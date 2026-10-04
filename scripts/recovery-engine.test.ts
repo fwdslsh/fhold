@@ -43,9 +43,9 @@ async function fixture() {
 	const versions = {
 		image: 'synthetic',
 		opencode: '1.18.34',
-		akm: '0.9.22',
-		codex: '0.159.3',
-		claude: '2.1.286'
+		akm: '0.9.24',
+		codex: '0.160.0',
+		claude: '2.1.289'
 	};
 	const config = {
 		url: pathToFileURL(path.join(dir, 'backup')).href,
@@ -620,7 +620,7 @@ describe('same-instance local recovery engine', () => {
 		])
 			expect(() => parseBlobDestination(url)).toThrow();
 	});
-	test('pinned Codex 0.159.3 catalog preserves all six native SQLite files and identity', async () => {
+	test('pinned Codex 0.160.0 catalog preserves all six native SQLite files and identity', async () => {
 		const f = await fixture();
 		const codex = path.join(f.roots.home, '.codex');
 		await mkdir(path.join(codex, '.tmp'), { recursive: true });

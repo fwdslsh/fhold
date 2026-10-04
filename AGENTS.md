@@ -90,6 +90,7 @@ by downgrading engines against live databases.
 
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
 host. Linux is supported; ARM64 cross-build evidence is not native execution.
-Public binary/image publishing requires separately configured and verified release
-gates. Keep the standalone CLI/source-build path and local `fhold/` image namespace
-until then; do not add an npm bootstrap, cross-host publishing bridge or installer.
+GitHub builds the standalone CLI/AppImages and publishes signed multi-architecture
+images to `fwdslsh/fhold-{assistant,guardian,portal}` on Docker Hub. Fresh installs
+use those pinned public images; the explicitly selected `fhold` namespace remains
+local-build-only. Do not add an npm bootstrap or cross-host publishing bridge.

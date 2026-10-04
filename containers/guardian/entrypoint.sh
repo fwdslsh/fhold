@@ -2,7 +2,7 @@
 set -euo pipefail
 
 guardian_package=/opt/fhold/guardian-app
-guardian_home=${HOME:-/opt/fhold/guardian}
+guardian_home=${HOME:-/home/fhold}
 export PATH="/opt/fhold/node_modules/.bin:$PATH"
 
 mkdir -p "$guardian_home/.local/share/opencode" /opt/fhold/logs

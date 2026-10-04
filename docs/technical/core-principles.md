@@ -25,8 +25,13 @@ Codex/Claude workers remain experimental and vendor-native. Both supervisors
 default on. Native sign-in/consent is never inferred and
 explicit off settings remain off.
 No software is installed at container startup.
-Built-in OpenCode skills are ordinary image-baked managed assets, not a second
-plugin platform. Claude and Codex sign-in guidance preserve native login processes
+Built-in skills are ordinary image-baked managed assets, shared through the
+native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
+Operator-owned AKM catalogs may omit that source without blocking startup;
+the built-in skills remain available through native harness integrations.
+AKM and fhold plugins are preinstalled in all three native harnesses without
+pre-trusting hooks. Agents run as `fhold`, with home `/home/fhold`; the native
+OpenCode HTTP username is `user`. Claude and Codex sign-in guidance preserve native login processes
 across tool calls without implementing token exchange or accepting user consent.
 The image-baked `fhold-admin` skill provides redacted current-container diagnostics
 and routes to versioned Claude/Codex setup scripts. It has no host/cloud management
@@ -35,9 +40,12 @@ a PTY; Codex's pinned foreground app-server uses its private native Unix control
 socket for standard pairing, without a runtime-installed/self-updating daemon.
 Temporary control sockets are not recovery data. Running, account sign-in and
 pairing remain separate from a verified native-client tool request.
-Assistant includes npm/npx from the same pinned upstream Node image so ordinary
-stdio MCP clients can launch their declared commands. No desktop keyring service
-or vendor-specific client dependency is added to work around a headless client bug.
+Assistant includes pinned, upstream npm/npx compatible with its pinned Node runtime,
+installed through npm's standard global upgrade at image build time so ordinary
+stdio MCP clients can launch their declared commands. Bundled dependency advisories
+remain subject to the image scan gate; do not patch npm's internal dependency tree.
+No desktop keyring service or vendor-specific client dependency is added to work
+around a headless client bug.
 Image-baked native CLIs have standard `/usr/local/bin` launchers, including for
 OpenCode login shells that replace the image's `PATH`; no user exports are needed.
 
@@ -117,9 +125,15 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
   as untrusted, retain durable AKM results and write only to `knowledge/inbox/`.
   Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
-  `FH_SCHEDULER_ENABLED=0` disables only task sync, cron and reconciliation.
+  `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
   Knowledge, native workers and the independent recovery timer remain available.
-  Health requires scheduler liveness/reconciliation only when scheduling is enabled.
+  Health requires scheduler liveness when scheduling or keep-alive is enabled,
+  and fresh reconciliation only when user scheduling is enabled.
+- Optional conditional HTTP keep-alive uses native fhold activity hooks and
+  the existing Supercronic process, independently of user task enablement. It
+  has no cloud API authority or work-age expiry. Unknown activity keeps the
+  instance awake; native trust remains required. This is best-effort signaling,
+  not a scale-in veto. See [the runtime contract](../harness-plugins.md).
 - Automatic memory captures validated non-secret facts only from trusted native
   build/plan sessions through the existing provider and remains configurable.
   Remote/unattended sessions do not implicitly write personal memory.
@@ -204,14 +218,14 @@ not an empty timestamp-release migration registry.
 ## Current release boundary
 
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
-host. Linux is supported through local source builds. The current source
-candidate is `0.1.2610040547-alpha.3` (unreleased). The latest qualified Linux
-artifacts and all three images are `0.1.2610040221-alpha.2`; that evidence does not
-qualify changed source. Every candidate needs its own artifact and runtime gates.
+host. GitHub builds Linux standalone CLI and Admin AppImage downloads and
+publishes Assistant/Guardian/Portal images to public Docker Hub. Every candidate
+needs its own artifact and runtime gates; earlier artifacts do not qualify changed source.
 Versions use real UTC `X.Y.yyMMddHHmm` timestamps and explicit alpha/beta/rc
 channels. The CLI remains a standalone executable, not an npm bootstrap package.
-Local images use `fhold`; public binary/image publishing and registry ownership
-must be configured and verified separately. Native ARM64 execution and actual
-Windows/macOS packaging remain unqualified. No cross-host publishing bridge is
-needed. An existing version/receipt permits identical-byte retries only; changed
+Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
+Explicit local builds use the `fhold` namespace without registry pulls. Native
+Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
+and Windows/macOS packaging remain unqualified. No cross-host publishing bridge
+is needed. An existing version/receipt permits identical-byte retries only; changed
 source or content requires a new version, including unpublished candidates.

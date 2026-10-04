@@ -21,7 +21,7 @@ These are standalone Assistant inputs, not cloud-management settings in CLI/Admi
 | `FH_RECOVERY_MAX_UNSAVED_SECONDS` | `300`; fail closed on unsaved age, at least the capture interval. |
 | `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | `120`; monotonic between-step/SQLite budget, 1–3,600 seconds. |
 | `FH_RECOVERY_PROBE_PORT` | `0` (off); private health-only probe, not the native API port. |
-| `FH_RECOVERY_STATE_DIR` | `/home/opencode/.fhold-recovery`; private staging/receipt, no arbitrary native-tree overlap. |
+| `FH_RECOVERY_STATE_DIR` | `/home/fhold/.fhold-recovery`; private staging/receipt, no arbitrary native-tree overlap. |
 | `FH_RECOVERY_INCLUDE_FILE` | Unset keeps the native catalog; absolute JSON file listing additional container `paths` and `sqlite` databases. |
 | `FH_RUNTIME_DIR` | `/tmp/fhold-runtime`; ephemeral private process/status files. |
 | `FH_RECOVERY_CREDENTIAL_FILE` | Unset uses explicit managed identity; otherwise absolute private standard Blob connection-string file. |
@@ -194,7 +194,7 @@ manifest membership, including deletions. Surviving local state must not be
 silently overwritten by an older remote point; unresolved authority fails
 closed. Corruption does not authorize automatic rollback to an older generation.
 
-Container recovery retains the existing native roots (`/home/opencode`,
+Container recovery retains the existing native roots (`/home/fhold`,
 `/stash`, `/work`, `/opt/akm/data`, `/etc/akm`). Explicit additional paths restore
 to their original absolute container locations. Container `FH_HOME` does not
 remap them; host CLI/Admin home selection remains separate. Symbolic links and
@@ -212,14 +212,14 @@ ordinary files in these trees, plus the individually registered SQLite databases
 | --- | --- |
 | `/work` | Workspace files, Git metadata and other regular files. |
 | `/stash` | Knowledge, task sources/results and private native provider files. |
-| `/home/opencode/.config/opencode`, `.local/share/opencode`, `.local/state/opencode` | Native OpenCode configuration, sessions, account and supporting files. |
-| `/home/opencode/.codex` | Codex configuration, account, sessions, approvals and registered databases. |
-| `/home/opencode/.claude`, `.claude.json` | Claude configuration, account, sessions and consent. |
+| `/home/fhold/.config/opencode`, `.local/share/opencode`, `.local/state/opencode` | Native OpenCode configuration, sessions, account and supporting files. |
+| `/home/fhold/.codex` | Codex configuration, account, sessions, approvals and registered databases. |
+| `/home/fhold/.claude`, `.claude.json` | Claude configuration, account, sessions and consent. |
 | `/opt/akm/data`, `/etc/akm` | AKM durable state, logs and configuration. |
 
 Generated SDK dependencies, vendor plugin caches, transient coordination files
 and the rebuilt AKM index are excluded. The catalog is **not the entire home**:
-for example, `/home/opencode/.my-client` and `/home/opencode/.npm` are not selected.
+for example, `/home/fhold/.my-client` and `/home/fhold/.npm` are not selected.
 Adding a file under `/work` or `/stash` needs no catalog change, subject to the
 existing bounds, link rules and SQLite checks. Keep third-party credentials out
 of searchable knowledge and ordinary shared workspaces.
@@ -233,13 +233,13 @@ For example, mount it read-only; it contains paths, not authentication keys:
 ```json
 {
   "paths": [
-    "/home/opencode/.my-client",
+    "/home/fhold/.my-client",
     "/extra/project-files",
     "/extra/settings.json"
   ],
   "sqlite": [
     "/extra/project-files/application.db",
-    "/home/opencode/.my-client/state.sqlite"
+    "/home/fhold/.my-client/state.sqlite"
   ]
 }
 ```

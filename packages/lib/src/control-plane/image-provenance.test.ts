@@ -7,7 +7,7 @@ import { buildComposeOptions } from './compose.js';
 import { composeConfigJson } from './docker.js';
 import { createFholdState } from './foundation.js';
 import { installHome } from './install.js';
-import { readStackConfig, writeStackConfig } from './stack-config.js';
+import { defaultStackConfig, readStackConfig, writeStackConfig } from './stack-config.js';
 import { updateHome } from './update.js';
 
 const roots: string[] = [];
@@ -26,7 +26,7 @@ async function fixture(namespace = 'fhold') {
 	const resolved = await composeConfigJson(buildComposeOptions(state)); if (!resolved.ok) throw new Error(resolved.stderr);
 	const callsPath = join(root, 'calls.jsonl');
 	const docker = join(root, 'docker');
-	const imageReference = `${namespace}/assistant:${read.config.deployment.images.assistant}`;
+	const imageReference = `${namespace}/fhold-assistant:${read.config.deployment.images.assistant}`;
 	const imageId = `sha256:${'a'.repeat(64)}`;
 	writeFileSync(docker, `#!${process.execPath}
 import { appendFileSync } from 'node:fs';
@@ -84,4 +84,17 @@ test('explicit registry namespaces retain default, explicit-pull and no-pull upd
 	const before = calls().length;
 	await activateComposeCommand(state, ['up', '-d', '--pull', 'missing']);
 	expect(calls().slice(before).find((args) => args.includes('up'))?.slice(-2)).toEqual(['--pull', 'missing']);
+});
+
+test('fresh installs select the public images and updates pull the pinned release by default', async () => {
+	const namespace = defaultStackConfig('/tmp/fhold-public-default').deployment.imageNamespace;
+	expect(namespace).toBe('fwdslsh');
+	const { home, state, calls } = await fixture(namespace);
+	const resolved = await composeConfigJson(buildComposeOptions(state));
+	if (!resolved.ok) throw new Error(resolved.stderr);
+	const config = readStackConfig(home);
+	if (!config.ok) throw new Error(config.error);
+	expect(resolved.config.services.assistant.image).toBe(`fwdslsh/fhold-assistant:${config.config.deployment.images.assistant}`);
+	await updateHome({ homeDir: home, start: true });
+	expect(calls().filter((args) => args.includes('pull') && !args.includes('up'))).toHaveLength(1);
 });

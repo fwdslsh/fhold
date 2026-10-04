@@ -34,15 +34,15 @@ type MountGrant = {
 
 const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 	assistant: [
-		{ source: 'data/assistant', target: '/home/opencode', readOnly: false },
+		{ source: 'data/assistant', target: '/home/fhold', readOnly: false },
 		{
 			source: 'config/assistant',
-			target: '/home/opencode/.config/opencode',
+			target: '/home/fhold/.config/opencode',
 			readOnly: true
 		},
 		{
 			source: 'knowledge/secrets/auth.json',
-			target: '/home/opencode/.local/share/opencode/auth.json',
+			target: '/home/fhold/.local/share/opencode/auth.json',
 			readOnly: false
 		},
 		{ source: 'system/assistant', target: '/etc/opencode', readOnly: true },
@@ -61,12 +61,12 @@ const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 		},
 		{
 			source: 'config/guardian',
-			target: '/opt/fhold/guardian/.config/opencode',
+			target: '/home/fhold/.config/opencode',
 			readOnly: true
 		},
 		{
 			source: 'knowledge/secrets/auth.json',
-			target: '/opt/fhold/guardian/.local/share/opencode/auth.json',
+			target: '/home/fhold/.local/share/opencode/auth.json',
 			readOnly: true
 		},
 		{ source: 'workspace', target: '/work', readOnly: true },
@@ -123,7 +123,7 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		AKM_AUTO_LEARNING: '0',
 		AKM_REDACT_HIGH_ENTROPY: '1',
 		AKM_REDACT_PII: '1',
-		HOME: '/home/opencode',
+		HOME: '/home/fhold',
 		OPENCODE_CONFIG_DIR: '/etc/opencode',
 		OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
 		OPENCODE_DISABLE_CLAUDE_CODE: 'true',
@@ -131,12 +131,13 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		OPENCODE_API_URL: 'http://127.0.0.1:4096',
 		OPENCODE_PORT: '4096',
+		OPENCODE_SERVER_USERNAME: 'user',
 		OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 		TERM: 'xterm-256color'
 	},
 	guardian: {
 		GUARDIAN_AUDIT_PATH: '/opt/fhold/logs/guardian-audit.log',
-		HOME: '/opt/fhold/guardian',
+		HOME: '/home/fhold',
 		PORT: '8080',
 		OPENCODE_CONFIG_DIR: '/opt/fhold/moderator-config',
 		OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
@@ -145,11 +146,12 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		FH_ASSISTANT_DIRECTORY: '/work',
 		FH_ASSISTANT_URL: 'http://assistant:4096',
+		OPENCODE_SERVER_USERNAME: 'user',
 		OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 		GUARDIAN_AUTH_DIR: '/run/fhold-credentials',
 		GUARDIAN_HANDLE_KEY_FILE: '/run/secrets/guardian_handle_key',
-		GUARDIAN_OAUTH_CONFIG_FILE: '/opt/fhold/guardian/.config/opencode/oauth.json',
-		GUARDIAN_OAUTH_IDENTITIES_FILE: '/opt/fhold/guardian/.config/opencode/oauth-identities.json',
+		GUARDIAN_OAUTH_CONFIG_FILE: '/home/fhold/.config/opencode/oauth.json',
+		GUARDIAN_OAUTH_IDENTITIES_FILE: '/home/fhold/.config/opencode/oauth-identities.json',
 		GUARDIAN_MODERATION_URL: 'http://127.0.0.1:4097',
 		GUARDIAN_MODERATION_PORT: '4097',
 		GUARDIAN_MODERATION_THRESHOLD: '3'
@@ -179,7 +181,10 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 		'FH_AUTOMATIC_MEMORY',
 		'FH_CODEX_REMOTE',
 		'FH_CODEX_SANDBOX',
-		'FH_CLAUDE_REMOTE'
+		'FH_CLAUDE_REMOTE',
+		'FH_KEEPALIVE_URL',
+		'FH_KEEPALIVE_AUTH',
+		'FH_KEEPALIVE_AUTHORIZATION_FILE'
 	]),
 	guardian: new Set([
 		'GUARDIAN_ALLOWED_ORIGINS',
@@ -264,9 +269,9 @@ function expectedImage(
 	environment: Readonly<Record<string, string>>
 ): string {
 	const definition = CORE_IMAGES[name];
-	const namespace = environment.FH_IMAGE_NAMESPACE?.trim() || 'fhold';
+	const namespace = environment.FH_IMAGE_NAMESPACE?.trim() || 'fwdslsh';
 	const version = environment[definition.versionKey]?.trim() || libPackage.version;
-	return `${namespace}/${definition.component}:${version}`;
+	return `${namespace}/fhold-${definition.component}:${version}`;
 }
 
 function exactStringArray(value: unknown, expected: readonly string[]): boolean {
@@ -378,6 +383,22 @@ function auditCoreEnvironment(
 		}
 	}
 	if (name === 'assistant') {
+		if (environment.FH_KEEPALIVE_URL) {
+			try {
+				const url = new URL(String(environment.FH_KEEPALIVE_URL));
+				if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash)
+					throw new Error('invalid target');
+			} catch {
+				issues.push(
+					'service assistant keep-alive requires an HTTP(S) URL without inline credentials or a fragment'
+				);
+			}
+		}
+		const keepaliveAuth = environment.FH_KEEPALIVE_AUTH ?? 'none';
+		if (!['none', 'opencode'].includes(String(keepaliveAuth)))
+			issues.push('service assistant keep-alive authentication must be none or opencode');
+		if (environment.FH_KEEPALIVE_AUTHORIZATION_FILE && keepaliveAuth === 'opencode')
+			issues.push('service assistant keep-alive must select only one authentication source');
 		if (!isCodexSandbox(environment.FH_CODEX_SANDBOX))
 			issues.push('service assistant must use a supported Codex sandbox');
 		for (const key of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE']) {

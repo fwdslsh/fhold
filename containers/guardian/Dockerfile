@@ -20,7 +20,7 @@ RUN bun install --frozen-lockfile --production --linker hoisted \
 
 FROM oven/bun:1.4.2-slim
 
-ENV HOME=/opt/fhold/guardian \
+ENV HOME=/home/fhold \
     PORT=8080 \
     OPENCODE_CONFIG_DIR=/opt/fhold/moderator-config \
     OPENCODE_DISABLE_PROJECT_CONFIG=true \
@@ -71,15 +71,17 @@ COPY packages/guardian/src/assistant-client.ts \
 COPY containers/guardian/entrypoint.sh /usr/local/bin/fhold-guardian
 
 RUN test -n "$GUARDIAN_VERSION" \
+    && usermod -l fhold -d /home/fhold bun \
+    && groupmod -n fhold bun \
     && chmod 0755 /usr/local/bin/fhold-guardian \
-    && mkdir -p /opt/fhold/guardian/.config/opencode \
-                /opt/fhold/guardian/.local/share/opencode \
+    && mkdir -p /home/fhold/.config/opencode \
+                /home/fhold/.local/share/opencode \
                 /opt/fhold/logs \
-    && chmod -R a+rwX /opt/fhold/guardian /opt/fhold/logs
+    && chmod -R a+rwX /home/fhold /opt/fhold/logs
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD curl -sf http://127.0.0.1:8080/health || exit 1
 
-USER bun
+USER fhold
 ENTRYPOINT ["/usr/local/bin/fhold-guardian"]

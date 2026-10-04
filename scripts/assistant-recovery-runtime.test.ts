@@ -56,6 +56,7 @@ fi
 		chmodSync(path, 0o755);
 	};
 	stub('akm', 'printf "sync\\n" >>"$EVENTS"');
+	stub('fhold-keepalive', ':');
 	stub('supercronic', "trap 'exit 0' TERM; while sleep 0.1; do :; done");
 	stub(
 		'fhold-remote',

@@ -770,7 +770,7 @@ describe('Admin renderer behavior', () => {
 			'No public MCPB download is published for this private alpha. Run bun run --cwd packages/claude-desktop pack and install packages/claude-desktop/artifacts/fhold-claude-desktop-0.1.2610020008-alpha.1.mcpb.';
 		renderConnectionDetails({
 			connectionDetails: {
-				opencode: { url: 'http://127.0.0.1:3810', username: 'opencode' },
+				opencode: { url: 'http://127.0.0.1:3810', username: 'user' },
 				claude: { url: 'http://127.0.0.1:3830/mcp', note },
 				mcp: { url: 'http://127.0.0.1:3830/mcp' }
 			}

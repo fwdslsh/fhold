@@ -1,19 +1,18 @@
 # Release runbook
 
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
-host. The latest qualified Linux artifacts and all three images are
-`0.1.2610040221-alpha.2`; the [qualification summary](alpha-qualification.md)
-records tested runtime/artifact evidence and remaining gates. Changed source
-does not inherit those artifacts' qualification.
+host. `.github/workflows/release.yml` builds Linux downloads and signed amd64/arm64
+images on GitHub, verifies uploaded checksums and publishes the release. Public
+Docker Hub repositories are `fwdslsh/fhold-assistant`, `fwdslsh/fhold-guardian`
+and `fwdslsh/fhold-portal`. Fresh CLI/Admin installs select the matching pinned
+images automatically. No Docker Hub account is needed to pull them.
 
-Current source candidate is `0.1.2610040547-alpha.3` (unreleased). Preparing and
-publishing its source does not publish new binaries/images or establish passing
-GitHub CI; record actual workflow results separately.
-
-Public binary downloads, container image publishing and signing are not
-configured. Keep the standalone CLI/source-build path and local `fhold/` image
-namespace until public release gates are explicitly configured and verified.
-No npm bootstrap package or cross-host publishing bridge is required.
+Publishing uses the repository's Docker Hub credentials and the explicit
+`FH_PUBLICATION_CONFIGURED=true` repository variable. Run the workflow from
+`main` with the stamped version and `dry_run=false` to publish; the default
+dry run builds and validates without publishing. No npm bootstrap package or
+cross-host publishing bridge is required. Previous local qualification records
+remain historical; each public release must pass its own workflow gates.
 
 The persisted literal `fhold` namespace is local-only: activation uses
 `--pull never`, ordinary update defaults to no pull, and explicit update `--pull`
@@ -74,12 +73,49 @@ evidence must verify the extracted ARM64 ELF architecture and be labeled
 build-only, not a startup smoke. Future public asset validation still requires
 the complete declared Linux inventory before publication.
 
+## Reviewed runtime advisories
+
+The first [public GitHub CI run](https://github.com/fwdslsh/fhold/actions/runs/37181359928)
+passed the quality gate and both native architectures for Guardian and Portal,
+but the Assistant's fixable-HIGH image scan failed on seven advisories in npm's
+bundled dependencies.
+
+The Assistant now installs pinned upstream npm 12.2.0 through the standard
+global upgrade during the Node build stage. Its published bundle updates
+`ip-address` and `tar` and removes four of those findings. Three remain:
+
+| Bundled dependency | Version | Remaining advisory | Required fix |
+| --- | --- | --- | --- |
+| `brace-expansion` | 5.0.9 | CVE-2026-102276, CVE-2026-102278 | 5.0.11 or later |
+| `undici` | 6.28.0 | CVE-2026-19534 | 6.28.1 or later in the 6.x line |
+
+The rebuilt Linux x64 image was scanned with Trivy 0.75.0 and confirms exactly
+these three fixable high findings, with no critical findings. Guardian and Portal
+have neither critical nor fixable high findings. The standard runtime and recovery
+smokes passed separately; they do not waive vulnerability gates. See the
+[dependency-refresh verification](alpha-qualification.md#dependency-refresh-verification).
+
+The [published npm 12.2.0 bundle](https://registry.npmjs.org/npm/-/npm-12.2.0.tgz)
+retains these versions as checked on October 4, 2026. npm 12.2.0 supports
+the pinned Node 24 runtime. Use [npm's supported upgrade process](https://docs.npmjs.com/try-the-latest-stable-version-of-npm/);
+do not modify its internal bundle or remove npm/npx functionality.
+
+On October 4, 2026 the product owner explicitly approved publishing this alpha
+with these three npm-bundled denial-of-service findings. The exception file
+`.github/trivy-ignore.yaml` matches only the exact advisory IDs, installed npm
+bundle paths and affected package versions, and expires November 4, 2026.
+The unfiltered high/critical report stays visible. All critical findings and all
+other fixable high findings still fail the gate. This is a disclosed exception,
+not a clean-scan claim. Remove the entries when a supported npm release fixes
+them; re-review before expiry. Existing running instances are not updated by a
+source or release publication.
+
 ## Reviewed build-tool advisory
 
 Raw `bun audit` continues to report `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 is
 an unpatched high-severity transitive dependency of the MCPB developer packer.
 The [official advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv) concerns
-RSA signature verification and lists no patched version as of 2026-10-01.
+RSA signature verification and lists no patched version as of 2026-10-04.
 
 The reviewed exception is limited to the standard **unsigned** MCPB pack path:
 the packer eagerly imports signing code, but this path performs no certificate,
@@ -97,9 +133,9 @@ targets. Read-only CI also runs in contributor forks. Release publishing require
 the exact repository/origin and stamped versions, and refuses live publication
 unless explicitly configured. The workflows retain immutable image/tag
 retry and upload checksum checks. Source hosting is canonical on GitHub; binary
-and image publication is a separate operation. Before enabling release publication,
-verify registry ownership, accounts, signing, real artifacts and qualified download
-instructions. The CLI source/build workspace delivers a standalone Linux
+and image publication is a separate operation. Registry ownership and publishing
+credentials must be configured before live publication. Verify signing, real
+artifacts and download instructions for every release. The CLI delivers a standalone Linux
 executable, not an npm bootstrap package.
 
 Published bytes/tags must not be overwritten. Matching retries are no-write;

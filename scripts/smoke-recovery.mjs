@@ -24,9 +24,9 @@ const envFile = join(root, 'runtime.env');
 const includeFile = join(root, 'include.json');
 const customSelection = {
 	paths: [
-		'/home/opencode/.claude',
-		'/home/opencode/.codex',
-		'/home/opencode/.custom-client',
+		'/home/fhold/.claude',
+		'/home/fhold/.codex',
+		'/home/fhold/.custom-client',
 		'/tmp/fhold-extra state',
 		'/tmp/fhold-extra state/nested',
 		'/tmp/fhold-settings.json'
@@ -141,7 +141,7 @@ async function api(container, route, options = {}, authenticated = true) {
 		headers: {
 			'Content-Type': 'application/json',
 			...(authenticated
-				? { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
+				? { Authorization: `Basic ${Buffer.from(`user:${password}`).toString('base64')}` }
 				: {})
 		},
 		signal: AbortSignal.timeout(10_000)
@@ -252,7 +252,7 @@ try {
 	const codexPresence = JSON.parse(
 		await execBun(
 			first.id,
-			`import{access}from'node:fs/promises';const presence={};for(const name of ['state_5.sqlite','logs_2.sqlite','goals_1.sqlite','thread_history_1.sqlite','memories_1.sqlite','queue_1.sqlite']){presence[name]=await access('/home/opencode/.codex/'+name).then(()=>true).catch(()=>false);}console.log(JSON.stringify(presence));`
+			`import{access}from'node:fs/promises';const presence={};for(const name of ['state_5.sqlite','logs_2.sqlite','goals_1.sqlite','thread_history_1.sqlite','memories_1.sqlite','queue_1.sqlite']){presence[name]=await access('/home/fhold/.codex/'+name).then(()=>true).catch(()=>false);}console.log(JSON.stringify(presence));`
 		)
 	);
 	assert.ok(
@@ -262,17 +262,17 @@ try {
 	report.codexDatabasePresence = codexPresence;
 	await execBun(
 		first.id,
-		`import{mkdir,writeFile}from'node:fs/promises';for(const p of ['/stash/knowledge','/home/opencode/.codex'])await mkdir(p,{recursive:true});await writeFile('/stash/knowledge/recovery-fixture.md','Synthetic durable knowledge marker.');await writeFile('/work/recovery-fixture.txt','Synthetic workspace marker.');await writeFile('/home/opencode/.codex/auth.json',JSON.stringify({fixtureOnly:'synthetic-account-marker'}));await writeFile('/home/opencode/.claude.json',JSON.stringify({fixtureTrustMarker:'synthetic-trust-marker'}));`
+		`import{mkdir,writeFile}from'node:fs/promises';for(const p of ['/stash/knowledge','/home/fhold/.codex'])await mkdir(p,{recursive:true});await writeFile('/stash/knowledge/recovery-fixture.md','Synthetic durable knowledge marker.');await writeFile('/work/recovery-fixture.txt','Synthetic workspace marker.');await writeFile('/home/fhold/.codex/auth.json',JSON.stringify({fixtureOnly:'synthetic-account-marker'}));await writeFile('/home/fhold/.claude.json',JSON.stringify({fixtureTrustMarker:'synthetic-trust-marker'}));`
 	);
 	await execBun(
 		first.id,
 		`
 		import{mkdir,writeFile}from'node:fs/promises';import{Database}from'bun:sqlite';
-		for(const p of ['/home/opencode/.custom-client','/tmp/fhold-extra state/nested'])await mkdir(p,{recursive:true});
-		await writeFile('/home/opencode/.custom-client/auth.json','synthetic-custom-client-account',{mode:0o600});
+		for(const p of ['/home/fhold/.custom-client','/tmp/fhold-extra state/nested'])await mkdir(p,{recursive:true});
+		await writeFile('/home/fhold/.custom-client/auth.json','synthetic-custom-client-account',{mode:0o600});
 		await writeFile('/tmp/fhold-extra state/nested/note','synthetic-extra-directory',{mode:0o700});
 		await writeFile('/tmp/fhold-settings.json','synthetic-individual-file');
-		await writeFile('/home/opencode/not-selected','excluded-sentinel');
+		await writeFile('/home/fhold/not-selected','excluded-sentinel');
 		for(const[index,file]of ${JSON.stringify(customSelection.sqlite)}.entries()){
 			const db=new Database(file);db.exec('PRAGMA journal_mode=WAL;CREATE TABLE marker(id INTEGER PRIMARY KEY,value TEXT)');
 			db.query('INSERT INTO marker(value) VALUES(?)').run('synthetic-custom-sqlite-'+index);db.close();
@@ -297,7 +297,7 @@ try {
 	report.catalog = JSON.parse(
 		await execBun(
 			first.id,
-			`import{readFile,readdir}from'node:fs/promises';const root='/opt/fhold/tools/node_modules/akm-cli/dist/core';const data={};for(const name of ['state-db.js','logs-db.js','paths.js']){const source=await readFile(root+'/'+name,'utf8');data[name]=source.split(String.fromCharCode(10)).filter(x=>/state[.]db|logs[.]db|index[.]db|function getStateDbPath|function getLogsDbPath/.test(x)).slice(0,12);}data.opencodeFiles=await readdir('/home/opencode/.local/share/opencode');data.akmFiles=await readdir('/opt/akm/data');data.versions=JSON.parse(await readFile('/opt/fhold/tools/package.json','utf8')).dependencies;console.log(JSON.stringify(data));`
+			`import{readFile,readdir}from'node:fs/promises';const root='/opt/fhold/tools/node_modules/akm-cli/dist/core';const data={};for(const name of ['state-db.js','logs-db.js','paths.js']){const source=await readFile(root+'/'+name,'utf8');data[name]=source.split(String.fromCharCode(10)).filter(x=>/state[.]db|logs[.]db|index[.]db|function getStateDbPath|function getLogsDbPath/.test(x)).slice(0,12);}data.opencodeFiles=await readdir('/home/fhold/.local/share/opencode');data.akmFiles=await readdir('/opt/akm/data');data.versions=JSON.parse(await readFile('/opt/fhold/tools/package.json','utf8')).dependencies;console.log(JSON.stringify(data));`
 		)
 	);
 	report.checks.realPinnedCatalogInspected = true;
@@ -314,19 +314,19 @@ try {
 	);
 	await execBun(
 		second.id,
-		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/opencode/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/opencode/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid','reconciliation.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`
+		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/fhold/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/fhold/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid','reconciliation.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`
 	);
 	report.checks.emptyLayerReplacement = true;
 	await execBun(
 		second.id,
 		`
 		import assert from'node:assert/strict';import{readFile,stat,access}from'node:fs/promises';import{Database}from'bun:sqlite';
-		assert.equal(await readFile('/home/opencode/.custom-client/auth.json','utf8'),'synthetic-custom-client-account');
-		assert.equal((await stat('/home/opencode/.custom-client/auth.json')).mode&0o777,0o600);
+		assert.equal(await readFile('/home/fhold/.custom-client/auth.json','utf8'),'synthetic-custom-client-account');
+		assert.equal((await stat('/home/fhold/.custom-client/auth.json')).mode&0o777,0o600);
 		assert.equal(await readFile('/tmp/fhold-extra state/nested/note','utf8'),'synthetic-extra-directory');
 		assert.equal((await stat('/tmp/fhold-extra state/nested/note')).mode&0o777,0o700);
 		assert.equal(await readFile('/tmp/fhold-settings.json','utf8'),'synthetic-individual-file');
-		assert.equal(await access('/home/opencode/not-selected').then(()=>true).catch(()=>false),false);
+		assert.equal(await access('/home/fhold/not-selected').then(()=>true).catch(()=>false),false);
 		for(const[index,file]of ${JSON.stringify(customSelection.sqlite)}.entries()){
 			const db=new Database(file,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');
 			assert.equal(db.query('SELECT value FROM marker').get().value,'synthetic-custom-sqlite-'+index);db.close();
@@ -339,7 +339,7 @@ try {
 	report.checks.nativeShellAndFileApiRestored = true;
 	await execBun(
 		second.id,
-		`import assert from'node:assert/strict';import{Database}from'bun:sqlite';const presence=${JSON.stringify(codexPresence)};for(const[name,initialized]of Object.entries(presence)){if(!initialized)continue;const db=new Database('/home/opencode/.codex/'+name,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');db.close();}console.log('initialized pinned native Codex database catalog restored');`
+		`import assert from'node:assert/strict';import{Database}from'bun:sqlite';const presence=${JSON.stringify(codexPresence)};for(const[name,initialized]of Object.entries(presence)){if(!initialized)continue;const db=new Database('/home/fhold/.codex/'+name,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');db.close();}console.log('initialized pinned native Codex database catalog restored');`
 	);
 	report.checks.nativeCodexInitializedDatabasesRecovered = true;
 	report.checks.syntheticKnowledgeWorkspaceAccountTrustRestored = true;

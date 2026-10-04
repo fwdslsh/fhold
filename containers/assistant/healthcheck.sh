@@ -3,7 +3,8 @@ set -euo pipefail
 runtime="${FH_RUNTIME_DIR:-/tmp/fhold-runtime}"
 case "${FH_SCHEDULER_ENABLED-1}" in 0|1) ;; *) exit 1 ;; esac
 children=(assistant)
-if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ]; then children+=(scheduler reconciliation); fi
+if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ] || [ -n "${FH_KEEPALIVE_URL:-}" ]; then children+=(scheduler); fi
+if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ]; then children+=(reconciliation); fi
 if [ -n "${FH_RECOVERY_URL:-}" ]; then
   test -f "$runtime/recovery-restored"
   fhold-recovery status >/dev/null
@@ -28,5 +29,5 @@ if [ -z "$password" ]; then
   password="$(tr -d '\r\n' <"$password_file")"
 fi
 test -n "$password"
-curl --max-time 5 -sf -u "${OPENCODE_SERVER_USERNAME:-opencode}:$password" \
+curl --max-time 5 -sf -u "${OPENCODE_SERVER_USERNAME:-user}:$password" \
   "http://127.0.0.1:${OPENCODE_PORT:-4096}/config" >/dev/null

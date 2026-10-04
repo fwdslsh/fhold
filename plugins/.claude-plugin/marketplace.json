@@ -1,0 +1,11 @@
+{
+	"name": "fhold-plugins",
+	"owner": { "name": "fhold" },
+	"plugins": [
+		{
+			"name": "fhold",
+			"source": "./fhold",
+			"description": "fhold runtime skills and conditional keep-alive"
+		}
+	]
+}

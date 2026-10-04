@@ -120,7 +120,7 @@ export function defaultStackConfig(homeDir?: string): StackConfig {
 		version: STACK_CONFIG_VERSION,
 		deployment: {
 			projectName: `fhold-${suffix}`,
-			imageNamespace: 'fhold',
+			imageNamespace: 'fwdslsh',
 			images: {
 				assistant: FH_RELEASE_VERSION,
 				guardian: FH_RELEASE_VERSION,

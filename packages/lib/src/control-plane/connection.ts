@@ -55,7 +55,7 @@ export function connectionDetails(
 		return {
 			type,
 			url: assistantEndpoint(homeDir),
-			username: 'opencode',
+			username: 'user',
 			passwordFile: stateSecretFile(homeDir, 'fhold_opencode_password'),
 			...(options.showAssistantPassword ? { password: assistantPassword(homeDir) } : {}),
 			note: 'Trusted native access bypasses Guardian and should remain on loopback or a trusted private network.'

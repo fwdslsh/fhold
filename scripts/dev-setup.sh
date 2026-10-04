@@ -50,6 +50,7 @@ CLI=(bun run packages/cli/src/main.ts)
 
 export FH_HOME="$DEV_ROOT"
 export FH_REPO_ROOT="$ROOT_DIR"
+export FH_IMAGE_NAMESPACE="${FH_IMAGE_NAMESPACE:-fhold}"
 
 if [[ -e "$DEV_ROOT" && ! -d "$DEV_ROOT" ]]; then
 	echo "Error: development home is not a directory: $DEV_ROOT" >&2

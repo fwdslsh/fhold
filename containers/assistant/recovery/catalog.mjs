@@ -5,7 +5,7 @@ import { readRegular } from './directory-store.mjs';
 export const CATALOG_VERSION = 1;
 export const CUSTOM_CATALOG_VERSION = 2;
 export const DEFAULT_ROOTS = Object.freeze({
-	home: '/home/opencode',
+	home: '/home/fhold',
 	stash: '/stash',
 	work: '/work',
 	akmData: '/opt/akm/data',

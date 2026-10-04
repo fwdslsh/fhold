@@ -42,7 +42,7 @@ const password = readFileSync(
 	'utf8'
 ).trim();
 const nativeHeaders = {
-	authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`,
+	authorization: `Basic ${Buffer.from(`user:${password}`).toString('base64')}`,
 	'content-type': 'application/json'
 };
 const clients: Client[] = [];

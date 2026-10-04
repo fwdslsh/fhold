@@ -22,7 +22,13 @@ configuration and update reconcile safely. Stop removes containers/networks,
 not durable volumes or user data; there is no purge command. Offline update
 refreshes managed files only and does not upgrade running containers.
 
-With the persisted local image namespace `fhold`, ordinary update does not pull
+Fresh installations use the public `fwdslsh/fhold-assistant`,
+`fwdslsh/fhold-guardian` and `fwdslsh/fhold-portal` images pinned to their release.
+An ordinary update pulls those pinned images; `--no-pull` uses existing copies.
+Existing instances retain their saved image namespace and are not silently
+switched from local builds to public images.
+
+With the explicitly selected local image namespace `fhold`, ordinary update does not pull
 and every activation uses Compose `--pull never`. Build the reviewed images
 locally first; a missing local image cannot silently fetch a Docker Hub substitute.
 Explicit `fhold update --pull` is refused for this local-only namespace.

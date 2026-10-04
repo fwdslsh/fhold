@@ -4,11 +4,13 @@
 import { createHash } from 'node:crypto';
 import { remoteEnvironment } from './fhold-remote.mjs';
 
-export function recallReview(value) {
+export function recallReview(value, plugin = 'akm@akm-plugins') {
+	if (!['akm@akm-plugins', 'fhold@fhold-plugins'].includes(plugin))
+		throw new Error('Unsupported built-in plugin.');
 	if (!Array.isArray(value)) throw new Error('Invalid Codex hook inventory.');
-	const hooks = value.filter((h) => h?.pluginId === 'akm@akm-plugins');
+	const hooks = value.filter((h) => h?.pluginId === plugin);
 	if (!hooks.length || hooks.length > 16)
-		throw new Error('AKM hooks are unavailable. Check the native Codex plugin installation.');
+		throw new Error('Plugin hooks are unavailable. Check the native Codex plugin installation.');
 	const reviewed = hooks
 		.map((h) => {
 			if (
@@ -25,7 +27,7 @@ export function recallReview(value) {
 				typeof h.enabled !== 'boolean' ||
 				!['trusted', 'untrusted', 'modified'].includes(h.trustStatus)
 			)
-				throw new Error('Unsupported AKM hook definition; native review is required.');
+				throw new Error('Unsupported plugin hook definition; native review is required.');
 			return {
 				key: h.key,
 				hash: h.currentHash,
@@ -38,7 +40,7 @@ export function recallReview(value) {
 		})
 		.sort((a, b) => a.key.localeCompare(b.key));
 	if (new Set(reviewed.map((h) => h.key)).size !== reviewed.length)
-		throw new Error('Duplicate AKM hook identity.');
+		throw new Error('Duplicate plugin hook identity.');
 	const digest = createHash('sha256').update(JSON.stringify(reviewed)).digest('hex');
 	const status = reviewed.every((h) => !h.enabled)
 		? 'installed'
@@ -48,7 +50,7 @@ export function recallReview(value) {
 	return { status, digest, hooks: reviewed };
 }
 
-export async function reviewRecall(rpc) {
+export async function reviewRecall(rpc, plugin = 'akm@akm-plugins') {
 	const result = await rpc('hooks/list', { cwds: ['/work'] });
 	if (!Array.isArray(result?.data) || result.data.length !== 1)
 		throw new Error('Invalid Codex hook inventory.');
@@ -56,19 +58,19 @@ export async function reviewRecall(rpc) {
 		throw new Error(
 			'Native Codex reported hook configuration errors. Review its configuration first.'
 		);
-	return recallReview(result.data[0].hooks);
+	return recallReview(result.data[0].hooks, plugin);
 }
 
-export async function changeRecall(rpc, action, digest) {
+export async function changeRecall(rpc, action, digest, plugin = 'akm@akm-plugins') {
 	if (!['approve', 'disable'].includes(action) || !/^[a-f0-9]{64}$/.test(digest))
-		throw new Error('Review the current AKM hooks and explicitly approve your choice first.');
+		throw new Error('Review the current plugin hooks and explicitly approve your choice first.');
 	const config = await rpc('config/read', { includeLayers: true, cwd: '/work' });
 	const layer = config.layers?.find((l) => l.name?.type === 'user' && l.name.profile === null);
 	if (!layer || typeof layer.version !== 'string')
 		throw new Error('Native Codex user configuration is unavailable.');
-	const review = await reviewRecall(rpc);
+	const review = await reviewRecall(rpc, plugin);
 	if (digest !== review.digest)
-		throw new Error('AKM hooks changed since review. Review the current definitions again.');
+		throw new Error('Plugin hooks changed since review. Review the current definitions again.');
 	const edits = review.hooks.flatMap((h) => {
 		const key = `hooks.state.${JSON.stringify(h.key)}`;
 		return action === 'disable'
@@ -80,8 +82,8 @@ export async function changeRecall(rpc, action, digest) {
 	});
 	const result = await rpc('config/batchWrite', { edits, expectedVersion: layer.version });
 	if (result.overriddenMetadata)
-		throw new Error('Native policy overrides recall. Review your Codex configuration.');
-	return reviewRecall(rpc);
+		throw new Error('Native policy overrides plugin hooks. Review your Codex configuration.');
+	return reviewRecall(rpc, plugin);
 }
 
 export async function withCodexRecall(
@@ -166,9 +168,12 @@ export async function withCodexRecall(
 
 if (import.meta.main) {
 	try {
-		const action = process.argv[2] ?? 'review';
+		const args = process.argv.slice(2);
+		const selector = args.find((arg) => arg.startsWith('--plugin='));
+		const plugin = selector?.slice('--plugin='.length) ?? 'akm@akm-plugins';
+		const [action = 'review', digest] = args.filter((arg) => arg !== selector);
 		const result = await withCodexRecall((rpc) =>
-			action === 'review' ? reviewRecall(rpc) : changeRecall(rpc, action, process.argv[3])
+			action === 'review' ? reviewRecall(rpc, plugin) : changeRecall(rpc, action, digest, plugin)
 		);
 		console.log(JSON.stringify(result));
 	} catch (error) {

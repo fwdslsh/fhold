@@ -1,6 +1,53 @@
 # Changelog
 
-## 0.1.2610040547-alpha.3 — unreleased public source candidate
+## 0.1.2610040821-alpha.3 — public Linux alpha
+
+First public GitHub/Docker Hub release: standalone Linux x64/ARM64 CLI, optional
+Admin AppImages, Claude Desktop extension, checksums and asset manifest. CLI and
+Admin fresh installs use the pinned public `fwdslsh/fhold-assistant` image;
+optional Guardian/Portal use their matching public images. Images support amd64
+and arm64 and are signed through GitHub Actions. No Docker Hub login is needed.
+
+Includes the dependency refresh, native fhold plugins and shared image-baked
+skills for OpenCode, Claude Code and Codex. Optional conditional HTTP keep-alive
+uses the existing scheduler and can run with user scheduling disabled. Native
+completion/cancellation handling prevents stale activity from keeping instances
+awake; append-only history does not count as live work. Older AKM catalogs no
+longer prevent startup. See [keep-alive configuration](docs/harness-plugins.md).
+
+Assistant now runs as `fhold` at `/home/fhold`; its OpenCode HTTP username is
+`user`. Custom deployments must update old mount paths, absolute plugin/backup
+paths and clients before upgrading. Managed host data directories are preserved.
+Existing local-build homes retain their namespace; they do not silently switch
+to public images. Native plugin customizations and consent are preserved.
+
+Claude/Codex remote workers remain experimental. ARM64 Admin is cross-built,
+not native-startup-qualified. The owner approved narrow, expiring exceptions for
+three npm-bundled denial-of-service advisories and the existing unsigned MCPB
+build-tool advisory; see [scope and expiry](docs/operations/release.md#reviewed-runtime-advisories).
+Raw reports remain visible; no upstream package internals were patched.
+
+## 0.1.2610040740-alpha.3 — unreleased combined source candidate
+
+Combine the dependency refresh with native fhold plugins in all three harnesses,
+shared image-baked skills, and opt-in conditional HTTP keep-alive using the
+existing scheduler. Keep-alive can run with user scheduling disabled. Native
+hook approval remains explicit; no accounts or trust decisions are image-baked.
+
+Agents now run as `fhold` at `/home/fhold`; the native OpenCode HTTP username is
+`user`. Custom deployments must update their mounts, absolute plugin/recovery
+paths and clients before activating this candidate. Managed homes keep the
+same host data directory. Customized native plugin registrations are preserved;
+use the native plugin manager to update their selected baked versions.
+
+Review fixes use native completion events for failed/cancelled tools and
+background subagents, avoid treating append-only history as active work, and
+version native fhold plugins with the product release. Older AKM catalogs no
+longer prevent startup. The combined candidate passed 496 tests with no skips,
+all image smokes, and directory/Blob-emulator recovery. The existing npm security
+gate remains unresolved; this is not a published release or merge approval.
+
+## 0.1.2610040637-alpha.3 — unreleased public source candidate
 
 GitHub is the canonical source and contribution host. Product documentation,
 package metadata and image source labels use `https://github.com/fwdslsh/fhold`.
@@ -14,6 +61,18 @@ a native runner. The MCPB source manifest participates in release stamping.
 The locked Electron build dependency `http-cache-semantics` is updated to 4.3.0
 for the newly reported cache-disclosure advisory. Local agent state and generated
 artifacts are excluded from image build contexts.
+
+Assistant uses the supported build-time npm upgrade to pinned 12.2.0. It removes
+four bundled dependency findings; three upstream findings still block the
+unchanged image security gate. No vendor bundle patches or scan waivers are added.
+
+Refresh workspace dependencies and the native tools to their latest stable
+published versions: Claude Code 2.1.289, Codex 0.160.0, AKM CLI 0.9.24 and MCP SDK
+2.3.0. All three AKM plugins use 0.9.21202610040615, with the native marketplaces
+pinned to the matching verified archive. Bun 1.4.2, Node 24.21.0 LTS and OpenCode
+1.18.34 remain current. CI actions are updated alongside Trivy 0.75.0 and cosign
+3.1.3. Upstream nested dependency pins are preserved; no vendor internals are
+rewritten to force versions.
 
 ## 0.1.2610040221-alpha.2 — qualified Linux artifacts
 

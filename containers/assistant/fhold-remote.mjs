@@ -2,7 +2,7 @@
 // Optional vendor-native agents. Their failures never stop OpenCode or cron.
 import { spawn } from 'node:child_process';
 import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 
 export const remoteDirectory = join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'remote');
@@ -53,6 +53,8 @@ export function remoteEnvironment(source) {
 		delete env[key];
 	// Suppress vendor self-updates: runtime software is release-pinned and image-baked.
 	env.DISABLE_AUTOUPDATER = '1';
+	// Non-secret location for shared, per-boot native activity observations.
+	if (source.FH_RUNTIME_DIR) env.FH_RUNTIME_DIR = source.FH_RUNTIME_DIR;
 	return env;
 }
 
@@ -161,6 +163,8 @@ export async function superviseRemote(
 	process.on('SIGUSR2', answer);
 	try {
 		while (!stopping) {
+			try { unlinkSync(join(dirname(directory), 'activity', `${tool}.ready`)); }
+			catch (error) { if (error.code !== 'ENOENT') throw error; }
 			child = undefined;
 			answeredPrompt = undefined;
 			groupForced = false;

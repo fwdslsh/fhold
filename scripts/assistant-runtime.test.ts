@@ -244,23 +244,36 @@ describe('personal memory capture', () => {
 });
 
 describe('Assistant scheduler health', () => {
-	it('requires every essential process and fresh successful task reconciliation', () => {
+	it('requires every essential process and fresh successful task reconciliation', async () => {
 		const root = home();
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
-		const run = () =>
-			Bun.spawnSync(['bash', script], {
-				env: { ...process.env, FH_RUNTIME_DIR: root },
+		const run = async () => {
+			const child = Bun.spawn(['bash', script], {
+				env: {
+					...process.env,
+					FH_RUNTIME_DIR: root,
+					FH_SCHEDULER_ENABLED: '1',
+					FH_RECOVERY_URL: ''
+				},
+				stdin: 'ignore',
 				stdout: 'ignore',
-				stderr: 'ignore'
-			}).exitCode;
-		expect(run()).not.toBe(0);
+				stderr: 'ignore',
+				timeout: 2000,
+				killSignal: 'SIGKILL'
+			});
+			const exitCode = await child.exited;
+			// A killed or timed-out shell is not a successful unhealthy-state check.
+			expect(child.signalCode).toBeNull();
+			return exitCode;
+		};
+		expect(await run()).toBe(1);
 		for (const child of ['assistant', 'scheduler', 'reconciliation'])
 			writeFileSync(join(root, `${child}.pid`), String(process.pid));
 		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
-		expect(run()).not.toBe(0);
+		expect(await run()).toBe(1);
 		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
 		writeFileSync(join(root, 'scheduler.pid'), '999999999');
-		expect(run()).not.toBe(0);
+		expect(await run()).toBe(1);
 	});
 });
 
@@ -273,10 +286,14 @@ describe('published AKM scheduler compatibility', () => {
 		const config = join(root, 'config');
 		const knowledge = join(root, 'knowledge');
 		for (const path of [bin, config, knowledge]) mkdirSync(path);
-		writeFileSync(
-			join(config, 'config.json'),
-			readFileSync(join(import.meta.dir, '../packages/skeleton/config/akm/config.json'))
+		const settings = JSON.parse(
+			readFileSync(join(import.meta.dir, '../packages/skeleton/config/akm/config.json'), 'utf8')
 		);
+		// The host fixture has its own content roots; the image uses /stash and
+		// /fhold-bundle. Keep the same native bundle/component schema in both.
+		settings.bundles.stash.path = knowledge;
+		settings.bundles.fhold.path = join(import.meta.dir, '../packages/skeleton/system/assistant');
+		writeFileSync(join(config, 'config.json'), JSON.stringify(settings));
 		const crontab = join(bin, 'crontab');
 		writeFileSync(
 			crontab,
@@ -306,6 +323,8 @@ describe('published AKM scheduler compatibility', () => {
 				stderr: 'pipe',
 				timeout: 30000
 			});
+		const keepalive = '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick';
+		writeFileSync(env.FH_TEST_CRONTAB, `${keepalive}\n`);
 		const created = run(
 			'create',
 			'published-check',
@@ -340,5 +359,6 @@ describe('published AKM scheduler compatibility', () => {
 		expect(run('remove', 'published-check').exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
+		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(keepalive);
 	}, 160_000);
 });

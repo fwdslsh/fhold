@@ -1,0 +1,12 @@
+{
+	"name": "fhold-plugins",
+	"interface": { "displayName": "fhold" },
+	"plugins": [
+		{
+			"name": "fhold",
+			"source": { "source": "local", "path": "./fhold" },
+			"policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+			"category": "Developer Tools"
+		}
+	]
+}

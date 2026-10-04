@@ -1146,7 +1146,7 @@ async function run(): Promise<Record<string, unknown>> {
 			`document.querySelector('#view-connections')?.hidden === false &&
 					document.querySelector('#client-opencode')?.hidden === false &&
 					document.querySelector('#direct-url')?.textContent.startsWith('http://') &&
-					document.querySelector('#direct-username')?.textContent === 'opencode'`,
+					document.querySelector('#direct-username')?.textContent === 'user'`,
 			'the complete OpenCode connection recipe'
 		);
 		await window.webContents.executeJavaScript(`(() => {

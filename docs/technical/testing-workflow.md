@@ -32,6 +32,12 @@ credential-scoped MCP/handles, path/descriptor escape refusal, moderation fail-c
 portal default-deny, own-backup manifest/hash/conflict/partial-retry preservation,
 native-history WAL/collision checks, restricted tasks, memory and native trust.
 
+The Assistant's conditional heartbeat has a separate offline image check:
+`node scripts/smoke-keepalive.mjs fhold/assistant:<candidate>` starts a native
+OpenCode shell task and observes real Supercronic HTTP requests while work is
+active, then verifies requests stop when idle. It also checks that user tasks
+remain disabled. This qualifies local activity signaling, not a cloud autoscaler.
+
 Admin's lightweight DOM suite checks CSP, masking, IPC, preview invalidation,
 accessibility decisions and unchanged window size. The rendered E2E checks real
 Chromium/OpenCode links, MCP details, keyboard focus and setup/backup journey,

@@ -37,7 +37,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_PROJECT_NAME` | Persisted instance name, or stable per-canonical-home default, from deployment intent |
 | `FH_INSTANCE_HOSTNAME` | Derived Assistant OS hostname from that same project name; not another user setting |
 | `FH_UID`, `FH_GID` | Non-root container identity |
-| `FH_IMAGE_NAMESPACE` | Image namespace; default `fhold` |
+| `FH_IMAGE_NAMESPACE` | Image namespace; default `fwdslsh` (public Docker Hub); `fhold` selects local builds |
 | `FH_STACK_CONFIG_VERSION` | Derived intent schema version |
 | `FH_ENABLED_ADDONS` | Derived profiles: `gateway,discord,slack` |
 | `FH_ASSISTANT_BIND_ADDRESS` | Derived native OpenCode host bind |
@@ -105,8 +105,8 @@ bypasses Guardian.
 
 | Host source | Container target | Mode |
 |---|---|---|
-| `data/assistant` | `/home/opencode` | read/write |
-| `config/assistant` | `/home/opencode/.config/opencode` | read-only |
+| `data/assistant` | `/home/fhold` | read/write |
+| `config/assistant` | `/home/fhold/.config/opencode` | read-only |
 | `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `config/akm` | `/etc/akm` | read-write; AKM's native scheduler activation only, no delegated ingress credentials |
@@ -117,6 +117,19 @@ bypasses Guardian.
 
 Assistant receives only the OpenCode server password. It receives no Guardian,
 portal, bot, Docker, or host-admin credential.
+
+The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
+authentication uses username `user`. `/fhold-bundle` is an image-baked,
+root-owned read-only AKM skills source, shared with the native fhold plugins.
+Custom AKM configuration is preserved; it does not prevent the built-in skills
+from being available through the native harness integrations.
+
+`FH_KEEPALIVE_URL` optionally enables conditional HTTP heartbeats using the
+existing scheduler, including when user schedules are disabled. Authentication
+is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
+`FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
+See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
+approval, custom deployment configuration and the best-effort boundary.
 
 Optional native Codex/Claude Code remote workers inherit the same nonroot
 container boundary, with no additional mounts or ports. Their own native sign-in

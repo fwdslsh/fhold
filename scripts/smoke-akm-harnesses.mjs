@@ -65,6 +65,7 @@ function fixture(harness) {
 		DISABLE_AUTOUPDATER: '1',
 		CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
 		FH_AUTOMATIC_MEMORY: '0',
+		FH_RUNTIME_DIR: join(dir, 'runtime'),
 		// NSS maps explicit host UIDs in Compose, but carries no credentials.
 		...(process.env.LD_PRELOAD
 			? {
@@ -204,6 +205,7 @@ function recalled(file, harness) {
 		recursive: true
 	});
 	const plugins = JSON.parse(f.run(['claude', 'plugin', 'list', '--json']));
+	assert.ok(plugins.some((p) => p.id === 'fhold@fhold-plugins' && p.enabled));
 	assert.ok(
 		plugins.some(
 			(p) => p.id === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode']
@@ -218,6 +220,16 @@ function recalled(file, harness) {
 			[log, join(f.dir, 'state/akm-claude/events.jsonl')]
 		);
 		assert.match(readFileSync(debug, 'utf8'), /Hook SessionStart:startup \(SessionStart\) success/);
+		assert.ok(
+			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/claude.ready')),
+			'Claude did not load its native fhold hooks'
+		);
+		assert.ok(
+			(await import('node:fs'))
+				.readdirSync(join(f.env.FH_RUNTIME_DIR, 'activity'))
+				.some((name) => name.startsWith('claude-')),
+			'Claude did not report the active prompt'
+		);
 	} finally {
 		proc.kill();
 		await proc.exited;
@@ -234,6 +246,7 @@ function recalled(file, harness) {
 		recursive: true
 	});
 	const plugins = JSON.parse(f.run(['codex', 'plugin', 'list', '--json']));
+	assert.ok(plugins.installed.some((p) => p.pluginId === 'fhold@fhold-plugins' && p.enabled));
 	assert.ok(
 		plugins.installed.some(
 			(p) => p.pluginId === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode']
@@ -272,6 +285,23 @@ function recalled(file, harness) {
 		'Approval must survive a fresh native process'
 	);
 	const inventory = await withCodexRecall((rpc) => rpc('hooks/list', { cwds: ['/work'] }), options);
+	const fholdReview = await withCodexRecall(
+		(rpc) => reviewRecall(rpc, 'fhold@fhold-plugins'),
+		options
+	);
+	assert.ok(
+		fholdReview.hooks.every((h) => h.trust === 'untrusted'),
+		'fhold hooks must retain native approval'
+	);
+	assert.equal(
+		(
+			await withCodexRecall(
+				(rpc) => changeRecall(rpc, 'approve', fholdReview.digest, 'fhold@fhold-plugins'),
+				options
+			)
+		).status,
+		'ready'
+	);
 	assert.ok(
 		inventory.data[0].hooks
 			.filter((h) => h.source === 'user')
@@ -292,6 +322,16 @@ function recalled(file, harness) {
 			() => recalled(join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl'), 'codex'),
 			'Codex recall',
 			[log, join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl')]
+		);
+		assert.ok(
+			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')),
+			'Codex did not load its native fhold hooks'
+		);
+		assert.ok(
+			(await import('node:fs'))
+				.readdirSync(join(f.env.FH_RUNTIME_DIR, 'activity'))
+				.some((name) => name.startsWith('codex-')),
+			'Codex did not report the active prompt'
 		);
 	} finally {
 		proc.kill();

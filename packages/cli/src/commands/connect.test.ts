@@ -37,7 +37,7 @@ describe('connection guidance', () => {
 		const saved = readStackConfig(home);
 		if (!saved.ok) throw new Error(saved.error);
 		expect(details.url).toBe(`http://127.0.0.1:${saved.config.assistant.port}`);
-		expect(details.username).toBe('opencode');
+		expect(details.username).toBe('user');
 		expect(details.passwordFile).toEndWith('/state/secrets/fhold_opencode_password');
 		expect(details).not.toHaveProperty('password');
 	});

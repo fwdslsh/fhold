@@ -20,7 +20,7 @@ async function assistantHealthy(): Promise<boolean> {
 			'utf8'
 		).trim();
 		if (!password) return false;
-		const authorization = Buffer.from(`opencode:${password}`, 'utf8').toString('base64');
+		const authorization = Buffer.from(`user:${password}`, 'utf8').toString('base64');
 		const response = await fetch(`${assistantEndpoint(homeDir)}/config`, {
 			headers: { authorization: `Basic ${authorization}` },
 			signal: AbortSignal.timeout(1_500)

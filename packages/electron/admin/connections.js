@@ -108,7 +108,7 @@ export function renderConnectionDetails(snapshot) {
 	directLink.textContent = details.opencode.url;
 	directLink.setAttribute('href', details.opencode.url);
 	directLink.hidden = false;
-	setText('direct-username', details.opencode.username || 'opencode');
+	setText('direct-username', details.opencode.username || 'user');
 	setText('claude-url', details.claude.url);
 	setText('mcp-url', details.mcp.url);
 	setText('claude-extension-help', details.claude.note);

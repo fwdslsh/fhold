@@ -5,3 +5,10 @@ source = "/akm-marketplace"
 
 [plugins."akm@akm-plugins"]
 enabled = true
+
+[marketplaces.fhold-plugins]
+source_type = "local"
+source = "/fhold-plugins"
+
+[plugins."fhold@fhold-plugins"]
+enabled = true

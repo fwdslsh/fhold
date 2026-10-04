@@ -1,6 +1,6 @@
 {
   "name": "@fhold/claude-desktop",
-  "version": "0.1.2610040547-alpha.3",
+  "version": "0.1.2610040821-alpha.3",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.2.0",
-    "@modelcontextprotocol/server": "2.2.0"
+    "@modelcontextprotocol/client": "2.3.0",
+    "@modelcontextprotocol/server": "2.3.0"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",

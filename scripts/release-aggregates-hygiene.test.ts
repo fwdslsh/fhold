@@ -87,6 +87,8 @@ describe('release manifest', () => {
 		expect(new Set(release.manifests).size).toBe(release.manifests.length);
 		expect(release.manifests).toContain('packages/electron/package.json');
 		expect(release.manifests).toContain('packages/claude-desktop/manifest.json');
+		expect(release.manifests).toContain('plugins/fhold/.claude-plugin/plugin.json');
+		expect(release.manifests).toContain('plugins/fhold/.codex-plugin/plugin.json');
 		expect(release.compose).toEqual(['packages/skeleton/system/stack/stack.compose.yml']);
 	});
 
@@ -95,9 +97,41 @@ describe('release manifest', () => {
 			expect(existsSync(join(ROOT, manifest))).toBe(true);
 		}
 	});
+
+	test('native fhold plugin caches track the product release', () => {
+		const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+		for (const harness of ['claude', 'codex']) {
+			const plugin = JSON.parse(
+				readFileSync(join(ROOT, `plugins/fhold/.${harness}-plugin/plugin.json`), 'utf8')
+			);
+			expect(plugin.version).toBe(version);
+		}
+	});
 });
 
 describe('release workflows', () => {
+	test('runtime exceptions stay limited to the approved npm bundle findings', () => {
+		const ignored = Bun.YAML.parse(readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')) as {
+			vulnerabilities: Array<{ id: string; paths: string[]; purls: string[]; expired_at: string }>;
+		};
+		expect(ignored.vulnerabilities.map((entry) => entry.id).sort()).toEqual([
+			'CVE-2026-102276', 'CVE-2026-102278', 'CVE-2026-19534'
+		]);
+		for (const entry of ignored.vulnerabilities) {
+			const dependency = entry.id === 'CVE-2026-19534' ? 'undici' : 'brace-expansion';
+			const version = dependency === 'undici' ? '6.28.0' : '5.0.9';
+			expect(entry.paths).toEqual([`usr/local/lib/node_modules/npm/node_modules/${dependency}/package.json`]);
+			expect(entry.purls).toEqual([`pkg:npm/${dependency}@${version}`]);
+			expect(String(entry.expired_at)).toBe('2026-11-04');
+		}
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
+			jobs: { images: { steps: Array<{ uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }> } };
+		};
+		for (const step of workflow.jobs.images.steps.filter((step) => step.uses?.startsWith('aquasecurity/trivy-action@'))) {
+			expect(step.env?.TRIVY_IGNOREFILE).toBe(step.with?.severity === 'HIGH' ? '.github/trivy-ignore.yaml' : undefined);
+		}
+	});
+
 	test('unprivileged CI also runs for contributors in forks', () => {
 		const ci = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'ci.yml'), 'utf8')) as {
 			permissions: Record<string, string>;
@@ -113,6 +147,32 @@ describe('release workflows', () => {
 		for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith('.yml'))) {
 			expect(() => Bun.YAML.parse(readFileSync(join(WORKFLOWS, file), 'utf8'))).not.toThrow();
 		}
+	});
+
+	test('workflows use the reviewed stable Node 24 and composite action releases', () => {
+		const actions = new Set<string>();
+		for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith('.yml'))) {
+			const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, file), 'utf8')) as {
+				jobs: Record<string, { uses?: string; steps?: Array<{ uses?: string }> }>;
+			};
+			for (const job of Object.values(workflow.jobs)) {
+				for (const action of [job.uses, ...(job.steps ?? []).map((step) => step.uses)]) {
+					if (action && !action.startsWith('./')) actions.add(action);
+				}
+			}
+		}
+		expect([...actions].sort()).toEqual([
+			'actions/checkout@v7.0.1',
+			'actions/download-artifact@v8.0.1',
+			'actions/upload-artifact@v7.0.1',
+			'aquasecurity/trivy-action@v0.36.0',
+			'docker/build-push-action@v7.4.0',
+			'docker/login-action@v4.6.0',
+			'docker/setup-buildx-action@v4.4.1',
+			'docker/setup-qemu-action@v4.4.0',
+			'oven-sh/setup-bun@v2.2.0',
+			'sigstore/cosign-installer@v4.1.2'
+		]);
 	});
 
 	test('every runtime image is built, scanned, and smoked on both supported architectures', () => {
@@ -154,11 +214,13 @@ describe('release workflows', () => {
 			platform: 'linux/amd64',
 			runner: 'ubuntu-latest'
 		});
-		expect(images.steps.some((step) => step.uses === 'docker/setup-qemu-action@v3')).toBe(false);
+		expect(images.steps.some((step) => step.uses?.startsWith('docker/setup-qemu-action@'))).toBe(
+			false
+		);
 		expect(
 			images.steps.some((step) => step.name === 'Assert native architecture for runtime tests')
 		).toBe(true);
-		const build = images.steps.find((step) => step.uses === 'docker/build-push-action@v6');
+		const build = images.steps.find((step) => step.uses?.startsWith('docker/build-push-action@'));
 		expect(build?.with?.platforms).toBe('${{ matrix.platform }}');
 		expect(
 			images.steps.filter((step) => step.uses?.startsWith('aquasecurity/trivy-action@')).length
@@ -166,6 +228,7 @@ describe('release workflows', () => {
 		const scans = images.steps.filter((step) =>
 			step.uses?.startsWith('aquasecurity/trivy-action@')
 		);
+		expect(scans.every((step) => step.with?.version === 'v0.75.0')).toBe(true);
 		expect(
 			scans.some(
 				(step) =>
@@ -187,6 +250,19 @@ describe('release workflows', () => {
 });
 
 describe('image tool pins', () => {
+	test('Assistant upgrades pinned upstream npm at build time and smokes both launchers', () => {
+		const dockerfile = readFileSync(join(ROOT, 'containers/assistant/Dockerfile'), 'utf8');
+		const smoke = readFileSync(join(ROOT, 'scripts/smoke-image.sh'), 'utf8');
+		expect(dockerfile).toMatch(/^ARG NPM_VERSION=\d+\.\d+\.\d+$/m);
+		expect(dockerfile).toContain('npm install --global "npm@${NPM_VERSION}"');
+		expect(dockerfile).toContain('test "$(npm --version)" = "${NPM_VERSION}"');
+		expect(dockerfile).toContain(
+			'COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm'
+		);
+		expect(smoke).toContain('test "$(docker exec "$container" npm --version)" = "$expected_npm"');
+		expect(smoke).toContain('test "$(docker exec "$container" npx --version)" = "$expected_npm"');
+	});
+
 	// core-principles.md: the assistant and Guardian images install OpenCode
 	// from their own tools manifests, and those two pins must stay in lockstep.
 	test('assistant and guardian opencode-ai pins match', () => {
@@ -344,12 +420,19 @@ describe('release completeness gate', () => {
 		expect(validate?.run).toContain(
 			"process.env.DRY_RUN !== 'true' && process.env.FH_PUBLICATION_CONFIGURED !== 'true'"
 		);
-		const login = workflow.jobs.images.steps.find((step) => step.uses === 'docker/login-action@v3');
+		const login = workflow.jobs.images.steps.find((step) =>
+			step.uses?.startsWith('docker/login-action@')
+		);
 		expect(login?.if).toBe('inputs.dry_run != true');
 		expect(login?.with).toEqual({
 			username: '${{ secrets.DOCKERHUB_USERNAME }}',
 			password: '${{ secrets.DOCKERHUB_TOKEN }}'
 		});
+		const cosign = workflow.jobs.images.steps.find((step) =>
+			step.uses?.startsWith('sigstore/cosign-installer@')
+		);
+		expect(cosign?.if).toBe('inputs.dry_run != true');
+		expect(cosign?.with?.['cosign-release']).toBe('v3.1.3');
 		expect(
 			workflow.jobs.release.steps.find(
 				(step) => step.name === 'Publish the verified GitHub release'

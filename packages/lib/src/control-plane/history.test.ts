@@ -330,7 +330,7 @@ describe.skipIf(!image)('offline native history recovery (real Assistant engines
 						'-e',
 						`
 				const endpoint='http://127.0.0.1:4096';
-				const headers={authorization:'Basic '+Buffer.from('opencode:synthetic-history-test-only').toString('base64')};
+				const headers={authorization:'Basic '+Buffer.from('user:synthetic-history-test-only').toString('base64')};
 				for(let attempt=0;attempt<50;attempt++){try{if((await fetch(endpoint+'/global/health',{headers,signal:AbortSignal.timeout(1000)})).ok)break;}catch{}await Bun.sleep(100);}
 				const unauthorized=(await fetch(endpoint+'/session',{signal:AbortSignal.timeout(5000)})).status;
 				const sessions=await fetch(endpoint+'/session?directory=/work/project',{headers,signal:AbortSignal.timeout(5000)}).then(r=>r.json());

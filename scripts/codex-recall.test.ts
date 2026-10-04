@@ -20,6 +20,13 @@ const hook = (event = 'sessionStart') => ({
 });
 
 describe('native Codex recall review', () => {
+	it('reviews the fhold plugin separately without changing AKM or unrelated hook approval', () => {
+		const fhold = { ...hook(), pluginId: 'fhold@fhold-plugins', key: 'fhold:sessionStart' };
+		expect(
+			recallReview([hook(), fhold], 'fhold@fhold-plugins').hooks.map((h: { key: string }) => h.key)
+		).toEqual(['fhold:sessionStart']);
+		expect(() => recallReview([fhold], 'third-party@market')).toThrow('Unsupported');
+	});
 	it('reports approval, ready and installed states without trusting unrelated hooks', () => {
 		const unrelated = {
 			...hook(),
