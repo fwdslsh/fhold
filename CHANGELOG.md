@@ -3,10 +3,12 @@
 ## Unreleased
 
 New named instances live under `~/fhold/instances/<name>`, leaving room beside
-`instances/` for backups, docs and other local files. CLI `--instance`/`-i`
+`instances/` for backups, docs and other local files. One global CLI `--name`/`-n`
 accepts a directory name under that root or an absolute path, with precedence
 argument → optional `FH_HOME` → current directory. The selector works before or
-after commands. `install --name` controls container/hostname identity separately.
+after commands. A DNS-safe name is also the initial container/hostname identity;
+there is no separate instance selector or install-name option. Existing saved
+identities are preserved when selecting a home by name or absolute path.
 Admin suggests the folder as a new instance is named; its unnamed default is
 `~/fhold/instances/default`, and custom folder choices remain supported.
 Existing homes, project names, ports, credentials and data are not relocated or

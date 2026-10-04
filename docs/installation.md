@@ -42,8 +42,8 @@ docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS
 docker build --build-arg GUARDIAN_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/guardian/Dockerfile -t "fhold/fhold-guardian:$fhold_build_version" .
 docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/portal/Dockerfile -t "fhold/fhold-portal:$fhold_build_version" .
 ./packages/cli/dist/fhold-cli --version
-FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli --instance personal-agent install --no-start
-./packages/cli/dist/fhold-cli --instance personal-agent setup
+FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli install --name personal-agent --no-start
+./packages/cli/dist/fhold-cli -n personal-agent setup
 ```
 
 These are local source-build instructions, not an identical-byte release retry.
@@ -63,7 +63,7 @@ explicit `update --pull` is refused rather than treating `fhold/` as Docker Hub.
 
 The source CLI (next release) selects a home in this order:
 
-1. `--instance` or `-i`: a directory name beneath `~/fhold/instances/`, or an absolute path.
+1. `--name` or `-n`: a directory name beneath `~/fhold/instances/`, or an absolute path.
 2. `FH_HOME`, if explicitly set in your shell.
 3. The current working directory when neither is supplied.
 
@@ -71,9 +71,9 @@ No environment variable is required. The selector works before or after a
 command, including nested commands. For example:
 
 ```bash
-fhold --instance personal-agent install
-fhold -i personal-agent status
-fhold --instance /srv/fhold/another-agent status
+fhold install --name personal-agent
+fhold -n personal-agent status
+fhold --name /srv/fhold/another-agent status
 ```
 
 With `FH_HOME` unset, running `fhold install` from an empty directory installs
@@ -85,15 +85,17 @@ backups, docs and other local directories. Custom locations remain supported.
 Existing homes are never moved automatically; continue selecting their original
 location explicitly.
 
-The published alpha.3 CLI predates `--instance` and the cwd fallback. Use
-`FH_HOME` with that binary, as in the download example above. These new selection
-features are in source; published artifacts have not been replaced.
+The published alpha.3 CLI predates global `--name`/`-n` selection and the cwd
+fallback. In alpha.3, `install --name` only sets the container/hostname identity;
+use `FH_HOME` with that binary, as in the download example above. The new selection
+behavior is in source; published artifacts have not been replaced.
 
 CLI and Admin derive the same stable per-home Compose
 project. A DNS-safe directory name under the default instances root is also the
-initial instance name. Override the identity with
-`fhold -i chosen-folder install --name personal-agent`, or the **Instance name**
-field in Admin setup; `--name` does not change the selected home. The name is persisted in
+initial instance name: `fhold install -n personal-agent` chooses both its folder
+and initial container/hostname identity. There is no second install-name flag.
+For a custom folder, Admin's **Instance name** field or CLI `install --config`
+can supply a different initial identity. The name is persisted in
 `deployment.projectName`, produces containers such as `personal-agent-assistant-1`
 and sets the Assistant's OS hostname to `personal-agent`. Use lowercase letters,
 numbers and hyphens, up to 63 characters. Under the default layout the folder name

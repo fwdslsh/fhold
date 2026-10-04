@@ -31,13 +31,15 @@ describe('CLI help', () => {
 			expect(help).toContain(command);
 		}
 		expect(help).not.toContain('uninstall');
-		expect(help).toContain('--instance <name|absolute-path>');
+		expect(help).toContain('--name <name|absolute-path>');
+		expect(help).not.toContain('--instance');
 		expect(help).toContain('~/fhold/instances');
 		expect(help).toContain('then FH_HOME, then the current directory');
 		expect(() => helpText('addon')).toThrow('Unknown command');
 		expect(() => helpText('import')).toThrow('Unknown command');
 		expect(helpText('config')).toContain('assistant');
-		expect(helpText('install')).toContain('--name <instance-name>');
+		expect(helpText('install')).toContain('--name <name|absolute-path>');
+		expect(helpText('install')).not.toContain('--name <instance-name>');
 		expect(helpText('portal')).toContain('credential <portal> --credential <username>');
 		expect(helpText('credential')).toContain('set-policy');
 		expect(helpText('provider')).toContain('login');
@@ -66,7 +68,7 @@ describe('CLI help', () => {
 		const output = spyOn(console, 'log').mockImplementation(() => {});
 		try {
 			process.env.FH_HOME = '/tmp/fhold-ambient-selection';
-			await main(['config', 'path', '--instance', 'selected-agent']);
+			await main(['config', 'path', '--name', 'selected-agent']);
 			expect(output.mock.calls.at(-1)?.[0]).toBe(join(resolveFholdHome(defaultFholdHome('selected-agent')), 'state', 'stack.json'));
 			expect(process.env.FH_HOME).toBe('/tmp/fhold-ambient-selection');
 			delete process.env.FH_HOME;

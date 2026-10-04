@@ -25,7 +25,7 @@ Native sign-in, workspace trust and consent remain explicit user decisions.
 
 New named homes live under `~/fhold/instances/<name>`, leaving `~/fhold` available
 for backups, docs and other local files. The source CLI accepts
-`fhold --instance personal-agent install` or an absolute instance path. Selection
+`fhold install --name personal-agent` or `fhold status -n /absolute/instance/path`. Selection
 is argument → optional `FH_HOME` → current directory, so one shell can manage
 multiple instances without exporting variables. Admin's unnamed default is
 `~/fhold/instances/default`; its folder picker still supports any custom location.
@@ -33,8 +33,9 @@ Published alpha.3 does not have the new selector yet; see [installation](docs/in
 Existing homes are never moved automatically. Different homes receive separate
 Compose projects. Welcome can create another instance; name it, accept or change
 the suggested folder, and setup chooses free ports. Manual port overrides are
-under Advanced. `install --name` overrides the container/hostname identity,
-not the selected directory. No second instance-name registry is introduced.
+under Advanced. A DNS-safe name under the default instances root is also its
+initial container/hostname identity. Selecting an existing home never renames it.
+No separate instance selector or second instance-name registry is introduced.
 Never point fhold at a foreign or unrelated nonempty home. Supported portable
 restore requires fhold's own backup manifest; no old-product import is provided.
 

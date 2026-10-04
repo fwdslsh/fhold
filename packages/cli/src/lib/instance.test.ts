@@ -23,6 +23,12 @@ test('a selector is a literal directory name or absolute path, not a relative pa
 		expect(() => resolveInstanceHome(invalid)).toThrow();
 });
 
+test('named selectors use the same DNS-safe identity as new container names; custom paths are not names', () => {
+	for (const invalid of ['Agent', 'my agent', '-agent', 'agent-', 'a'.repeat(64)])
+		expect(() => resolveInstanceHome(invalid)).toThrow('instance name');
+	expect(resolveInstanceHome('/tmp/Custom Agent')).toBe('/tmp/Custom Agent');
+});
+
 const command = defineCommand({
 	subCommands: {
 		task: { subCommands: { create: { args: { prompt: { type: 'string' }, file: { type: 'string', alias: 'f' } } } } },
@@ -31,19 +37,19 @@ const command = defineCommand({
 });
 
 test('the global selector works before or after commands, with aliases or equals syntax', async () => {
-	for (const argv of [['--instance', 'april', 'status'], ['status', '-i', 'april'], ['status', '--instance=april'], ['-i=april', 'status']])
+	for (const argv of [['--name', 'april', 'status'], ['status', '-n', 'april'], ['status', '--name=april'], ['-n=april', 'status']])
 		expect(await instanceArguments(argv, command)).toEqual({ argv: ['status'], instance: 'april' });
-	expect(await instanceArguments(['task', '--instance', 'april', 'create', 'idea'], command)).toEqual({ argv: ['task', 'create', 'idea'], instance: 'april' });
+	expect(await instanceArguments(['task', '--name', 'april', 'create', 'idea'], command)).toEqual({ argv: ['task', 'create', 'idea'], instance: 'april' });
 });
 
 test('string argument values and the end-of-options delimiter are never selectors', async () => {
-	const argv = ['task', 'create', 'idea', '--prompt', '--instance=literal', '-f', '-i', '--instance', 'april'];
+	const argv = ['task', 'create', 'idea', '--prompt', '--name=literal', '-f', '-n', '--name', 'april'];
 	expect(await instanceArguments(argv, command)).toEqual({ argv: argv.slice(0, -2), instance: 'april' });
-	const literal = ['status', '--', '--instance', 'april'];
+	const literal = ['status', '--', '--name', 'april'];
 	expect(await instanceArguments(literal, command)).toEqual({ argv: literal });
 });
 
 test('missing and duplicate selectors fail instead of silently targeting another instance', async () => {
-	for (const argv of [['--instance'], ['--instance='], ['--instance', '--help'], ['--instance', 'april', 'status', '-i', 'may']])
+	for (const argv of [['--name'], ['--name='], ['-n'], ['--name', '--help'], ['--name', 'april', 'status', '-n', 'may']])
 		await expect(instanceArguments(argv, command)).rejects.toThrow();
 });

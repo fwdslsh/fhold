@@ -7,7 +7,6 @@ import {
 	defaultStackConfig,
 	ensureDockerReady,
 	installHome,
-	isInstanceName,
 	parseStackConfig
 } from '@fhold/lib';
 
@@ -17,7 +16,6 @@ import { completeSetup } from './setup.js';
 export type InstallOptions = {
 	start: boolean;
 	configFile?: string;
-	name?: string;
 };
 
 async function readConfigFile(path: string): Promise<unknown> {
@@ -39,13 +37,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		? parseStackConfig(await readConfigFile(options.configFile))
 		: null;
 	if (supplied && !supplied.ok) throw new Error(supplied.error);
-	if (options.name !== undefined && !isInstanceName(options.name))
-		throw new Error(
-			'Choose an instance name with 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.'
-		);
-	const name =
-		options.name ??
-		(supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined);
+	const name = supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined;
 	const state = createFholdState(undefined, name);
 	if (classifyInstall(state.homeDir) !== 'not_installed') {
 		throw new Error('fhold is already installed. Use `fhold update` to refresh it.');
@@ -55,11 +47,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		const docker = await ensureDockerReady();
 		if (!docker.ok) throw new Error(docker.message);
 		await assertProjectOwnership(
-			options.name ??
-				(supplied?.ok
-					? supplied.config.deployment.projectName
-					: process.env.FH_PROJECT_NAME?.trim() ||
-						defaultStackConfig(state.homeDir).deployment.projectName)
+			name ?? defaultStackConfig(state.homeDir).deployment.projectName
 		);
 	}
 
@@ -67,8 +55,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		(homeDir) =>
 			installHome({
 				homeDir,
-				...(supplied?.ok ? { config: supplied.config } : {}),
-				...(options.name === undefined ? {} : { name: options.name })
+				...(supplied?.ok ? { config: supplied.config } : {})
 			}),
 		state.homeDir
 	);
@@ -80,7 +67,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 	console.log(
 		options.start
 			? 'Assistant and provider are ready.'
-			: 'Run `fhold setup` from this directory, or select it with `--instance`, to start and verify your provider.'
+			: 'Run `fhold setup` from this directory, or select it with `--name` (or `-n`), to start and verify your provider.'
 	);
 }
 
@@ -99,18 +86,12 @@ export default defineCommand({
 			type: 'string',
 			alias: 'f',
 			description: 'stack configuration JSON file'
-		},
-		name: {
-			type: 'string',
-			description:
-				'Instance name for containers and hostname; use --instance to select its directory'
 		}
 	},
 	async run({ args }) {
 		await bootstrapInstall({
 			start: args.start !== false,
-			configFile: args.config ? String(args.config) : undefined,
-			name: args.name === undefined ? undefined : String(args.name)
+			configFile: args.config ? String(args.config) : undefined
 		});
 	}
 });

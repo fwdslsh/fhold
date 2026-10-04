@@ -46,7 +46,7 @@ Prefer a small, maintainable solution over another helper, service or exception.
 ## Ownership and data safety
 
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
-is `~/fhold/instances/default`. CLI selection is `--instance`/`-i` (a directory
+is `~/fhold/instances/default`. CLI selection is `--name`/`-n` (a directory
 name under that root or an absolute path), then `FH_HOME`, then the current
 directory. `FH_HOME` is optional. Admin's folder picker accepts custom locations.
 Existing homes are never relocated automatically. Reserve `~/fhold` for instances

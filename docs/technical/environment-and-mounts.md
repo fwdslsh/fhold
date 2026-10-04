@@ -6,7 +6,7 @@ This document describes the active runtime. The executable source is
 ## Host layout
 
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
-is `~/fhold/instances/default`. CLI `--instance`/`-i` selects a directory name
+is `~/fhold/instances/default`. CLI `--name`/`-n` selects a directory name
 under that root or an absolute path. If absent, explicit `FH_HOME` takes
 precedence over cwd. The CLI resolves that choice once for every command and
 its child processes; users do not need to export a variable. Admin uses its

@@ -1,15 +1,15 @@
 # Managing fhold
 
-Select an instance with `--instance` or `-i`: a directory name always means
+Select an instance with `--name` or `-n`: a directory name always means
 `~/fhold/instances/<name>`, while an absolute path can select any location.
 The argument takes precedence over optional `FH_HOME`; without either, commands
 act on the current directory. No environment variable or shell restart is needed
 to manage different instances:
 
 ```bash
-fhold --instance personal-agent status
-fhold -i another-agent status
-fhold --instance /srv/fhold/team-agent status
+fhold status --name personal-agent
+fhold -n another-agent status
+fhold --name /srv/fhold/team-agent status
 ```
 
 These selectors describe the source CLI/next release. Published alpha.3 still
@@ -128,9 +128,9 @@ explicit bind intent and appropriate transport security.
 
 ```bash
 fhold backup --to /private/path/backup
-fhold --instance /absolute/path/new-instance install --no-start
-fhold --instance /absolute/path/new-instance restore --from /private/path/backup --dry-run
-fhold --instance /absolute/path/new-instance restore --from /private/path/backup --apply
+fhold --name /absolute/path/new-instance install --no-start
+fhold --name /absolute/path/new-instance restore --from /private/path/backup --dry-run
+fhold --name /absolute/path/new-instance restore --from /private/path/backup --apply
 ```
 
 A required `fhold-backup.json` with `product: "fhold"`, supported format and

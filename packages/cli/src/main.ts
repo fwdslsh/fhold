@@ -42,7 +42,7 @@ async function autoRun(): Promise<void> {
 	}
 	if (installState === 'incompatible_home') {
 		throw new Error(
-			`Refusing incompatible fhold home at ${homeDir}. Use --instance with a new directory name or an empty absolute path.`
+			`Refusing incompatible fhold home at ${homeDir}. Use --name with a new directory name or an empty absolute path.`
 		);
 	}
 	if (installState === 'setup_incomplete') {
@@ -90,7 +90,7 @@ const subCommands = {
 } as const;
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
-	install: 'fhold install [--name <instance-name>] [--no-start] [--config <stack.json>]',
+	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup: 'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote]',
 	provider:
 		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
@@ -125,13 +125,13 @@ export function helpText(command?: string): string {
 	if (command) {
 		const usage = COMMAND_USAGE[command];
 		if (!usage) throw new Error(`Unknown command: ${command}`);
-		return `Usage: ${usage.replace(/^fhold /, 'fhold [--instance <name|absolute-path>] ')}\nInstance selection: --instance (or -i), then FH_HOME, then the current directory.\n${['remote', 'setup', 'config'].includes(command) ? 'Codex and Claude Code native remote access is experimental; host and account support vary.\n' : ''}`;
+		return `Usage: ${usage.replace(/^fhold /, 'fhold [--name <name|absolute-path>] ')}\nInstance selection: --name (or -n), then FH_HOME, then the current directory.\n${['remote', 'setup', 'config'].includes(command) ? 'Codex and Claude Code native remote access is experimental; host and account support vary.\n' : ''}`;
 	}
 	return [
 		'fhold — manage your self-hosted personal agent',
 		'',
-		'Usage: fhold [--instance <name|absolute-path>] <command> [options]',
-		'Instance selection: --instance (or -i), then FH_HOME, then the current directory.',
+		'Usage: fhold [--name <name|absolute-path>] <command> [options]',
+		'Instance selection: --name (or -n), then FH_HOME, then the current directory.',
 		'Names resolve under ~/fhold/instances. Absolute paths can select any instance.',
 		'',
 		'Commands:',

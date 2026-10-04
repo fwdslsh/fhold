@@ -1,16 +1,18 @@
-import { dirname, isAbsolute, join } from 'node:path';
-import { defaultFholdHome, resolveFholdHome } from '@fhold/lib';
+import { isAbsolute } from 'node:path';
+import { defaultFholdHome, isInstanceName, resolveFholdHome } from '@fhold/lib';
 import type { ArgsDef, CommandDef, Resolvable, SubCommandsDef } from 'citty';
 
 export function resolveInstanceHome(instance?: string): string {
 	if (instance === undefined)
 		return resolveFholdHome(process.env.FH_HOME?.trim() || process.cwd());
 	if (!instance || instance.trim() !== instance || instance.includes('\0') || /[\r\n]/.test(instance))
-		throw new Error('Provide an instance directory name or an absolute path with --instance.');
+		throw new Error('Provide an instance directory name or an absolute path with --name (or -n).');
 	if (isAbsolute(instance)) return resolveFholdHome(instance);
 	if (instance === '.' || instance === '..' || /[\\/]/.test(instance))
 		throw new Error('Use a single directory name under ~/fhold/instances, or an absolute path.');
-	return resolveFholdHome(join(dirname(defaultFholdHome()), instance));
+	if (!isInstanceName(instance))
+		throw new Error('Use 1–63 lowercase letters, numbers or hyphens for an instance name, starting and ending with a letter or number; or provide an absolute path.');
+	return resolveFholdHome(defaultFholdHome(instance));
 }
 
 async function value<T>(input: Resolvable<T> | undefined): Promise<T | undefined> {
@@ -43,14 +45,14 @@ export async function instanceArguments(
 			break;
 		}
 		if (
-			token === '--instance' || token === '-i' ||
-			token.startsWith('--instance=') || token.startsWith('-i=')
+			token === '--name' || token === '-n' ||
+			token.startsWith('--name=') || token.startsWith('-n=')
 		) {
-			if (instance !== undefined) throw new Error('Provide --instance only once.');
+			if (instance !== undefined) throw new Error('Provide --name (or -n) only once.');
 			const separator = token.indexOf('=');
 			const supplied = separator >= 0 ? token.slice(separator + 1) : argv[++index];
 			if (!supplied || (separator < 0 && supplied.startsWith('-')))
-				throw new Error('Provide an instance directory name or an absolute path with --instance.');
+				throw new Error('Provide an instance directory name or an absolute path with --name (or -n).');
 			instance = supplied;
 			continue;
 		}

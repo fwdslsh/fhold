@@ -79,7 +79,7 @@ test('every shipped CLI compile target disables both ambient autoload mechanisms
 
 test('compiled named installs use sibling default homes and override ambient FH_HOME', () => {
 	for (const [name, override] of [['april', undefined], ['may', undefined], ['custom-agent', join(root, 'custom-home')]] as const) {
-		const result = spawnSync(secureBinary, ['--instance', name, 'install', '--no-start'], {
+		const result = spawnSync(secureBinary, ['install', '--name', name, '--no-start'], {
 			cwd: root, env: childEnvironment(override ? { FH_HOME: override } : {}), encoding: 'utf8', timeout: 15000
 		});
 		expect(result.error).toBeUndefined();
@@ -89,6 +89,7 @@ test('compiled named installs use sibling default homes and override ambient FH_
 		const config = JSON.parse(readFileSync(join(home, 'state/stack.json'), 'utf8'));
 		expect(config.deployment.projectName).toBe(name);
 		expect(readFileSync(join(home, 'state/stack.env'), 'utf8')).toContain(`FH_HOME=${home}`);
+		expect(readFileSync(join(home, 'state/stack.env'), 'utf8')).toContain(`FH_INSTANCE_HOSTNAME=${name}`);
 		expect(existsSync(join(operatorDirectory, '.fhold'))).toBe(false);
 	}
 });
@@ -96,10 +97,13 @@ test('compiled named installs use sibling default homes and override ambient FH_
 test('compiled CLI selects named, absolute and cwd instances from one shell, ahead of FH_HOME', () => {
 	const april = join(operatorDirectory, 'fhold', 'instances', 'april');
 	const may = join(operatorDirectory, 'fhold', 'instances', 'may');
-	expect(run(secureBinary, root, ['--instance', 'april', 'status'], { FH_HOME: explicitHome }).homeDir).toBe(april);
-	expect(run(secureBinary, root, ['status', '-i', 'may']).homeDir).toBe(may);
-	expect(run(secureBinary, root, ['config', '--instance=april', 'show']).deployment).toMatchObject({ projectName: 'april' });
-	expect(run(secureBinary, root, ['--instance', explicitHome, 'status']).homeDir).toBe(explicitHome);
+	expect(run(secureBinary, root, ['--name', 'april', 'status'], { FH_HOME: explicitHome }).homeDir).toBe(april);
+	expect(run(secureBinary, root, ['status', '-n', 'may']).homeDir).toBe(may);
+	expect(run(secureBinary, root, ['config', '--name=april', 'show']).deployment).toMatchObject({ projectName: 'april' });
+	const before = readFileSync(join(explicitHome, 'state/stack.json'), 'utf8');
+	expect(run(secureBinary, root, ['--name', explicitHome, 'status']).homeDir).toBe(explicitHome);
+	expect(run(secureBinary, root, ['config', 'show', '-n', explicitHome]).deployment).toEqual(JSON.parse(before).deployment);
+	expect(readFileSync(join(explicitHome, 'state/stack.json'), 'utf8')).toBe(before);
 	expect(run(secureBinary, april, ['status']).homeDir).toBe(april);
 	expect(run(secureBinary, may, ['status']).homeDir).toBe(may);
 	expect(run(secureBinary, root, ['status'], { FH_HOME: explicitHome }).homeDir).toBe(explicitHome);
@@ -110,9 +114,9 @@ test('compiled install uses cwd or FH_HOME when no selector is provided and pres
 	const envHome = join(root, 'fresh-env');
 	const absoluteHome = join(root, 'fresh-absolute');
 	for (const [directory, argv, overrides, home] of [
-		[cwd, ['install', '--name', 'cwd-agent', '--no-start'], {}, cwd],
-		[root, ['install', '--name', 'env-agent', '--no-start'], { FH_HOME: envHome }, envHome],
-		[root, ['install', '--instance', absoluteHome, '--name', 'absolute-agent', '--no-start'], {}, absoluteHome]
+		[cwd, ['install', '--no-start'], {}, cwd],
+		[root, ['install', '--no-start'], { FH_HOME: envHome }, envHome],
+		[root, ['install', '-n', absoluteHome, '--no-start'], { FH_HOME: explicitHome }, absoluteHome]
 	] as const) {
 		const result = spawnSync(secureBinary, [...argv], { cwd: directory, env: childEnvironment(overrides), encoding: 'utf8', timeout: 15000 });
 		expect(result.error).toBeUndefined(); expect(result.status, result.stderr || result.stdout).toBe(0);
@@ -123,7 +127,7 @@ test('compiled install uses cwd or FH_HOME when no selector is provided and pres
 
 test('compiled selectors reject ambiguous targets before installation without modifying an existing home', () => {
 	const before = readFileSync(join(explicitHome, 'state/stack.json'), 'utf8');
-	for (const selector of [['--instance'], ['--instance', '../outside'], ['--instance', 'april', '-i', 'may']]) {
+	for (const selector of [['--name'], ['--name', '../outside'], ['--name', 'Bad Name'], ['--name', 'april', '-n', 'may']]) {
 		const result = spawnSync(secureBinary, ['install', '--no-start', ...selector], {
 			cwd: root, env: childEnvironment({ FH_HOME: explicitHome }), encoding: 'utf8', timeout: 15000
 		});

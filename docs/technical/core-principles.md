@@ -67,7 +67,7 @@ drive CLI, Admin and the standalone Assistant image. Updates replace only releas
 managed files, seed missing operator files and never synchronize or delete
 whole trees. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
 default is `~/fhold/instances/default`. CLI home selection is an explicit
-`--instance`/`-i` directory name under that root or an absolute path, then optional
+`--name`/`-n` directory name under that root or an absolute path, then optional
 `FH_HOME`, then cwd. Admin selects a default, recent or custom folder. `~/fhold`
 may also hold backups/docs; it is not itself an instance or a new configuration layer.
 Home selection is canonical; default changes never relocate existing homes or
@@ -78,7 +78,8 @@ manual ports live under Advanced. Existing instances never change ports on refre
 or update. Availability checks are preflight, not a reservation until Compose starts.
 Welcome provides explicit new-instance setup in an empty or new folder. A chosen
 DNS-safe name reuses `deployment.projectName` for Compose/container naming and
-the Assistant hostname; there is no second name registry. Fresh setup refuses
+the Assistant hostname; the CLI uses that same name to select its default folder,
+not a separate install-name option or second name registry. Fresh setup refuses
 names already present in Docker. Compose commands check project working-directory
 ownership before acting, so a selected folder cannot take over another instance.
 Opening/switching homes never resizes the window or starts/stops a stack.

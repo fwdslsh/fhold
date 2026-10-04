@@ -20,12 +20,16 @@ afterEach(() => {
 });
 
 describe('install', () => {
-	it('persists a chosen name as project intent and the derived hostname without Docker', async () => {
+	it('preserves a custom configuration name as project intent and the derived hostname without Docker', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-named-install-'));
 		roots.push(root);
 		process.env.FH_HOME = join(root, 'home');
 		process.env.FH_REPO_ROOT = join(import.meta.dir, '../../../..');
-		await bootstrapInstall({ start: false, name: 'personal-agent' });
+		const intent = defaultStackConfig(process.env.FH_HOME);
+		intent.deployment.projectName = 'personal-agent';
+		const configFile = join(root, 'stack.json');
+		writeFileSync(configFile, JSON.stringify(intent));
+		await bootstrapInstall({ start: false, configFile });
 		const config = JSON.parse(
 			readFileSync(join(process.env.FH_HOME, 'state', 'stack.json'), 'utf8')
 		);
@@ -34,12 +38,16 @@ describe('install', () => {
 			'FH_INSTANCE_HOSTNAME=personal-agent'
 		);
 	});
-	it('refuses an invalid name before materializing a new home', async () => {
+	it('refuses invalid configuration names before materializing a new home', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-invalid-name-'));
 		roots.push(root);
 		process.env.FH_HOME = join(root, 'home');
-		for (const name of ['', 'Agent', 'my agent', '-agent', 'agent-', 'a'.repeat(64)]) {
-			await expect(bootstrapInstall({ start: false, name })).rejects.toThrow('instance name');
+		const configFile = join(root, 'stack.json');
+		for (const name of ['', 'Agent', 'my agent', '-agent', 'agent/slash', 'a'.repeat(129)]) {
+			const config = defaultStackConfig(process.env.FH_HOME);
+			config.deployment.projectName = name;
+			writeFileSync(configFile, JSON.stringify(config));
+			await expect(bootstrapInstall({ start: false, configFile })).rejects.toThrow('valid project');
 			expect(existsSync(process.env.FH_HOME)).toBe(false);
 		}
 	});
