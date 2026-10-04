@@ -10,6 +10,7 @@ Only a small script surface remains active.
 | `bump-release.mjs` | Stamp the complete product release |
 | `smoke-image.sh` | Assert image startup and runtime security boundaries |
 | `smoke-akm-harnesses.mjs` | Image-internal real-harness AKM hook and recall checks, without vendor credentials |
+| `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |
 | `smoke-admin-artifact.mjs` | Extract and launch a fresh Linux Admin AppImage on its build runner |
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |

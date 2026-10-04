@@ -66,6 +66,8 @@ RUN mkdir -p /akm-marketplace/claude \
       akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.agents/plugins/marketplace.json \
       akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.claude-plugin/marketplace.json \
       akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/LICENSE
+COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
+RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
 # Let the pinned native CLI generate its SDK dependency cache at build time.
@@ -135,7 +137,13 @@ COPY --from=tools /akm-marketplace /akm-marketplace
 COPY --from=tools /fhold-plugins /fhold-plugins
 COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
-COPY containers/assistant/codex.config.toml /etc/codex/config.toml
+COPY --from=tools /managed-defaults/ /
+# Native system configuration exists before the non-root entrypoint starts.
+COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
+COPY --from=tools /assistant-defaults/config/opencode/ /etc/opencode/
+COPY --from=tools /assistant-defaults/config/codex/ /etc/codex/
+COPY --from=tools /assistant-defaults/config/claude/ /etc/claude-code/
+COPY --from=tools /native-defaults/opencode-sdk/ /etc/opencode/
 
 ARG PLATFORM_VERSION
 ARG VCS_REF
@@ -153,8 +161,8 @@ LABEL org.opencontainers.image.title="fhold Assistant" \
 RUN test -n "$PLATFORM_VERSION" \
     && usermod -l fhold -d /home/fhold bun \
     && groupmod -n fhold bun \
-    && chmod -R a-w /fhold-bundle /fhold-plugins \
-    && chmod -R a+rX /fhold-bundle /fhold-plugins \
+    && chmod -R a-w /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
+    && chmod -R a+rX /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
     && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
     && for command in opencode akm codex claude; do \
@@ -166,8 +174,8 @@ RUN test -n "$PLATFORM_VERSION" \
     && chmod 0755 /usr/local/bin/fhold-assistant /usr/local/bin/fhold-task /usr/local/bin/fhold-recovery /usr/local/bin/fhold-remote /usr/local/bin/fhold-remote-setup /usr/local/bin/fhold-codex-recall.mjs /usr/local/bin/fhold-healthcheck /usr/local/bin/fhold-opencode-run \
     && ln -s fhold-remote /usr/local/bin/fhold-remote.mjs \
     && mkdir -p /home/fhold /etc/opencode /etc/akm /opt/akm/cache /opt/akm/data/state /stash /work \
-    && chown -R fhold:fhold /home/fhold /etc/opencode /etc/akm /opt/akm /stash /work \
-    && chmod -R a+rwX /home/fhold /etc/opencode /etc/akm /opt/akm /stash /work
+    && chown -R fhold:fhold /home/fhold /etc/akm /opt/akm /stash /work \
+    && chmod -R a+rwX /home/fhold /etc/akm /opt/akm /stash /work
 
 ENV HOME=/home/fhold \
     OPENCODE_CONFIG_DIR=/etc/opencode \

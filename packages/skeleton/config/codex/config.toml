@@ -1,4 +1,6 @@
-# Native system defaults. User configuration and hook-trust decisions take precedence.
+# Operator-owned native defaults. requirements.toml enforces restrictions.
+approval_policy = "on-request"
+
 [marketplaces.akm-plugins]
 source_type = "local"
 source = "/akm-marketplace"

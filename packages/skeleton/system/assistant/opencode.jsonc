@@ -4,26 +4,5 @@
 		"port": 4096,
 		"hostname": "0.0.0.0",
 		"mdns": false
-	},
-	"permission": {
-		"bash": {
-			"*": "allow",
-			"rm -r *": "ask",
-			"rm -rf *": "ask",
-			"rm -fr *": "ask",
-			"sudo *": "ask",
-			"rm -rf /": "deny",
-			"rm -fr /": "deny"
-		},
-		"edit": "allow",
-		"task": "allow",
-		"external_directory": {
-			"/tmp/*": "allow",
-			"/work/*": "allow",
-			"/stash/*": "allow",
-			"/fhold-bundle/*": "allow",
-			"/etc/akm/*": "allow",
-			"/home/fhold/.config/opencode/*": "allow"
-		}
 	}
 }

@@ -73,6 +73,17 @@ function assistantService(homeDir = '/tmp/home') {
 			}
 		],
 		volumes: [
+			...[
+				['opencode/opencode.json', 'opencode/opencode.json'],
+				['codex/config.toml', 'codex/config.toml'],
+				['codex/requirements.toml', 'codex/requirements.toml'],
+				['claude/managed-settings.json', 'claude-code/managed-settings.json']
+			].map(([source, target]) => ({
+				type: 'bind',
+				source: `${homeDir}/config/${source}`,
+				target: `/etc/${target}`,
+				read_only: true
+			})),
 			{ type: 'bind', source: `${homeDir}/data/assistant`, target: '/home/fhold' },
 			{
 				type: 'bind',
@@ -133,6 +144,23 @@ function auditHome(): string {
 }
 
 describe('Compose security audit', () => {
+	it('allows only the exact read-only optional Claude managed MCP mount', () => {
+		const home = auditHome();
+		const config = baseConfig(home);
+		const mount = {
+			type: 'bind',
+			source: `${home}/config/claude/managed-mcp.json`,
+			target: '/etc/claude-code/managed-mcp.json',
+			read_only: true
+		};
+		config.services.assistant.volumes.push(mount);
+		expect(auditCompose(config, home)).toEqual([]);
+		mount.read_only = false;
+		expect(auditCompose(config, home).length).toBeGreaterThan(0);
+		mount.read_only = true;
+		mount.source = `${home}/workspace/managed-mcp.json`;
+		expect(auditCompose(config, home).length).toBeGreaterThan(0);
+	});
 	it('accepts the generic keep-alive overlay without granting additional secrets or mounts', () => {
 		const home = auditHome();
 		const config = baseConfig(home);

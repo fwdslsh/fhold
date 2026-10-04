@@ -1,0 +1,6 @@
+# Built-in handlers run once from /etc/codex/hooks.json, trusted by policy.
+# Add native task permission requirements here; no credentials belong here.
+allow_managed_hooks_only = true
+
+[features]
+hooks = true

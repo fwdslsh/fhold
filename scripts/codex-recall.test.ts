@@ -20,6 +20,31 @@ const hook = (event = 'sessionStart') => ({
 });
 
 describe('native Codex recall review', () => {
+	it('verifies the exact managed handlers and refuses incomplete or duplicate inventories', () => {
+		const managed = { 'akm@akm-plugins': [{ event: 'sessionStart', command: hook().command }] };
+		const system = {
+			...hook(),
+			source: 'system',
+			sourcePath: '/etc/codex/hooks.json',
+			pluginId: null,
+			isManaged: true,
+			trustStatus: 'managed'
+		};
+		expect(recallReview([system], undefined, managed)).toMatchObject({
+			managed: true,
+			status: 'ready',
+			hooks: [{ trust: 'managed' }]
+		});
+		expect(() => recallReview([], undefined, managed)).toThrow('incomplete');
+		expect(() => recallReview([system, system], undefined, managed)).toThrow('duplicated');
+		expect(() => recallReview([{ ...system, command: 'unexpected' }], undefined, managed)).toThrow(
+			'incomplete'
+		);
+		expect(() => recallReview([{ ...system, trustStatus: 'trusted' }], undefined, managed)).toThrow(
+			'Unsupported'
+		);
+		expect(() => recallReview([hook()], undefined, managed)).toThrow('incomplete');
+	});
 	it('reviews the fhold plugin separately without changing AKM or unrelated hook approval', () => {
 		const fhold = { ...hook(), pluginId: 'fhold@fhold-plugins', key: 'fhold:sessionStart' };
 		expect(

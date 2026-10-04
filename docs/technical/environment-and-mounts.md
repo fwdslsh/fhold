@@ -20,7 +20,7 @@ The following paths are relative to that instance's home, not `~/fhold`:
 | Host path | Owner | Purpose |
 |---|---|---|
 | `system/` | fhold release | Exact managed OpenCode and Compose files |
-| `config/` | Operator | Seed-once OpenCode, AKM, and Compose settings |
+| `config/` | Operator | Seed-once OpenCode, Codex, Claude, AKM, and Compose settings |
 | `knowledge/` | Operator and AKM | Knowledge, task sources, scoped user environment, provider auth |
 | `workspace/` | Operator | Trusted local agent workspace |
 | `state/stack.json` | Control plane | Versioned stack intent |
@@ -35,6 +35,11 @@ The following paths are relative to that instance's home, not `~/fhold`:
 
 Updates replace only the allowlisted managed files in `seed.ts`. They seed
 operator files only when absent and never synchronize or delete whole directories.
+
+Native policy files under `config/opencode`, `config/codex` and `config/claude`
+are mounted read-only at the harnesses' system paths. See
+[managed harness configuration](../managed-harness-configuration.md) for exact
+mounts, task permissions and standalone deployment inputs.
 
 ## Host-side Compose variables
 
@@ -54,7 +59,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_ASSISTANT_PORT` | Derived native OpenCode host port |
 | `FH_TIMEZONE`, `FH_AUTOMATIC_MEMORY` | Derived schedule timezone and automatic memory intent |
 | `FH_CODEX_REMOTE`, `FH_CLAUDE_REMOTE` | Independent native supervisor startup switches, both default `1`; optional `0` keeps a worker off without removing account state. Native sign-in/consent is still required. |
-| `FH_CODEX_SANDBOX` | Native Codex isolation: `workspace-write` default, `read-only`, or explicit `danger-full-access` container isolation; approvals remain on-request |
+| `FH_CODEX_SANDBOX` | Native Codex isolation: `workspace-write` default, `read-only`, or explicit `danger-full-access` container isolation; task approvals follow native policy |
 | `FH_GUARDIAN_BIND_ADDRESS` | Derived Guardian host bind |
 | `FH_GUARDIAN_PORT` | Derived Guardian host port |
 | `DISCORD_ALLOWED_GUILDS`, `DISCORD_ALLOWED_ROLES` | Derived Discord scope |

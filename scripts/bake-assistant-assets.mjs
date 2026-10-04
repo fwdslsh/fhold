@@ -8,6 +8,9 @@ import { MANAGED_FILES, SEEDED_FILES } from '../packages/lib/src/control-plane/s
 const locations = [
 	['system/assistant/', '/etc/opencode/'],
 	['config/assistant/', '/home/fhold/.config/opencode/'],
+	['config/opencode/', '/etc/opencode/'],
+	['config/codex/', '/etc/codex/'],
+	['config/claude/', '/etc/claude-code/'],
 	['config/akm/', '/etc/akm/'],
 	['knowledge/', '/stash/']
 ];
@@ -38,11 +41,15 @@ export function bakeAssistantAssets(skeleton, output) {
 		mkdirSync(dirname(target), { recursive: true });
 		copyFileSync(join(skeleton, source), target);
 	}
-	writeFileSync(join(output, 'manifest.tsv'), assets.map(({ source, target }) => `${source}\t${target}\n`).join(''));
+	writeFileSync(
+		join(output, 'manifest.tsv'),
+		assets.map(({ source, target }) => `${source}\t${target}\n`).join('')
+	);
 	return assets;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-	if (process.argv.length !== 4) throw new Error('Usage: bake-assistant-assets.mjs <skeleton> <output>');
+	if (process.argv.length !== 4)
+		throw new Error('Usage: bake-assistant-assets.mjs <skeleton> <output>');
 	bakeAssistantAssets(resolve(process.argv[2]), resolve(process.argv[3]));
 }

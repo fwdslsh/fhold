@@ -3,8 +3,9 @@
 Assistant includes the native AKM plugin and a native fhold plugin in OpenCode,
 Claude Code and Codex. The image build runs each vendor's installer against
 pinned local marketplaces. Startup seeds the generated caches and missing
-defaults; it never installs software, replaces customized native settings or
-pre-approves hooks. The fhold plugins share one activity reporter and the same
+defaults; it never installs software or replaces customized native settings.
+The image registers the existing AKM/fhold handlers as native system-managed
+hooks so fresh sessions need no personal hook approval. The fhold plugins share one activity reporter and the same
 release-owned skills.
 
 ## Skills and identity
@@ -48,8 +49,8 @@ preserved. After an image update, use Claude's native plugin manager to install
 or update `fhold@fhold-plugins` and `akm@akm-plugins` from the baked local
 marketplaces if those customized registrations still select an older version.
 No network install is needed. The fhold plugin version follows the product
-release so a new image never reuses a stale versioned plugin cache. Codex keeps
-its native hook-review requirement when definitions change.
+release so a new image never reuses a stale versioned plugin cache. Managed
+handlers always come from the pinned read-only packages in the running image.
 
 ## Conditional HTTP heartbeat
 
@@ -118,23 +119,23 @@ longer tracks. Hosts still own cooldown, shutdown grace and recovery policy.
 
 ## Native approval and verification
 
-AKM and fhold are installed and enabled without account sign-in. Codex requires
-the operator to review and trust each plugin's hooks using its native `/hooks`
-interface. Trust is never baked into the image. A missing approval is not a
-reason to add a bypass flag or grant the container additional privileges.
+AKM and fhold are installed and enabled without account sign-in. Codex and
+Claude execute their system-managed handlers without personal approval.
+OpenCode loads their existing managed plugins. Deployments can supply native
+task permission policies and MCP configuration through the files documented in
+[managed harness configuration](managed-harness-configuration.md).
 
 The existing fhold review helper can also select the built-in fhold plugin:
 
 ```sh
 fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
-# Only after the operator has reviewed and approved those exact definitions:
-fhold-codex-recall.mjs approve REVIEWED_DIGEST --plugin=fhold@fhold-plugins
 ```
 
-The default selection remains AKM. Approval is bound to the reviewed native
-hashes and a version-checked config write. Other plugins' decisions are preserved.
-Claude retains its native trust and consent flow. Plugin discovery, account
-sign-in, hook approval and a working remote session are distinct checks.
+The default selection remains AKM. A current image reports `managed: true`,
+`status: "ready"`, and native `managed` trust. Personal approve/disable operations
+are refused for managed hooks. Older images still use the helper's exact-hash,
+version-checked native approval flow. Account sign-in, native remote consent,
+managed hook readiness and a working remote session remain distinct checks.
 
 Source references: [OpenCode plugins](https://opencode.ai/docs/plugins/),
 [Claude hooks](https://code.claude.com/docs/en/hooks),

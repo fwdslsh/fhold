@@ -14,11 +14,12 @@ let reviewRequest = 0;
 function renderSandboxHelp() {
 	byId('remote-sandbox-help').textContent =
 		byId('remote-sandbox').value === 'danger-full-access'
-			? 'Use only when the container is your isolation boundary. Codex can access every file, credential and network connection available inside it. On-request approvals and hook review remain, but not every command needs approval.'
-			: 'Uses Codex’s native sandbox and on-request approvals. This requires host sandbox support.';
+			? 'Use only when the container is your isolation boundary. Codex can access every file, credential and network connection available inside it. Task permissions follow the instance policy.'
+			: 'Uses Codex’s native sandbox and the instance task permission policy. This requires host sandbox support.';
 }
 
 export function recallStatusLabel(review) {
+	if (review?.managed) return review.status === 'ready' ? 'Managed · ready' : 'Managed · disabled';
 	return (
 		{ installed: 'Installed', 'approval-needed': 'Approval needed', ready: 'Ready' }[
 			review?.status
@@ -34,11 +35,13 @@ function renderRecallStatus(review, error) {
 	);
 	byId('codex-recall-guidance').textContent =
 		error ??
-		(review?.status === 'approval-needed'
-			? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
-			: review?.status === 'ready'
-				? 'Native approval was verified in this explicit review. Refresh or restart requires another review.'
-				: 'Review AKM hooks here; no Codex command is needed. Start Assistant to check approval.');
+		(review?.managed
+			? 'Controlled by the instance policy. No personal hook approval is required.'
+			: review?.status === 'approval-needed'
+				? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
+				: review?.status === 'ready'
+					? 'Native approval was verified in this explicit review. Refresh or restart requires another review.'
+					: 'Review AKM hooks here; no Codex command is needed. Start Assistant to check approval.');
 }
 
 export function renderRemoteStatus(snapshot) {
@@ -80,9 +83,17 @@ async function loadRecall() {
 					`${h.event} (${h.trust}${h.enabled ? '' : ', off'})\n${h.command}\nDefinition: ${h.sourcePath}\nHash: ${h.hash}`
 			)
 			.join('\n\n');
-		byId('remote-recall').disabled = false;
+		byId('remote-recall').disabled = review.managed === true;
+		byId('remote-recall').required = recallOnly && !review.managed;
 		byId('remote-recall').checked = review.status === 'ready';
-		byId('remote-recall-disable').hidden = !recallOnly || !review.hooks.some((h) => h.enabled);
+		byId('remote-recall-disable').hidden =
+			review.managed || !recallOnly || !review.hooks.some((h) => h.enabled);
+		byId('remote-begin').hidden = recallOnly && review.managed;
+		if (review.managed) {
+			byId('remote-guidance').textContent =
+				'The instance manages these hooks. No approval is needed.';
+			if (recallOnly) byId('remote-stage').textContent = 'Managed hook configuration verified.';
+		}
 		byId('remote-begin').disabled = false;
 	} catch (error) {
 		if (request !== reviewRequest || !byId('remote-dialog').open) return;
@@ -151,7 +162,7 @@ function showProgress(progress) {
 		byId('remote-begin').disabled = false;
 		byId('remote-trust').disabled = false;
 		byId('remote-sandbox').disabled = false;
-		byId('remote-recall').disabled = !recallReview;
+		byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
 		byId('remote-answer').value = '';
 		void refresh(false);
 	} else {
@@ -239,6 +250,7 @@ export function bindRemoteEvents() {
 		}
 		if (
 			starting ||
+			(recallOnly && recallReview?.managed) ||
 			byId('remote-begin').disabled ||
 			(!connectionOnly && !recallOnly && !byId('remote-trust').checked) ||
 			(recallOnly && !byId('remote-recall').checked)
@@ -251,7 +263,7 @@ export function bindRemoteEvents() {
 		byId('remote-prompts').hidden = recallOnly;
 		byId('remote-stage').textContent = 'Preparing Assistant…';
 		try {
-			if (!connectionOnly && tool === 'codex' && recallRequested) {
+			if (!connectionOnly && tool === 'codex' && recallRequested && !recallReview?.managed) {
 				if (!recallReview) throw new Error('Review current AKM hooks first.');
 				{
 					const review = await state.api.codexRecall({
@@ -270,6 +282,7 @@ export function bindRemoteEvents() {
 				!recallOnly &&
 				tool === 'codex' &&
 				!recallRequested &&
+				!recallReview?.managed &&
 				recallReview?.status === 'ready'
 			) {
 				await state.api.codexRecall({
@@ -312,7 +325,7 @@ export function bindRemoteEvents() {
 			}
 		} finally {
 			starting = false;
-			if (!running) byId('remote-recall').disabled = !recallReview;
+			if (!running) byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
 		}
 	});
 	byId('remote-send').addEventListener('click', async () => {
@@ -351,7 +364,7 @@ export function bindRemoteEvents() {
 		void cancel();
 	});
 	byId('remote-recall-disable').addEventListener('click', async () => {
-		if (starting || running || !recallOnly || !recallReview) return;
+		if (starting || running || !recallOnly || !recallReview || recallReview.managed) return;
 		starting = true;
 		setBusy(true);
 		try {

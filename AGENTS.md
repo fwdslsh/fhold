@@ -22,10 +22,13 @@ running processes, mocked tests and source scans are not live readiness.
   Both supervisors default on, waiting for native sign-in and consent.
   Explicit off choices remain off. Enabled workers start
   on every boot, even with scheduling off.
-  Preserve native sign-in, trust, chosen isolation mode and hook approval;
+  Preserve native sign-in, consent, chosen isolation mode and user state;
   failure must not stop the Assistant or recurring work. Codex defaults to its
   workspace sandbox; only explicit `danger-full-access` uses outer container
-  isolation instead. Keep on-request approvals; never automatically fall back.
+  isolation instead. Task approvals follow supplied native system policy,
+  defaulting to on-request; never automatically change policy after failure.
+  Built-in AKM/fhold hooks use native managed registration, without personal
+  approval records. See `docs/managed-harness-configuration.md`.
 - No new protocol, service, provider registry, scheduler or compatibility layer.
 - Host-specific deployment/qualification and external vendor installers are not
   product runtime features. Keep generic transports, runtime contracts, product

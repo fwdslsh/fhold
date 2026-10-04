@@ -17,8 +17,6 @@ export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'w
 			'--listen',
 			'unix://',
 			'-c',
-			'approval_policy="on-request"',
-			'-c',
 			`sandbox_mode="${sandbox}"`
 		];
 	if (tool === 'claude')
@@ -29,8 +27,6 @@ export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'w
 			'same-dir',
 			'--capacity',
 			'1',
-			'--permission-mode',
-			'default',
 			'--no-chrome'
 		];
 	throw new Error('Remote agent must be codex or claude.');

@@ -6,6 +6,7 @@ import { requireInstall } from './state.js';
 
 export type CodexRecallReview = {
 	status: 'installed' | 'approval-needed' | 'ready';
+	managed?: boolean;
 	digest: string;
 	hooks: Array<{
 		key: string;
@@ -14,7 +15,7 @@ export type CodexRecallReview = {
 		command: string;
 		sourcePath: string;
 		enabled: boolean;
-		trust: 'trusted' | 'untrusted' | 'modified';
+		trust: 'trusted' | 'untrusted' | 'modified' | 'managed';
 	}>;
 };
 
@@ -23,6 +24,7 @@ function parseReview(value: unknown): CodexRecallReview {
 	const input = value as Record<string, unknown>;
 	if (
 		!['installed', 'approval-needed', 'ready'].includes(String(input.status)) ||
+		(input.managed !== undefined && typeof input.managed !== 'boolean') ||
 		!/^[a-f0-9]{64}$/.test(String(input.digest)) ||
 		!Array.isArray(input.hooks) ||
 		!input.hooks.length ||
@@ -37,7 +39,9 @@ function parseReview(value: unknown): CodexRecallReview {
 				(k) => typeof h[k] !== 'string' || (h[k] as string).length > 8192
 			) ||
 			typeof h.enabled !== 'boolean' ||
-			!['trusted', 'untrusted', 'modified'].includes(String(h.trust))
+			!(input.managed ? ['managed'] : ['trusted', 'untrusted', 'modified']).includes(
+				String(h.trust)
+			)
 		)
 			throw new Error('Invalid native hook review.');
 	}

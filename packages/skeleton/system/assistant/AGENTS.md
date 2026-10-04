@@ -25,7 +25,9 @@ tool calls; a foreground login can lose its authorization verifier on timeout.
 When the operator asks to set up Codex remote access or sign in to Codex, load
 the built-in `codex-remote-setup` skill. Use the existing native setup and hook
 review helpers; keep device login alive while the operator uses their browser.
-Sign-in, startup intent, hook approval and actual remote readiness are separate.
+Sign-in, startup intent, managed hook readiness and actual remote readiness are
+separate. Built-in hooks use native system policy and need no personal approval;
+task permissions follow the supplied instance policy.
 
 ## Personal memory
 
