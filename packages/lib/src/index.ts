@@ -206,6 +206,8 @@ export {
 	changeCodexRecall,
 	type CodexRecallReview
 } from './control-plane/codex-recall.js';
+export { restartStatus, type RestartStatus } from './control-plane/runtime-revision.js';
+
 export {
 	activateComposeCommand,
 	deactivateComposeCommand

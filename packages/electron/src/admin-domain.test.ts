@@ -7,6 +7,8 @@ import { stageAdminAssets, DISTRIBUTION_ASSETS } from '../scripts/stage-assets.j
 import { retainAdminE2eHome } from '../scripts/admin-e2e-retention.mjs';
 
 import {
+	confirmedAdminAction,
+	interruptionPrompt,
 	adminPortalMappings,
 	adminPortalTokens,
 	backupFromAdmin,
@@ -52,6 +54,18 @@ async function install(
 }
 
 describe('Admin domain', () => {
+	it('requires explicit container confirmation and defaults native dialogs to postponing', () => {
+		for (const action of ['start', 'restart', 'stop'] as const) {
+			expect(() => confirmedAdminAction(action)).toThrow();
+			expect(() => confirmedAdminAction({ action })).toThrow('Confirm');
+			expect(() => confirmedAdminAction({ action, confirmed: false })).toThrow('Confirm');
+			expect(confirmedAdminAction({ action, confirmed: true })).toBe(action);
+		}
+		expect(() => confirmedAdminAction({ action: ['start'], confirmed: true })).toThrow();
+		expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+		expect(interruptionPrompt('remote-setup').detail).toContain('before and after native sign-in');
+		expect(() => interruptionPrompt(['restart'])).toThrow();
+	});
 	it('installs explicitly selected homes with distinct stable Compose projects without changing FH_HOME', async () => {
 		const { root, home } = await install();
 		const other = join(root, 'other-home');

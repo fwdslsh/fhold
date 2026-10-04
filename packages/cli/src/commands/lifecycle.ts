@@ -10,6 +10,7 @@ import {
 	ensureDockerReady,
 	parseComposePsRows,
 	readStackConfig,
+	restartStatus,
 	releaseStackLock,
 	requireInstall,
 	runComposeStreaming
@@ -28,7 +29,7 @@ async function readyState(homeDir?: string): Promise<FholdState> {
 
 async function withLock(
 	state: FholdState,
-	action: (lock: NonNullable<ReturnType<typeof acquireStackLock>>) => Promise<void>
+	action: (lock: NonNullable<ReturnType<typeof acquireStackLock>>) => Promise<unknown>
 ): Promise<void> {
 	const lock = acquireStackLock(state.dataDir);
 	if (!lock) throw new Error('lifecycle_in_progress: Another stack operation is running.');
@@ -79,6 +80,7 @@ export async function readStatus(): Promise<Record<string, unknown>> {
 	return {
 		homeDir: state.homeDir,
 		config: config.config,
+		pendingRestart: restartStatus(state.homeDir),
 		services: result.ok ? parseComposePsRows(result.stdout) : [],
 		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' })
 	};

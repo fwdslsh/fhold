@@ -5,6 +5,7 @@ import { acquireStackLock, releaseStackLock, type StackLock } from './lock.js';
 import { auditCompose } from './secret-audit.js';
 import { ensureRuntime } from './state.js';
 import { readStackConfig } from './stack-config.js';
+import { recordAppliedRuntime, recordRuntimeActivation, restartStatus, runtimeRevision } from './runtime-revision.js';
 
 /** Older images must not receive a policy that disables their only hook source. */
 export async function assertManagedHarnessImage(resolved: unknown, prepareMissing?: () => Promise<void>): Promise<void> {
@@ -26,8 +27,8 @@ export async function assertManagedHarnessImage(resolved: unknown, prepareMissin
 export async function activateComposeCommand(
 	state: FholdState,
 	composeArgs: string[],
-	options: { lock?: StackLock | null } = {}
-): Promise<void> {
+	options: { lock?: StackLock | null; deferAppliedReceipt?: boolean } = {}
+): Promise<string> {
 	const lock = options.lock ?? acquireStackLock(state.dataDir);
 	if (!lock) throw new Error('lifecycle_in_progress: Another stack operation is running.');
 	const ownsLock = options.lock == null;
@@ -48,6 +49,13 @@ export async function activateComposeCommand(
 			if (!hasPull) selectedArgs.push('--pull', 'never');
 		}
 		ensureRuntime(state);
+		const revision = runtimeRevision(state.homeDir);
+		// Compose does not detect changed bind-mounted file contents. A pending
+		// configuration therefore needs recreation, not merely `docker restart`.
+		if (selectedArgs[0] === 'up' && restartStatus(state.homeDir).required) {
+			if (!selectedArgs.includes('--force-recreate')) selectedArgs.push('--force-recreate');
+			if (!selectedArgs.includes('--remove-orphans')) selectedArgs.push('--remove-orphans');
+		}
 		const composeOptions = buildComposeOptions(state);
 		const resolved = await composeConfigJson(composeOptions);
 		if (!resolved.ok) {
@@ -65,9 +73,13 @@ export async function activateComposeCommand(
 				? () => runComposeStreaming([...buildComposeCliArgs(state), 'pull', 'assistant'], { envFiles: composeOptions.envFiles })
 				: undefined);
 		}
+		if (selectedArgs[0] === 'up') recordRuntimeActivation(state.homeDir, revision);
 		await runComposeStreaming([...buildComposeCliArgs(state), ...selectedArgs], {
 			envFiles: composeOptions.envFiles
 		});
+		if (selectedArgs[0] === 'up' && selectedArgs.includes('--wait') && !options.deferAppliedReceipt)
+			recordAppliedRuntime(state.homeDir, revision);
+		return revision;
 	} finally {
 		if (ownsLock) releaseStackLock(lock);
 	}

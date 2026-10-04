@@ -109,6 +109,35 @@ OpenCode links, Guardian MCP details and optional portals. People & access owns
 named identities. System holds backup, restore, logs and diagnostics. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
+### Save changes, restart when ready
+
+Admin saves settings before offering **Restart now** or **Restart later**.
+Postponing is the default; closing the prompt does not restart anything. Make
+several changes and apply them together when you are ready. A persistent
+**Pending restart** banner belongs to that instance and survives closing Admin
+or switching instances. For a stopped instance, it offers **Start to apply**.
+
+Applying recreates the configured containers and can interrupt active work and
+client connections. The banner clears only after a successful healthy start;
+failed or interrupted attempts keep it pending. A matching CLI's `fhold restart`
+also applies the settings and clears the pending state on Admin's next refresh.
+Use fhold's restart, not `docker restart`, to load changed environment, mounts
+and image settings. Turning a remote worker off is also a saved change: it
+continues running until you apply it. Native remote **Set up** separately asks
+for permission before its sign-in workflow can restart containers.
+
+Live credential keys, policies and portal-user mappings still take effect
+without a restart; deferring settings does not defer credential revocation.
+Provider sign-in alone does not restart containers. If provider readiness also
+changes Guardian's moderator configuration, Admin offers a restart to apply it.
+
+Restart tracking covers stack intent, release/seeded startup files, native
+harness policy and enabled portal tokens. It excludes agent data and provider
+login files. Existing homes gain a comparison baseline on their first managed
+edit or successful start with these tools. It is not a watcher for arbitrary
+files mounted through a custom Compose override; restart explicitly after
+editing those files. Status inspection itself never writes tracking state.
+
 ## Provider and knowledge
 
 OpenCode owns providers, credentials and models. Use native sign-in, then

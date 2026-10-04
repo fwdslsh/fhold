@@ -26,6 +26,7 @@ The following paths are relative to that instance's home, not `~/fhold`:
 | `state/stack.json` | Control plane | Versioned stack intent |
 | `state/stack.env` | Control plane | Non-secret values derived from StackConfig intent |
 | `state/installation.json` | Control plane | Generated release/managed-image provenance, never an identity fallback |
+| `state/applied-runtime.json` | Control plane | Private startup-input digest and pending-activation flag; no secret values; shared by CLI/Admin restart status |
 | `state/credentials/` | Control plane/operator | Named Guardian key directories plus derived key-free registry |
 | `state/portal-credentials/` | Control plane | Derived, adapter-scoped runtime keyrings |
 | `config/guardian/oauth.json` | Operator | OAuth resource-server settings; disabled by default |

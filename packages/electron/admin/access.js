@@ -1,4 +1,4 @@
-import { saveConfigAndApply } from './configuration.js';
+import { saveConfigAndOfferRestart } from './configuration.js';
 import { policyLabels, state } from './state.js';
 import { all, byId, operation, setOptions } from './ui.js';
 
@@ -155,10 +155,9 @@ export function bindAccessEvents() {
 			)
 		)
 			return;
-		await saveConfigAndApply(
+		await saveConfigAndOfferRestart(
 			config,
 			'access-form',
-			'restart',
 			'Saving access levels',
 			'Access levels saved and applied.'
 		);

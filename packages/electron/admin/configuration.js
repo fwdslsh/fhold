@@ -1,18 +1,21 @@
 import { render } from './snapshot.js';
 import { state } from './state.js';
 import { byId, notice, operation, setFormClean } from './ui.js';
+import { offerRestart } from './restart.js';
 
-export async function saveConfigAndApply(config, formId, action, progress, success) {
-	return operation(
+export async function saveConfigAndOfferRestart(config, formId, progress, success) {
+	const saved = await operation(
 		progress,
 		async () => {
 			const saved = await state.api.saveConfig({ config, baseConfig: state.currentConfig });
 			setFormClean(formId);
 			render(saved);
-			return state.api.action(action);
+			return saved;
 		},
 		success
 	);
+	if (saved) await offerRestart(saved);
+	return saved;
 }
 
 export function bindConfigurationEvents() {
@@ -44,12 +47,11 @@ export function bindConfigurationEvents() {
 			bindAddress: byId('gateway-bind').value.trim(),
 			port: gatewayPort
 		};
-		await saveConfigAndApply(
+		await saveConfigAndOfferRestart(
 			config,
 			'network-form',
-			'restart',
 			'Saving network settings',
-			'Network settings saved and fhold restarted.'
+			'Network settings saved.'
 		);
 	});
 }

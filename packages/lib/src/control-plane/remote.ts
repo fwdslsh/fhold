@@ -12,6 +12,7 @@ import {
 	type StackConfig
 } from './stack-config.js';
 import { ensureRuntime, requireInstall } from './state.js';
+import { rememberRuntimeBeforeChange } from './runtime-revision.js';
 
 export type RemoteTool = 'claude' | 'codex';
 export type CodexSandbox = StackConfig['assistant']['codexSandbox'];
@@ -102,6 +103,7 @@ export async function disableRemote(state: FholdState, value: unknown): Promise<
 	try {
 		const parsed = readStackConfig(state.homeDir);
 		if (!parsed.ok) throw new Error(parsed.error);
+		rememberRuntimeBeforeChange(state.homeDir);
 		parsed.config.assistant[tool === 'codex' ? 'codexRemote' : 'claudeRemote'] = false;
 		writeStackConfig(state.homeDir, parsed.config);
 		ensureRuntime(state);
@@ -143,6 +145,7 @@ export async function beginRemoteEnable(
 	try {
 		const parsed = readStackConfig(state.homeDir);
 		if (!parsed.ok) throw new Error(parsed.error);
+		rememberRuntimeBeforeChange(state.homeDir);
 		const sandbox = options.sandbox ?? parsed.config.assistant.codexSandbox;
 		parsed.config.assistant[field] = false;
 		if (tool === 'codex') parsed.config.assistant.codexSandbox = sandbox;

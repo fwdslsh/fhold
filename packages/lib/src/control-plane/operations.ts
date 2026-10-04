@@ -8,6 +8,7 @@ import { readOAuthIdentityMap, writeOAuthIdentityMap } from './oauth-store.js';
 import { normalizePortalSecret, writePortalSecret } from './portal-settings.js';
 import { isPortalName, isPortalUserId, portalCredentialUsages, readPortalCredentialMap, syncPortalCredentialBundles, writePortalCredentialMap } from './portal-credential-store.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { rememberRuntimeBeforeChange } from './runtime-revision.js';
 
 /** All mutations read latest intent only after exclusion is acquired. */
 export function mutateStack<T>(homeDir: string, action: (config: StackConfig) => T): T {
@@ -18,6 +19,7 @@ export function mutateStack<T>(homeDir: string, action: (config: StackConfig) =>
 	try {
 		const result = readStackConfig(state.homeDir);
 		if (!result.ok) throw new Error(result.error);
+		rememberRuntimeBeforeChange(state.homeDir);
 		return action(result.config);
 	} finally { releaseStackLock(lock); }
 }

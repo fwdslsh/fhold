@@ -74,6 +74,14 @@ may also hold backups/docs; it is not itself an instance or a new configuration 
 Home selection is canonical; default changes never relocate existing homes or
 rename their persisted project identity. Each home has stable independent project
 intent and saved concrete ports.
+Admin separates saving configuration from applying it. Container-disrupting
+actions require explicit confirmation, with postponement as the default. A
+private, per-home applied-runtime digest records known startup inputs, not
+credentials or agent data. Read-only snapshots report pending changes across
+Admin restarts and instance switches. Only successful healthy activation clears
+the pending state; updates also verify their selected image identities first.
+The existing lifecycle lock and Compose path own application. No background
+service, automatic restart or second configuration store is introduced.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.

@@ -1371,6 +1371,32 @@ input[type="checkbox"] {
 	border: 0;
 }
 
+.pending-restart {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 24px;
+	margin-bottom: 24px;
+	padding: 16px 20px;
+	border: 1px solid var(--border-soft);
+	border-radius: 6px;
+	background: var(--surface-muted);
+}
+
+.pending-restart > div {
+	flex: 1 1 280px;
+}
+
+.pending-restart p {
+	margin: 4px 0 0;
+	font-size: 0.875rem;
+}
+
+.pending-restart button {
+	flex-shrink: 0;
+}
+
 .notice {
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr) auto;

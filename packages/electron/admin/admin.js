@@ -8,6 +8,7 @@ import { bindConfigurationEvents } from './configuration.js';
 import { bindPreferencesEvents } from './preferences.js';
 import { bindRemoteEvents } from './remote.js';
 import { bindInstanceEvents, initializeAdmin } from './instances.js';
+import { bindRestartEvents } from './restart.js';
 import { state } from './state.js';
 
 state.api = window.fholdAdmin;
@@ -21,4 +22,5 @@ bindConfigurationEvents();
 bindPreferencesEvents();
 bindRemoteEvents();
 bindInstanceEvents();
+bindRestartEvents();
 void initializeAdmin();
