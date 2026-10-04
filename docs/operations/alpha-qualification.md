@@ -6,9 +6,45 @@ claim downloadable binaries, published container images or stable release status
 fhold owns the generic images, CLI/Admin, runtime contracts and reusable tests;
 host deployment and third-party installers are outside the product boundary.
 
-Current source candidate is `0.1.2610040547-alpha.3` (unreleased). The evidence
-below belongs to alpha.2; it is not a claim that alpha.3 artifacts or GitHub CI
-have been qualified.
+Current source candidate is `0.1.2610040637-alpha.3` (unreleased). Its verification
+below is separate from the previously qualified alpha.2 artifacts. Local passing
+checks do not establish passing GitHub CI or complete release qualification.
+
+The public source quality gate and Guardian/Portal image checks have since passed
+on GitHub. Assistant image qualification is blocked by the
+[npm runtime advisories](release.md#runtime-release-blockers); no new release is
+published while that gate fails.
+
+## Dependency-refresh verification
+
+On October 4, 2026, the refreshed candidate passed these Linux x64 checks:
+
+- Frozen workspace install, type checks, lint and all 477 product tests, with no
+  failures or skips. Native-history tests used the newly built Assistant image;
+  loopback socket tests were enabled. No workspace dependency was reported
+  outdated by `bun outdated --recursive`.
+- CLI compilation and actual-binary configuration-boundary tests, Admin bundle
+  and x64 AppImage startup, standard unsigned MCPB packing, all-profile Compose
+  validation on a CLI-created empty home, shell syntax and workflow linting.
+- All three image builds and normal startup smokes. Assistant verified npm/npx
+  12.2.0 as non-root stdio launchers, all three native AKM recalls, preserved
+  Codex decisions, changed-hook re-review and remote-worker failure isolation.
+- Cold-container directory and Blob-emulator recovery, including native SQLite,
+  custom paths, account/trust fixtures, final checkpoint and ownership release.
+  These use synthetic data, not real vendor accounts. Azurite's API-version check
+  is disabled because it does not yet implement the shipped SDK's service version;
+  this proves emulator transport/recovery behavior, not live service compatibility.
+- Trivy 0.75.0 found no critical advisories in any image and no fixable high
+  advisories in Guardian or Portal. Assistant still has the three documented npm
+  bundle findings. The reviewed unsigned-MCPB build-tool exception also remains.
+
+The workspace uses the latest stable published direct dependencies checked that
+day. Upstream packages retain their own nested pins: for example, `akm-opencode`
+still depends on `akm-cli` 0.9.21 internally while the installed command is 0.9.24.
+No override was added to force a different upstream SDK implementation.
+No live deployment, provider request, remote-client pairing or native ARM64 run
+is qualified by these local checks. Cross-version checkpoint restore remains
+unsupported; refreshed native dependency versions require their own checkpoints.
 
 ## Qualified alpha.2 evidence
 

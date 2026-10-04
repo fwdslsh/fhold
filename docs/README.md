@@ -18,7 +18,7 @@
 - [Current alpha qualification and limits](operations/alpha-qualification.md).
 
 Canonical source and contributions live at [fwdslsh/fhold](https://github.com/fwdslsh/fhold).
-Current source candidate is `0.1.2610040547-alpha.3` (unreleased).
+Current source candidate is `0.1.2610040637-alpha.3` (unreleased).
 The latest qualified Linux artifacts and all three images are
 `0.1.2610040221-alpha.2`. Qualification separates tested immutable artifacts from
 changed source. Public binary/image publishing, native ARM64 execution and

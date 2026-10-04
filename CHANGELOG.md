@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2610040547-alpha.3 — unreleased public source candidate
+## 0.1.2610040637-alpha.3 — unreleased public source candidate
 
 GitHub is the canonical source and contribution host. Product documentation,
 package metadata and image source labels use `https://github.com/fwdslsh/fhold`.
@@ -14,6 +14,18 @@ a native runner. The MCPB source manifest participates in release stamping.
 The locked Electron build dependency `http-cache-semantics` is updated to 4.3.0
 for the newly reported cache-disclosure advisory. Local agent state and generated
 artifacts are excluded from image build contexts.
+
+Assistant uses the supported build-time npm upgrade to pinned 12.2.0. It removes
+four bundled dependency findings; three upstream findings still block the
+unchanged image security gate. No vendor bundle patches or scan waivers are added.
+
+Refresh workspace dependencies and the native tools to their latest stable
+published versions: Claude Code 2.1.289, Codex 0.160.0, AKM CLI 0.9.24 and MCP SDK
+2.3.0. All three AKM plugins use 0.9.21202610040615, with the native marketplaces
+pinned to the matching verified archive. Bun 1.4.2, Node 24.21.0 LTS and OpenCode
+1.18.34 remain current. CI actions are updated alongside Trivy 0.75.0 and cosign
+3.1.3. Upstream nested dependency pins are preserved; no vendor internals are
+rewritten to force versions.
 
 ## 0.1.2610040221-alpha.2 — qualified Linux artifacts
 

@@ -1,4 +1,9 @@
 FROM node:24.21.0-bookworm-slim AS node-runtime
+ARG NPM_VERSION=12.2.0
+# Use npm's supported self-upgrade at build time, without altering its bundle.
+# This upgrade fixes several bundled advisories; remaining findings still block CI.
+RUN npm install --global "npm@${NPM_VERSION}" \
+    && test "$(npm --version)" = "${NPM_VERSION}"
 
 FROM oven/bun:1.4.2 AS tools
 ARG TARGETARCH
@@ -44,17 +49,17 @@ COPY scripts/bake-assistant-assets.mjs /repo/scripts/bake-assistant-assets.mjs
 RUN bun /repo/scripts/bake-assistant-assets.mjs /repo/packages/skeleton /assistant-defaults
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:44cfcd12e2d034de1ee859fe19b5d3b0e61331972c8a7fb6b86f860007002ce0 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:364e42cbdce9bda435758fd7df7861ce360aa15286ac18a83a871595de39f8cc \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/26a281d923060f40af52c636fd7abc8cb5f64390 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0/claude \
+    && plugin_root=akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0/.agents/plugins/marketplace.json \
-      akm-plugins-f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0/.claude-plugin/marketplace.json \
-      akm-plugins-f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0/LICENSE
+      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.agents/plugins/marketplace.json \
+      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.claude-plugin/marketplace.json \
+      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/LICENSE
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
 # Let the pinned native CLI generate its SDK dependency cache at build time.
@@ -102,8 +107,8 @@ RUN apt-get update \
 
 COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
-# Keep npm/npx paired with the pinned upstream Node runtime, not Debian's npm
-# or a second package manager installation at startup.
+# Keep the compatible, pinned upstream npm/npx installed in the Node stage,
+# not Debian's npm or a second package manager installation at startup.
 COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY containers/assistant/tools/package.json /opt/fhold/tools/package.json
 COPY containers/assistant/entrypoint.sh /usr/local/bin/fhold-assistant

@@ -49,9 +49,13 @@ wait_for_health() {
 verify_runtime_versions() {
 	test "$(docker exec "$container" bun --version)" = "$expected_bun"
 	if [ "$kind" = assistant ]; then
-		local expected_node expected_tools
+		local expected_node expected_npm expected_tools
 		expected_node=$(sed -nE 's/^FROM node:([0-9.]+).*$/\1/p' containers/assistant/Dockerfile)
 		test "$(docker exec "$container" node --version)" = "v$expected_node"
+		expected_npm=$(sed -nE 's/^ARG NPM_VERSION=([0-9.]+)$/\1/p' containers/assistant/Dockerfile)
+		test -n "$expected_npm"
+		test "$(docker exec "$container" npm --version)" = "$expected_npm"
+		test "$(docker exec "$container" npx --version)" = "$expected_npm"
 		# OpenCode runs login shells whose /etc/profile replaces the image PATH.
 		# Native CLIs must remain ordinary commands without an agent exporting PATH.
 		docker exec --workdir /work "$container" bash --login -c \

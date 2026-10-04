@@ -6,7 +6,7 @@ host. The latest qualified Linux artifacts and all three images are
 records tested runtime/artifact evidence and remaining gates. Changed source
 does not inherit those artifacts' qualification.
 
-Current source candidate is `0.1.2610040547-alpha.3` (unreleased). Preparing and
+Current source candidate is `0.1.2610040637-alpha.3` (unreleased). Preparing and
 publishing its source does not publish new binaries/images or establish passing
 GitHub CI; record actual workflow results separately.
 
@@ -74,12 +74,46 @@ evidence must verify the extracted ARM64 ELF architecture and be labeled
 build-only, not a startup smoke. Future public asset validation still requires
 the complete declared Linux inventory before publication.
 
+## Runtime release blockers
+
+The first [public GitHub CI run](https://github.com/fwdslsh/fhold/actions/runs/37181359928)
+passed the quality gate and both native architectures for Guardian and Portal,
+but the Assistant's fixable-HIGH image scan failed on seven advisories in npm's
+bundled dependencies. This is a release blocker, not an audit exception.
+
+The Assistant now installs pinned upstream npm 12.2.0 through the standard
+global upgrade during the Node build stage. Its published bundle updates
+`ip-address` and `tar` and removes four of those findings. Three remain:
+
+| Bundled dependency | Version | Remaining advisory | Required fix |
+| --- | --- | --- | --- |
+| `brace-expansion` | 5.0.9 | CVE-2026-102276, CVE-2026-102278 | 5.0.11 or later |
+| `undici` | 6.28.0 | CVE-2026-19534 | 6.28.1 or later in the 6.x line |
+
+The rebuilt Linux x64 image was scanned with Trivy 0.75.0 and confirms exactly
+these three fixable high findings, with no critical findings. Guardian and Portal
+have neither critical nor fixable high findings. The standard runtime and recovery
+smokes passed separately; they do not waive vulnerability gates. See the
+[dependency-refresh verification](alpha-qualification.md#dependency-refresh-verification).
+
+The [published npm 12.2.0 bundle](https://registry.npmjs.org/npm/-/npm-12.2.0.tgz)
+retains these versions as checked on October 4, 2026. npm 12.2.0 supports
+the pinned Node 24 runtime. Use [npm's supported upgrade process](https://docs.npmjs.com/try-the-latest-stable-version-of-npm/);
+do not modify its internal bundle, remove npm/npx functionality or suppress the
+findings to make CI pass.
+
+Before a binary/image release, select a supported upstream npm release containing
+the fixes, rebuild Assistant, pass the unchanged image scans and native smokes on
+both architectures, and complete the release dry run. Until then, source hosting
+is public but full release qualification is incomplete. Existing running instances
+are not updated by a source or CI change.
+
 ## Reviewed build-tool advisory
 
 Raw `bun audit` continues to report `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 is
 an unpatched high-severity transitive dependency of the MCPB developer packer.
 The [official advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv) concerns
-RSA signature verification and lists no patched version as of 2026-10-01.
+RSA signature verification and lists no patched version as of 2026-10-04.
 
 The reviewed exception is limited to the standard **unsigned** MCPB pack path:
 the packer eagerly imports signing code, but this path performs no certificate,
