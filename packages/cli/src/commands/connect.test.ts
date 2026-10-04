@@ -54,9 +54,9 @@ describe('connection guidance', () => {
 			showKey: true
 		});
 		expect(revealed.credentialKey?.length).toBeGreaterThanOrEqual(32);
-		expect(revealed.extension).toBeUndefined();
-		expect(revealed.note).toContain('No public MCPB download is published');
-		expect(revealed.note).toContain(`artifacts/fhold-claude-desktop-${cliPackage.version}.mcpb`);
-		expect(revealed.note).toContain('bun run --cwd packages/claude-desktop pack');
+		expect(revealed.extension).toBe(
+			`https://github.com/fwdslsh/fhold/releases/download/${cliPackage.version}/fhold-claude-desktop-${cliPackage.version}.mcpb`
+		);
+		expect(revealed.note).toContain('matching GitHub release');
 	});
 });

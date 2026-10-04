@@ -124,6 +124,10 @@ bypasses Guardian.
 | `config/assistant` | `/home/fhold/.config/opencode` | read-only |
 | `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
 | `system/assistant` | `/etc/opencode` | read-only |
+| `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
+| `config/codex/config.toml` | `/etc/codex/config.toml` | read-only |
+| `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only |
+| `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | read-only |
 | `config/akm` | `/etc/akm` | read-write; AKM's native scheduler activation only, no delegated ingress credentials |
 | `knowledge` | `/stash` | read/write |
 | `data/akm/cache` | `/opt/akm/cache` | read/write |

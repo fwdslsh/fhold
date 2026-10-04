@@ -12,8 +12,6 @@ fhold -n another-agent status
 fhold --name /srv/fhold/team-agent status
 ```
 
-These selectors describe the source CLI/next release. Published alpha.3 still
-uses `FH_HOME`; see [installation](installation.md#select-an-instance).
 With `FH_HOME` unset, change into an instance's home and use the shorter commands
 below. Existing homes are not moved by updates: use their saved absolute path,
 cwd, `FH_HOME` or Admin's folder picker, not a name that resolves elsewhere.
@@ -52,6 +50,42 @@ locally first; a missing local image cannot silently fetch a Docker Hub substitu
 Explicit `fhold update --pull` is refused for this local-only namespace.
 An explicitly configured nonlocal registry namespace retains its default pull
 behavior; `--no-pull` selects existing local copies for that registry intent.
+
+### Upgrade from alpha.3
+
+Download the new CLI or Admin from the [alpha.4 release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4)
+first; `fhold update` updates the selected instance, not the CLI executable.
+Select the existing home's **absolute path** in the new CLI, or open that folder
+in the new Admin, then update:
+
+```bash
+fhold --name /absolute/path/to/existing-instance update
+```
+
+This keeps the existing location, saved identity, ports, data and credentials.
+Managed image defaults advance to alpha.4. Explicit image pins remain pins;
+review and update an older pin before activating the new managed policy mounts.
+The CLI refuses an incompatible Assistant image rather than silently disabling
+its hooks. CLI/Admin and image must come from the matching release.
+
+Built-in AKM/fhold hooks now use native managed registration. Custom user,
+project and ordinary plugin hooks are suppressed by the managed-only default;
+move reviewed custom hooks into native managed settings before upgrading if
+you rely on them. Plugin skills and MCP servers remain available. See
+[managed harness configuration](managed-harness-configuration.md) for native
+file paths and examples. Native remote workers remain experimental.
+
+### Edit harness settings
+
+Edit the native files under your instance's `config/` directory and run
+`fhold restart` from that home (with `FH_HOME` unset), or select it with `--name`.
+No image rebuild is required. Updates only seed missing operator files and
+preserve your edits; the files are read-only inside the container.
+Use [the configuration map](managed-harness-configuration.md#deployment-inputs)
+to choose between ordinary user settings and enforced operator policy. Do not
+edit release-owned `system/` files or generated `state/stack.env`.
+
+## Admin
 
 Admin starts at Welcome: previous/default instance, recent paths or a folder
 picker. **Create new instance** suggests `~/fhold/instances/<name>` as you enter a name;

@@ -6,7 +6,8 @@ fhold uses OpenCode directly; it does not maintain a parallel agent/session abst
 
 | Layer | Host path | Purpose |
 |---|---|---|
-| managed directory | `system/assistant` | server settings, global instructions, three Guardian profiles, restricted scheduled profile, local AKM plugin wrapper |
+| managed directory | `system/assistant` | release-owned server settings, global instructions, Guardian/scheduled profiles and native AKM/fhold plugins |
+| operator policy | `config/opencode/opencode.json` | native managed settings and permissions, overriding ordinary user settings |
 | user config | `config/assistant/` | operator model/provider preferences, persona, and user profile |
 | provider auth | `knowledge/secrets/auth.json` | OpenCode credential store |
 | workspace | `workspace` | trusted local worktree |
@@ -14,7 +15,11 @@ fhold uses OpenCode directly; it does not maintain a parallel agent/session abst
 `OPENCODE_CONFIG_DIR=/etc/opencode` points at the managed directory. Both loaded
 config directories contain a pre-seeded `.gitignore` and are mounted read-only,
 so OpenCode does not bootstrap package metadata or fetch its plugin SDK at
-startup. OpenCode discovers the image-baked local plugin at `plugins/akm.js`.
+startup. OpenCode discovers the image-baked local plugins at `plugins/akm.js`
+and `plugins/fhold.js`. The operator policy is a separate read-only file mount
+inside `/etc/opencode`; updates preserve host edits. See
+[managed harness configuration](../managed-harness-configuration.md) for its
+precedence, edit/restart workflow and custom deployment mounts.
 
 Project configuration, Claude compatibility discovery, external skill
 discovery, and OpenCode's embedded browser UI are disabled in the hosted

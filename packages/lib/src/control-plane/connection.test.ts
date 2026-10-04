@@ -7,6 +7,7 @@ import { connectionDetails } from './connection.js';
 import { ensureCredentialKeys } from './credential-store.js';
 import { managedComposeFile, stateSecretFile } from './foundation.js';
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
+import { FH_RELEASE_VERSION } from './release.js';
 
 const roots: string[] = [];
 
@@ -27,6 +28,19 @@ afterEach(() => {
 });
 
 describe('shared connection details', () => {
+	it('links the matching published extension and preserves explicit local bundles', () => {
+		const root = home();
+		const details = connectionDetails(root, 'claude');
+		expect(details.extension).toBe(
+			`https://github.com/fwdslsh/fhold/releases/download/${FH_RELEASE_VERSION}/fhold-claude-desktop-${FH_RELEASE_VERSION}.mcpb`
+		);
+		expect(details.note).toContain('matching GitHub release');
+		expect(details.credentialKey).toBeUndefined();
+		const local = connectionDetails(root, 'claude', { claudeExtension: '/tmp/local.mcpb' });
+		expect(local.extension).toBe('/tmp/local.mcpb');
+		expect(local.note).toContain('explicitly supplied MCPB');
+	});
+
 	it('keeps native and Guardian secrets hidden unless explicitly requested', () => {
 		const root = home();
 		const direct = connectionDetails(root, 'opencode');

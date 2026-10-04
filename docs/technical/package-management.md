@@ -4,7 +4,8 @@ The source workspaces share one root `bun.lock`. Host orchestration imports
 `@fhold/lib`; the library has no runtime dependency. Standard MCP/platform SDKs
 remain in their owning packages. The CLI source/build workspace produces a
 standalone Linux executable; it is not an npm bootstrap package. GitHub is the
-canonical source; public binary/image publishing is not configured.
+canonical source and release builder; Linux downloads are published there and
+signed multi-architecture images are published to public Docker Hub.
 
 Native Node.js 22.12 or newer is required for Electron developer/build tooling;
 do not use a shell alias or compatibility shim in place of the native binary.

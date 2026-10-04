@@ -82,10 +82,12 @@ export function connectionDetails(
 		return {
 			type,
 			...common,
-			...(options.claudeExtension ? { extension: options.claudeExtension } : {}),
+			extension:
+				options.claudeExtension ??
+				`https://github.com/fwdslsh/fhold/releases/download/${FH_RELEASE_VERSION}/fhold-claude-desktop-${FH_RELEASE_VERSION}.mcpb`,
 			note: options.claudeExtension
 				? 'Enable Guardian, install the explicitly supplied MCPB, then enter this loopback URL and credential key.'
-				: `No public MCPB download is published for this private alpha. From a reviewed fhold checkout, run bun run --cwd packages/claude-desktop pack and install packages/claude-desktop/artifacts/fhold-claude-desktop-${FH_RELEASE_VERSION}.mcpb. Enable Guardian, then enter this loopback URL and credential key.`
+				: `Download fhold-claude-desktop-${FH_RELEASE_VERSION}.mcpb from the matching GitHub release and install it in Claude Desktop. Enable Guardian, then enter this loopback URL and credential key.`
 		};
 	}
 	return {

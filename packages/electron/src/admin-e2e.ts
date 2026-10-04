@@ -1165,16 +1165,23 @@ async function run(): Promise<Record<string, unknown>> {
 			url: document.querySelector('#claude-url')?.textContent,
 			credential: document.querySelector('#claude-credential')?.value,
 			extension: document.querySelector('#claude-extension-help')?.textContent,
-			download: document.querySelector('#install-claude-extension')
-		}))()`)) as { url?: string; credential?: string; extension?: string; download?: unknown };
+			download: document.querySelector('#claude-extension-download')?.getAttribute('href'),
+			downloadHidden: document.querySelector('#claude-extension-download')?.hidden
+		}))()`)) as {
+			url?: string;
+			credential?: string;
+			extension?: string;
+			download?: string;
+			downloadHidden?: boolean;
+		};
 		assert(claudeRecipe.url?.endsWith('/mcp'), 'Claude recipe omitted the MCP endpoint.');
 		assert(claudeRecipe.credential === 'owner', 'Claude recipe omitted its access identity.');
 		assert(
-			/no public.*download/i.test(claudeRecipe.extension ?? '') &&
-				claudeRecipe.extension?.includes('bun run --cwd packages/claude-desktop pack') &&
-				claudeRecipe.extension.includes('.mcpb') &&
-				!claudeRecipe.download,
-			'Claude recipe omitted the local bundle instructions or advertised an unavailable download.'
+			claudeRecipe.extension?.includes('matching GitHub release') &&
+				claudeRecipe.download?.startsWith('https://github.com/fwdslsh/fhold/releases/download/') &&
+				claudeRecipe.download.endsWith('.mcpb') &&
+				claudeRecipe.downloadHidden === false,
+			'Claude recipe omitted the matching public extension download.'
 		);
 		await assertRenderedFloor(window, 'Claude Desktop recipe');
 		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png');

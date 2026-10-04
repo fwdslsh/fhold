@@ -827,20 +827,32 @@ describe('Admin renderer behavior', () => {
 		expect(control('guardian-api-status').textContent).toContain('enabled');
 	});
 
-	it('provides local MCPB instructions without an unavailable public download', () => {
+	it('offers the matching public MCPB download and hides unavailable links', () => {
 		state.currentSnapshot = { config: { gateway: { enabled: false } } };
 		const note =
-			'No public MCPB download is published for this private alpha. Run bun run --cwd packages/claude-desktop pack and install packages/claude-desktop/artifacts/fhold-claude-desktop-0.1.2610020008-alpha.1.mcpb.';
-		renderConnectionDetails({
+			'Download the extension from the matching GitHub release and install it in Claude Desktop.';
+		const extension =
+			'https://github.com/fwdslsh/fhold/releases/download/0.1.2610041911-alpha.4/fhold-claude-desktop-0.1.2610041911-alpha.4.mcpb';
+		const snapshot = {
 			connectionDetails: {
 				opencode: { url: 'http://127.0.0.1:3810', username: 'user' },
-				claude: { url: 'http://127.0.0.1:3830/mcp', note },
+				claude: {
+					url: 'http://127.0.0.1:3830/mcp',
+					note,
+					extension: extension as string | undefined
+				},
 				mcp: { url: 'http://127.0.0.1:3830/mcp' }
 			}
-		});
+		};
+		renderConnectionDetails(snapshot);
 		expect(control('claude-extension-help').textContent).toBe(note);
-		expect(html).not.toContain('id="install-claude-extension"');
+		expect(control('claude-extension-download').getAttribute('href')).toBe(extension);
+		expect(control('claude-extension-download').hidden).toBe(false);
 		expect(html).toContain('data-copy-field="claude-extension-help"');
+		snapshot.connectionDetails.claude.extension = undefined;
+		renderConnectionDetails(snapshot);
+		expect(control('claude-extension-download').hidden).toBe(true);
+		expect(control('claude-extension-download').getAttribute('href')).toBe('about:blank');
 	});
 
 	it('uses dialable wildcard and IPv6 addresses and reports unhealthy services', () => {

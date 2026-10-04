@@ -22,9 +22,10 @@ fhold credential add claude-desktop read
 fhold connect claude --credential claude-desktop
 ```
 
-No public MCPB download is configured. From the reviewed fhold
-checkout, run `bun run --cwd packages/claude-desktop pack` and use the matching
-`packages/claude-desktop/artifacts/fhold-claude-desktop-<version>.mcpb`.
+Download `fhold-claude-desktop-<version>.mcpb` from the matching
+[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4).
+Admin's **Connections → Claude Desktop** panel provides the direct download;
+`fhold connect claude` prints the same versioned URL. No source build is required.
 In Claude Desktop:
 
 1. Open **Settings → Extensions → Advanced settings**.
@@ -56,7 +57,7 @@ credential also receives session mutation and permission-approval operations.
   healthy.
 - Credential rotation requires updating the extension setting.
 - Removing the named credential immediately revokes its key.
-- Locally built MCPB updates are installed manually.
+- Extension updates are installed manually from the matching release.
 
 Build the artifact from source with:
 
@@ -67,7 +68,7 @@ bun run --cwd packages/claude-desktop pack
 
 The result is written to `packages/claude-desktop/artifacts/`. The standard
 unsigned pack bundles runtime dependencies and validates the MCPB manifest.
-Public MCPB downloads and signing are not configured; see the reviewed build-tool
+Release MCPB downloads are unsigned; see the reviewed build-tool
 advisory in the [release runbook](operations/release.md).
 
 For access from Claude web/mobile or from another computer, use the

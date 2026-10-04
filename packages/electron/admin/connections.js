@@ -112,6 +112,9 @@ export function renderConnectionDetails(snapshot) {
 	setText('claude-url', details.claude.url);
 	setText('mcp-url', details.mcp.url);
 	setText('claude-extension-help', details.claude.note);
+	const extensionLink = byId('claude-extension-download');
+	extensionLink.setAttribute('href', details.claude.extension || 'about:blank');
+	extensionLink.hidden = !details.claude.extension;
 	byId('direct-password').value = '';
 	byId('direct-password').type = 'password';
 	byId('show-direct-password').checked = false;

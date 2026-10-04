@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.1.2610041911-alpha.4 — managed harness settings and simpler instance selection
+
+OpenCode, Codex and Claude now load operator-owned native policies from the
+instance's `config/` directory. Edit the files and restart; no image rebuild,
+new service or cloud-specific configuration is needed. Updates preserve edits,
+and the files are mounted read-only inside the Assistant. See
+[the file map and examples](docs/managed-harness-configuration.md).
+
+Built-in AKM/fhold hooks use native managed registration, with no personal hook
+approval required. **Custom-hook behavior changes:** the managed-only defaults
+suppress user, project and ordinary plugin hooks. Add reviewed custom hooks to
+the native managed settings if needed; plugin skills and MCP servers remain
+available. Managed policy is deployment configuration, not part of portable
+knowledge backups; preserve and reprovision it separately.
+
+Upgrade the CLI/Admin and Assistant image together. Activation checks image
+compatibility, preventing an older image pin from silently losing its hooks.
+Existing image pins remain explicit choices. See [alpha.3 upgrade instructions](docs/managing-fhold.md#upgrade-from-alpha3).
 
 New named instances live under `~/fhold/instances/<name>`, leaving room beside
 `instances/` for backups, docs and other local files. One global CLI `--name`/`-n`
@@ -12,8 +29,20 @@ identities are preserved when selecting a home by name or absolute path.
 Admin suggests the folder as a new instance is named; its unnamed default is
 `~/fhold/instances/default`, and custom folder choices remain supported.
 Existing homes, project names, ports, credentials and data are not relocated or
-changed automatically. Published alpha.3 artifacts are unchanged; use `FH_HOME`
-explicitly with that release until the new CLI is published.
+changed automatically. Alpha.3 binaries still require `FH_HOME`; the new global
+selector is available in alpha.4.
+
+Admin and CLI now link directly to the matching public Claude Desktop extension.
+Installation, management and release documentation have been aligned with the
+public GitHub/Docker Hub distribution and native configuration paths.
+
+Linux x64/ARM64 CLI, Admin AppImages and the optional unsigned MCPB are built
+on GitHub with checksums and an asset manifest. Fresh installs select the
+matching pinned public images. Claude/Codex remote workers remain experimental;
+ARM64 Admin startup remains unqualified. The previously approved, scoped
+[dependency exceptions](docs/operations/release.md#reviewed-runtime-advisories)
+remain in effect; this is not a clean-audit claim. Publishing does not update
+existing running instances.
 
 ## 0.1.2610040821-alpha.3 — public Linux alpha
 

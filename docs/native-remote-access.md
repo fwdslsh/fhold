@@ -1,14 +1,15 @@
 # Experimental Codex and Claude Code remote sessions
 
-Both integrations remain experimental in the first fhold alpha.
+Both integrations remain experimental in alpha.4.
 Both supervisors default on. Both have native
 account, consent, host and client requirements, and either can be disabled.
 Only a future release with explicit end-to-end validation may remove that label.
 This status does not apply to the core fhold agent or Claude Desktop MCPB.
 
-Use matching CLI/Admin and Assistant builds. Guided enable and native recall
-approval require the image-baked helpers; replacing source or one frontend
-does not update a running image. Public releases are not configured.
+Use matching CLI/Admin and Assistant releases. Guided setup uses the image-baked
+helpers; built-in recall hooks use native managed registration. Replacing source
+or one frontend does not update a running image. See [upgrading](managing-fhold.md#upgrade-from-alpha3)
+and [managed configuration](managed-harness-configuration.md).
 
 These options start **separate native coding agents** in the Assistant's
 workspace. They do not turn Codex or Claude Code into clients of OpenCode, expose

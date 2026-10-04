@@ -1,19 +1,37 @@
 # Linux qualification and release limits
 
 Canonical source is [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Linux is supported through local builds. Public source availability does not
-claim downloadable binaries, published container images or stable release status.
+Linux CLI/Admin downloads and signed multi-architecture container images are
+published through GitHub releases. Alpha releases are not stable releases.
 fhold owns the generic images, CLI/Admin, runtime contracts and reusable tests;
 host deployment and third-party installers are outside the product boundary.
 
-Current source candidate is `0.1.2610040637-alpha.3` (unreleased). Its verification
-below is separate from the previously qualified alpha.2 artifacts. Local passing
-checks do not establish passing GitHub CI or complete release qualification.
+Release-specific gates run through the [GitHub release workflow](https://github.com/fwdslsh/fhold/actions/workflows/release.yml).
+The workflow builds Linux x64/ARM64 CLI and AppImages, tests images on native x64
+and ARM64 runners, signs published images and checks uploaded asset bytes before
+publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
+The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
+disclosed exceptions, not clean-scan claims.
 
-The public source quality gate and Guardian/Portal image checks have since passed
-on GitHub. Assistant image qualification is blocked by the
-[npm runtime advisories](release.md#runtime-release-blockers); no new release is
-published while that gate fails.
+## Alpha.4 scope
+
+`0.1.2610041911-alpha.4` adds native managed harness policies, the global
+`--name`/`-n` instance selector and a public Claude Desktop extension download
+link. See [upgrade notes](../managing-fhold.md#upgrade-from-alpha3) for retained
+homes, compatible image pins and custom-hook behavior. The
+[managed-policy review](managed-harness-policy-verification.md) records source
+and real-image checks; each alpha.4 artifact still requires its own release gate.
+Do not treat historical alpha.2/alpha.3 counts below as alpha.4 results.
+
+## Published alpha.3 evidence
+
+[Alpha.3](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610040821-alpha.3)
+was published by successful [GitHub release run 37189889821](https://github.com/fwdslsh/fhold/actions/runs/37189889821).
+Its standalone Linux CLI/Admin, MCPB, checksums and manifest are public. All three
+Docker Hub images are signed and support amd64/arm64. Native x64/ARM64 runtime
+gates, downloaded x64 CLI/AppImage startup, fresh CLI installation, authenticated
+OpenCode access and conditional keep-alive passed. These immutable artifacts
+predate managed policies and must not receive alpha.4's managed-only mounts.
 
 ## Dependency-refresh verification
 
@@ -48,7 +66,7 @@ unsupported; refreshed native dependency versions require their own checkpoints.
 
 ## Qualified alpha.2 evidence
 
-The latest qualified Linux artifacts and all three images are
+The previously locally qualified Linux artifacts and all three images are
 `0.1.2610040221-alpha.2`. Qualification on October 4, 2026
 covered the exact built artifacts, not subsequent source changes. Original
 versions, bytes and verification receipts remain immutable.
@@ -93,13 +111,14 @@ source cleanup does not re-certify existing images or deployments.
 ## Remaining gates
 
 Native Claude/Codex workers remain experimental. Supervisors default on and
-preserve explicit off decisions; sign-in, consent, trust and hook review remain
-user choices. Process status is not client/tool readiness. Codex defaults to
+preserve explicit off decisions; native sign-in, consent and workspace trust remain
+user choices. Alpha.4's built-in hooks use managed registration, not personal
+approval. Process status is not client/tool readiness. Codex defaults to
 `workspace-write`; outer container isolation must be explicit. Account renewal
 and reconnect after recovery require separate live confirmation.
 
-Public binary/image publishing, signing, native ARM64 execution and Windows/macOS
-packaging are not qualified by the local x64 run. Public OAuth, a live Slack
+Windows/macOS packaging and native ARM64 Admin startup remain unqualified.
+Public OAuth, a live Slack
 account, target-host network mounts and measured recovery capacity/RPO/RTO remain
 separate gates. The unsigned MCPB build-tool advisory exception is scoped to
 packing, not a clean-audit claim; see [release operations](release.md).

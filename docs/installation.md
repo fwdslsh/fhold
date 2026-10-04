@@ -2,18 +2,17 @@
 
 Use a non-root Linux account with Docker Engine and Compose v2. Download the
 matching x64 or ARM64 CLI or Admin AppImage from the
-[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610040821-alpha.3).
+[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4).
 The release includes checksums and an asset manifest. The CLI is a standalone
 executable; installed releases do not require Bun, Node.js or npm on the host.
 
 For example, on Linux x64:
 
 ```bash
-curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610040821-alpha.3/fhold-cli-linux-x64
+curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610041911-alpha.4/fhold-cli-linux-x64
 chmod +x fhold
-export FH_HOME="$HOME/fhold/instances/personal-agent"
 ./fhold install --name personal-agent
-./fhold setup
+./fhold --name personal-agent setup
 ```
 
 Use `fhold-cli-linux-arm64` on ARM64. CLI and Admin pull the matching pinned
@@ -61,7 +60,7 @@ explicit `update --pull` is refused rather than treating `fhold/` as Docker Hub.
 
 ## Select an instance
 
-The source CLI (next release) selects a home in this order:
+The CLI selects a home in this order:
 
 1. `--name` or `-n`: a directory name beneath `~/fhold/instances/`, or an absolute path.
 2. `FH_HOME`, if explicitly set in your shell.
@@ -85,10 +84,8 @@ backups, docs and other local directories. Custom locations remain supported.
 Existing homes are never moved automatically; continue selecting their original
 location explicitly.
 
-The published alpha.3 CLI predates global `--name`/`-n` selection and the cwd
-fallback. In alpha.3, `install --name` only sets the container/hostname identity;
-use `FH_HOME` with that binary, as in the download example above. The new selection
-behavior is in source; published artifacts have not been replaced.
+Alpha.3 predates global `--name`/`-n` selection and the cwd fallback. Use
+`FH_HOME` when running that older binary; install alpha.4 to use the commands above.
 
 CLI and Admin derive the same stable per-home Compose
 project. A DNS-safe directory name under the default instances root is also the

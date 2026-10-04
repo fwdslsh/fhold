@@ -44,8 +44,8 @@ All three CLI build commands disable Bun's compiled dotenv and bunfig autoload
 with `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`.
 Run the actual compiled-binary regression from a directory containing hostile
 `.env` and `bunfig.toml` fixtures; source-level tests alone do not prove this
-launch boundary. Alpha.2 passed those actual-binary checks and artifact gates;
-subsequent source changes do not rebind its artifacts to another revision.
+launch boundary. Earlier releases passed those actual-binary checks and artifact gates;
+subsequent source changes do not rebind their artifacts to another revision.
 
 The Assistant image also fixes the distinct Bun helper/AKM workspace-preload
 boundary with native `BUN_OPTIONS='--no-env-file --config=/dev/null'`. Verify

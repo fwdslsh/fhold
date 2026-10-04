@@ -13,13 +13,14 @@
 - [Architecture](technical/architecture.md) and [core principles](technical/core-principles.md).
 - [Configuration, environment and mounts](technical/environment-and-mounts.md).
 - [Native OpenCode configuration](technical/opencode-configuration.md).
+- [Managed harness configuration](managed-harness-configuration.md): editable native settings, enforced policies and custom hooks.
 - [MCP API reference](technical/api-spec.md).
 - [Dependencies and development](technical/package-management.md), [tests](technical/testing-workflow.md).
 - [Admin verification](operations/admin-setup-verification.md) and [release gates](operations/release.md).
 - [Current alpha qualification and limits](operations/alpha-qualification.md).
 
 Canonical source and contributions live at [fwdslsh/fhold](https://github.com/fwdslsh/fhold).
-The [Linux alpha release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610040821-alpha.3)
+The [Linux alpha release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4)
 includes CLI/Admin downloads and matching public Docker Hub images. Native x64
 and ARM64 CI test the runtime images and CLI. ARM64 Admin startup and non-Linux
 packaging remain unqualified; earlier local qualification is historical evidence.

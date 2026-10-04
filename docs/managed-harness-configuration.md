@@ -41,7 +41,7 @@ declarations. Agents cannot modify these system files. Their normal home and
 account settings remain writable and recoverable.
 
 For a local instance, edit the files under the selected instance directory and
-run `fhold --name april restart` (replace `april` with your instance name or
+run `fhold --name personal-agent restart` (replace `personal-agent` with your instance name or
 absolute directory). Standalone Docker, Compose, Kubernetes and ephemeral hosts
 use the same image paths: the deployment tool supplies the files and recreates
 the container. No cloud-specific fhold settings or bootstrap script is needed.
@@ -49,6 +49,9 @@ the container. No cloud-specific fhold settings or bootstrap script is needed.
 `config/assistant/opencode.json` remains the ordinary user/provider configuration.
 Use `config/opencode/opencode.json` for operator-managed policy that takes
 precedence over it. Do not move provider credentials into the policy files.
+Neither an image rebuild nor a new environment variable is required. You can
+also change into the instance home and run `fhold restart` with `FH_HOME` unset.
+Do not edit `system/` or generated `state/stack.env`; updates own those files.
 
 Upgrade the CLI/Admin and Assistant image together. Activation checks the image's
 `dev.fwdslsh.fhold.managed-harness-policy=1` capability label before applying the
