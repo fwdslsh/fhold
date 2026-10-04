@@ -1,0 +1,6 @@
+{
+	"allowManagedHooksOnly": true,
+	"permissions": {
+		"defaultMode": "default"
+	}
+}

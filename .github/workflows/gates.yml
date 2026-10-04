@@ -153,6 +153,9 @@ jobs:
       - name: Verify native work drives conditional keep-alive
         if: matrix.image == 'assistant'
         run: node scripts/smoke-keepalive.mjs fhold/assistant:ci
+      - name: Verify operator-supplied native task permissions
+        if: matrix.image == 'assistant'
+        run: node scripts/smoke-managed-policy.mjs fhold/assistant:ci
       - uses: oven-sh/setup-bun@v2.2.0
         if: matrix.image == 'assistant'
         with:

@@ -17,7 +17,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function fixture(namespace = 'fhold') {
+async function fixture(namespace = 'fhold', managedPolicy = true, imagePresent = true) {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-image-provenance-')); roots.push(root);
 	const home = join(root, 'home'); await installHome({ homeDir: home });
 	const read = readStackConfig(home); if (!read.ok) throw new Error(read.error);
@@ -29,18 +29,51 @@ async function fixture(namespace = 'fhold') {
 	const imageReference = `${namespace}/fhold-assistant:${read.config.deployment.images.assistant}`;
 	const imageId = `sha256:${'a'.repeat(64)}`;
 	writeFileSync(docker, `#!${process.execPath}
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n');
+if (args.includes('pull') && !args.includes('up')) writeFileSync(${JSON.stringify(join(root, 'pulled'))}, 'pulled');
 if (args.includes('config') && args.includes('--format')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});
 if (args.includes('ps') && args.includes('-q')) console.log('fixture-container');
-if (args[0] === 'image' && args[1] === 'inspect') console.log(${JSON.stringify(imageId)});
+if (args[0] === 'image' && args[1] === 'inspect') {
+  if (!${imagePresent} && !existsSync(${JSON.stringify(join(root, 'pulled'))})) process.exit(1);
+  console.log(args.some(arg => arg.includes('managed-harness-policy')) ? ${JSON.stringify(managedPolicy ? '1' : '<no value>')} : ${JSON.stringify(imageId)});
+}
 if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'fixture-container', Image: imageId, Config: { Image: imageReference, Labels: { 'com.docker.compose.project': read.config.deployment.projectName, 'com.docker.compose.service': 'assistant' } } }))});
 `);
 	chmodSync(docker, 0o700); process.env.FH_DOCKER_BIN = docker;
 	const calls = () => existsSync(callsPath) ? readFileSync(callsPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]) : [];
 	return { home, state, calls };
 }
+
+test('an older pinned image cannot activate managed-only policy or change a running stack during update', async () => {
+	const { home, state, calls } = await fixture('fhold', false);
+	const managed = join(home, 'system/assistant/AGENTS.md');
+	writeFileSync(managed, 'prior release sentinel');
+	const config = readFileSync(join(home, 'state/stack.json'));
+	await expect(updateHome({ homeDir: home, start: true })).rejects.toThrow('does not support managed harness policy');
+	expect(readFileSync(managed, 'utf8')).toBe('prior release sentinel');
+	expect(readFileSync(join(home, 'state/stack.json'))).toEqual(config);
+	expect(existsSync(join(home, 'state/update-receipts'))).toBe(false);
+	await expect(activateComposeCommand(state, ['up', '-d'])).rejects.toThrow('does not support managed harness policy');
+	expect(calls().some(args => args.includes('up') || args.includes('pull'))).toBe(false);
+});
+
+test('fresh registry activation pulls a missing image before policy inspection', async () => {
+	const { state, calls } = await fixture('registry.example.test/fhold', true, false);
+	await activateComposeCommand(state, ['up', '-d']);
+	const pull = calls().findIndex(args => args.includes('pull'));
+	const up = calls().findIndex(args => args.includes('up'));
+	expect(pull).toBeGreaterThanOrEqual(0);
+	expect(up).toBeGreaterThan(pull);
+	expect(calls()[pull]?.slice(-2)).toEqual(['pull', 'assistant']);
+});
+
+test.each(['fhold', 'registry.example.test/fhold'])('a missing %s image with no-pull never triggers an implicit registry fetch', async (namespace) => {
+		const { state, calls } = await fixture(namespace, true, false);
+		await expect(activateComposeCommand(state, ['up', '-d', '--pull', 'never'])).rejects.toThrow('Pull or build');
+		expect(calls().some(args => args.includes('pull') || args.includes('up'))).toBe(false);
+});
 
 test('an omitted pull never contacts a registry for the exact local fhold namespace', async () => {
 	const { home, calls } = await fixture();

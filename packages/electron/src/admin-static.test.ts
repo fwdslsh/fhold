@@ -300,13 +300,21 @@ describe('Admin static security boundary', () => {
 		control('new-instance-home').value = ' /chosen/new-instance ';
 		bindInstanceEvents();
 		await control('new-instance-form').listeners.get('submit')?.({ preventDefault() {} });
-		expect(target).toEqual({ kind: 'local', homeDir: '/chosen/new-instance', name: 'personal-agent' });
+		expect(target).toEqual({
+			kind: 'local',
+			homeDir: '/chosen/new-instance',
+			name: 'personal-agent'
+		});
 		expect(reloads).toBe(1);
 		expect(state.operationInFlight).toBe(false);
 	});
 	it('suggests a named default folder and leaves manually chosen folders alone', () => {
 		bindInstanceEvents();
-		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default' }, instancesDirectory: '/user/fhold/instances', recentInstances: [] });
+		renderWelcome({
+			defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default' },
+			instancesDirectory: '/user/fhold/instances',
+			recentInstances: []
+		});
 		expect(control('new-instance-home').value).toBe('/user/fhold/instances/personal-agent');
 		control('new-instance-name').value = 'april';
 		control('new-instance-name').listeners.get('input')?.({});
@@ -515,6 +523,11 @@ describe('Admin static security boundary', () => {
 		expect(recallStatusLabel({ status: 'installed' })).toBe('Installed');
 		expect(recallStatusLabel({ status: 'approval-needed' })).toBe('Approval needed');
 		expect(recallStatusLabel({ status: 'ready' })).toBe('Ready');
+		expect(recallStatusLabel({ status: 'ready', managed: true })).toBe('Managed · ready');
+		expect(recallStatusLabel({ status: 'installed', managed: true })).toBe('Managed · disabled');
+		expect(recallStatusLabel({ status: 'approval-needed', managed: true })).toBe(
+			'Managed · needs attention'
+		);
 		expect(recallStatusLabel(undefined)).toBe('Not checked');
 		expect(remoteStageText({ stage: 'sandbox' })).toContain('safely run Codex');
 		expect(remoteStageText({ stage: 'container-isolation' })).toContain('explicitly selected');
@@ -533,7 +546,7 @@ describe('Admin static security boundary', () => {
 		control('remote-sandbox').listeners.get('change')?.({});
 		expect(control('remote-sandbox-help').textContent).toContain('every file, credential');
 		expect(control('remote-sandbox-help').textContent).toContain(
-			'not every command needs approval'
+			'Task permissions follow the instance policy'
 		);
 		expect(control('remote-trust').checked).toBe(false);
 		control('remote-sandbox').value = 'workspace-write';
@@ -644,6 +657,43 @@ describe('Admin static security boundary', () => {
 		]);
 		expect(control('remote-stage').textContent).toContain('changed since review');
 		expect(control('remote-recall').checked).toBe(false);
+		await control('remote-cancel').listeners.get('click')?.({});
+	});
+	it('shows managed recall without offering personal hook approval or disable', async () => {
+		const button = new Control();
+		button.dataset.codexRecallReview = '';
+		selector('[data-remote-enable], [data-remote-connect], [data-codex-recall-review]', button);
+		const calls: string[] = [];
+		state.api = {
+			codexRecall: async (request: { action: string }) => {
+				calls.push(request.action);
+				return {
+					managed: true,
+					status: 'ready',
+					digest: 'a'.repeat(64),
+					hooks: [
+						{
+							event: 'sessionStart',
+							command: 'managed handler',
+							sourcePath: '/etc/codex/hooks.json',
+							trust: 'managed',
+							enabled: true
+						}
+					]
+				};
+			}
+		};
+		bindRemoteEvents();
+		button.listeners.get('click')?.({});
+		await Bun.sleep(1);
+		expect(control('remote-recall').disabled).toBe(true);
+		expect(control('remote-recall').required).toBe(false);
+		expect(control('remote-begin').hidden).toBe(true);
+		expect(control('remote-recall-disable').hidden).toBe(true);
+		expect(control('codex-recall-status').textContent).toBe('Managed · ready');
+		await control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
+		await control('remote-recall-disable').listeners.get('click')?.({});
+		expect(calls).toEqual(['review']);
 		await control('remote-cancel').listeners.get('click')?.({});
 	});
 	it('loads local modules under a closed CSP with no renderer network access', () => {

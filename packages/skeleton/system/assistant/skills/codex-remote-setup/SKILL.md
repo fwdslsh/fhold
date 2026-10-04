@@ -1,6 +1,6 @@
 ---
 name: codex-remote-setup
-description: Set up experimental Codex remote access from a fhold OpenCode conversation. Use the shipped scripts for native device sign-in, sandbox preflight, optional AKM hook approval and pairing of the existing worker. Use for sign-in, pairing failures or sandbox prerequisite errors in headless containers.
+description: Set up experimental Codex remote access from a fhold OpenCode conversation. Use the shipped scripts for native device sign-in, sandbox preflight, managed AKM hook verification and pairing of the existing worker. Use for sign-in, pairing failures or sandbox prerequisite errors in headless containers.
 ---
 
 # Codex remote setup
@@ -22,7 +22,8 @@ Keep `FH_CODEX_SANDBOX`, default `workspace-write`. Workspace/read-only modes
 need working native namespaces; read-only is not a namespace-error workaround.
 Only an explicit user choice may use `danger-full-access`, making the container
 the boundary with access to its files, credentials and network. Native
-`on-request` approvals and hook trust remain. Never auto-switch modes, change
+task permissions follow the instance policy. Built-in hooks need no personal
+approval. Never auto-switch modes, change
 deployment configuration from a shell export or add container capabilities.
 
 ```bash
@@ -52,15 +53,21 @@ Failed/expired setup needs a fresh attempt. `cancel SESSION_DIR` stops only that
 attempt; `clean SESSION_DIR` removes only its generated scratch files, leaving
 account/configuration intact. Repeat clean after cancellation finishes.
 
-## Offer automatic knowledge recall
+## Verify automatic knowledge recall
 
 ```bash
 fhold-codex-recall.mjs review
 ```
 
-Explain the exact AKM hooks: session hints and prompt recall via `akm curate`.
-Configured search/embedding services may be contacted. This does not approve
-tools or enable automatic memory writes. Only after explicit review and consent:
+Current images register the built-in AKM and fhold hooks as system-managed.
+When the result has `managed: true` and `status: "ready"`, proceed to pairing;
+no personal hook approval is needed. Task permissions follow the instance's
+native policy files and are independent of hook trust. If managed hooks are
+disabled or missing, report the policy/configuration error to the operator.
+
+Older images may still return unmanaged plugin hooks. For those, explain the
+exact AKM hooks: session hints and prompt recall via `akm curate`. Configured
+search/embedding services may be contacted. Only after explicit consent:
 
 ```bash
 fhold-codex-recall.mjs approve REVIEWED_DIGEST

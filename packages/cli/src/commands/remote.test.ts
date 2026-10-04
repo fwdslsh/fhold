@@ -61,7 +61,9 @@ async function guidedFixture(failure = false) {
 		docker,
 		`#!${process.execPath}
 const args=process.argv.slice(2);
-if(args.includes('config')) {
+if(args[0] === 'image' && args[1] === 'inspect') {
+ console.log('1');
+} else if(args.includes('config')) {
  const config=${JSON.stringify(resolved.config)};
  Object.assign(config.services.assistant.environment,{FH_CODEX_REMOTE:process.env.FH_CODEX_REMOTE,FH_CLAUDE_REMOTE:process.env.FH_CLAUDE_REMOTE,FH_CODEX_SANDBOX:process.env.FH_CODEX_SANDBOX});
  console.log(JSON.stringify(config));

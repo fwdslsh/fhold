@@ -244,10 +244,11 @@ try {
 	const codexInventory = JSON.parse(
 		await execBun(
 			first.id,
-			`import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);console.log(JSON.stringify({status:review.status}));`
+			`import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);console.log(JSON.stringify({status:review.status,managed:review.managed}));`
 		)
 	);
-	assert.notEqual(codexInventory.status, 'ready', 'image does not pre-trust native hooks');
+	assert.equal(codexInventory.status, 'ready', 'managed hooks are ready without user approval');
+	assert.equal(codexInventory.managed, true);
 	report.checks.nativeCodexInitializedWithoutAccountOrApproval = true;
 	const codexPresence = JSON.parse(
 		await execBun(
@@ -347,7 +348,6 @@ try {
 	await stop(second);
 	await released();
 	const harnessPath = join(dirname(fileURLToPath(import.meta.url)), 'smoke-akm-harnesses.mjs');
-	const harnessBootstrap = `import{readFile,mkdir,copyFile,cp}from'node:fs/promises';import{dirname}from'node:path';for(const line of(await readFile('/assistant-defaults/manifest.tsv','utf8')).split(String.fromCharCode(10))){if(!line)continue;const[source,target]=line.split(String.fromCharCode(9));await mkdir(dirname(target),{recursive:true});await copyFile('/assistant-defaults/'+source,target);}await cp('/native-defaults/opencode-sdk','/etc/opencode',{recursive:true,force:false});await import('/tmp/smoke-akm-harnesses.mjs');`;
 	const harnessName = `fhold-recovery-smoke-${instance}-harnesses`;
 	created.add(harnessName);
 	report.harnessResult = await docker(
@@ -365,8 +365,7 @@ try {
 			image,
 			'--no-env-file',
 			'--config=/dev/null',
-			'-e',
-			harnessBootstrap
+			'/tmp/smoke-akm-harnesses.mjs'
 		],
 		240_000
 	);

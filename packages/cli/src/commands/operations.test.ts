@@ -134,7 +134,7 @@ const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n');
 if (args.includes('config') && args.includes('--format')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});
 if (args.includes('ps') && args.includes('-q')) console.log('test-container-id');
-if (args[0] === 'image' && args[1] === 'inspect') console.log('sha256:${'a'.repeat(64)}');
+if (args[0] === 'image' && args[1] === 'inspect') console.log(args.some(arg => arg.includes('managed-harness-policy')) ? '1' : 'sha256:${'a'.repeat(64)}');
 if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'test-container-id', Image: `sha256:${'a'.repeat(64)}`, Config: { Image: `fhold/fhold-assistant:${JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.images.assistant}`, Labels: { 'com.docker.compose.project': JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.projectName, 'com.docker.compose.service': 'assistant' } } }))});
 `
 		);

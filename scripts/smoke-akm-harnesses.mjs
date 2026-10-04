@@ -212,14 +212,20 @@ function recalled(file, harness) {
 		)
 	);
 	const debug = join(f.dir, 'debug.log');
+	const eventFile = join(f.dir, 'state/akm-claude/events.jsonl');
 	const { proc, log, close } = launch(f, ['claude', '-p', prompt, '--debug-file', debug]);
 	try {
-		await waitFor(
-			() => recalled(join(f.dir, 'state/akm-claude/events.jsonl'), 'claude-code'),
-			'Claude recall',
-			[log, join(f.dir, 'state/akm-claude/events.jsonl')]
-		);
+		await waitFor(() => recalled(eventFile, 'claude-code'), 'Claude recall', [
+			log,
+			debug,
+			eventFile
+		]);
 		assert.match(readFileSync(debug, 'utf8'), /Hook SessionStart:startup \(SessionStart\) success/);
+		assert.equal(
+			events(eventFile).filter((event) => event.event === 'prompt_recall').length,
+			1,
+			'Managed and plugin hooks must not execute the same Claude recall twice'
+		);
 		assert.ok(
 			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/claude.ready')),
 			'Claude did not load its native fhold hooks'
@@ -260,13 +266,14 @@ function recalled(file, harness) {
 		})
 	);
 	const review = await withCodexRecall(reviewRecall, options);
-	assert.equal(review.status, 'approval-needed');
+	assert.equal(review.status, 'ready');
+	assert.equal(review.managed, true);
 	assert.deepEqual(review.hooks.map((h) => h.event).sort(), ['sessionStart', 'userPromptSubmit']);
 	assert.ok(
-		review.hooks.every((h) => h.trust === 'untrusted'),
-		'Production defaults must not pre-trust hooks'
+		review.hooks.every((h) => h.trust === 'managed'),
+		'Built-in hooks must use native system policy'
 	);
-	// Use the same native writer as guided setup, only in this disposable home.
+	// Supply an offline provider only in this disposable home; no hook approvals.
 	const config = join(f.env.CODEX_HOME, 'config.toml');
 	writeFileSync(
 		config,
@@ -275,39 +282,33 @@ function recalled(file, harness) {
 			'\n[model_providers.offline]\nname="offline"\nbase_url="http://127.0.0.1:9/v1"\n' +
 			'wire_api="responses"\nrequires_openai_auth=false\nrequest_max_retries=0\nstream_max_retries=0\n'
 	);
-	assert.equal(
-		(await withCodexRecall((rpc) => changeRecall(rpc, 'approve', review.digest), options)).status,
-		'ready'
-	);
+	for (const action of ['approve', 'disable'])
+		await assert.rejects(
+			withCodexRecall((rpc) => changeRecall(rpc, action, review.digest), options),
+			/managed policy/
+		);
 	assert.equal(
 		(await withCodexRecall(reviewRecall, options)).status,
 		'ready',
-		'Approval must survive a fresh native process'
+		'Managed hooks must remain ready in a fresh native process'
 	);
 	const inventory = await withCodexRecall((rpc) => rpc('hooks/list', { cwds: ['/work'] }), options);
 	const fholdReview = await withCodexRecall(
 		(rpc) => reviewRecall(rpc, 'fhold@fhold-plugins'),
 		options
 	);
+	assert.equal(fholdReview.managed, true);
+	assert.equal(fholdReview.status, 'ready');
+	assert.equal(fholdReview.hooks.length, 9);
 	assert.ok(
-		fholdReview.hooks.every((h) => h.trust === 'untrusted'),
-		'fhold hooks must retain native approval'
-	);
-	assert.equal(
-		(
-			await withCodexRecall(
-				(rpc) => changeRecall(rpc, 'approve', fholdReview.digest, 'fhold@fhold-plugins'),
-				options
-			)
-		).status,
-		'ready'
+		inventory.data[0].hooks.every((h) => h.isManaged),
+		'Unmanaged user and plugin hooks must be suppressed'
 	);
 	assert.ok(
-		inventory.data[0].hooks
-			.filter((h) => h.source === 'user')
-			.every((h) => h.trustStatus === 'untrusted'),
-		'Approval must not trust unrelated native hooks'
+		!readFileSync(config, 'utf8').includes('trusted_hash'),
+		'System hooks must not create user approvals'
 	);
+	const eventFile = join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl');
 	const { proc, log, close } = launch(f, [
 		'codex',
 		'exec',
@@ -318,11 +319,7 @@ function recalled(file, harness) {
 		prompt
 	]);
 	try {
-		await waitFor(
-			() => recalled(join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl'), 'codex'),
-			'Codex recall',
-			[log, join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl')]
-		);
+		await waitFor(() => recalled(eventFile, 'codex'), 'Codex recall', [log, eventFile]);
 		assert.ok(
 			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')),
 			'Codex did not load its native fhold hooks'
@@ -338,29 +335,12 @@ function recalled(file, harness) {
 		await proc.exited;
 		close();
 	}
-	const definition = review.hooks[0].sourcePath;
-	const manifest = JSON.parse(readFileSync(definition, 'utf8'));
-	manifest.hooks.hooks.SessionStart[0].hooks[0].command += ' # changed fixture definition';
-	writeFileSync(definition, JSON.stringify(manifest));
-	const changed = await withCodexRecall(reviewRecall, options);
-	assert.equal(changed.status, 'approval-needed');
-	assert.ok(changed.hooks.some((h) => h.trust === 'modified'));
-	await assert.rejects(
-		withCodexRecall((rpc) => changeRecall(rpc, 'approve', review.digest), options),
-		/changed since review/
-	);
 	assert.equal(
-		(await withCodexRecall((rpc) => changeRecall(rpc, 'disable', changed.digest), options)).status,
-		'installed'
+		events(eventFile).filter((event) => event.event === 'prompt_recall').length,
+		1,
+		'Managed and plugin hooks must not execute the same recall twice'
 	);
-	assert.equal(
-		(await withCodexRecall(reviewRecall, options)).status,
-		'installed',
-		'Recall-off choice must survive a fresh process'
-	);
-	console.log(
-		'codex: native approval persisted; changed definitions required review; stale approval rejected; recall-off persisted'
-	);
+	console.log('codex: managed hooks ready without personal approval; unmanaged hooks suppressed');
 }
 
 assert.ok(

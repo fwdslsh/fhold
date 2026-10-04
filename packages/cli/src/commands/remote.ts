@@ -34,9 +34,22 @@ export function describeRecall(review: CodexRecallReview): string {
 	);
 }
 
-async function guideRecall(reader: ReturnType<typeof createInterface>, homeDir?: string): Promise<void> {
+async function guideRecall(
+	reader: ReturnType<typeof createInterface>,
+	homeDir?: string
+): Promise<void> {
 	const state = createFholdState(homeDir);
 	const review = await reviewCodexRecall(state);
+	if (review.managed) {
+		console.log(
+			`Automatic knowledge recall: Managed (${review.status === 'ready' ? 'ready' : 'not fully enabled'}). No personal hook approval is required.`
+		);
+		if (review.status !== 'ready')
+			console.log(
+				'Review config/codex/requirements.toml in the instance directory to enable all AKM hooks.'
+			);
+		return;
+	}
 	if (review.status === 'ready') {
 		console.log('Automatic knowledge recall: Ready (previous approval retained).');
 		return;
@@ -76,7 +89,7 @@ export async function enableRemote(
 		);
 		if (tool === 'codex' && options.sandbox === 'danger-full-access')
 			console.log(
-				'Container isolation: Codex can access all files, credentials and network available inside Assistant. There is no inner filesystem/network sandbox. Native on-request approvals and hook trust remain; not every command needs approval. Use only when this container is your intended isolation boundary.'
+				'Container isolation: Codex can access all files, credentials and network available inside Assistant. There is no inner filesystem/network sandbox. Task permissions follow the instance policy. Use only when this container is your intended isolation boundary.'
 			);
 		if (
 			!options.trust &&

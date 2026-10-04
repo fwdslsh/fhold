@@ -30,7 +30,7 @@ for existing tasks; neither is proof of a working provider or remote client.
   sign-in, the exact `code#state` exchange, native workspace trust, one-time
   Remote Control consent and the current worker's connection link.
 - Load [codex-remote-setup](../codex-remote-setup/SKILL.md) for device sign-in,
-  sandbox prerequisites, native AKM hook review and pairing.
+  sandbox prerequisites, native managed AKM hook verification and pairing.
 
 Their runnable scripts are shipped alongside each skill; use them rather than
 retyping login/FIFO recipes. Both workers normally start on every boot without

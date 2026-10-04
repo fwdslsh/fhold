@@ -42,7 +42,7 @@ fhold remote status codex
 fhold remote pair codex
 ```
 
-Guided enable first offers automatic knowledge recall as described below. It
+Guided enable first checks automatic knowledge recall as described below. It
 then pauses the selected worker, checks native sandbox support for workspace/read-only
 modes with a harmless local command, and then uses Codex device sign-in. Explicit
 container isolation skips only that bubblewrap prerequisite. It opens the native
@@ -52,14 +52,15 @@ login is unavailable, enable it in your ChatGPT account/workspace settings.
 Successful setup automatically saves sandbox intent and enables startup.
 It then requests a fresh private pairing code from the background service.
 Startup runs native
-`codex app-server --remote-control --listen unix://` in the foreground with `on-request` approvals and
+`codex app-server --remote-control --listen unix://` in the foreground with the instance task permission policy and
 `workspace-write` (default), explicitly selected `read-only`, or explicitly selected
 `danger-full-access`. The first two require native sandbox support; neither is
 a namespace-error workaround. `danger-full-access` removes the inner filesystem
 and network sandbox and uses the surrounding container as the isolation boundary.
 Codex can then access any files, credentials or network available inside that
-container. `on-request` approvals and native hook review remain, but not every
-command requires approval. No bypass-approvals flag, privileged container, extra
+container. Approvals default to `on-request`; operators can supply native policy
+as described in [managed configuration](managed-harness-configuration.md).
+No bypass-approvals flag, privileged container, extra
 capability, automatic fallback or host-platform detection is used.
 Pair requests a fresh short-lived code from the
 running native service. Treat that code as private.
@@ -94,7 +95,7 @@ ships a runnable `scripts/setup.sh` backed by the same native setup helper as
 CLI/Admin, retaining the device
 login process while you open its link and enter the one-time code in your browser.
 It reuses existing ChatGPT sign-in, preserves configured sandbox intent and guides
-optional AKM hook review without approving it for you. It installs nothing.
+managed AKM hook verification. It installs nothing.
 
 The skill requires Bash-capable access. The background supervisor already starts
 by default and retries while waiting for native sign-in/consent. No startup
@@ -200,11 +201,10 @@ settings, accounts, additional plugins, and trust decisions are preserved.
 Run `claude plugin list`, `claude plugin details akm`, or
 `codex plugin list --json` inside Assistant to inspect `akm@akm-plugins`.
 Claude provides the five discovery/feedback/remember commands and AKM skill;
-Codex uses the AKM skill and CLI forms. Codex's lifecycle hooks require your
-explicit review and approval before automatic recall starts—fhold
-does not pre-trust them. Guided setup and Admin provide that native review;
-users do not need to open Codex or run `/hooks`. Native workspace trust and tool
-approvals still apply.
+Codex uses the AKM skill and CLI forms. The built-in lifecycle hooks are
+registered as native system-managed handlers and need no personal approval.
+Task permissions follow the operator's native policy; account sign-in and
+remote consent remain separate.
 All harnesses use `/stash` knowledge and aligned AKM versions. Automatic learning
 and session extraction remain off in the native remote workers
 (`AKM_AUTO_LEARNING=0`, `AKM_AUTO_MEMORY=0`). Image tests verify real session hooks
@@ -214,15 +214,19 @@ and [Codex plugins](https://developers.openai.com/plugins/build/plugins).
 
 ## Codex automatic knowledge recall
 
-During Codex setup, choose **Enable automatic knowledge recall** after reviewing
-the explanation and actual commands. AKM executes a session-start command to
+On current images, automatic knowledge recall is managed by instance policy.
+AKM executes a session-start command to
 check its CLI and load bundle hints, then a pre-prompt command that passes the
 prompt to `akm curate` and adds relevant knowledge to Codex. Configured search or
 embedding services may be contacted. This does not enable automatic memory
 writes, approve tools, or bypass Guardian/native sandboxing.
 
-Admin **Connections → Codex → Review knowledge recall** provides the same review
-independently from remote startup and vendor sign-in. Its states are:
+Admin **Connections → Codex → Review knowledge recall** checks the native managed
+inventory independently from remote startup and sign-in. **Managed · ready**
+means all expected handlers are enabled by policy; personal approve/disable
+controls are unavailable. CLI setup also skips the personal approval question.
+
+Older images without managed hooks retain these states and the review flow below:
 
 - **Installed**: hooks are installed but automatic recall is off.
 - **Approval needed**: hooks are new/changed, not yet trusted, or only partly enabled.
@@ -232,12 +236,12 @@ Approval is bound to the exact definitions displayed. Changed definitions or
 native-config write conflicts reject a stale review; review again rather than
 reusing the old confirmation. Codex's native `hooks/list` and version-checked
 `config/batchWrite` interfaces persist trust in its normal configuration. No
-separate trust store, blanket approval, managed-hook exemption, or bypass flag
+separate trust store, blanket approval, or bypass flag
 is used. Unrelated user/project/plugin hooks are left alone. Approval and opt-out
 survive container recreation and apply to new sessions. Admin also offers
 **Turn off automatic knowledge recall** without changing remote startup.
 
-CLI setup/enable offers the same choice. To review separately:
+On older images CLI setup/enable offers the same choice. To review separately:
 
 ```sh
 fhold remote recall codex

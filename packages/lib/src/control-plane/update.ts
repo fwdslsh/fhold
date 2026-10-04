@@ -9,7 +9,7 @@ import { ensureRuntime, requireInstall } from './state.js';
 import { buildComposeArgs, composeConfigJson, composeProjectName, ensureDockerReady, runComposeStreaming, runDocker } from './docker.js';
 import { buildComposeOptions } from './compose.js';
 import { auditCompose } from './secret-audit.js';
-import { activateComposeCommand } from './activation.js';
+import { activateComposeCommand, assertManagedHarnessImage } from './activation.js';
 import { FH_RELEASE_VERSION } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
 import { assertSafePortablePath } from './provider-files.js';
@@ -74,6 +74,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 				if (!image.ok || !/^sha256:[a-f0-9]{64}$/.test(image.stdout.trim())) throw new Error(`Candidate image identity could not be verified: ${service}`);
 				selectedImages.push({ service, imageReference: definition.image, imageId: image.stdout.trim() });
 			}
+			await assertManagedHarnessImage(resolved.config);
 		}
 		const id = `${Date.now()}-${crypto.randomUUID()}`;
 		const checkpoint = join(state.homeDir, 'state', 'update-receipts', id);

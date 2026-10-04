@@ -29,8 +29,9 @@ Built-in skills are ordinary image-baked managed assets, shared through the
 native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
 Operator-owned AKM catalogs may omit that source without blocking startup;
 the built-in skills remain available through native harness integrations.
-AKM and fhold plugins are preinstalled in all three native harnesses without
-pre-trusting hooks. Agents run as `fhold`, with home `/home/fhold`; the native
+AKM and fhold plugins are preinstalled in all three native harnesses. Their
+existing handlers are registered as native managed hooks at image build time;
+no personal approval records are fabricated. Agents run as `fhold`, with home `/home/fhold`; the native
 OpenCode HTTP username is `user`. Claude and Codex sign-in guidance preserve native login processes
 across tool calls without implementing token exchange or accepting user consent.
 The image-baked `fhold-admin` skill provides redacted current-container diagnostics
@@ -110,22 +111,29 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
   moderator; failed or ambiguous verdicts block the request.
 - Portal allowlists default-deny. Operator-owned per-adapter maps select only
   explicit identities; each adapter receives just its generated keyring.
-- Native remote workers bypass Guardian, retain vendor trust/approvals and
-  explicit consent. Never copy host login files, auto-accept trust or disable
-  approvals. Process-running status is not account/client readiness.
+- Native remote workers bypass Guardian and use operator-supplied native task
+  permission policy. Native account sign-in and remote consent remain explicit.
+  Never copy host login files or fabricate user consent. Process-running status
+  is not account/client readiness.
 - Codex defaults to `workspace-write`; `read-only` also uses its native sandbox.
   Explicit `danger-full-access` uses the container as the isolation boundary,
   without an inner filesystem/network sandbox or bubblewrap prerequisite.
-  It retains `on-request` and hook approval, not an approval gate on every command.
+  Task approvals follow native policy, defaulting to `on-request`.
   Never select it automatically after a failed sandbox probe or grant extra
   capabilities. Accessible data, credentials and network remain within its reach.
 - Enabling Claude or Codex remote access enables its supervisor on every
   Assistant boot, independently of the scheduler. Missing/expired sign-in or
   native consent may prevent connection but does not silently unset that intent
   or stop OpenCode. Guided setup cancellation/failure leaves startup off.
-- Codex AKM recall approval reviews exact native definitions and version-checked
-  writes. Changed definitions require renewed review; unrelated hooks/decisions
-  are preserved. No pre-trust or hook-review bypass.
+- Built-in Codex/Claude hooks use root-owned native managed files. Managed-only
+  settings prevent duplicate execution of their plugin hooks. Codex diagnostics
+  verify the exact build inventory and distinguish managed readiness from user
+  approval. Older unmanaged images retain exact-hash review and version-checked
+  writes. System policy is read-only to agents and supplied before startup;
+  user-home recovery cannot replace it. See [managed configuration](../managed-harness-configuration.md).
+  CLI/Admin verify the selected image's managed-policy capability before
+  activating the new mounts, so an older image pin cannot silently suppress
+  its only hooks. Active updates check compatibility before managed-file writes.
 - Provider setup finishes only after a real no-tool request; it replaces only
   the untouched moderator placeholder with the exact provider/model verified.
 - Scheduled tasks use the restricted `scheduled` profile, treat fetched content
@@ -139,7 +147,7 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - Optional conditional HTTP keep-alive uses native fhold activity hooks and
   the existing Supercronic process, independently of user task enablement. It
   has no cloud API authority or work-age expiry. Unknown activity keeps the
-  instance awake; native trust remains required. This is best-effort signaling,
+  instance awake; managed hooks must remain enabled. This is best-effort signaling,
   not a scale-in veto. See [the runtime contract](../harness-plugins.md).
 - Automatic memory captures validated non-secret facts only from trusted native
   build/plan sessions through the existing provider and remains configurable.

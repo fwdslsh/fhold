@@ -28,7 +28,7 @@ describe('optional native remote workers', () => {
 		for (const mode of ['workspace-write', 'read-only', 'danger-full-access']) {
 			const command = remoteCommand('codex', mode);
 			expect(command).toContain(`sandbox_mode="${mode}"`);
-			expect(command).toContain('approval_policy="on-request"');
+			expect(command.join(' ')).not.toContain('approval_policy');
 			expect(command.join(' ')).not.toMatch(/bypass|hook-trust|approval_policy="never"/);
 		}
 		expect(() => remoteCommand('codex', 'yolo')).toThrow();
@@ -39,8 +39,6 @@ describe('optional native remote workers', () => {
 			'same-dir',
 			'--capacity',
 			'1',
-			'--permission-mode',
-			'default',
 			'--no-chrome'
 		]);
 		expect(() => remoteCommand('untrusted')).toThrow();
@@ -119,7 +117,7 @@ describe('optional native remote workers', () => {
 			expect(completedLog).toContain('no-assistant-password');
 			expect(completedLog).not.toContain('must-not-leak');
 			expect(completedLog).toContain('danger-full-access');
-			expect(completedLog).toContain('on-request');
+			expect(completedLog).not.toContain('approval_policy');
 			expect(statSync(log).size).toBeLessThanOrEqual(65_536);
 			expect(statSync(log).mode & 0o777).toBe(0o600);
 			expect(statSync(status).mode & 0o777).toBe(0o600);

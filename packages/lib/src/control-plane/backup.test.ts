@@ -41,6 +41,8 @@ describe('portable backup', () => {
 		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), '{"secret":true}');
 		writeFileSync(join(source, 'workspace', 'project.txt'), 'workspace');
 		writeFileSync(join(source, 'config', 'assistant', 'persona.md'), 'concise');
+		mkdirSync(join(source, 'config/codex'), { recursive: true });
+		writeFileSync(join(source, 'config/codex/requirements.toml'), 'allowed_approval_policies = ["never"]\n');
 
 		const manifest = await createBackup({ sourceHome: source, destination });
 
@@ -51,6 +53,10 @@ describe('portable backup', () => {
 			'workspace/project.txt'
 		]);
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'auth.json'))).toBe(false);
+		expect(existsSync(join(destination, 'config/codex/requirements.toml'))).toBe(false);
+		expect(manifest.excludedCategories).toContain(
+			'Operator harness policies (config/opencode, config/codex, config/claude); preserve and reapply separately'
+		);
 		expect(JSON.parse(readFileSync(join(destination, 'fhold-backup.json'), 'utf8'))).toEqual(
 			manifest
 		);

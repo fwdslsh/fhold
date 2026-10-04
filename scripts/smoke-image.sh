@@ -49,6 +49,7 @@ wait_for_health() {
 verify_runtime_versions() {
 	test "$(docker exec "$container" bun --version)" = "$expected_bun"
 	if [ "$kind" = assistant ]; then
+		test "$(docker image inspect "$image" --format '{{index .Config.Labels "dev.fwdslsh.fhold.managed-harness-policy"}}')" = 1
 		local expected_node expected_npm expected_tools
 		expected_node=$(sed -nE 's/^FROM node:([0-9.]+).*$/\1/p' containers/assistant/Dockerfile)
 		test "$(docker exec "$container" node --version)" = "v$expected_node"
@@ -143,6 +144,7 @@ assistant)
 		"$root/config"
 	cp -R packages/skeleton/system/assistant "$root/system"
 	cp -R packages/skeleton/config/assistant/. "$root/config/"
+	cp packages/skeleton/config/opencode/opencode.json "$root/opencode-policy.json"
 	cp packages/skeleton/config/akm/config.json "$root/akm.json"
 	printf '%s\n' 'assistant-smoke-password-0000000000000000' >"$root/password"
 	printf '%s\n' '{}' >"$root/knowledge/secrets/auth.json"
@@ -167,6 +169,7 @@ assistant)
 		-e OPENCODE_SERVER_PASSWORD_FILE=/run/fhold/password \
 		-v "$root/data:/home/fhold" \
 		-v "$root/system:/etc/opencode:ro" \
+		-v "$root/opencode-policy.json:/etc/opencode/opencode.json:ro" \
 		-v "$root/config:/home/fhold/.config/opencode:ro" \
 		-v "$root/akm.json:/etc/akm/config.json:ro" \
 		-v "$root/knowledge:/stash" \
@@ -184,7 +187,7 @@ assistant)
 	docker exec "$container" bun -e \
 		'const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); if (typeof Bun.Terminal !== "function" || setupCommands("codex", "read-only")[0][0] !== "sandbox") throw Error("Guided native setup is unavailable");'
 	docker exec "$container" bun -e \
-		'const { remoteCommand } = await import("/usr/local/bin/fhold-remote.mjs"); const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); const args = remoteCommand("codex", "danger-full-access"); if (!args.includes("approval_policy=\"on-request\"") || !args.includes("sandbox_mode=\"danger-full-access\"") || args.some(a => a.includes("bypass")) || setupCommands("codex", "danger-full-access").some(([stage]) => stage === "sandbox")) throw Error("Explicit container isolation contract failed");'
+		'const { remoteCommand } = await import("/usr/local/bin/fhold-remote.mjs"); const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); const args = remoteCommand("codex", "danger-full-access"); if (args.some(a => a.includes("approval_policy")) || !args.includes("sandbox_mode=\"danger-full-access\"") || args.some(a => a.includes("bypass")) || setupCommands("codex", "danger-full-access").some(([stage]) => stage === "sandbox")) throw Error("Explicit container isolation contract failed");'
 	docker exec "$container" claude plugin validate /akm-marketplace/claude --strict
 	docker exec "$container" claude plugin validate /fhold-plugins/fhold --strict
 	docker exec "$container" claude plugin list --json | docker exec -i "$container" bun -e \

@@ -46,6 +46,22 @@ const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 			readOnly: false
 		},
 		{ source: 'system/assistant', target: '/etc/opencode', readOnly: true },
+		{
+			source: 'config/opencode/opencode.json',
+			target: '/etc/opencode/opencode.json',
+			readOnly: true
+		},
+		{ source: 'config/codex/config.toml', target: '/etc/codex/config.toml', readOnly: true },
+		{
+			source: 'config/codex/requirements.toml',
+			target: '/etc/codex/requirements.toml',
+			readOnly: true
+		},
+		{
+			source: 'config/claude/managed-settings.json',
+			target: '/etc/claude-code/managed-settings.json',
+			readOnly: true
+		},
 		{ source: 'config/akm', target: '/etc/akm', readOnly: false },
 		{ source: 'knowledge', target: '/stash', readOnly: false },
 		{ source: 'data/akm/cache', target: '/opt/akm/cache', readOnly: false },
@@ -301,7 +317,19 @@ function auditCoreMounts(
 	issues: string[],
 	expected: readonly MountGrant[] = CORE_MOUNTS[name] ?? []
 ): void {
-	const byTarget = new Map(expected.map((grant) => [grant.target, grant]));
+	// This optional native file makes Claude's MCP catalog exclusive. Operators
+	// add it explicitly; an empty default would suppress plugin-provided servers.
+	const optional: MountGrant[] =
+		name === 'assistant'
+			? [
+					{
+						source: 'config/claude/managed-mcp.json',
+						target: '/etc/claude-code/managed-mcp.json',
+						readOnly: true
+					}
+				]
+			: [];
+	const byTarget = new Map([...expected, ...optional].map((grant) => [grant.target, grant]));
 	const found = new Set<string>();
 	if (!Array.isArray(value)) {
 		for (const grant of expected)

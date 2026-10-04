@@ -62,6 +62,10 @@ services:
       # exposing the delegated Guardian/portal secret directory to the agent.
       - ${FH_HOME:?}/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json
       - ${FH_HOME:?}/system/assistant:/etc/opencode:ro
+      - ${FH_HOME:?}/config/opencode/opencode.json:/etc/opencode/opencode.json:ro
+      - ${FH_HOME:?}/config/codex/config.toml:/etc/codex/config.toml:ro
+      - ${FH_HOME:?}/config/codex/requirements.toml:/etc/codex/requirements.toml:ro
+      - ${FH_HOME:?}/config/claude/managed-settings.json:/etc/claude-code/managed-settings.json:ro
       # AKM owns scheduler.enabled and writes it atomically when tasks pause/resume.
       # This operator-only config contains no delegated Guardian/portal credentials.
       - ${FH_HOME:?}/config/akm:/etc/akm
