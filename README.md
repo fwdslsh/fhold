@@ -4,17 +4,15 @@ A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Current source candidate: `0.1.2610040637-alpha.3` (unreleased).
-Linux is supported through local source builds. Public binary downloads and
-container image publishing are not configured; the CLI is a standalone executable,
-not an npm bootstrap package. Windows and macOS packaging is deferred.
-Release qualification is currently blocked by [upstream npm dependency
-advisories](docs/operations/release.md#runtime-release-blockers).
-The latest qualified Linux artifacts and all three images are
-`0.1.2610040221-alpha.2`. The [qualification record](docs/operations/alpha-qualification.md)
-separates that evidence from changed source and documents ARM64 build-only limits.
+Linux alpha: [0.1.2610040821-alpha.3](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610040821-alpha.3).
+Download a standalone CLI or optional Admin AppImage for x64 or ARM64.
+Fresh installs use the matching public [Docker Hub images](https://hub.docker.com/r/fwdslsh/fhold-assistant)
+automatically. No npm installation or Docker Hub account is required.
+Windows and macOS packaging is deferred. See the [release notes](CHANGELOG.md)
+and [reviewed dependency exceptions](docs/operations/release.md#reviewed-runtime-advisories)
+for this alpha's limits.
 
-Use [Installation](docs/installation.md) for a local build and first setup,
+Use [Installation](docs/installation.md) for downloads and first setup,
 [Managing fhold](docs/managing-fhold.md) for lifecycle, knowledge and recovery,
 and [the documentation map](docs/README.md) for connections and technical details.
 

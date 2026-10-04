@@ -48,9 +48,10 @@ Trivy 0.75.0 reported no critical vulnerabilities in this Assistant candidate.
 The fixable-high gate still reports three bundled npm dependency advisories:
 `CVE-2026-102276`, `CVE-2026-102278` (brace-expansion 5.0.9) and
 `CVE-2026-19534` (undici 6.28.0). npm is already the stable 12.2.0 release.
-No vendor dependency patch or security exception was added. The source branch
-is not a release-security qualification; merge/release approval remains pending
-resolution of that gate.
+No vendor dependency patch or security exception was part of this earlier
+candidate's verification. The subsequent public alpha includes the owner's
+explicitly approved [narrow release exceptions](release.md#reviewed-runtime-advisories);
+that approval does not change this candidate's raw scan results.
 
 No real model-provider request, signed-in Claude/Codex remote session, ARM64
 runtime, rendered Admin, live cloud scale-in or deployment was qualified here.

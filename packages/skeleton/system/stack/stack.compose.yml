@@ -12,7 +12,7 @@ x-logging: &logging
 
 services:
   assistant:
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/assistant:${FH_ASSISTANT_VERSION:-0.1.2610040740-alpha.3}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-assistant:${FH_ASSISTANT_VERSION:-0.1.2610040821-alpha.3}
     hostname: ${FH_INSTANCE_HOSTNAME:-fhold}
     init: true
     restart: unless-stopped
@@ -81,7 +81,7 @@ services:
 
   guardian:
     profiles: [gateway, discord, slack]
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/guardian:${FH_GUARDIAN_VERSION:-0.1.2610040740-alpha.3}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-guardian:${FH_GUARDIAN_VERSION:-0.1.2610040821-alpha.3}
     init: true
     restart: unless-stopped
     logging: *logging
@@ -145,7 +145,7 @@ services:
 
   discord:
     profiles: [discord]
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:${FH_PORTAL_VERSION:-0.1.2610040740-alpha.3}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610040821-alpha.3}
     init: true
     restart: unless-stopped
     logging: *logging
@@ -182,7 +182,7 @@ services:
 
   slack:
     profiles: [slack]
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:${FH_PORTAL_VERSION:-0.1.2610040740-alpha.3}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610040821-alpha.3}
     init: true
     restart: unless-stopped
     logging: *logging

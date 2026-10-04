@@ -1,12 +1,28 @@
 # Installation
 
-Linux is supported through source builds from the canonical
-[GitHub repository](https://github.com/fwdslsh/fhold). Public binary downloads and
-container image publishing are not configured. Use locally built artifacts and
-images; `fhold/` is a local image namespace, not a registry claim. The CLI is a
-standalone executable, not an npm bootstrap package.
+Use a non-root Linux account with Docker Engine and Compose v2. Download the
+matching x64 or ARM64 CLI or Admin AppImage from the
+[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610040821-alpha.3).
+The release includes checksums and an asset manifest. The CLI is a standalone
+executable; installed releases do not require Bun, Node.js or npm on the host.
 
-## Requirements and local build
+For example, on Linux x64:
+
+```bash
+curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610040821-alpha.3/fhold-cli-linux-x64
+chmod +x fhold
+./fhold install --name personal-agent
+./fhold setup
+```
+
+Use `fhold-cli-linux-arm64` on ARM64. CLI and Admin pull the matching pinned
+`fwdslsh/fhold-assistant` image from public Docker Hub; Guardian and Portal images
+are pulled only when enabled. A Docker Hub login is not required. For Admin,
+make the downloaded `.AppImage` executable and launch it, then choose **Create
+new instance**. Keep the CLI somewhere on your PATH to use the shorter commands
+below. An AI provider supported by OpenCode is required for assistant responses.
+
+## Optional source build
 
 Use a non-root Linux account, Docker Engine with Compose v2, Bun for source
 builds, native Node.js 22.12+ for Electron tooling, and an AI provider supported
@@ -21,11 +37,11 @@ bun run --cwd packages/cli build
 fhold_build_version="$(node -p 'require("./package.json").version')"
 fhold_build_revision="$(git rev-parse HEAD)"
 fhold_build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/assistant/Dockerfile -t "fhold/assistant:$fhold_build_version" .
-docker build --build-arg GUARDIAN_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/guardian/Dockerfile -t "fhold/guardian:$fhold_build_version" .
-docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/portal/Dockerfile -t "fhold/portal:$fhold_build_version" .
+docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/assistant/Dockerfile -t "fhold/fhold-assistant:$fhold_build_version" .
+docker build --build-arg GUARDIAN_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/guardian/Dockerfile -t "fhold/fhold-guardian:$fhold_build_version" .
+docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/portal/Dockerfile -t "fhold/fhold-portal:$fhold_build_version" .
 ./packages/cli/dist/fhold-cli --version
-./packages/cli/dist/fhold-cli install --no-start
+FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli install --no-start
 ./packages/cli/dist/fhold-cli setup
 ```
 

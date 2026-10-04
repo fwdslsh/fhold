@@ -218,14 +218,14 @@ not an empty timestamp-release migration registry.
 ## Current release boundary
 
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
-host. Linux is supported through local source builds. The current source
-candidate is `0.1.2610040637-alpha.3` (unreleased). The latest qualified Linux
-artifacts and all three images are `0.1.2610040221-alpha.2`; that evidence does not
-qualify changed source. Every candidate needs its own artifact and runtime gates.
+host. GitHub builds Linux standalone CLI and Admin AppImage downloads and
+publishes Assistant/Guardian/Portal images to public Docker Hub. Every candidate
+needs its own artifact and runtime gates; earlier artifacts do not qualify changed source.
 Versions use real UTC `X.Y.yyMMddHHmm` timestamps and explicit alpha/beta/rc
 channels. The CLI remains a standalone executable, not an npm bootstrap package.
-Local images use `fhold`; public binary/image publishing and registry ownership
-must be configured and verified separately. Native ARM64 execution and actual
-Windows/macOS packaging remain unqualified. No cross-host publishing bridge is
-needed. An existing version/receipt permits identical-byte retries only; changed
+Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
+Explicit local builds use the `fhold` namespace without registry pulls. Native
+Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
+and Windows/macOS packaging remain unqualified. No cross-host publishing bridge
+is needed. An existing version/receipt permits identical-byte retries only; changed
 source or content requires a new version, including unpublished candidates.

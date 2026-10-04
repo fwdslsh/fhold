@@ -269,9 +269,9 @@ function expectedImage(
 	environment: Readonly<Record<string, string>>
 ): string {
 	const definition = CORE_IMAGES[name];
-	const namespace = environment.FH_IMAGE_NAMESPACE?.trim() || 'fhold';
+	const namespace = environment.FH_IMAGE_NAMESPACE?.trim() || 'fwdslsh';
 	const version = environment[definition.versionKey]?.trim() || libPackage.version;
-	return `${namespace}/${definition.component}:${version}`;
+	return `${namespace}/fhold-${definition.component}:${version}`;
 }
 
 function exactStringArray(value: unknown, expected: readonly string[]): boolean {

@@ -119,6 +119,9 @@ describe('operational command wiring', () => {
 	it('recreates local images without implicit pulls and preserves user files', async () => {
 		const root = fixture();
 		const home = await install(root);
+		const localConfig = JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8'));
+		localConfig.deployment.imageNamespace = 'fhold';
+		writeStackConfig(home, localConfig);
 		const resolved = await composeConfigJson(buildComposeOptions(createFholdState()));
 		if (!resolved.ok) throw new Error(resolved.stderr);
 		const fakeDocker = join(root, 'docker');
@@ -132,7 +135,7 @@ appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n');
 if (args.includes('config') && args.includes('--format')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});
 if (args.includes('ps') && args.includes('-q')) console.log('test-container-id');
 if (args[0] === 'image' && args[1] === 'inspect') console.log('sha256:${'a'.repeat(64)}');
-if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'test-container-id', Image: `sha256:${'a'.repeat(64)}`, Config: { Image: `fhold/assistant:${JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.images.assistant}`, Labels: { 'com.docker.compose.project': JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.projectName, 'com.docker.compose.service': 'assistant' } } }))});
+if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'test-container-id', Image: `sha256:${'a'.repeat(64)}`, Config: { Image: `fhold/fhold-assistant:${JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.images.assistant}`, Labels: { 'com.docker.compose.project': JSON.parse(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).deployment.projectName, 'com.docker.compose.service': 'assistant' } } }))});
 `
 		);
 		chmodSync(fakeDocker, 0o755);

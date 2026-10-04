@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.2610040821-alpha.3 — public Linux alpha
+
+First public GitHub/Docker Hub release: standalone Linux x64/ARM64 CLI, optional
+Admin AppImages, Claude Desktop extension, checksums and asset manifest. CLI and
+Admin fresh installs use the pinned public `fwdslsh/fhold-assistant` image;
+optional Guardian/Portal use their matching public images. Images support amd64
+and arm64 and are signed through GitHub Actions. No Docker Hub login is needed.
+
+Includes the dependency refresh, native fhold plugins and shared image-baked
+skills for OpenCode, Claude Code and Codex. Optional conditional HTTP keep-alive
+uses the existing scheduler and can run with user scheduling disabled. Native
+completion/cancellation handling prevents stale activity from keeping instances
+awake; append-only history does not count as live work. Older AKM catalogs no
+longer prevent startup. See [keep-alive configuration](docs/harness-plugins.md).
+
+Assistant now runs as `fhold` at `/home/fhold`; its OpenCode HTTP username is
+`user`. Custom deployments must update old mount paths, absolute plugin/backup
+paths and clients before upgrading. Managed host data directories are preserved.
+Existing local-build homes retain their namespace; they do not silently switch
+to public images. Native plugin customizations and consent are preserved.
+
+Claude/Codex remote workers remain experimental. ARM64 Admin is cross-built,
+not native-startup-qualified. The owner approved narrow, expiring exceptions for
+three npm-bundled denial-of-service advisories and the existing unsigned MCPB
+build-tool advisory; see [scope and expiry](docs/operations/release.md#reviewed-runtime-advisories).
+Raw reports remain visible; no upstream package internals were patched.
+
 ## 0.1.2610040740-alpha.3 — unreleased combined source candidate
 
 Combine the dependency refresh with native fhold plugins in all three harnesses,

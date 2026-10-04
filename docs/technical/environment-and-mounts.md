@@ -37,7 +37,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_PROJECT_NAME` | Persisted instance name, or stable per-canonical-home default, from deployment intent |
 | `FH_INSTANCE_HOSTNAME` | Derived Assistant OS hostname from that same project name; not another user setting |
 | `FH_UID`, `FH_GID` | Non-root container identity |
-| `FH_IMAGE_NAMESPACE` | Image namespace; default `fhold` |
+| `FH_IMAGE_NAMESPACE` | Image namespace; default `fwdslsh` (public Docker Hub); `fhold` selects local builds |
 | `FH_STACK_CONFIG_VERSION` | Derived intent schema version |
 | `FH_ENABLED_ADDONS` | Derived profiles: `gateway,discord,slack` |
 | `FH_ASSISTANT_BIND_ADDRESS` | Derived native OpenCode host bind |
@@ -121,7 +121,8 @@ portal, bot, Docker, or host-admin credential.
 The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
 authentication uses username `user`. `/fhold-bundle` is an image-baked,
 root-owned read-only AKM skills source, shared with the native fhold plugins.
-Keep that bundle in operator-supplied AKM configuration.
+Custom AKM configuration is preserved; it does not prevent the built-in skills
+from being available through the native harness integrations.
 
 `FH_KEEPALIVE_URL` optionally enables conditional HTTP heartbeats using the
 existing scheduler, including when user schedules are disabled. Authentication

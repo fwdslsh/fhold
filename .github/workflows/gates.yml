@@ -132,6 +132,8 @@ jobs:
           exit-code: '1'
       - name: Reject fixable high runtime image advisories
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_IGNOREFILE: .github/trivy-ignore.yaml
         with:
           image-ref: fhold/${{ matrix.image }}:ci
           version: v0.75.0

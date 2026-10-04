@@ -110,6 +110,28 @@ describe('release manifest', () => {
 });
 
 describe('release workflows', () => {
+	test('runtime exceptions stay limited to the approved npm bundle findings', () => {
+		const ignored = Bun.YAML.parse(readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')) as {
+			vulnerabilities: Array<{ id: string; paths: string[]; purls: string[]; expired_at: string }>;
+		};
+		expect(ignored.vulnerabilities.map((entry) => entry.id).sort()).toEqual([
+			'CVE-2026-102276', 'CVE-2026-102278', 'CVE-2026-19534'
+		]);
+		for (const entry of ignored.vulnerabilities) {
+			const dependency = entry.id === 'CVE-2026-19534' ? 'undici' : 'brace-expansion';
+			const version = dependency === 'undici' ? '6.28.0' : '5.0.9';
+			expect(entry.paths).toEqual([`usr/local/lib/node_modules/npm/node_modules/${dependency}/package.json`]);
+			expect(entry.purls).toEqual([`pkg:npm/${dependency}@${version}`]);
+			expect(String(entry.expired_at)).toBe('2026-11-04');
+		}
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
+			jobs: { images: { steps: Array<{ uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }> } };
+		};
+		for (const step of workflow.jobs.images.steps.filter((step) => step.uses?.startsWith('aquasecurity/trivy-action@'))) {
+			expect(step.env?.TRIVY_IGNOREFILE).toBe(step.with?.severity === 'HIGH' ? '.github/trivy-ignore.yaml' : undefined);
+		}
+	});
+
 	test('unprivileged CI also runs for contributors in forks', () => {
 		const ci = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'ci.yml'), 'utf8')) as {
 			permissions: Record<string, string>;

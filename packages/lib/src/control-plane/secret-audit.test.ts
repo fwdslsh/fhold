@@ -49,7 +49,7 @@ const assistantEnvironment = {
 function assistantService(homeDir = '/tmp/home') {
 	const stack = readStackConfig(homeDir);
 	return {
-		image: `fhold/assistant:${libPackage.version}`,
+		image: `fwdslsh/fhold-assistant:${libPackage.version}`,
 		hostname: stack.ok ? stackConfigEnv(stack.config).FH_INSTANCE_HOSTNAME : 'fhold',
 		init: true,
 		user: '1000:1000',
@@ -325,7 +325,7 @@ describe('Compose security audit', () => {
 
 		const issues = auditCompose(config, home);
 		expect(issues).toContain(
-			`service assistant must use managed image fhold/assistant:${libPackage.version}`
+			`service assistant must use managed image fwdslsh/fhold-assistant:${libPackage.version}`
 		);
 		expect(issues).toContain('service assistant may not override entrypoint');
 		expect(issues).toContain('service assistant may not override post_start');

@@ -1,0 +1,18 @@
+# Owner-approved npm-bundle exceptions for this alpha release, 2026-10-04.
+# All findings remain visible in the unfiltered report. Remove when npm fixes them.
+vulnerabilities:
+  - id: CVE-2026-102276
+    paths: [usr/local/lib/node_modules/npm/node_modules/brace-expansion/package.json]
+    purls: [pkg:npm/brace-expansion@5.0.9]
+    expired_at: 2026-11-04
+    statement: Approved npm-bundled denial-of-service risk; keep the supported upstream bundle.
+  - id: CVE-2026-102278
+    paths: [usr/local/lib/node_modules/npm/node_modules/brace-expansion/package.json]
+    purls: [pkg:npm/brace-expansion@5.0.9]
+    expired_at: 2026-11-04
+    statement: Approved npm-bundled denial-of-service risk; keep the supported upstream bundle.
+  - id: CVE-2026-19534
+    paths: [usr/local/lib/node_modules/npm/node_modules/undici/package.json]
+    purls: [pkg:npm/undici@6.28.0]
+    expired_at: 2026-11-04
+    statement: Approved npm-bundled denial-of-service risk; keep the supported upstream bundle.

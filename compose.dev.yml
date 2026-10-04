@@ -22,7 +22,7 @@ x-portal-dev: &portal-dev
     dockerfile: containers/portal/Dockerfile
     args:
       PLATFORM_VERSION: ${PLATFORM_VERSION:-dev}
-  image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:dev
+  image: ${FH_IMAGE_NAMESPACE:-fhold}/fhold-portal:dev
 
 services:
   guardian:
@@ -31,7 +31,7 @@ services:
       dockerfile: containers/guardian/Dockerfile
       args:
         GUARDIAN_VERSION: ${GUARDIAN_VERSION:-dev}
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/guardian:dev
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/fhold-guardian:dev
     # Publication remains controlled by the managed compose file.
 
   assistant:
@@ -40,7 +40,7 @@ services:
       dockerfile: containers/assistant/Dockerfile
       args:
         PLATFORM_VERSION: ${PLATFORM_VERSION:-dev}
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/assistant:dev
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/fhold-assistant:dev
 
   discord:
     <<: *portal-dev

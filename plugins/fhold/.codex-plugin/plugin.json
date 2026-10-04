@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.1.2610040740-alpha.3",
+  "version": "0.1.2610040821-alpha.3",
   "description": "Built-in fhold runtime skills and activity reporting for conditional HTTP keep-alive",
   "author": {
     "name": "fhold"
