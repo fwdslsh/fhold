@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultStackConfig, installHome } from '@fhold/lib';
@@ -31,7 +31,7 @@ function childEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv 
 function run(binary: string, cwd: string, args: string[], overrides: NodeJS.ProcessEnv = {}) {
 	const result = spawnSync(binary, args, { cwd, env: childEnvironment(overrides), encoding: 'utf8', timeout: 15_000 });
 	expect(result.error).toBeUndefined();
-	expect(result.status).toBe(0);
+	expect(result.status, result.stderr || result.stdout).toBe(0);
 	return JSON.parse(result.stdout) as Record<string, unknown>;
 }
 function dockerFixture(path: string, marker: string): void {
@@ -48,13 +48,23 @@ beforeAll(async () => {
 	dockerFixture(join(binDirectory, 'docker'), approvedDockerMarker);
 	dockerFixture(explicitDocker, explicitDockerMarker);
 	dockerFixture(poisonedDocker, poisonedDockerMarker);
-	for (const [binary, flags] of [[secureBinary, compileFlags], [unsafeControl, []]] as const) {
-		// Compile the actual CLI entry with process.execPath into a generated
-		// temporary target. Never write build output to source production dirs.
-		const result = spawnSync(process.execPath, ['build', join(import.meta.dir, 'main.ts'), '--compile', ...flags, '--outfile', binary], { cwd: root, env: childEnvironment(), encoding: 'utf8', timeout: 30_000 });
-		expect(result.error).toBeUndefined();
-		expect(result.status).toBe(0);
-	}
+	// Use the shipping build, including its embedded Skeleton. Compiling only
+	// main.ts can falsely pass after a local build but cannot install standalone
+	// from a fresh checkout. Runtime fixtures still have no repo/tool fallback.
+	const built = spawnSync(process.execPath, ['run', 'build'], {
+		cwd: join(import.meta.dir, '..'), encoding: 'utf8', timeout: 30_000
+	});
+	expect(built.error).toBeUndefined();
+	expect(built.status, built.stderr || built.stdout).toBe(0);
+	copyFileSync(join(import.meta.dir, '..', 'dist', 'fhold-cli'), secureBinary);
+	chmodSync(secureBinary, 0o700);
+	// The deliberately unsafe build is only a negative control for Bun's
+	// ambient autoload behavior; it is never installed or distributed.
+	const control = spawnSync(process.execPath, ['build', join(import.meta.dir, 'main.ts'), '--compile', '--outfile', unsafeControl], {
+		cwd: root, env: childEnvironment(), encoding: 'utf8', timeout: 30_000
+	});
+	expect(control.error).toBeUndefined();
+	expect(control.status, control.stderr || control.stdout).toBe(0);
 }, 30_000);
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
@@ -73,7 +83,7 @@ test('compiled named installs use sibling default homes and override ambient FH_
 			cwd: root, env: childEnvironment(override ? { FH_HOME: override } : {}), encoding: 'utf8', timeout: 15000
 		});
 		expect(result.error).toBeUndefined();
-		expect(result.status).toBe(0);
+		expect(result.status, result.stderr || result.stdout).toBe(0);
 		const home = join(operatorDirectory, 'fhold', 'instances', name);
 		expect(result.stdout).toContain(`fhold installed at ${home}`);
 		const config = JSON.parse(readFileSync(join(home, 'state/stack.json'), 'utf8'));
@@ -105,7 +115,7 @@ test('compiled install uses cwd or FH_HOME when no selector is provided and pres
 		[root, ['install', '--instance', absoluteHome, '--name', 'absolute-agent', '--no-start'], {}, absoluteHome]
 	] as const) {
 		const result = spawnSync(secureBinary, [...argv], { cwd: directory, env: childEnvironment(overrides), encoding: 'utf8', timeout: 15000 });
-		expect(result.error).toBeUndefined(); expect(result.status).toBe(0);
+		expect(result.error).toBeUndefined(); expect(result.status, result.stderr || result.stdout).toBe(0);
 		expect(result.stdout).toContain(`fhold installed at ${home}`);
 		expect(JSON.parse(readFileSync(join(home, 'state/installation.json'), 'utf8')).homeDir).toBe(home);
 	}

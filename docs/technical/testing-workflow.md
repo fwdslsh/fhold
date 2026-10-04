@@ -3,6 +3,11 @@
 Run from a fresh locked checkout and use disposable explicit fhold homes.
 Never select an existing user installation for a test.
 
+Compiled CLI tests invoke the normal shipping build, including the embedded
+Skeleton, before exercising installation and multi-instance selection with a
+private operator home. They do not require artifacts from an earlier local build
+or inject a repository-assets fallback into the installed CLI.
+
 ```bash
 bun install --frozen-lockfile
 bun run check
