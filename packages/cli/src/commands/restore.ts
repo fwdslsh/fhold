@@ -1,0 +1,169 @@
+import { defineCommand } from 'citty';
+
+import {
+	applyRestore,
+	classifyInstall,
+	createFholdState,
+	planRestore,
+	type RestoreOptions,
+	type RestorePlan
+} from '@fhold/lib';
+
+function optionsFromArgs(args: Record<string, unknown>): RestoreOptions {
+	return {
+		sourceHome: String(args.from ?? ''),
+		destinationHome: createFholdState().homeDir,
+		includeProviderAuth: args['include-provider-auth'] === true,
+		includeUserEnv: args['include-user-env'] === true,
+		includePortalMaps: args['include-portal-maps'] === true,
+		includeOAuth: args['include-oauth'] === true,
+		acknowledgeUnrestored: args['acknowledge-unrestored'] === true
+	};
+}
+
+const DETAIL_LIMIT = 10;
+const WARNING_GROUP_LIMIT = 8;
+
+function displayText(value: string): string {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: prevent untrusted file names from controlling terminal output.
+	return value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 512);
+}
+
+export function printRestorePlan(plan: RestorePlan, json: boolean): void {
+	if (json) {
+		console.log(JSON.stringify(plan, null, 2));
+		return;
+	}
+	console.log(`Restore source: ${displayText(plan.sourceHome)}`);
+	console.log(`Newly initialized fhold destination: ${displayText(plan.destinationHome)}`);
+	console.log('Scope: portable files only — NOT a full runtime recovery or native history restore.');
+	for (const item of plan.preservation) {
+		console.log(`${item.disposition}: ${displayText(item.category)} — ${displayText(item.note)}`);
+	}
+	if (plan.reviewRequired)
+		console.warn(
+			'Unrestored data needs a separate recovery decision. Apply requires --acknowledge-unrestored after you have reviewed and privately preserved it.'
+		);
+	const totals = new Map<string, Map<string, number>>();
+	const conflicts: RestorePlan['entries'] = [];
+	for (const entry of plan.entries) {
+		const actions = totals.get(entry.category) ?? new Map<string, number>();
+		actions.set(entry.action, (actions.get(entry.action) ?? 0) + 1);
+		totals.set(entry.category, actions);
+		if (entry.action === 'conflict') conflicts.push(entry);
+	}
+	for (const [category, actions] of totals) {
+		console.log(
+			`${category}: ${[...actions].map(([action, count]) => `${count} ${action}`).join(', ')}`
+		);
+	}
+	if (conflicts.length > 0) {
+		console.warn(`Resolve ${conflicts.length} destination conflict(s) before applying:`);
+		for (const entry of conflicts.slice(0, DETAIL_LIMIT)) {
+			console.warn(
+				`conflict: ${displayText(entry.relativeSource)} -> ${displayText(entry.relativeDestination)}`
+			);
+		}
+		if (conflicts.length > DETAIL_LIMIT) {
+			console.warn(
+				`${conflicts.length - DETAIL_LIMIT} more conflict(s); use --json for every path.`
+			);
+		}
+	}
+	const warnings = new Map<string, { count: number; example: string }>();
+	for (const warning of plan.warnings) {
+		// Path-based warnings share a prefix; distinct guidance remains its own group.
+		const separator = warning.indexOf(':');
+		const kind = separator > 0 ? warning.slice(0, separator) : warning;
+		const group = warnings.get(kind) ?? { count: 0, example: warning };
+		group.count += 1;
+		warnings.set(kind, group);
+	}
+	if (plan.warnings.length > 0) {
+		console.warn(`${plan.warnings.length} warning(s) in ${warnings.size} group(s):`);
+		// Preserve security/configuration guidance ahead of repetitive filesystem noise.
+		const groups = [...warnings].sort(([left], [right]) => {
+			const priority = (kind: string): number =>
+				/provider|credential|secret|auth|config|task/i.test(kind) ? 1 : 0;
+			return priority(right) - priority(left);
+		});
+		for (const [kind, group] of groups.slice(0, WARNING_GROUP_LIMIT)) {
+			console.warn(`warning (${group.count}): ${displayText(kind)}`);
+			if (group.example !== kind) console.warn(`  Example: ${displayText(group.example)}`);
+		}
+		if (groups.length > WARNING_GROUP_LIMIT) {
+			console.warn(
+				`${groups.length - WARNING_GROUP_LIMIT} more warning group(s); use --json for full details.`
+			);
+		}
+	}
+	console.log(
+		`${plan.copyCount} file(s) ready, ${plan.conflicts} conflict(s), ${plan.totalBytes} byte(s) inspected.`
+	);
+	if (totals.has('task')) {
+		console.log(
+			'Restoreed tasks are staged in knowledge/imported-tasks, not scheduled. Review their contents, then use `fhold task adopt <file>` to adopt a supported task in paused state.'
+		);
+	}
+	console.log(
+		'Use --dry-run --json for the complete file plan and warnings; --apply copies only the selected data.'
+	);
+}
+
+export default defineCommand({
+	meta: {
+		name: 'restore',
+		description: 'Safely copy selected data from a fhold portable backup into a newly initialized fhold installation'
+	},
+	args: {
+		from: { type: 'string', required: true, description: 'fhold portable backup (read only)' },
+		apply: { type: 'boolean', description: 'apply a freshly validated restore plan' },
+		'dry-run': { type: 'boolean', description: 'display the plan without writing (the default)' },
+		json: { type: 'boolean', description: 'print the plan as JSON' },
+		'include-provider-auth': {
+			type: 'boolean',
+			description: 'copy provider authentication and safe referenced files from knowledge/secrets'
+		},
+		'include-user-env': {
+			type: 'boolean',
+			description: 'copy knowledge/env/user.env'
+		},
+		'include-portal-maps': {
+			type: 'boolean',
+			description: 'copy validated Discord and Slack identity maps'
+		},
+		'include-oauth': {
+			type: 'boolean',
+			description: 'copy validated Guardian OAuth settings and identity maps'
+		},
+		'acknowledge-unrestored': {
+			type: 'boolean',
+			description:
+				'acknowledge separately preserved or deferred data; does not restore native history'
+		}
+	},
+	run({ args }) {
+		const state = createFholdState();
+		if (classifyInstall(state.homeDir) !== 'setup_incomplete') {
+			throw new Error(
+				'Restore requires a fresh, not-yet-completed fhold installation. Run `fhold install --no-start` with a new FH_HOME first.'
+			);
+		}
+		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');
+		const options = optionsFromArgs(args as Record<string, unknown>);
+		if (!args.apply) {
+			printRestorePlan(planRestore(options), args.json === true);
+			return;
+		}
+
+			const plan = applyRestore(options);
+			printRestorePlan(plan, args.json === true);
+			if (!args.json) {
+				console.log(
+					'Portable files copied and checksums verified. This is not a complete runtime recovery: native history and other unselected data need separate acceptance. Restoreed tasks remain inactive.'
+				);
+				console.log(`Private receipt: ${state.homeDir}/state/restore-receipts/${plan.digest}.json`);
+				console.log('Review task contents before adoption, then run `fhold setup`.');
+			}
+	}
+});

@@ -1,0 +1,29 @@
+{
+  "name": "@fhold/electron",
+  "version": "0.1.2610040547-alpha.3",
+  "private": true,
+  "type": "module",
+  "description": "Optional static desktop administration tool for fhold stacks",
+  "author": "fhold contributors",
+  "license": "MIT",
+  "desktopName": "fhold-admin.desktop",
+  "main": "dist/admin-main.js",
+  "scripts": {
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "bundle": "bun run scripts/generate-icon.mjs && bun build src/admin-main.ts --bundle --target=node --outfile dist/admin-main.js --external electron && bun build src/admin-preload.ts --bundle --target=node --format=cjs --outfile dist/admin-preload.cjs --external electron && bun run scripts/stage-assets.ts",
+    "bundle:e2e": "bun run bundle && bun build src/admin-e2e.ts --bundle --target=node --outfile dist/admin-e2e.js --external electron",
+    "test": "bun test src/admin-domain.test.ts src/admin-static.test.ts src/admin-instances.test.ts",
+    "test:e2e": "bun run scripts/admin-e2e.mjs",
+    "build:linux": "bun run bundle && electron-builder --config electron-builder.yml --linux --x64 --arm64",
+    "build:linux-x64": "bun run bundle && electron-builder --config electron-builder.yml --linux --x64"
+  },
+  "devDependencies": {
+    "@fhold/lib": "workspace:*",
+    "axe-core": "4.13.0",
+    "electron": "44.5.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
+    "@types/node": "^26.6.3"
+  }
+}

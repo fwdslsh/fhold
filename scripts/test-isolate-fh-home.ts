@@ -1,0 +1,125 @@
+/**
+ * Bun test preload — FH_HOME isolation.
+ *
+ * Loaded via root bunfig.toml [test] preload = [...] for every `bun test`
+ * invocation in this repo (lib, CLI, Guardian, and Portal).
+ *
+ * Guarantees:
+ *   1. FH_HOME is pointed at a fresh mkdtemp dir, unconditionally overriding
+ *      any ambient shell value, .env leakage, or .dev residue — at module top
+ *      level, so even code that runs before hooks never sees the ambient value.
+ *   2. A tripwire throws if FH_HOME is re-pointed at a real or dev dir during
+ *      the test process lifetime (catches tests that forget to restore FH_HOME).
+ *   3. The temp dirs are cleaned up after all tests finish.
+ */
+import { beforeAll, afterAll, beforeEach } from "bun:test";
+import { mkdtempSync, rmSync, realpathSync, existsSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// ── Repo root detection ─────────────────────────────────────────────────────
+
+const _scriptDir = (() => {
+  try {
+    return dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
+
+// This script lives at <repo>/scripts/test-isolate-fh-home.ts
+const REPO_ROOT = resolve(_scriptDir, "..");
+
+// ── Forbidden path prefixes ─────────────────────────────────────────────────
+
+const FORBIDDEN: string[] = [
+  join(homedir(), ".fhold"),
+  join(REPO_ROOT, ".dev"),
+  join(homedir(), ".config"),
+  join(homedir(), ".local"),
+];
+
+function isForbidden(p: string): boolean {
+  try {
+    const real = realpathSync(p);
+    return FORBIDDEN.some((f) => real === f || real.startsWith(`${f}/`));
+  } catch {
+    return FORBIDDEN.some((f) => p === f || p.startsWith(`${f}/`));
+  }
+}
+
+function assertSafeOpHome(value: string | undefined, label: string): void {
+  if (!value) return;
+  const abs = resolve(value);
+  if (isForbidden(abs)) {
+    throw new Error(
+      `[test-isolation TRIPWIRE] ${label}: FH_HOME="${value}" resolves to a protected directory.\n` +
+      `  Resolved: ${abs}\n` +
+      `  Tests must never write to ~/.fhold or .dev. Use a mkdtempSync() temp dir and restore FH_HOME in afterEach.`
+    );
+  }
+}
+
+// ── Point skeleton asset resolution at the repo for tests ──────────────────
+// first, then falls back to FH_REPO_ROOT. The package is not published yet,
+// so we set the env var here (top-level, not inside beforeAll) so it is visible
+// before any test module is evaluated. Tests that manage FH_REPO_ROOT
+// themselves save/restore it in their own beforeEach/afterEach.
+
+const originalFholdRepoRoot: string | undefined = process.env.FH_REPO_ROOT;
+if (!originalFholdRepoRoot) {
+  process.env.FH_REPO_ROOT = REPO_ROOT;
+}
+
+// ── Process-level neutralization ────────────────────────────────────────────
+// Bun auto-loads the repo-root `.env` before this preload runs, and a developer
+// .env legitimately sets FH_HOME=.dev for the dev-stack workflows. Overriding
+// only in beforeAll is too late: test modules evaluate before hooks fire, so a
+// file that captures process.env.FH_HOME at module scope (to restore it later)
+// captures the poisoned value and re-exposes it mid-run — which is exactly what
+// the tripwire below then catches. Override here, at top level, before any test
+// module is evaluated, so no test can ever observe the ambient value.
+
+const processTempDir = mkdtempSync(join(tmpdir(), "fh-test-"));
+process.env.FH_HOME = processTempDir;
+
+process.on("exit", () => {
+  rmSync(processTempDir, { recursive: true, force: true });
+});
+
+// ── Suite-level temp dir ────────────────────────────────────────────────────
+
+let suiteTempDir: string | undefined;
+
+beforeAll(() => {
+  // Unconditionally override — this is the isolation guarantee.
+  suiteTempDir = mkdtempSync(join(tmpdir(), "fh-test-"));
+  process.env.FH_HOME = suiteTempDir;
+
+});
+
+afterAll(() => {
+  // Restore to the process-level safe dir, NOT the pre-process original: the
+  // original may be the developer's .env value (.dev), and putting it back
+  // while the process is still running would re-poison later suites.
+  process.env.FH_HOME = processTempDir;
+
+  if (originalFholdRepoRoot !== undefined) {
+    process.env.FH_REPO_ROOT = originalFholdRepoRoot;
+  } else {
+    delete process.env.FH_REPO_ROOT;
+  }
+
+  if (suiteTempDir && existsSync(suiteTempDir)) {
+    rmSync(suiteTempDir, { recursive: true, force: true });
+  }
+  suiteTempDir = undefined;
+});
+
+// ── Per-test tripwire ───────────────────────────────────────────────────────
+// Fires if a test forgot to restore FH_HOME after pointing it somewhere dangerous.
+
+beforeEach(() => {
+  assertSafeOpHome(process.env.FH_HOME, "FH_HOME before test");
+});

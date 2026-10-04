@@ -1,0 +1,60 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/build",
+      "!**/dist",
+      "!**/.dev",
+      "!**/.fhold",
+      "!**/coverage",
+      "!**/test-results",
+      "!**/bun.lock",
+      "!**/bun.lockb",
+      "!**/*.min.js",
+      // Checked-in diagrams are documentation assets, not source.
+      "!**/*.svg",
+      "!.claude/workflows"
+    ]
+  },
+  "json": {
+    "parser": {
+      // Skeleton ships JSONC templates (e.g. config/guardian/opencode.json) with
+      // // comments and trailing commas; allow both so they don't raise parse errors.
+      "allowComments": true,
+      "allowTrailingCommas": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "suspicious": {
+        "noImplicitAnyLet": "warn",
+        "noAssignInExpressions": "warn",
+        "noDuplicateProperties": "warn",
+        // Compose and environment fixtures intentionally contain literal `${VAR}` syntax.
+        "noTemplateCurlyInString": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "warn"
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab",
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "none"
+    }
+  }
+}

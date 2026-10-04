@@ -1,0 +1,49 @@
+# Local development override — builds images from source instead of pulling
+#
+# Preferred usage:
+#   bun run dev:build
+#
+# Manual equivalent (from project root):
+#   docker compose --project-directory . \
+#     -f .dev/system/stack/stack.compose.yml \
+#     -f .dev/config/stack/custom.compose.yml \
+#     -f compose.dev.yml \
+#     --env-file .dev/state/stack.env \
+#     up --pull never --build -d
+#
+# The --project-directory . flag is REQUIRED when the managed compose files live
+# in a different directory (.fhold/system/stack/ or .dev/system/stack/).
+# Without it, Docker Compose resolves build contexts relative to the first -f
+# file's directory, which breaks builds.
+
+x-portal-dev: &portal-dev
+  build:
+    context: .
+    dockerfile: containers/portal/Dockerfile
+    args:
+      PLATFORM_VERSION: ${PLATFORM_VERSION:-dev}
+  image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:dev
+
+services:
+  guardian:
+    build:
+      context: .
+      dockerfile: containers/guardian/Dockerfile
+      args:
+        GUARDIAN_VERSION: ${GUARDIAN_VERSION:-dev}
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/guardian:dev
+    # Publication remains controlled by the managed compose file.
+
+  assistant:
+    build:
+      context: .
+      dockerfile: containers/assistant/Dockerfile
+      args:
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-dev}
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/assistant:dev
+
+  discord:
+    <<: *portal-dev
+
+  slack:
+    <<: *portal-dev

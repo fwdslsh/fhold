@@ -1,0 +1,8 @@
+{
+  "name": "@fhold/guardian-tools",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "opencode-ai": "1.18.34"
+  }
+}

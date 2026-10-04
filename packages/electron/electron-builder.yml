@@ -1,0 +1,28 @@
+appId: dev.fwdslsh.fhold.admin
+productName: fhold Admin
+artifactName: fhold-admin-${version}-${arch}-${os}.${ext}
+
+directories:
+  output: dist/packages
+  buildResources: assets
+
+files:
+  - dist/admin-main.js
+  - dist/admin-preload.cjs
+  - admin/**/*
+  - assets/icon.png
+  - package.json
+
+extraResources:
+  - from: dist/skeleton
+    to: skeleton
+
+publish: null
+npmRebuild: false
+
+linux:
+  executableName: fhold-admin
+  syncDesktopName: true
+  target:
+    - AppImage
+  icon: assets/icon.png

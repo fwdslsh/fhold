@@ -1,0 +1,23 @@
+{
+  "name": "@fhold/claude-desktop",
+  "version": "0.1.2610040547-alpha.3",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Optional Claude Desktop MCPB bridge for a local fhold Guardian",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "pack": "bun run build && bun run scripts/pack.ts",
+    "test": "bun run build && bun test src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/server": "2.2.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "bun-types": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}

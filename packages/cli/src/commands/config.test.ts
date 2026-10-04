@@ -1,0 +1,128 @@
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { main } from '../main.js';
+import { bootstrapInstall } from './install.js';
+
+const roots: string[] = [];
+const originalHome = process.env.FH_HOME;
+const originalRepo = process.env.FH_REPO_ROOT;
+
+afterEach(() => {
+	if (originalHome === undefined) delete process.env.FH_HOME;
+	else process.env.FH_HOME = originalHome;
+	if (originalRepo === undefined) delete process.env.FH_REPO_ROOT;
+	else process.env.FH_REPO_ROOT = originalRepo;
+	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+async function setup(): Promise<string> {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-config-'));
+	roots.push(root);
+	process.env.FH_HOME = join(root, 'home');
+	process.env.FH_REPO_ROOT = join(import.meta.dir, '../../../..');
+	await bootstrapInstall({ start: false });
+	return process.env.FH_HOME;
+}
+
+describe('config commands', () => {
+	it('refuses raw remote startup toggles without saving native intent', async () => {
+ const home = await setup();
+ const file = join(home, 'state', 'stack.json');
+ const before = readFileSync(file, 'utf8');
+ for (const tool of ['codex', 'claude']) {
+  await expect(main(['config', 'assistant', `--${tool}-remote`, 'on', '--no-apply'])).rejects.toThrow();
+ }
+ expect(readFileSync(file, 'utf8')).toBe(before);
+});
+	it('persists direct Assistant exposure and portal credential selection without Docker', async () => {
+		await setup();
+
+		await main(['config', 'assistant', '--bind', '0.0.0.0', '--port', '4910', '--no-apply']);
+		await main(['credential', 'add', 'support-bot', 'read']);
+		await main(['portal', 'credential', 'discord', '--credential', 'support-bot', '--no-apply']);
+
+		const config = JSON.parse(
+			readFileSync(join(process.env.FH_HOME, 'state', 'stack.json'), 'utf8')
+		) as {
+			assistant: { bindAddress: string; port: number };
+			credentials: Record<string, { policy: string }>;
+			portals: { discord: { credential: string } };
+		};
+		expect(config.assistant).toMatchObject({ bindAddress: '0.0.0.0', port: 4910 });
+		expect(config.credentials['support-bot']?.policy).toBe('read');
+		expect(config.portals.discord.credential).toBe('support-bot');
+		const env = readFileSync(join(process.env.FH_HOME, 'state', 'stack.env'), 'utf8');
+		expect(env).toContain('FH_ASSISTANT_BIND_ADDRESS=0.0.0.0');
+		expect(env).not.toContain('FH_DISCORD_CREDENTIAL=');
+		const bundle = JSON.parse(
+			readFileSync(
+				join(process.env.FH_HOME, 'state', 'portal-credentials', 'discord', 'credentials.json'),
+				'utf8'
+			)
+		) as { default: string; credentials: Record<string, string> };
+		expect(bundle.default).toBe('support-bot');
+		expect(Object.keys(bundle.credentials)).toEqual(['support-bot']);
+	});
+
+	it('changes timezone and memory without resetting unrelated Assistant preferences', async () => {
+		const home = await setup();
+		await main([
+			'config',
+			'assistant',
+			'--timezone',
+			'America/Chicago',
+			'--memory',
+			'off',
+			'--no-apply'
+		]);
+		await main(['config', 'assistant', '--port', '4911', '--no-apply']);
+		const path = join(home, 'state', 'stack.json');
+		const before = readFileSync(path, 'utf8');
+		expect(JSON.parse(before).assistant).toMatchObject({
+			port: 4911,
+			timezone: 'America/Chicago',
+			automaticMemory: false
+		});
+		await expect(
+			main(['config', 'assistant', '--timezone', 'Not/AZone', '--no-apply'])
+		).rejects.toThrow();
+		expect(readFileSync(path, 'utf8')).toBe(before);
+		await expect(main(['config', 'assistant', '--memory', 'maybe', '--no-apply'])).rejects.toThrow(
+			'--memory must be on or off'
+		);
+		expect(readFileSync(path, 'utf8')).toBe(before);
+	});
+
+	it('configures and disables the Guardian OAuth resource server without Docker', async () => {
+		await setup();
+		await main([
+			'config',
+			'oauth',
+			'--resource',
+			'https://agent.example/mcp',
+			'--issuer',
+			'https://identity.example/',
+			'--jwks-url',
+			'https://identity.example/jwks.json',
+			'--scopes',
+			'fhold,profile',
+			'--no-apply'
+		]);
+		const path = join(process.env.FH_HOME ?? '', 'config', 'guardian', 'oauth.json');
+		expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+			version: 1,
+			enabled: true,
+			resource: 'https://agent.example/mcp',
+			issuer: 'https://identity.example/',
+			jwksUrl: 'https://identity.example/jwks.json',
+			audience: 'https://agent.example/mcp',
+			scopes: ['fhold', 'profile'],
+			algorithms: ['RS256']
+		});
+		await main(['config', 'oauth', '--disable', '--no-apply']);
+		expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ version: 1, enabled: false });
+	});
+});

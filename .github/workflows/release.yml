@@ -1,0 +1,285 @@
+name: GitHub Linux release (publication guarded)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Frozen X.Y.yyMMddHHmm version (for example 0.1.2610020008-alpha.1)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Build and validate without publishing'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-fhold-fhold
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: version
+        name: Validate the stamped release
+        env:
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RELEASE_REF: ${{ github.ref }}
+          ACTIONS_ORIGIN: ${{ github.server_url }}
+          ACTIONS_REPOSITORY: ${{ github.repository }}
+          FH_PUBLICATION_CONFIGURED: ${{ vars.FH_PUBLICATION_CONFIGURED }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import { parseSemver } from './scripts/set-version.mjs';
+          const version = process.env.VERSION ?? '';
+          if (process.env.ACTIONS_ORIGIN !== 'https://github.com' ||
+              process.env.ACTIONS_REPOSITORY !== 'fwdslsh/fhold') {
+            throw new Error('Releases build and publish only on GitHub fwdslsh/fhold');
+          }
+          const parsed = parseSemver(version);
+          if (!parsed) throw new Error(`Invalid version: ${version}`);
+          if (process.env.DRY_RUN !== 'true' && process.env.FH_PUBLICATION_CONFIGURED !== 'true') {
+            throw new Error('Public publication is unconfigured and deferred');
+          }
+          if (process.env.DRY_RUN !== 'true' &&
+              process.env.RELEASE_REF !== 'refs/heads/main' &&
+              !process.env.RELEASE_REF.startsWith('refs/heads/release/')) {
+            throw new Error('Live releases require main/release/*');
+          }
+          const release = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
+          const manifests = release.manifests;
+          for (const manifest of manifests) {
+            const actual = JSON.parse(readFileSync(manifest, 'utf8')).version;
+            if (actual !== version) throw new Error(`${manifest} is ${actual}; expected ${version}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nprerelease=${parsed.pre !== null}\n`);
+          NODE
+
+  gates:
+    needs: validate
+    uses: ./.github/workflows/gates.yml
+
+  images:
+    name: Publish ${{ matrix.image }} image
+    needs: [validate, gates]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: assistant
+            file: containers/assistant/Dockerfile
+            build_args: PLATFORM_VERSION=${{ needs.validate.outputs.version }}
+          - image: guardian
+            file: containers/guardian/Dockerfile
+            build_args: GUARDIAN_VERSION=${{ needs.validate.outputs.version }}
+          - image: portal
+            file: containers/portal/Dockerfile
+            build_args: PLATFORM_VERSION=${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: inputs.dry_run != true
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: existing
+        name: Reuse only an immutable image from this commit
+        if: inputs.dry_run != true
+        env:
+          IMAGE: fhold/${{ matrix.image }}:${{ needs.validate.outputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}" > image-manifest.txt 2> image-error.txt; then
+            docker pull --platform linux/amd64 "${IMAGE}"
+            revision="$(docker image inspect "${IMAGE}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+            test "${revision}" = "${RELEASE_SHA}" || { echo 'Image tag belongs to another commit; use a new version'; exit 1; }
+            digest="$(docker buildx imagetools inspect "${IMAGE}" --format '{{.Manifest.Digest}}')"
+            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          elif ! grep -qiE 'manifest unknown|not found' image-error.txt; then
+            echo 'Cannot determine image tag availability; refusing to overwrite'
+            exit 1
+          fi
+      - id: build
+        if: steps.existing.outputs.digest == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.dry_run != true }}
+          tags: fhold/${{ matrix.image }}:${{ needs.validate.outputs.version }}
+          build-args: ${{ matrix.build_args }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/fwdslsh/fhold
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.title=fhold ${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release-${{ matrix.image }}
+          cache-to: type=gha,scope=release-${{ matrix.image }},mode=max
+      - uses: sigstore/cosign-installer@v4.1.2
+        if: inputs.dry_run != true
+        with:
+          cosign-release: v3.0.6
+      - name: Sign the immutable manifest
+        if: inputs.dry_run != true
+        env:
+          DIGEST: ${{ steps.existing.outputs.digest || steps.build.outputs.digest }}
+        run: cosign sign --yes "fhold/${{ matrix.image }}@${DIGEST}"
+
+  cli:
+    name: Build CLI ${{ matrix.asset }}
+    needs: [validate, gates]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: build:linux-x64
+            asset: fhold-cli-linux-x64
+          - os: ubuntu-24.04-arm
+            script: build:linux-arm64
+            asset: fhold-cli-linux-arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/cli ${{ matrix.script }}
+      - name: Smoke the fresh native CLI artifact
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          arch="$(node -p 'process.arch')"
+          case "${ASSET}" in
+            "fhold-cli-linux-${arch}") ;;
+            *) echo 'CLI artifact does not match its native runner' >&2; exit 1 ;;
+          esac
+          actual="$("./packages/cli/dist/${ASSET}" --version)"
+          test "${actual}" = "${VERSION}"
+          "./packages/cli/dist/${ASSET}" --help
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset }}
+          if-no-files-found: error
+          path: packages/cli/dist/${{ matrix.asset }}
+
+  admin:
+    name: Build optional admin for ${{ matrix.platform }}
+    needs: [validate, gates]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            script: build:linux
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/electron ${{ matrix.script }}
+      - name: Smoke the fresh native Admin package
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: node scripts/smoke-admin-artifact.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fhold-admin-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            packages/electron/dist/packages/*.AppImage
+
+  claude-extension:
+    name: Build optional Claude Desktop extension
+    needs: [validate, gates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/claude-desktop pack
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fhold-claude-desktop
+          if-no-files-found: error
+          path: packages/claude-desktop/artifacts/fhold-claude-desktop-${{ needs.validate.outputs.version }}.mcpb
+
+  release:
+    needs: [validate, images, cli, admin, claude-extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: fhold-*
+          path: dist
+          merge-multiple: true
+      - name: Verify the Claude Desktop extension is present
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: test -f "dist/fhold-claude-desktop-${VERSION}.mcpb"
+      - name: Create checksums
+        run: |
+          cd dist
+          sha256sum -- * > checksums-sha256.txt
+      - name: Write manifest and validate the complete release
+        env:
+          RELEASE_ASSETS_DIR: dist
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: node scripts/validate-release-assets.mjs --write-manifest
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fhold-release-assets
+          path: dist
+      - name: Publish the verified GitHub release
+        if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          # Published versions are immutable; never overwrite their assets.
+          if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo 'Release already exists; use a new version rather than replacing downloads.' >&2
+            exit 1
+          fi
+          args=(release create "${VERSION}" --repo "${GITHUB_REPOSITORY}" \
+            --target "${RELEASE_SHA}" --title "fhold ${VERSION}" --generate-notes --draft)
+          if [ "${PRERELEASE}" = true ]; then args+=(--prerelease --latest=false); fi
+          gh "${args[@]}" dist/*
+          # Verify the uploaded files before making the release public.
+          gh release download "${VERSION}" --repo "${GITHUB_REPOSITORY}" --dir verified-assets
+          (cd verified-assets && sha256sum --check --strict checksums-sha256.txt)
+          RELEASE_ASSETS_DIR=verified-assets node scripts/validate-release-assets.mjs
+          gh release edit "${VERSION}" --repo "${GITHUB_REPOSITORY}" --draft=false

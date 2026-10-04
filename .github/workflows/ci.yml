@@ -1,0 +1,20 @@
+name: GitHub CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'release/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # CI and release call the same reusable stack gate.
+  gates:
+    uses: ./.github/workflows/gates.yml

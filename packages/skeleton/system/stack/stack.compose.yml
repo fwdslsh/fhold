@@ -1,0 +1,236 @@
+# fhold stack
+#
+# One required service (assistant), one optional security gateway (guardian),
+# and two optional chat adapters. Operator overlays belong exclusively in
+# config/stack/custom.compose.yml.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  assistant:
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/assistant:${FH_ASSISTANT_VERSION:-0.1.2610040547-alpha.3}
+    hostname: ${FH_INSTANCE_HOSTNAME:-fhold}
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    user: "${FH_UID:-1000}:${FH_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /home/opencode
+      OPENCODE_CONFIG_DIR: /etc/opencode
+      OPENCODE_DISABLE_PROJECT_CONFIG: "true"
+      OPENCODE_DISABLE_CLAUDE_CODE: "true"
+      OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
+      OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true"
+      OPENCODE_PORT: "4096"
+      OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
+      AKM_BUNDLE_DIR: /stash
+      AKM_CONFIG_DIR: /etc/akm
+      AKM_CACHE_DIR: /opt/akm/cache
+      AKM_DATA_DIR: /opt/akm/data
+      AKM_STATE_DIR: /opt/akm/data/state
+      TZ: ${FH_TIMEZONE:-UTC}
+      FH_AUTOMATIC_MEMORY: ${FH_AUTOMATIC_MEMORY:-1}
+      FH_CODEX_REMOTE: ${FH_CODEX_REMOTE:-1}
+      FH_CODEX_SANDBOX: ${FH_CODEX_SANDBOX:-workspace-write}
+      FH_CLAUDE_REMOTE: ${FH_CLAUDE_REMOTE:-1}
+      AKM_AUTO_MEMORY: "0"
+      AKM_AUTO_LEARNING: "0"
+      AKM_REDACT_HIGH_ENTROPY: "1"
+      AKM_REDACT_PII: "1"
+      OPENCODE_API_URL: http://127.0.0.1:4096
+      TERM: xterm-256color
+    ports:
+      # Trusted native OpenCode access. Loopback is the secure default; an
+      # operator may explicitly publish another address in the stack configuration.
+      - name: opencode
+        target: 4096
+        published: "${FH_ASSISTANT_PORT:-3810}"
+        host_ip: "${FH_ASSISTANT_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    volumes:
+      - ${FH_HOME:?}/data/assistant:/home/opencode
+      - ${FH_HOME:?}/config/assistant:/home/opencode/.config/opencode:ro
+      # OpenCode owns this credential file. Mount only the file rather than
+      # exposing the delegated Guardian/portal secret directory to the agent.
+      - ${FH_HOME:?}/knowledge/secrets/auth.json:/home/opencode/.local/share/opencode/auth.json
+      - ${FH_HOME:?}/system/assistant:/etc/opencode:ro
+      # AKM owns scheduler.enabled and writes it atomically when tasks pause/resume.
+      # This operator-only config contains no delegated Guardian/portal credentials.
+      - ${FH_HOME:?}/config/akm:/etc/akm
+      - ${FH_HOME:?}/knowledge:/stash
+      - ${FH_HOME:?}/data/akm/cache:/opt/akm/cache
+      - ${FH_HOME:?}/data/akm/data:/opt/akm/data
+      - ${FH_HOME:?}/workspace:/work
+    secrets:
+      - opencode_server_password
+    networks: [agent_net]
+    healthcheck:
+      test: ["CMD", "fhold-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  guardian:
+    profiles: [gateway, discord, slack]
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/guardian:${FH_GUARDIAN_VERSION:-0.1.2610040547-alpha.3}
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    user: "${FH_UID:-1000}:${FH_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /opt/fhold/guardian
+      OPENCODE_CONFIG_DIR: /opt/fhold/moderator-config
+      OPENCODE_DISABLE_PROJECT_CONFIG: "true"
+      OPENCODE_DISABLE_CLAUDE_CODE: "true"
+      OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
+      OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true"
+      PORT: "8080"
+      FH_ASSISTANT_URL: http://assistant:4096
+      FH_ASSISTANT_DIRECTORY: /work
+      OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
+      GUARDIAN_AUTH_DIR: /run/fhold-credentials
+      GUARDIAN_HANDLE_KEY_FILE: /run/secrets/guardian_handle_key
+      GUARDIAN_OAUTH_CONFIG_FILE: /opt/fhold/guardian/.config/opencode/oauth.json
+      GUARDIAN_OAUTH_IDENTITIES_FILE: /opt/fhold/guardian/.config/opencode/oauth-identities.json
+      GUARDIAN_AUDIT_PATH: /opt/fhold/logs/guardian-audit.log
+      GUARDIAN_ALLOWED_ORIGINS: ${GUARDIAN_ALLOWED_ORIGINS:-}
+      GUARDIAN_MODERATION_URL: http://127.0.0.1:4097
+      GUARDIAN_MODERATION_PORT: "4097"
+      GUARDIAN_MODERATION_TIMEOUT_MS: ${GUARDIAN_MODERATION_TIMEOUT_MS:-4000}
+      GUARDIAN_ASSISTANT_TIMEOUT_MS: ${GUARDIAN_ASSISTANT_TIMEOUT_MS:-120000}
+      GUARDIAN_MODERATION_THRESHOLD: "3"
+    ports:
+      - name: mcp
+        target: 8080
+        published: "${FH_GUARDIAN_PORT:-3830}"
+        host_ip: "${FH_GUARDIAN_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    volumes:
+      - ${FH_HOME:?}/data/logs:/opt/fhold/logs
+      - ${FH_HOME:?}/system/guardian:/opt/fhold/moderator-config:ro
+      - ${FH_HOME:?}/config/guardian:/opt/fhold/guardian/.config/opencode:ro
+      - ${FH_HOME:?}/knowledge/secrets/auth.json:/opt/fhold/guardian/.local/share/opencode/auth.json:ro
+      # Guardian reads this mount itself so workspace resources cannot escape
+      # through OpenCode's intentionally broad native file API.
+      - ${FH_HOME:?}/workspace:/work:ro
+      # Guardian authenticates every named credential. Each portal receives a
+      # generated keyring containing only its default and mapped credentials.
+      - ${FH_HOME:?}/state/credentials:/run/fhold-credentials:ro
+    secrets:
+      - guardian_handle_key
+      - opencode_server_password
+    networks: [agent_net, ingress_net]
+    depends_on:
+      assistant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  discord:
+    profiles: [discord]
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:${FH_PORTAL_VERSION:-0.1.2610040547-alpha.3}
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    user: "${FH_UID:-1000}:${FH_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PORT: "8184"
+      PORTAL_ADAPTER: discord
+      MCP_SERVER_URL: http://guardian:8080/mcp
+      PORTAL_CREDENTIALS_FILE: /run/fhold-credentials/credentials.json
+      PORTAL_STATE_PATH: /var/lib/fhold/portal.db
+      DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
+      DISCORD_ALLOWED_GUILDS: ${DISCORD_ALLOWED_GUILDS:-}
+      DISCORD_ALLOWED_ROLES: ${DISCORD_ALLOWED_ROLES:-}
+      DISCORD_ALLOWED_USERS: ${DISCORD_ALLOWED_USERS:-}
+      DISCORD_BLOCKED_USERS: ${DISCORD_BLOCKED_USERS:-}
+    volumes:
+      - ${FH_HOME:?}/data/portal/discord:/var/lib/fhold
+      - ${FH_HOME:?}/state/portal-credentials/discord:/run/fhold-credentials:ro
+    secrets:
+      - discord_bot_token
+    networks: [ingress_net]
+    depends_on:
+      guardian:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8184/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  slack:
+    profiles: [slack]
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/portal:${FH_PORTAL_VERSION:-0.1.2610040547-alpha.3}
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    user: "${FH_UID:-1000}:${FH_GID:-1000}"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PORT: "8185"
+      PORTAL_ADAPTER: slack
+      MCP_SERVER_URL: http://guardian:8080/mcp
+      PORTAL_CREDENTIALS_FILE: /run/fhold-credentials/credentials.json
+      PORTAL_STATE_PATH: /var/lib/fhold/portal.db
+      SLACK_BOT_TOKEN_FILE: /run/secrets/slack_bot_token
+      SLACK_APP_TOKEN_FILE: /run/secrets/slack_app_token
+      SLACK_ALLOWED_CHANNELS: ${SLACK_ALLOWED_CHANNELS:-}
+      SLACK_ALLOWED_USERS: ${SLACK_ALLOWED_USERS:-}
+      SLACK_BLOCKED_USERS: ${SLACK_BLOCKED_USERS:-}
+    volumes:
+      - ${FH_HOME:?}/data/portal/slack:/var/lib/fhold
+      - ${FH_HOME:?}/state/portal-credentials/slack:/run/fhold-credentials:ro
+    secrets:
+      - slack_bot_token
+      - slack_app_token
+    networks: [ingress_net]
+    depends_on:
+      guardian:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8185/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  # Network membership is the isolation boundary. Both networks retain normal
+  # outbound access so the assistant can reach model providers and the portal
+  # adapters can reach Discord/Slack.
+  agent_net: {}
+  ingress_net: {}
+
+secrets:
+  opencode_server_password:
+    file: ${FH_HOME:?}/state/secrets/fhold_opencode_password
+  guardian_handle_key:
+    file: ${FH_HOME:?}/state/secrets/fhold_guardian_handle_key
+  discord_bot_token:
+    file: ${FH_HOME:?}/state/secrets/discord_bot_token
+  slack_bot_token:
+    file: ${FH_HOME:?}/state/secrets/slack_bot_token
+  slack_app_token:
+    file: ${FH_HOME:?}/state/secrets/slack_app_token

@@ -1,0 +1,159 @@
+name: stack gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: stack quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install the single locked workspace
+        run: bun install --frozen-lockfile
+      - name: Audit dependencies with the reviewed unsigned MCPB build-only exception
+        # node-forge is absent from runtime images/bridge; no signing/certificate processing.
+        # Raw bun audit still reports this unpatched advisory. See docs/operations/release.md.
+        run: bun run audit
+      - name: Type check active packages
+        run: bun run check
+      - name: Test active packages
+        env:
+          FH_SOCKET_TESTS: '1'
+        run: bun run test
+      - name: Lint
+        run: bun run lint
+      - name: Build the standalone CLI
+        run: bun run --cwd packages/cli build
+      - name: Build and validate the optional Claude Desktop extension
+        run: bun run --cwd packages/claude-desktop pack
+      - name: Verify the embedded Skeleton
+        run: |
+          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'system/stack/stack.compose.yml'
+          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'system/assistant/agents/scheduled.md'
+          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'config/akm/config.json'
+      - name: Bundle the optional admin app
+        run: bun run --cwd packages/electron bundle
+      - name: Validate shell entrypoints
+        run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh containers/assistant/opencode-run.sh containers/guardian/entrypoint.sh
+      - name: Validate the materialized Compose project
+        env:
+          FH_HOME: ${{ runner.temp }}/fhold-ci
+          FH_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          bun run packages/cli/src/main.ts install --no-start
+          docker compose \
+            --project-name fhold-ci \
+            --project-directory "${GITHUB_WORKSPACE}" \
+            -f "${FH_HOME}/system/stack/stack.compose.yml" \
+            -f "${FH_HOME}/config/stack/custom.compose.yml" \
+            --env-file "${FH_HOME}/state/stack.env" \
+            --profile gateway --profile discord --profile slack \
+            config --quiet
+
+  images:
+    name: Build ${{ matrix.image }} (${{ matrix.platform }})
+    needs: quality
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+        image: [assistant, guardian, portal]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: assistant
+            file: containers/assistant/Dockerfile
+            build_args: PLATFORM_VERSION=ci
+          - image: guardian
+            file: containers/guardian/Dockerfile
+            build_args: GUARDIAN_VERSION=ci
+          - image: portal
+            file: containers/portal/Dockerfile
+            build_args: PLATFORM_VERSION=ci
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert native architecture for runtime tests
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          case "${PLATFORM}" in
+            linux/amd64) test "$(uname -m)" = x86_64 ;;
+            linux/arm64) test "$(uname -m)" = aarch64 ;;
+            *) exit 1 ;;
+          esac
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: fhold/${{ matrix.image }}:ci
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }},mode=max
+      - name: Assert a non-root runtime user
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          user="$(docker image inspect "fhold/${IMAGE}:ci" --format '{{.Config.User}}')"
+          test -n "${user}"
+          test "${user}" != root
+          test "${user}" != 0
+      - name: Report all high and critical runtime image advisories
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: fhold/${{ matrix.image }}:ci
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+      - name: Reject every critical runtime image advisory
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: fhold/${{ matrix.image }}:ci
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+      - name: Reject fixable high runtime image advisories
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: fhold/${{ matrix.image }}:ci
+          scanners: vuln
+          severity: HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Run image startup and security smoke
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: bash scripts/smoke-image.sh "fhold/${IMAGE}:ci" "${IMAGE}"
+      - name: Verify native remote failures do not interrupt Assistant
+        if: matrix.image == 'assistant'
+        env:
+          FH_SMOKE_REMOTE: '1'
+        run: bash scripts/smoke-image.sh fhold/assistant:ci assistant
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.image == 'assistant'
+        with:
+          bun-version: 1.4.2
+      - name: Install locked workspace for native history verification
+        if: matrix.image == 'assistant'
+        run: bun install --frozen-lockfile
+      - name: Verify native history recovery with the built Assistant engine
+        if: matrix.image == 'assistant'
+        env:
+          FH_HISTORY_TEST_IMAGE: fhold/assistant:ci
+        run: bun test packages/lib/src/control-plane/history.test.ts

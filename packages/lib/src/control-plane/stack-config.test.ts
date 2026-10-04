@@ -1,0 +1,299 @@
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+	credentialRegistryFile,
+	defaultStackConfig,
+	ensureStackConfig,
+	hostTimezone,
+	isInstanceName,
+	stackConfigEnv,
+	parseStackConfig,
+	readStackConfig,
+	stackConfigFile,
+	writeStackConfig
+} from './stack-config.js';
+
+const homes: string[] = [];
+
+function home(): string {
+	const path = mkdtempSync(join(tmpdir(), 'fhold-stack-config-'));
+	homes.push(path);
+	return path;
+}
+
+afterEach(() => {
+	for (const path of homes.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+
+describe('StackConfig', () => {
+	it('accepts DNS-safe instance names and derives a hostname without changing existing project identities', () => {
+		for (const name of ['personal', 'work-agent', '1', 'a'.repeat(63)])
+			expect(isInstanceName(name)).toBe(true);
+		for (const name of [
+			'',
+			'My Agent',
+			'UPPER',
+			'a_b',
+			'-agent',
+			'agent-',
+			'a'.repeat(64),
+			42,
+			null
+		])
+			expect(isInstanceName(name)).toBe(false);
+		const config = defaultStackConfig();
+		config.deployment.projectName = 'my-agent';
+		expect(stackConfigEnv(config).FH_INSTANCE_HOSTNAME).toBe('my-agent');
+		config.deployment.projectName = 'existing_project_';
+		expect(stackConfigEnv(config).FH_INSTANCE_HOSTNAME).toBe('existing-project');
+		expect(config.deployment.projectName).toBe('existing_project_');
+		config.deployment.projectName = 'a'.repeat(128);
+		expect(stackConfigEnv(config).FH_INSTANCE_HOSTNAME).toHaveLength(63);
+	});
+	it('validates explicit native Codex isolation modes without changing the default', () => {
+		const config = defaultStackConfig();
+		expect(config.assistant.codexSandbox).toBe('workspace-write');
+		for (const mode of ['workspace-write', 'read-only', 'danger-full-access'] as const) {
+			config.assistant.codexSandbox = mode;
+			expect(parseStackConfig(config).ok).toBe(true);
+			expect(stackConfigEnv(config).FH_CODEX_SANDBOX).toBe(mode);
+		}
+		for (const value of ['yolo', 'external-sandbox', '', null, 1])
+			expect(
+				parseStackConfig({ ...config, assistant: { ...config.assistant, codexSandbox: value } }).ok
+			).toBe(false);
+	});
+	it('defaults both native workers on without overriding explicit off choices', () => {
+		const config = defaultStackConfig();
+		for (const field of ['codexRemote', 'claudeRemote']) {
+			for (const value of [null, 1, 'true', {}])
+				expect(
+					parseStackConfig({ ...config, assistant: { ...config.assistant, [field]: value } }).ok
+				).toBe(false);
+		}
+		const old = parseStackConfig({
+			...config,
+			assistant: { bindAddress: '127.0.0.1', port: 3810 }
+		});
+		expect(old.ok && old.config.assistant).toMatchObject({
+			codexRemote: true,
+			claudeRemote: true
+		});
+		config.assistant.codexRemote = true;
+		config.assistant.claudeRemote = false;
+		expect(parseStackConfig(config)).toMatchObject({
+			ok: true,
+			config: { assistant: { claudeRemote: false } }
+		});
+		expect(stackConfigEnv(config)).toMatchObject({ FH_CODEX_REMOTE: '1', FH_CLAUDE_REMOTE: '0' });
+		config.assistant.claudeRemote = true;
+		expect(stackConfigEnv(config)).toMatchObject({ FH_CODEX_REMOTE: '1', FH_CLAUDE_REMOTE: '1' });
+		config.assistant.codexRemote = false;
+		config.assistant.claudeRemote = false;
+		expect(parseStackConfig(config)).toMatchObject({
+			ok: true,
+			config: { assistant: { codexRemote: false, claudeRemote: false } }
+		});
+		expect(stackConfigEnv(config)).toMatchObject({ FH_CODEX_REMOTE: '0', FH_CLAUDE_REMOTE: '0' });
+	});
+	it('defaults to one assistant, three reusable credentials, and no ingress intent', () => {
+		expect(defaultStackConfig()).toEqual({
+			product: 'fhold',
+			deployment: defaultStackConfig().deployment,
+			version: 1,
+			assistant: {
+				bindAddress: '127.0.0.1',
+				port: 3810,
+				timezone: hostTimezone(),
+				automaticMemory: true,
+				codexRemote: true,
+				codexSandbox: 'workspace-write',
+				claudeRemote: true
+			},
+			gateway: { enabled: false, bindAddress: '127.0.0.1', port: 3830 },
+			credentials: {
+				owner: { id: 'owner', policy: 'full' },
+				discord: { id: 'discord', policy: 'chat' },
+				slack: { id: 'slack', policy: 'chat' }
+			},
+			portals: {
+				discord: {
+					enabled: false,
+					credential: 'discord',
+					access: { guilds: [], roles: [], users: [], blockedUsers: [] }
+				},
+				slack: {
+					enabled: false,
+					credential: 'slack',
+					access: { channels: [], users: [], blockedUsers: [] }
+				}
+			}
+		});
+	});
+
+	it('validates timezone and memory preferences and derives nonsecret runtime values', () => {
+		const config = defaultStackConfig();
+		config.assistant.timezone = 'America/Chicago';
+		config.assistant.automaticMemory = false;
+		expect(parseStackConfig(config).ok).toBe(true);
+		expect(stackConfigEnv(config)).toMatchObject({
+			FH_TIMEZONE: 'America/Chicago',
+			FH_AUTOMATIC_MEMORY: '0'
+		});
+		expect(
+			parseStackConfig({ ...config, assistant: { ...config.assistant, timezone: 'No/Such_Zone' } })
+				.ok
+		).toBe(false);
+		expect(
+			parseStackConfig({ ...config, assistant: { ...config.assistant, timezone: 'UTC\nBAD=1' } }).ok
+		).toBe(false);
+		expect(
+			parseStackConfig({ ...config, assistant: { ...config.assistant, automaticMemory: 'false' } })
+				.ok
+		).toBe(false);
+		const existing = parseStackConfig({
+			...config,
+			assistant: { bindAddress: '127.0.0.1', port: 3810 }
+		});
+		expect(existing.ok && existing.config.assistant).toMatchObject({
+			timezone: hostTimezone(),
+			automaticMemory: true
+		});
+	});
+
+	it('rejects invalid versions, binds, credentials, and portal references', () => {
+		expect(parseStackConfig({ product: 'fhold', version: 2 })).toEqual({
+			ok: false,
+			error: 'stack config must use version 1'
+		});
+		const invalid = defaultStackConfig();
+		invalid.gateway.bindAddress = 'public.example.com';
+		invalid.gateway.port = 70_000;
+		expect(parseStackConfig(invalid).ok).toBe(false);
+		const invalidPolicy = defaultStackConfig();
+		const owner = invalidPolicy.credentials.owner;
+		if (!owner) throw new Error('default owner credential missing');
+		owner.policy = 'unsafe' as never;
+		expect(parseStackConfig(invalidPolicy).ok).toBe(false);
+		const missing = defaultStackConfig();
+		missing.portals.discord.credential = 'missing';
+		expect(parseStackConfig(missing).ok).toBe(false);
+		const duplicate = defaultStackConfig();
+		const slack = duplicate.credentials.slack;
+		if (!slack) throw new Error('default slack credential missing');
+		slack.id = 'owner';
+		expect(parseStackConfig(duplicate).ok).toBe(false);
+		const invalidAccess = defaultStackConfig();
+		invalidAccess.portals.discord.access.users = ['not-a-snowflake'];
+		expect(parseStackConfig(invalidAccess)).toEqual({
+			ok: false,
+			error: 'discord users contains an invalid platform ID'
+		});
+		expect(parseStackConfig({ ...defaultStackConfig(), unsupported: true })).toEqual({
+			ok: false,
+			error: 'stack config contains unsupported settings'
+		});
+	});
+
+	it('makes portal enablement imply the gateway', () => {
+		const config = defaultStackConfig();
+		config.portals.discord.enabled = true;
+		const parsed = parseStackConfig(config);
+		expect(parsed.ok).toBe(true);
+		if (parsed.ok) expect(parsed.config.gateway.enabled).toBe(true);
+	});
+
+	it('requires an explicit stack config instead of inferring environment intent', () => {
+		const root = home();
+		mkdirSync(join(root, 'state'), { recursive: true });
+		writeFileSync(
+			join(root, 'state', 'stack.env'),
+			[
+				'FH_ENABLED_ADDONS=gateway,discord',
+				'FH_ASSISTANT_BIND_ADDRESS=192.168.1.12',
+				'FH_ASSISTANT_PORT=4910',
+				'FH_GUARDIAN_BIND_ADDRESS=0.0.0.0',
+				''
+			].join('\n')
+		);
+		const result = readStackConfig(root);
+		expect(result).toEqual({
+			ok: false,
+			error: `stack config is missing: ${stackConfigFile(root)}`
+		});
+	});
+
+	it('rejects unsupported config versions without mutating the file', () => {
+		const root = home();
+		mkdirSync(join(root, 'state'), { recursive: true });
+		writeFileSync(
+			stackConfigFile(root),
+			JSON.stringify({
+				product: 'fhold',
+				version: 2,
+				assistant: { bindAddress: '127.0.0.1', port: 3810 },
+				gateway: { enabled: true, bindAddress: '127.0.0.1', port: 3830, policy: 'read' },
+				portals: {
+					discord: { enabled: false, policy: 'chat' },
+					slack: { enabled: false, policy: 'full' }
+				}
+			})
+		);
+		const result = readStackConfig(root);
+		expect(result).toEqual({ ok: false, error: 'stack config must use version 1' });
+		expect(() => ensureStackConfig(root)).toThrow('stack config must use version 1');
+		expect(JSON.parse(readFileSync(stackConfigFile(root), 'utf8')).version).toBe(2);
+
+		writeFileSync(
+			stackConfigFile(root),
+			JSON.stringify({
+				product: 'fhold',
+				version: 2,
+				gateway: { enabled: true, bindAddress: '127.0.0.1', port: 3830 },
+				portals: { discord: { enabled: false }, slack: { enabled: false } }
+			})
+		);
+		expect(readStackConfig(root)).toEqual({ ok: false, error: 'stack config must use version 1' });
+	});
+
+	it('atomically writes intent and derives runtime registry and portal selections', () => {
+		const root = home();
+		const config = defaultStackConfig();
+		config.portals.slack.enabled = true;
+		config.portals.slack.access.channels = ['C012ABCDEF'];
+		writeStackConfig(root, config);
+
+		expect(JSON.parse(readFileSync(stackConfigFile(root), 'utf8')).version).toBe(1);
+		const registry = JSON.parse(readFileSync(credentialRegistryFile(root), 'utf8')) as {
+			credentials: Array<{ username: string; policy: string }>;
+		};
+		expect(registry.credentials).toContainEqual({ username: 'owner', id: 'owner', policy: 'full' });
+		const env = readFileSync(join(root, 'state', 'stack.env'), 'utf8');
+		expect(env).toContain('FH_ENABLED_ADDONS=gateway,slack');
+		expect(env).not.toContain('FH_DISCORD_CREDENTIAL=');
+		expect(env).not.toContain('FH_SLACK_CREDENTIAL=');
+		expect(env).toContain('SLACK_ALLOWED_CHANNELS=C012ABCDEF');
+		expect(ensureStackConfig(root).portals.slack.enabled).toBe(true);
+	});
+
+	it('repairs derived runtime env from JSON source of truth', () => {
+		const root = home();
+		const config = defaultStackConfig();
+		config.gateway.enabled = true;
+		writeStackConfig(root, config);
+		writeFileSync(
+			join(root, 'state', 'stack.env'),
+			'FH_ENABLED_ADDONS=unknown\nFH_ASSISTANT_PORT=9999\n'
+		);
+
+		ensureStackConfig(root);
+
+		const env = readFileSync(join(root, 'state', 'stack.env'), 'utf8');
+		expect(env).toContain('FH_ENABLED_ADDONS=gateway');
+		expect(env).not.toContain('unknown');
+		expect(env).toContain('FH_ASSISTANT_PORT=3810');
+	});
+});

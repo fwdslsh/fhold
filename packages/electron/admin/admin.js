@@ -1,0 +1,24 @@
+import { bindUiEvents } from './ui.js';
+import { bindRuntimeEvents } from './runtime.js';
+import { bindAccessEvents } from './access.js';
+import { bindConnectionsEvents } from './connections.js';
+import { bindProvidersEvents } from './providers.js';
+import { bindBackupEvents } from './backup.js';
+import { bindConfigurationEvents } from './configuration.js';
+import { bindPreferencesEvents } from './preferences.js';
+import { bindRemoteEvents } from './remote.js';
+import { bindInstanceEvents, initializeAdmin } from './instances.js';
+import { state } from './state.js';
+
+state.api = window.fholdAdmin;
+bindUiEvents();
+bindRuntimeEvents();
+bindAccessEvents();
+bindConnectionsEvents();
+bindProvidersEvents();
+bindBackupEvents();
+bindConfigurationEvents();
+bindPreferencesEvents();
+bindRemoteEvents();
+bindInstanceEvents();
+void initializeAdmin();

@@ -1,0 +1,589 @@
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
+import { join } from 'node:path';
+
+import {
+	mergeEnvContent,
+	resolveFholdHome,
+	stackConfigFile,
+	stackEnvFile,
+	writeFileAtomic
+} from './foundation.js';
+import { FH_RELEASE_VERSION } from './release.js';
+
+export { stackConfigFile } from './foundation.js';
+
+export const STACK_CONFIG_VERSION = 1 as const;
+export const CREDENTIAL_REGISTRY_VERSION = 1 as const;
+
+export const GUARDIAN_POLICIES = ['chat', 'read', 'full'] as const;
+export type GuardianPolicy = (typeof GUARDIAN_POLICIES)[number];
+
+export const CODEX_SANDBOX_MODES = ['workspace-write', 'read-only', 'danger-full-access'] as const;
+export function isCodexSandbox(value: unknown): value is (typeof CODEX_SANDBOX_MODES)[number] {
+	return CODEX_SANDBOX_MODES.some((mode) => mode === value);
+}
+
+export type CredentialConfig = {
+	id: string;
+	policy: GuardianPolicy;
+};
+
+export type DiscordPortalAccess = {
+	guilds: string[];
+	roles: string[];
+	users: string[];
+	blockedUsers: string[];
+};
+
+export type SlackPortalAccess = {
+	channels: string[];
+	users: string[];
+	blockedUsers: string[];
+};
+
+export type StackConfig = {
+	product: 'fhold';
+	version: typeof STACK_CONFIG_VERSION;
+	deployment: {
+		projectName: string;
+		imageNamespace: string;
+		images: { assistant: string; guardian: string; portal: string };
+	};
+	assistant: {
+		bindAddress: string;
+		port: number;
+		timezone: string;
+		automaticMemory: boolean;
+		codexRemote: boolean;
+		codexSandbox: (typeof CODEX_SANDBOX_MODES)[number];
+		claudeRemote: boolean;
+	};
+	gateway: {
+		enabled: boolean;
+		bindAddress: string;
+		port: number;
+	};
+	credentials: Record<string, CredentialConfig>;
+	portals: {
+		discord: { enabled: boolean; credential: string; access: DiscordPortalAccess };
+		slack: { enabled: boolean; credential: string; access: SlackPortalAccess };
+	};
+};
+
+export type StackConfigReadResult =
+	| { ok: true; config: StackConfig; source: 'file' }
+	| { ok: false; error: string };
+
+const DEFAULT_BIND_ADDRESS = '127.0.0.1';
+const DEFAULT_ASSISTANT_PORT = 3810;
+const DEFAULT_GATEWAY_PORT = 3830;
+const MAX_CREDENTIALS = 128;
+const ADDONS = new Set(['gateway', 'discord', 'slack']);
+const USERNAME_RE = /^[a-z][a-z0-9._-]{0,63}$/;
+const CREDENTIAL_ID_RE = /^(?:owner|discord|slack|cred_[a-f0-9]{32})$/;
+const DEFAULT_POLICIES = {
+	owner: 'full',
+	discord: 'chat',
+	slack: 'chat'
+} as const satisfies Record<string, GuardianPolicy>;
+
+export function isCredentialUsername(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		USERNAME_RE.test(value) &&
+		value !== 'constructor' &&
+		value !== 'prototype'
+	);
+}
+
+export function isCredentialId(value: unknown): value is string {
+	return typeof value === 'string' && CREDENTIAL_ID_RE.test(value);
+}
+
+/** A user-chosen instance name is also its Linux hostname. */
+export function isInstanceName(value: unknown): value is string {
+	return typeof value === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
+}
+
+export function createCredentialId(): string {
+	return `cred_${Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+		byte.toString(16).padStart(2, '0')
+	).join('')}`;
+}
+
+export function defaultStackConfig(homeDir?: string): StackConfig {
+	const suffix = createHash('sha256').update(resolveFholdHome(homeDir)).digest('hex').slice(0, 12);
+	return {
+		product: 'fhold',
+		version: STACK_CONFIG_VERSION,
+		deployment: {
+			projectName: `fhold-${suffix}`,
+			imageNamespace: 'fhold',
+			images: {
+				assistant: FH_RELEASE_VERSION,
+				guardian: FH_RELEASE_VERSION,
+				portal: FH_RELEASE_VERSION
+			}
+		},
+		assistant: {
+			bindAddress: DEFAULT_BIND_ADDRESS,
+			port: DEFAULT_ASSISTANT_PORT,
+			timezone: hostTimezone(),
+			automaticMemory: true,
+			codexRemote: true,
+			codexSandbox: 'workspace-write',
+			claudeRemote: true
+		},
+		gateway: {
+			enabled: false,
+			bindAddress: DEFAULT_BIND_ADDRESS,
+			port: DEFAULT_GATEWAY_PORT
+		},
+		credentials: {
+			owner: { id: 'owner', policy: DEFAULT_POLICIES.owner },
+			discord: { id: 'discord', policy: DEFAULT_POLICIES.discord },
+			slack: { id: 'slack', policy: DEFAULT_POLICIES.slack }
+		},
+		portals: {
+			discord: {
+				enabled: false,
+				credential: 'discord',
+				access: { guilds: [], roles: [], users: [], blockedUsers: [] }
+			},
+			slack: {
+				enabled: false,
+				credential: 'slack',
+				access: { channels: [], users: [], blockedUsers: [] }
+			}
+		}
+	};
+}
+
+export function hostTimezone(): string {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+	} catch {
+		return 'UTC';
+	}
+}
+
+export function validTimezone(value: unknown): value is string {
+	if (typeof value !== 'string' || value.length > 128 || !/^[A-Za-z0-9_+/-]+$/.test(value))
+		return false;
+	try {
+		new Intl.DateTimeFormat('en', { timeZone: value }).format();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+	return value !== null && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+	const allowed = new Set(keys);
+	return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function parsePort(value: unknown): number | null {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 65_535
+		? value
+		: null;
+}
+
+function parseIdList(
+	value: unknown,
+	label: string,
+	pattern: RegExp
+): { ok: true; value: string[] } | { ok: false; error: string } {
+	if (!Array.isArray(value) || value.length > 1_000) {
+		return { ok: false, error: `${label} must be an array of at most 1000 IDs` };
+	}
+	const result: string[] = [];
+	const seen = new Set<string>();
+	for (const item of value) {
+		if (typeof item !== 'string' || !pattern.test(item)) {
+			return { ok: false, error: `${label} contains an invalid platform ID` };
+		}
+		if (!seen.has(item)) result.push(item);
+		seen.add(item);
+	}
+	return { ok: true, value: result.sort() };
+}
+
+function parseDiscordAccess(value: unknown) {
+	const source = value === undefined ? {} : asRecord(value);
+	if (!source || !hasOnlyKeys(source, ['guilds', 'roles', 'users', 'blockedUsers'])) {
+		return { ok: false as const, error: 'discord access contains unsupported settings' };
+	}
+	const result = {
+		guilds: parseIdList(source.guilds ?? [], 'discord guilds', /^[0-9]{5,32}$/),
+		roles: parseIdList(source.roles ?? [], 'discord roles', /^[0-9]{5,32}$/),
+		users: parseIdList(source.users ?? [], 'discord users', /^[0-9]{5,32}$/),
+		blockedUsers: parseIdList(source.blockedUsers ?? [], 'discord blocked users', /^[0-9]{5,32}$/)
+	};
+	if (!result.guilds.ok) return result.guilds;
+	if (!result.roles.ok) return result.roles;
+	if (!result.users.ok) return result.users;
+	if (!result.blockedUsers.ok) return result.blockedUsers;
+	return {
+		ok: true as const,
+		value: {
+			guilds: result.guilds.value,
+			roles: result.roles.value,
+			users: result.users.value,
+			blockedUsers: result.blockedUsers.value
+		}
+	};
+}
+
+function parseSlackAccess(value: unknown) {
+	const source = value === undefined ? {} : asRecord(value);
+	if (!source || !hasOnlyKeys(source, ['channels', 'users', 'blockedUsers'])) {
+		return { ok: false as const, error: 'slack access contains unsupported settings' };
+	}
+	const channels = parseIdList(source.channels ?? [], 'slack channels', /^[CDG][A-Z0-9]{2,31}$/);
+	if (!channels.ok) return channels;
+	const users = parseIdList(source.users ?? [], 'slack users', /^[UW][A-Z0-9]{2,31}$/);
+	if (!users.ok) return users;
+	const blockedUsers = parseIdList(
+		source.blockedUsers ?? [],
+		'slack blocked users',
+		/^[UW][A-Z0-9]{2,31}$/
+	);
+	if (!blockedUsers.ok) return blockedUsers;
+	return {
+		ok: true as const,
+		value: { channels: channels.value, users: users.value, blockedUsers: blockedUsers.value }
+	};
+}
+
+function validBindAddress(value: string): boolean {
+	return isIP(value) !== 0;
+}
+
+export function isGuardianPolicy(value: unknown): value is GuardianPolicy {
+	return typeof value === 'string' && GUARDIAN_POLICIES.includes(value as GuardianPolicy);
+}
+
+function parseCredentials(
+	value: unknown
+): { ok: true; value: Record<string, CredentialConfig> } | { ok: false; error: string } {
+	const source = asRecord(value);
+	if (!source) return { ok: false, error: 'credentials must be an object keyed by username' };
+	const entries = Object.entries(source);
+	if (entries.length < 1 || entries.length > MAX_CREDENTIALS) {
+		return {
+			ok: false,
+			error: `credentials must contain between 1 and ${MAX_CREDENTIALS} entries`
+		};
+	}
+	const result: Record<string, CredentialConfig> = {};
+	const ids = new Set<string>();
+	for (const [username, rawCredential] of entries) {
+		if (!isCredentialUsername(username)) {
+			return { ok: false, error: `invalid credential username: ${username}` };
+		}
+		const credential = asRecord(rawCredential);
+		if (!credential || !hasOnlyKeys(credential, ['id', 'policy'])) {
+			return { ok: false, error: `credential ${username} contains unsupported settings` };
+		}
+		if (!isCredentialId(credential.id)) {
+			return { ok: false, error: `credential ${username} has an invalid id` };
+		}
+		if (ids.has(credential.id)) {
+			return { ok: false, error: `credential id is duplicated: ${credential.id}` };
+		}
+		if (!isGuardianPolicy(credential.policy)) {
+			return {
+				ok: false,
+				error: `credential ${username} policy must be one of: ${GUARDIAN_POLICIES.join(', ')}`
+			};
+		}
+		ids.add(credential.id);
+		result[username] = { id: credential.id, policy: credential.policy };
+	}
+	return { ok: true, value: result };
+}
+
+export function parseStackConfig(value: unknown): StackConfigReadResult {
+	const root = asRecord(value);
+	if (root?.product !== 'fhold')
+		return { ok: false, error: 'stack config must identify product fhold' };
+	if (!root || root.version !== STACK_CONFIG_VERSION) {
+		return { ok: false, error: `stack config must use version ${STACK_CONFIG_VERSION}` };
+	}
+	const deployment = asRecord(root.deployment);
+	const images = asRecord(deployment?.images);
+	if (
+		!deployment ||
+		!images ||
+		!hasOnlyKeys(deployment, ['projectName', 'imageNamespace', 'images']) ||
+		!hasOnlyKeys(images, ['assistant', 'guardian', 'portal']) ||
+		typeof deployment.projectName !== 'string' ||
+		!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(deployment.projectName) ||
+		typeof deployment.imageNamespace !== 'string' ||
+		!/^[a-z0-9][a-z0-9./:_-]{0,255}$/.test(deployment.imageNamespace) ||
+		['assistant', 'guardian', 'portal'].some(
+			(name) =>
+				typeof images[name] !== 'string' ||
+				!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(images[name] as string)
+		)
+	) {
+		return {
+			ok: false,
+			error: 'stack config deployment requires a valid project, image namespace and component tags'
+		};
+	}
+
+	const assistant = asRecord(root.assistant);
+	const gateway = asRecord(root.gateway);
+	const portals = asRecord(root.portals);
+	const discord = asRecord(portals?.discord);
+	const slack = asRecord(portals?.slack);
+	if (!assistant || !gateway || !portals || !discord || !slack) {
+		return { ok: false, error: 'stack config is missing assistant, gateway, or portal settings' };
+	}
+	if (
+		!hasOnlyKeys(root, [
+			'product',
+			'version',
+			'deployment',
+			'assistant',
+			'gateway',
+			'credentials',
+			'portals'
+		]) ||
+		!hasOnlyKeys(assistant, [
+			'bindAddress',
+			'port',
+			'timezone',
+			'automaticMemory',
+			'codexRemote',
+			'codexSandbox',
+			'claudeRemote'
+		]) ||
+		!hasOnlyKeys(gateway, ['enabled', 'bindAddress', 'port']) ||
+		!hasOnlyKeys(portals, ['discord', 'slack']) ||
+		!hasOnlyKeys(discord, ['enabled', 'credential', 'access']) ||
+		!hasOnlyKeys(slack, ['enabled', 'credential', 'access'])
+	) {
+		return { ok: false, error: 'stack config contains unsupported settings' };
+	}
+
+	const assistantPort = parsePort(assistant.port);
+	const gatewayPort = parsePort(gateway.port);
+	if (typeof assistant.bindAddress !== 'string' || !validBindAddress(assistant.bindAddress)) {
+		return { ok: false, error: 'assistant.bindAddress must be an IPv4 or IPv6 address' };
+	}
+	if (assistantPort === null) {
+		return { ok: false, error: 'assistant.port must be an integer between 1 and 65535' };
+	}
+	const timezone = assistant.timezone ?? hostTimezone();
+	const automaticMemory = assistant.automaticMemory ?? true;
+	const codexRemote = assistant.codexRemote === undefined ? true : assistant.codexRemote;
+	const claudeRemote = assistant.claudeRemote === undefined ? true : assistant.claudeRemote;
+	const codexSandbox =
+		assistant.codexSandbox === undefined ? 'workspace-write' : assistant.codexSandbox;
+	if (!isCodexSandbox(codexSandbox))
+		return { ok: false, error: `assistant.codexSandbox must be ${CODEX_SANDBOX_MODES.join(', ')}` };
+	if (typeof codexRemote !== 'boolean' || typeof claudeRemote !== 'boolean')
+		return {
+			ok: false,
+			error: 'assistant.codexRemote and assistant.claudeRemote must be booleans'
+		};
+	if (!validTimezone(timezone))
+		return { ok: false, error: 'assistant.timezone must be a valid IANA timezone' };
+	if (typeof automaticMemory !== 'boolean')
+		return { ok: false, error: 'assistant.automaticMemory must be a boolean' };
+	if (typeof gateway.enabled !== 'boolean') {
+		return { ok: false, error: 'gateway.enabled must be a boolean' };
+	}
+	if (typeof gateway.bindAddress !== 'string' || !validBindAddress(gateway.bindAddress)) {
+		return { ok: false, error: 'gateway.bindAddress must be an IPv4 or IPv6 address' };
+	}
+	if (gatewayPort === null) {
+		return { ok: false, error: 'gateway.port must be an integer between 1 and 65535' };
+	}
+	if (typeof discord.enabled !== 'boolean' || typeof slack.enabled !== 'boolean') {
+		return { ok: false, error: 'portal enabled values must be booleans' };
+	}
+	if (!isCredentialUsername(discord.credential) || !isCredentialUsername(slack.credential)) {
+		return { ok: false, error: 'portal credential values must be valid credential usernames' };
+	}
+	const discordAccess = parseDiscordAccess(discord.access);
+	if (!discordAccess.ok) return discordAccess;
+	const slackAccess = parseSlackAccess(slack.access);
+	if (!slackAccess.ok) return slackAccess;
+	const credentials = parseCredentials(root.credentials);
+	if (!credentials.ok) return credentials;
+	if (
+		!Object.hasOwn(credentials.value, discord.credential) ||
+		!Object.hasOwn(credentials.value, slack.credential)
+	) {
+		return { ok: false, error: 'every portal credential must reference a configured credential' };
+	}
+
+	const config: StackConfig = {
+		product: 'fhold',
+		version: STACK_CONFIG_VERSION,
+		deployment: {
+			projectName: deployment.projectName,
+			imageNamespace: deployment.imageNamespace,
+			images: {
+				assistant: images.assistant as string,
+				guardian: images.guardian as string,
+				portal: images.portal as string
+			}
+		},
+		assistant: {
+			bindAddress: assistant.bindAddress,
+			port: assistantPort,
+			timezone,
+			automaticMemory,
+			codexRemote,
+			codexSandbox,
+			claudeRemote
+		},
+		gateway: {
+			enabled: gateway.enabled || discord.enabled || slack.enabled,
+			bindAddress: gateway.bindAddress,
+			port: gatewayPort
+		},
+		credentials: credentials.value,
+		portals: {
+			discord: {
+				enabled: discord.enabled,
+				credential: discord.credential,
+				access: discordAccess.value
+			},
+			slack: { enabled: slack.enabled, credential: slack.credential, access: slackAccess.value }
+		}
+	};
+	return { ok: true, config, source: 'file' };
+}
+
+export function readStackConfig(homeDir: string): StackConfigReadResult {
+	const path = stackConfigFile(homeDir);
+	if (!existsSync(path)) {
+		return { ok: false, error: `stack config is missing: ${path}` };
+	}
+	try {
+		if (
+			!lstatSync(join(homeDir, 'state')).isDirectory() ||
+			lstatSync(join(homeDir, 'state')).isSymbolicLink() ||
+			!lstatSync(path).isFile() ||
+			lstatSync(path).isSymbolicLink()
+		)
+			throw new Error('Refusing linked or non-file stack configuration');
+		const value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+		return parseStackConfig(value);
+	} catch (error) {
+		return {
+			ok: false,
+			error: `could not read ${path}: ${error instanceof Error ? error.message : String(error)}`
+		};
+	}
+}
+
+export function credentialRegistryFile(homeDir: string): string {
+	return join(homeDir, 'state', 'credentials', 'registry.json');
+}
+
+function writeCredentialRegistry(homeDir: string, config: StackConfig): void {
+	const credentials = Object.entries(config.credentials)
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([username, credential]) => ({ username, ...credential }));
+	writeFileAtomic(
+		credentialRegistryFile(homeDir),
+		`${JSON.stringify({ version: CREDENTIAL_REGISTRY_VERSION, credentials }, null, 2)}\n`,
+		0o600
+	);
+}
+
+export function stackConfigEnv(config: StackConfig): Record<string, string> {
+	const addons: string[] = [];
+	if (config.gateway.enabled) addons.push('gateway');
+	if (config.portals.discord.enabled) addons.push('discord');
+	if (config.portals.slack.enabled) addons.push('slack');
+
+	return {
+		FH_PROJECT_NAME: config.deployment.projectName,
+		// Existing Compose names may contain underscores or exceed a DNS label.
+		// Keep their project identity; only the derived hostname is normalized.
+		FH_INSTANCE_HOSTNAME: config.deployment.projectName
+			.replaceAll('_', '-')
+			.slice(0, 63)
+			.replace(/-+$/, ''),
+		FH_IMAGE_NAMESPACE: config.deployment.imageNamespace,
+		FH_ASSISTANT_VERSION: config.deployment.images.assistant,
+		FH_GUARDIAN_VERSION: config.deployment.images.guardian,
+		FH_PORTAL_VERSION: config.deployment.images.portal,
+		FH_STACK_CONFIG_VERSION: String(config.version),
+		FH_ENABLED_ADDONS: [...new Set(addons)].join(','),
+		FH_ASSISTANT_BIND_ADDRESS: config.assistant.bindAddress,
+		FH_ASSISTANT_PORT: String(config.assistant.port),
+		FH_TIMEZONE: config.assistant.timezone,
+		FH_AUTOMATIC_MEMORY: config.assistant.automaticMemory ? '1' : '0',
+		FH_CODEX_REMOTE: config.assistant.codexRemote ? '1' : '0',
+		FH_CODEX_SANDBOX: config.assistant.codexSandbox,
+		FH_CLAUDE_REMOTE: config.assistant.claudeRemote ? '1' : '0',
+		FH_GUARDIAN_BIND_ADDRESS: config.gateway.bindAddress,
+		FH_GUARDIAN_PORT: String(config.gateway.port),
+		DISCORD_ALLOWED_GUILDS: config.portals.discord.access.guilds.join(','),
+		DISCORD_ALLOWED_ROLES: config.portals.discord.access.roles.join(','),
+		DISCORD_ALLOWED_USERS: config.portals.discord.access.users.join(','),
+		DISCORD_BLOCKED_USERS: config.portals.discord.access.blockedUsers.join(','),
+		SLACK_ALLOWED_CHANNELS: config.portals.slack.access.channels.join(','),
+		SLACK_ALLOWED_USERS: config.portals.slack.access.users.join(','),
+		SLACK_BLOCKED_USERS: config.portals.slack.access.blockedUsers.join(',')
+	};
+}
+
+export function writeStackConfig(homeDir: string, value: StackConfig): StackConfig {
+	const parsed = parseStackConfig(value);
+	if (!parsed.ok) throw new Error(parsed.error);
+
+	const config = parsed.config;
+	writeFileAtomic(stackConfigFile(homeDir), `${JSON.stringify(config, null, 2)}\n`, 0o600);
+	writeCredentialRegistry(homeDir, config);
+
+	const envPath = stackEnvFile(homeDir);
+	const current = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
+	writeFileAtomic(envPath, mergeEnvContent(current, stackConfigEnv(config)), 0o600);
+	return config;
+}
+
+export function ensureStackConfig(homeDir: string): StackConfig {
+	if (!existsSync(stackConfigFile(homeDir)))
+		return writeStackConfig(homeDir, defaultStackConfig(homeDir));
+	const result = readStackConfig(homeDir);
+	if (!result.ok) throw new Error(result.error);
+	const envPath = stackEnvFile(homeDir);
+	const disk = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
+	const next = mergeEnvContent(disk, stackConfigEnv(result.config));
+	if (next !== disk) writeFileAtomic(envPath, next, 0o600);
+	writeCredentialRegistry(homeDir, result.config);
+	return result.config;
+}
+
+export function enabledAddons(homeDir: string): string[] {
+	const result = readStackConfig(homeDir);
+	if (!result.ok) throw new Error(result.error);
+	return parseAddons(stackConfigEnv(result.config).FH_ENABLED_ADDONS).filter((addon) =>
+		ADDONS.has(addon)
+	);
+}
+
+function parseAddons(value: string | undefined): string[] {
+	return (value ?? '')
+		.split(',')
+		.map((item) => item.trim().toLowerCase())
+		.filter((item, index, all) => item.length > 0 && all.indexOf(item) === index);
+}

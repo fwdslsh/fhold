@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/admin-main.ts",
+    "src/admin-app.ts",
+    "src/admin-e2e.ts",
+    "src/admin-preload.ts",
+    "src/admin-types.ts",
+    "src/admin-domain.ts",
+    "src/admin-instances.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test"
+  ],
+  "extends": "../../tsconfig.base.json"
+}

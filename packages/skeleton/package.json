@@ -1,0 +1,12 @@
+{
+  "name": "@fhold/skeleton",
+  "version": "0.1.2610040547-alpha.3",
+  "description": "fhold default config skeleton — seeded into FH_HOME on install",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fwdslsh/fhold",
+    "directory": "packages/skeleton"
+  }
+}
