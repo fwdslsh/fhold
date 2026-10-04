@@ -21,8 +21,9 @@
 			"/tmp/*": "allow",
 			"/work/*": "allow",
 			"/stash/*": "allow",
+			"/fhold-bundle/*": "allow",
 			"/etc/akm/*": "allow",
-			"/home/opencode/.config/opencode/*": "allow"
+			"/home/fhold/.config/opencode/*": "allow"
 		}
 	}
 }

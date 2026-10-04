@@ -29,7 +29,7 @@ export function recoveryConfig(env = process.env) {
 		throw new Error('FH_INSTANCE_ID is required and must be a stable slug');
 	const runtimeDir = env.FH_RUNTIME_DIR || '/tmp/fhold-runtime';
 	const privateDir =
-		env.FH_RECOVERY_STATE_DIR || join(env.HOME || '/home/opencode', '.fhold-recovery');
+		env.FH_RECOVERY_STATE_DIR || join(env.HOME || '/home/fhold', '.fhold-recovery');
 	for (const value of [runtimeDir, privateDir]) {
 		if (!isAbsolute(value) || resolve(value) !== value || value === '/')
 			throw new Error('Recovery paths must be canonical absolute private directories');

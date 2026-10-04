@@ -11,6 +11,7 @@ export const MANAGED_FILES = [
 	'system/assistant/agents/memory.md',
 	'system/assistant/lib/memory.js',
 	'system/assistant/plugins/akm.js',
+	'system/assistant/plugins/fhold.js',
 	'system/assistant/skills/claude-code-login/SKILL.md',
 	'system/assistant/skills/claude-code-login/scripts/login.sh',
 	'system/assistant/skills/claude-code-login/scripts/remote.sh',

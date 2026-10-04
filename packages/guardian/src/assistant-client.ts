@@ -217,7 +217,7 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 	);
 	const directory = options.directory ?? Bun.env.FH_ASSISTANT_DIRECTORY ?? '/work';
 	const passwordFile = options.passwordFile ?? Bun.env.OPENCODE_SERVER_PASSWORD_FILE ?? '';
-	const username = options.username ?? Bun.env.OPENCODE_SERVER_USERNAME ?? 'opencode';
+	const username = options.username ?? Bun.env.OPENCODE_SERVER_USERNAME ?? 'user';
 	const timeoutMs =
 		options.timeoutMs ?? boundedInt(Bun.env.GUARDIAN_ASSISTANT_TIMEOUT_MS, 120_000, 300_000);
 	const client = createOpencodeClient({

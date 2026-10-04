@@ -33,7 +33,7 @@ const assistantEnvironment = {
 	FH_CODEX_SANDBOX: 'workspace-write',
 	FH_CLAUDE_REMOTE: '1',
 	TZ: defaultStackConfig().assistant.timezone,
-	HOME: '/home/opencode',
+	HOME: '/home/fhold',
 	OPENCODE_CONFIG_DIR: '/etc/opencode',
 	OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
 	OPENCODE_DISABLE_CLAUDE_CODE: 'true',
@@ -41,6 +41,7 @@ const assistantEnvironment = {
 	OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 	OPENCODE_API_URL: 'http://127.0.0.1:4096',
 	OPENCODE_PORT: '4096',
+	OPENCODE_SERVER_USERNAME: 'user',
 	OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 	TERM: 'xterm-256color'
 };
@@ -72,17 +73,17 @@ function assistantService(homeDir = '/tmp/home') {
 			}
 		],
 		volumes: [
-			{ type: 'bind', source: `${homeDir}/data/assistant`, target: '/home/opencode' },
+			{ type: 'bind', source: `${homeDir}/data/assistant`, target: '/home/fhold' },
 			{
 				type: 'bind',
 				source: `${homeDir}/config/assistant`,
-				target: '/home/opencode/.config/opencode',
+				target: '/home/fhold/.config/opencode',
 				read_only: true
 			},
 			{
 				type: 'bind',
 				source: `${homeDir}/knowledge/secrets/auth.json`,
-				target: '/home/opencode/.local/share/opencode/auth.json'
+				target: '/home/fhold/.local/share/opencode/auth.json'
 			},
 			{
 				type: 'bind',
@@ -132,6 +133,31 @@ function auditHome(): string {
 }
 
 describe('Compose security audit', () => {
+	it('accepts the generic keep-alive overlay without granting additional secrets or mounts', () => {
+		const home = auditHome();
+		const config = baseConfig(home);
+		Object.assign(config.services.assistant.environment, {
+			FH_KEEPALIVE_URL: 'https://agent.example/global/health',
+			FH_KEEPALIVE_AUTH: 'opencode'
+		});
+		expect(auditCompose(config, home)).toEqual([]);
+		Object.assign(config.services.assistant.environment, {
+			FH_KEEPALIVE_AUTH: 'none',
+			FH_KEEPALIVE_AUTHORIZATION_FILE: '/home/fhold/.config/keepalive-authorization'
+		});
+		expect(auditCompose(config, home)).toEqual([]);
+		Object.assign(config.services.assistant.environment, { FH_KEEPALIVE_AUTH: 'opencode' });
+		expect(auditCompose(config, home)).toContain(
+			'service assistant keep-alive must select only one authentication source'
+		);
+		Object.assign(config.services.assistant.environment, {
+			FH_KEEPALIVE_URL: 'https://user:secret@agent.example/'
+		});
+		expect(auditCompose(config, home)).toContain(
+			'service assistant keep-alive requires an HTTP(S) URL without inline credentials or a fragment'
+		);
+	});
+
 	it('requires native remote startup to match explicit intent, never an overlay override', () => {
 		const home = auditHome();
 		const config = baseConfig(home);

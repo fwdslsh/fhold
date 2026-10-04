@@ -25,8 +25,11 @@ Codex/Claude workers remain experimental and vendor-native. Both supervisors
 default on. Native sign-in/consent is never inferred and
 explicit off settings remain off.
 No software is installed at container startup.
-Built-in OpenCode skills are ordinary image-baked managed assets, not a second
-plugin platform. Claude and Codex sign-in guidance preserve native login processes
+Built-in skills are ordinary image-baked managed assets, shared through the
+native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
+AKM and fhold plugins are preinstalled in all three native harnesses without
+pre-trusting hooks. Agents run as `fhold`, with home `/home/fhold`; the native
+OpenCode HTTP username is `user`. Claude and Codex sign-in guidance preserve native login processes
 across tool calls without implementing token exchange or accepting user consent.
 The image-baked `fhold-admin` skill provides redacted current-container diagnostics
 and routes to versioned Claude/Codex setup scripts. It has no host/cloud management
@@ -117,9 +120,15 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
   as untrusted, retain durable AKM results and write only to `knowledge/inbox/`.
   Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
-  `FH_SCHEDULER_ENABLED=0` disables only task sync, cron and reconciliation.
+  `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
   Knowledge, native workers and the independent recovery timer remain available.
-  Health requires scheduler liveness/reconciliation only when scheduling is enabled.
+  Health requires scheduler liveness when scheduling or keep-alive is enabled,
+  and fresh reconciliation only when user scheduling is enabled.
+- Optional conditional HTTP keep-alive uses native fhold activity hooks and
+  the existing Supercronic process, independently of user task enablement. It
+  has no cloud API authority or work-age expiry. Unknown activity keeps the
+  instance awake; native trust remains required. This is best-effort signaling,
+  not a scale-in veto. See [the runtime contract](../harness-plugins.md).
 - Automatic memory captures validated non-secret facts only from trusted native
   build/plan sessions through the existing provider and remains configurable.
   Remote/unattended sessions do not implicitly write personal memory.

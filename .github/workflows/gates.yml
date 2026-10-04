@@ -145,6 +145,9 @@ jobs:
         env:
           FH_SMOKE_REMOTE: '1'
         run: bash scripts/smoke-image.sh fhold/assistant:ci assistant
+      - name: Verify native work drives conditional keep-alive
+        if: matrix.image == 'assistant'
+        run: node scripts/smoke-keepalive.mjs fhold/assistant:ci
       - uses: oven-sh/setup-bun@v2
         if: matrix.image == 'assistant'
         with:

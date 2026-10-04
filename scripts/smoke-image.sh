@@ -99,6 +99,15 @@ verify_workspace_runtime_boundary() {
 }
 
 verify_builtin_skills() {
+	docker exec "$container" sh -c 'test "$(id -un)" = fhold && test "$HOME" = /home/fhold && test ! -w /fhold-bundle && test ! -w /fhold-bundle/skills/fhold-admin/SKILL.md'
+	docker exec "$container" akm show fhold//fhold-admin >/dev/null
+	docker exec "$container" node --input-type=module -e '
+		import {writeFileSync, chmodSync} from "node:fs";
+		for (const action of [() => writeFileSync("/fhold-bundle/forbidden", "fixture"), () => chmodSync("/fhold-bundle", 0o777), () => writeFileSync("/fhold-bundle/skills/fhold-admin/SKILL.md", "fixture")]) {
+			let denied = false;
+			try { action(); } catch (error) { denied = ["EACCES", "EPERM", "EROFS"].includes(error.code); }
+			if (!denied) throw Error("Built-in bundle is writable by the agent");
+		}'
 	# Native discovery must see the same release-owned bytes that were baked,
 	# including when the installed stack mounts its managed configuration.
 	docker exec "$container" opencode debug skill | docker exec -i "$container" bun -e '
@@ -152,12 +161,12 @@ assistant)
 		"${remote_env[@]}" \
 		-e FH_CODEX_SANDBOX="$sandbox" \
 		-e OPENCODE_SERVER_PASSWORD_FILE=/run/fhold/password \
-		-v "$root/data:/home/opencode" \
+		-v "$root/data:/home/fhold" \
 		-v "$root/system:/etc/opencode:ro" \
-		-v "$root/config:/home/opencode/.config/opencode:ro" \
+		-v "$root/config:/home/fhold/.config/opencode:ro" \
 		-v "$root/akm.json:/etc/akm/config.json:ro" \
 		-v "$root/knowledge:/stash" \
-		-v "$root/knowledge/secrets/auth.json:/home/opencode/.local/share/opencode/auth.json" \
+		-v "$root/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json" \
 		-v "$root/workspace:/work" \
 		-v "$root/password:/run/fhold/password:ro" \
 		"$image" >/dev/null
@@ -165,7 +174,7 @@ assistant)
 	verify_runtime_versions
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
-	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/config >/dev/null
+	docker exec "$container" curl -sf -u 'user:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/config >/dev/null
 	docker exec "$container" sh -c \
 		'command -v akm >/dev/null && command -v opencode >/dev/null && command -v supercronic >/dev/null && codex --version && claude --version && test -x /usr/local/bin/fhold-remote && test -x /usr/local/bin/fhold-remote-setup && test -x /usr/local/bin/fhold-task && test -r /opt/fhold/tools/node_modules/akm-opencode/dist/index.js'
 	docker exec "$container" bun -e \
@@ -173,18 +182,19 @@ assistant)
 	docker exec "$container" bun -e \
 		'const { remoteCommand } = await import("/usr/local/bin/fhold-remote.mjs"); const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); const args = remoteCommand("codex", "danger-full-access"); if (!args.includes("approval_policy=\"on-request\"") || !args.includes("sandbox_mode=\"danger-full-access\"") || args.some(a => a.includes("bypass")) || setupCommands("codex", "danger-full-access").some(([stage]) => stage === "sandbox")) throw Error("Explicit container isolation contract failed");'
 	docker exec "$container" claude plugin validate /akm-marketplace/claude --strict
+	docker exec "$container" claude plugin validate /fhold-plugins/fhold --strict
 	docker exec "$container" claude plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version)) throw Error("Claude AKM plugin not loaded");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled)) throw Error("Claude built-in plugins not loaded");'
 	docker exec "$container" claude plugin details akm
 	docker exec "$container" codex plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version)) throw Error("Codex AKM plugin not installed/enabled");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled)) throw Error("Codex built-in plugins not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
 	# An image upgrade refreshes only untouched native installer output. A native
 	# user's settings and hook-trust state must survive without merging formats.
 	docker exec "$container" bun -e '
 		const {readFileSync, writeFileSync, cpSync} = await import("node:fs");
-		const home = "/home/opencode";
+		const home = "/home/fhold";
 		const registry = `${home}/.claude/plugins/installed_plugins.json`;
 		const previous = `${home}/.fhold-native-defaults/claude/plugins/installed_plugins.json`;
 		const installed = JSON.parse(readFileSync(registry, "utf8"));
@@ -200,7 +210,7 @@ assistant)
 	wait_for_health
 	docker exec "$container" bun -e '
 		const {readFileSync} = await import("node:fs");
-		const home = "/home/opencode";
+		const home = "/home/fhold";
 		const [claude, codex] = JSON.parse(readFileSync("/tmp/native-user-settings.json", "utf8"));
 		if (claude !== readFileSync(`${home}/.claude/settings.json`, "utf8") || codex !== readFileSync(`${home}/.codex/config.toml`, "utf8")) throw Error("Native user settings overwritten");
 		if (readFileSync(`${home}/.claude/plugins/installed_plugins.json`, "utf8") !== readFileSync("/native-defaults/claude/plugins/installed_plugins.json", "utf8")) throw Error("Untouched native plugin defaults did not refresh");'
@@ -209,8 +219,8 @@ assistant)
 	if [ "$remote" != 0 ]; then
 		# Codex's foreground app-server stays available without an account. Its
 		# native Unix pairing socket must exist; enrollment is a separate stage.
-		docker exec "$container" test -S /home/opencode/.codex/app-server-control/app-server-control.sock
-		docker exec "$container" test ! -e /home/opencode/.codex/packages/app-server-daemon
+		docker exec "$container" test -S /home/fhold/.codex/app-server-control/app-server-control.sock
+		docker exec "$container" test ! -e /home/fhold/.codex/packages/app-server-daemon
 		[[ "$(docker exec "$container" fhold-remote codex status)" == *process-running* ]]
 		for tool in claude; do
 			deadline=$((SECONDS + 45))
@@ -245,12 +255,12 @@ guardian)
 		-e GUARDIAN_AUTH_DIR=/run/fhold-credentials \
 		-e GUARDIAN_HANDLE_KEY_FILE=/run/fhold/handle \
 		-e OPENCODE_SERVER_PASSWORD_FILE=/run/fhold/password \
-		-e GUARDIAN_OAUTH_CONFIG_FILE=/opt/fhold/guardian/.config/opencode/oauth.json \
-		-e GUARDIAN_OAUTH_IDENTITIES_FILE=/opt/fhold/guardian/.config/opencode/oauth-identities.json \
+		-e GUARDIAN_OAUTH_CONFIG_FILE=/home/fhold/.config/opencode/oauth.json \
+		-e GUARDIAN_OAUTH_IDENTITIES_FILE=/home/fhold/.config/opencode/oauth-identities.json \
 		-v "$root/credentials:/run/fhold-credentials:ro" \
 		-v "$root/system:/opt/fhold/moderator-config:ro" \
-		-v "$root/config:/opt/fhold/guardian/.config/opencode:ro" \
-		-v "$root/auth/auth.json:/opt/fhold/guardian/.local/share/opencode/auth.json:ro" \
+		-v "$root/config:/home/fhold/.config/opencode:ro" \
+		-v "$root/auth/auth.json:/home/fhold/.local/share/opencode/auth.json:ro" \
 		-v "$root/logs:/opt/fhold/logs" \
 		-v "$root/workspace:/work:ro" \
 		-v "$root/password:/run/fhold/password:ro" \

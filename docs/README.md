@@ -9,6 +9,7 @@
 - [MCP and external clients](remote-mcp.md), [Claude Desktop bridge](claude-desktop.md).
 - [Discord](portals/discord-setup.md) and [Slack](portals/slack-setup.md).
 - [Experimental native remote workers](native-remote-access.md).
+- [Built-in harness plugins and keep-alive](harness-plugins.md): AKM, immutable skills, native activity and portable HTTP heartbeats.
 - [Architecture](technical/architecture.md) and [core principles](technical/core-principles.md).
 - [Configuration, environment and mounts](technical/environment-and-mounts.md).
 - [Native OpenCode configuration](technical/opencode-configuration.md).

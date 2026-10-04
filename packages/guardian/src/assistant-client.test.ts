@@ -86,7 +86,7 @@ describe('OpenCode Assistant adapter', () => {
 		const submitted = requests[0];
 		expect(submitted.headers.get('x-opencode-directory')).toBe('%2Fwork');
 		expect(submitted.headers.get('authorization')).toBe(
-			`Basic ${Buffer.from('opencode:first-password').toString('base64')}`
+			`Basic ${Buffer.from('user:first-password').toString('base64')}`
 		);
 		expect(await submitted.json()).toMatchObject({
 			messageID: 'msg_request',
@@ -105,7 +105,7 @@ describe('OpenCode Assistant adapter', () => {
 			})
 		]);
 		expect(requests[1]?.headers.get('authorization')).toBe(
-			`Basic ${Buffer.from('opencode:rotated-password').toString('base64')}`
+			`Basic ${Buffer.from('user:rotated-password').toString('base64')}`
 		);
 		expect(new URL(requests[1]?.url ?? '').searchParams.get('directory')).toBe('/work');
 	});

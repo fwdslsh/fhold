@@ -30,7 +30,7 @@ describe('shared connection details', () => {
 	it('keeps native and Guardian secrets hidden unless explicitly requested', () => {
 		const root = home();
 		const direct = connectionDetails(root, 'opencode');
-		expect(direct.username).toBe('opencode');
+		expect(direct.username).toBe('user');
 		expect(direct.password).toBeUndefined();
 		expect(connectionDetails(root, 'opencode', { showAssistantPassword: true }).password).toBe(
 			'private-password'

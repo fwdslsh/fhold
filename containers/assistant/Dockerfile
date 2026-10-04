@@ -43,6 +43,12 @@ COPY packages/lib/src/control-plane/seed-manifest.ts /repo/packages/lib/src/cont
 COPY scripts/bake-assistant-assets.mjs /repo/scripts/bake-assistant-assets.mjs
 RUN bun /repo/scripts/bake-assistant-assets.mjs /repo/packages/skeleton /assistant-defaults
 
+# One source of built-in skills, exposed through AKM and each native plugin.
+COPY plugins /fhold-plugins
+RUN mkdir -p /fhold-bundle/skills \
+    && cp -R /assistant-defaults/system/assistant/skills/. /fhold-bundle/skills/ \
+    && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
+
 # Both native harnesses install the same immutable upstream marketplace.
 ADD --checksum=sha256:44cfcd12e2d034de1ee859fe19b5d3b0e61331972c8a7fb6b86f860007002ce0 \
     https://codeload.github.com/itlackey/akm-plugins/tar.gz/f38beb5bdd5b2519a61f2b9fdbdc8c8f71a3b3f0 /tmp/akm-claude.tar.gz
@@ -77,6 +83,10 @@ RUN mkdir -p /native-defaults/codex \
     && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install akm@akm-plugins \
     && CODEX_HOME=/native-defaults/codex codex plugin marketplace add /akm-marketplace \
     && CODEX_HOME=/native-defaults/codex codex plugin add akm@akm-plugins \
+    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /fhold-plugins \
+    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install fhold@fhold-plugins \
+    && CODEX_HOME=/native-defaults/codex codex plugin marketplace add /fhold-plugins \
+    && CODEX_HOME=/native-defaults/codex codex plugin add fhold@fhold-plugins \
     && chmod a+r /native-defaults/codex/config.toml
 
 FROM oven/bun:1.4.2-slim
@@ -117,6 +127,8 @@ COPY containers/assistant/fhold-remote.mjs /usr/local/bin/fhold-remote
 COPY containers/assistant/fhold-remote-setup.mjs /usr/local/bin/fhold-remote-setup
 COPY containers/assistant/fhold-codex-recall.mjs /usr/local/bin/fhold-codex-recall.mjs
 COPY --from=tools /akm-marketplace /akm-marketplace
+COPY --from=tools /fhold-plugins /fhold-plugins
+COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
 COPY containers/assistant/codex.config.toml /etc/codex/config.toml
 
@@ -134,6 +146,12 @@ LABEL org.opencontainers.image.title="fhold Assistant" \
     org.opencontainers.image.licenses="MIT"
 
 RUN test -n "$PLATFORM_VERSION" \
+    && usermod -l fhold -d /home/fhold bun \
+    && groupmod -n fhold bun \
+    && chmod -R a-w /fhold-bundle /fhold-plugins \
+    && chmod -R a+rX /fhold-bundle /fhold-plugins \
+    && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
+    && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
     && for command in opencode akm codex claude; do \
       test -x "/opt/fhold/tools/node_modules/.bin/$command" || exit 1; \
       ln -s "/opt/fhold/tools/node_modules/.bin/$command" "/usr/local/bin/$command" || exit 1; \
@@ -142,17 +160,18 @@ RUN test -n "$PLATFORM_VERSION" \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && chmod 0755 /usr/local/bin/fhold-assistant /usr/local/bin/fhold-task /usr/local/bin/fhold-recovery /usr/local/bin/fhold-remote /usr/local/bin/fhold-remote-setup /usr/local/bin/fhold-codex-recall.mjs /usr/local/bin/fhold-healthcheck /usr/local/bin/fhold-opencode-run \
     && ln -s fhold-remote /usr/local/bin/fhold-remote.mjs \
-    && mkdir -p /home/opencode /etc/opencode /etc/akm /opt/akm/cache /opt/akm/data/state /stash /work \
-    && chown -R bun:bun /home/opencode /etc/opencode /etc/akm /opt/akm /stash /work \
-    && chmod -R a+rwX /home/opencode /etc/opencode /etc/akm /opt/akm /stash /work
+    && mkdir -p /home/fhold /etc/opencode /etc/akm /opt/akm/cache /opt/akm/data/state /stash /work \
+    && chown -R fhold:fhold /home/fhold /etc/opencode /etc/akm /opt/akm /stash /work \
+    && chmod -R a+rwX /home/fhold /etc/opencode /etc/akm /opt/akm /stash /work
 
-ENV HOME=/home/opencode \
+ENV HOME=/home/fhold \
     OPENCODE_CONFIG_DIR=/etc/opencode \
     OPENCODE_DISABLE_PROJECT_CONFIG=true \
     OPENCODE_DISABLE_CLAUDE_CODE=true \
     OPENCODE_DISABLE_EXTERNAL_SKILLS=true \
     OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \
     OPENCODE_PORT=4096 \
+    OPENCODE_SERVER_USERNAME=user \
     AKM_BUNDLE_DIR=/stash \
     AKM_CONFIG_DIR=/etc/akm \
     AKM_CACHE_DIR=/opt/akm/cache \
@@ -167,7 +186,7 @@ ENV HOME=/home/opencode \
     DISABLE_AUTOUPDATER=1 \
     BUN_OPTIONS="--no-env-file --config=/dev/null" \
     TZ=UTC \
-    PATH="/opt/fhold/tools/node_modules/.bin:/home/opencode/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    PATH="/opt/fhold/tools/node_modules/.bin:/home/fhold/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
 WORKDIR /work
 EXPOSE 4096
@@ -175,4 +194,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
   CMD fhold-healthcheck
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/fhold-assistant"]
-USER bun
+USER fhold

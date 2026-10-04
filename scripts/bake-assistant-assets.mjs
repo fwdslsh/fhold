@@ -7,7 +7,7 @@ import { MANAGED_FILES, SEEDED_FILES } from '../packages/lib/src/control-plane/s
 
 const locations = [
 	['system/assistant/', '/etc/opencode/'],
-	['config/assistant/', '/home/opencode/.config/opencode/'],
+	['config/assistant/', '/home/fhold/.config/opencode/'],
 	['config/akm/', '/etc/akm/'],
 	['knowledge/', '/stash/']
 ];

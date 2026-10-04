@@ -10,5 +10,5 @@ if [ ! -s "$file" ]; then
 fi
 OPENCODE_SERVER_PASSWORD="$(tr -d '\r\n' <"$file")"
 export OPENCODE_SERVER_PASSWORD
-export OPENCODE_SERVER_USERNAME=opencode
+export OPENCODE_SERVER_USERNAME=user
 exec opencode "$@"

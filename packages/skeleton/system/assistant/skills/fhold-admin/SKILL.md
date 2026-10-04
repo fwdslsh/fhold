@@ -18,7 +18,7 @@ bun /etc/opencode/skills/fhold-admin/scripts/status.mjs
 The script reports image version, actual hostname, runtime/account prerequisites,
 scheduler state and redacted recovery health. It never prints account tokens,
 provider keys, backup locations or private native logs. `/work` is the workspace,
-`/stash` is AKM knowledge and `/home/opencode` is native persistent state.
+`/stash` is AKM knowledge and `/home/fhold` is native persistent state.
 `FH_HOME` is a host installation directory, not a second home to create here.
 Confirm this hostname before modifying an instance—local and hosted sessions
 can look alike. Use `fhold-healthcheck` for runtime health and `fhold-task list`

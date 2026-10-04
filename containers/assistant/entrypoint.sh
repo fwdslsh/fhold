@@ -134,7 +134,7 @@ trap 'stop_children; exit 0' TERM INT
 trap stop_children EXIT
 
 prepare_identity() {
-  if getent passwd "$(id -u)" >/dev/null 2>&1; then return; fi
+  if [ "$(id -un 2>/dev/null)" = fhold ]; then return; fi
   local wrapper=""
   for candidate in /usr/lib/*/libnss_wrapper.so /lib/*/libnss_wrapper.so; do
     if [ -e "$candidate" ]; then wrapper="$candidate"; break; fi
@@ -143,8 +143,8 @@ prepare_identity() {
     echo "assistant: uid $(id -u) has no passwd entry and libnss-wrapper is unavailable" >&2
     exit 1
   fi
-  printf 'opencode:x:%s:%s:fhold Assistant:/home/opencode:/bin/bash\n' "$(id -u)" "$(id -g)" >/tmp/fhold-passwd
-  printf 'opencode:x:%s:\n' "$(id -g)" >/tmp/fhold-group
+  printf 'fhold:x:%s:%s:fhold Assistant:/home/fhold:/bin/bash\n' "$(id -u)" "$(id -g)" >/tmp/fhold-passwd
+  printf 'fhold:x:%s:\n' "$(id -g)" >/tmp/fhold-group
   export NSS_WRAPPER_PASSWD=/tmp/fhold-passwd
   export NSS_WRAPPER_GROUP=/tmp/fhold-group
   export LD_PRELOAD="$wrapper${LD_PRELOAD:+:$LD_PRELOAD}"
@@ -163,15 +163,15 @@ prepare_filesystem() {
     done </assistant-defaults/manifest.tsv
   fi
   mkdir -p \
-    /home/opencode/.cache/opencode \
-    /home/opencode/.config/opencode \
-    /home/opencode/.local/share/opencode \
-    /home/opencode/.local/state/opencode \
+    /home/fhold/.cache/opencode \
+    /home/fhold/.config/opencode \
+    /home/fhold/.local/share/opencode \
+    /home/fhold/.local/state/opencode \
     /opt/akm/cache /opt/akm/data/state /stash/tasks /stash/inbox /stash/disabled-tasks /work
 
   # Native generated SDK dependencies are baked, not installed at boot. Respect
   # mounted read-only configuration and every existing operator cache/package.
-  for config in /home/opencode/.config/opencode "${OPENCODE_CONFIG_DIR:-/etc/opencode}"; do
+  for config in /home/fhold/.config/opencode "${OPENCODE_CONFIG_DIR:-/etc/opencode}"; do
     if [ -w "$config" ] && [ -d /native-defaults/opencode-sdk ]; then
       cp -R -n /native-defaults/opencode-sdk/. "$config/"
     fi
@@ -179,11 +179,11 @@ prepare_filesystem() {
 
   # Native installers ran during the image build. Seed their generated caches,
   # never account files, trust decisions, or existing operator configuration.
-  mkdir -p /home/opencode/.codex/plugins/cache /home/opencode/.claude/plugins
-  cp -R -n /native-defaults/codex/plugins/cache/. /home/opencode/.codex/plugins/cache/
-  cp -R -n /native-defaults/claude/plugins/cache/. /home/opencode/.claude/plugins/cache/
+  mkdir -p /home/fhold/.codex/plugins/cache /home/fhold/.claude/plugins
+  cp -R -n /native-defaults/codex/plugins/cache/. /home/fhold/.codex/plugins/cache/
+  cp -R -n /native-defaults/claude/plugins/cache/. /home/fhold/.claude/plugins/cache/
   for file in claude/settings.json claude/plugins/installed_plugins.json claude/plugins/known_marketplaces.json codex/config.toml; do
-    local source="/native-defaults/$file" target="/home/opencode/.$file" previous="/home/opencode/.fhold-native-defaults/$file"
+    local source="/native-defaults/$file" target="/home/fhold/.$file" previous="/home/fhold/.fhold-native-defaults/$file"
     # Refresh only untouched generated defaults. Native user settings, installed
     # plugins, authentication and hook trust always take precedence.
     if [ ! -e "$target" ] || { [ -f "$previous" ] && cmp -s "$target" "$previous"; }; then
@@ -202,7 +202,8 @@ prepare_filesystem() {
     agents/scheduled.md \
     agents/memory.md \
     lib/memory.js \
-    plugins/akm.js; do
+    plugins/akm.js \
+    plugins/fhold.js; do
     if [ ! -r "${OPENCODE_CONFIG_DIR:-/etc/opencode}/$required" ]; then
       echo "assistant: managed OpenCode config is missing $required" >&2
       exit 1
@@ -216,6 +217,20 @@ prepare_filesystem() {
     echo 'assistant: fhold task helper is missing' >&2
     exit 1
   fi
+  # Supplied configuration must retain the built-in read-only bundle. Do not
+  # silently rewrite operator config or redirect their default write target.
+  node --input-type=module <<'BUNDLE'
+import { readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR || '/etc/akm', 'config.json'), 'utf8'));
+const source = Object.values(config.bundles || {}).find(bundle => bundle.path === '/fhold-bundle');
+const skills = source?.components?.skills;
+const directory = statSync('/fhold-bundle');
+if (!source || source.writable !== false || source.enabled === false || skills?.root !== 'skills' || skills?.adapter !== 'agent-skills' || skills?.writable !== false || directory.uid !== 0 || (directory.mode & 0o222)) {
+  console.error('assistant: retain the read-only /fhold-bundle skills source in AKM configuration; see docs/harness-plugins.md');
+  process.exit(1);
+}
+BUNDLE
 }
 
 load_opencode_password() {
@@ -259,6 +274,11 @@ write_cron_environment() {
       if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
     done
   } >"$file"
+  if [ -n "${FH_KEEPALIVE_URL:-}" ]; then
+    # Supercronic's seven-field format includes seconds. AKM preserves this
+    # product-owned line while reconciling its own marked task blocks.
+    printf '%s\n' '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick' >>"$file"
+  fi
 }
 
 sync_tasks() {
@@ -278,25 +298,29 @@ start_scheduler() {
   export RUNTIME_DIR
   # Initial reconciliation can spawn AKM/native descendants too. Keep it in a
   # tracked group so a signal during boot cannot leave a state writer behind.
-  setsid env "${writer_env[@]}" bash -c 'sync_tasks' &
-  local initial_sync_pid=$!
-  writer_pids+=("$initial_sync_pid")
-  wait "$initial_sync_pid" || true
-  unset 'writer_pids[-1]'
+  if [ "$SCHEDULER_ENABLED" = 1 ]; then
+    setsid env "${writer_env[@]}" bash -c 'sync_tasks' &
+    local initial_sync_pid=$!
+    writer_pids+=("$initial_sync_pid")
+    wait "$initial_sync_pid" || true
+    unset 'writer_pids[-1]'
+  fi
   setsid env "${writer_env[@]}" supercronic -inotify "$TASK_CRONTAB" &
   scheduler_pid=$!
   writer_pids+=("$scheduler_pid")
   essential_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
-  setsid env "${writer_env[@]}" bash -c 'while sleep 60; do sync_tasks || true; done' &
-  reconciliation_pid=$!
-  writer_pids+=("$reconciliation_pid")
-  essential_pids+=("$reconciliation_pid")
-  printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
+  if [ "$SCHEDULER_ENABLED" = 1 ]; then
+    setsid env "${writer_env[@]}" bash -c 'while sleep 60; do sync_tasks || true; done' &
+    reconciliation_pid=$!
+    writer_pids+=("$reconciliation_pid")
+    essential_pids+=("$reconciliation_pid")
+    printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
+  fi
 }
 
 required_binaries=(opencode akm setsid env)
-if [ "$SCHEDULER_ENABLED" = 1 ]; then required_binaries+=(supercronic); fi
+if [ "$SCHEDULER_ENABLED" = 1 ] || [ -n "${FH_KEEPALIVE_URL:-}" ]; then required_binaries+=(supercronic); fi
 if [ -n "${FH_RECOVERY_URL:-}" ]; then required_binaries+=(fhold-recovery); fi
 for binary in "${required_binaries[@]}"; do
   if ! command -v "$binary" >/dev/null 2>&1; then
@@ -332,7 +356,8 @@ if [ -n "${FH_RECOVERY_URL:-}" ]; then
 fi
 prepare_filesystem
 load_opencode_password
-if [ "$SCHEDULER_ENABLED" = 1 ]; then start_scheduler; fi
+fhold-keepalive init >/dev/null
+if [ "$SCHEDULER_ENABLED" = 1 ] || [ -n "${FH_KEEPALIVE_URL:-}" ]; then start_scheduler; fi
 
 cd /work
 setsid env "${writer_env[@]}" opencode serve \

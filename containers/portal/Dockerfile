@@ -28,15 +28,17 @@ RUN bun install --frozen-lockfile --production --ignore-scripts --linker hoisted
 COPY packages/portal/src ./src
 
 RUN test -n "$PLATFORM_VERSION" \
-    && mkdir -p /home/bun /var/lib/fhold \
-    && chown -R bun:bun /app /home/bun /var/lib/fhold
+    && usermod -l fhold -d /home/fhold bun \
+    && groupmod -n fhold bun \
+    && mkdir -p /home/fhold /var/lib/fhold \
+    && chown -R fhold:fhold /app /home/fhold /var/lib/fhold
 
-ENV HOME=/home/bun
+ENV HOME=/home/fhold
 ENV PORT=8080
 
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
   CMD curl -sf "http://127.0.0.1:${PORT}/health" || exit 1
 
-USER bun
+USER fhold
 CMD ["bun", "run", "src/index.ts"]

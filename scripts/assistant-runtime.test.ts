@@ -273,10 +273,14 @@ describe('published AKM scheduler compatibility', () => {
 		const config = join(root, 'config');
 		const knowledge = join(root, 'knowledge');
 		for (const path of [bin, config, knowledge]) mkdirSync(path);
-		writeFileSync(
-			join(config, 'config.json'),
-			readFileSync(join(import.meta.dir, '../packages/skeleton/config/akm/config.json'))
+		const settings = JSON.parse(
+			readFileSync(join(import.meta.dir, '../packages/skeleton/config/akm/config.json'), 'utf8')
 		);
+		// The host fixture has its own content roots; the image uses /stash and
+		// /fhold-bundle. Keep the same native bundle/component schema in both.
+		settings.bundles.stash.path = knowledge;
+		settings.bundles.fhold.path = join(import.meta.dir, '../packages/skeleton/system/assistant');
+		writeFileSync(join(config, 'config.json'), JSON.stringify(settings));
 		const crontab = join(bin, 'crontab');
 		writeFileSync(
 			crontab,
@@ -306,6 +310,8 @@ describe('published AKM scheduler compatibility', () => {
 				stderr: 'pipe',
 				timeout: 30000
 			});
+		const keepalive = '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick';
+		writeFileSync(env.FH_TEST_CRONTAB, `${keepalive}\n`);
 		const created = run(
 			'create',
 			'published-check',
@@ -340,5 +346,6 @@ describe('published AKM scheduler compatibility', () => {
 		expect(run('remove', 'published-check').exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
+		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(keepalive);
 	}, 160_000);
 });

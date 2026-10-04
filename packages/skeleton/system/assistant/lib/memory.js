@@ -114,7 +114,7 @@ export function createMemoryCapture(options = {}) {
 				...init,
 				headers: {
 					'Content-Type': 'application/json',
-					Authorization: `Basic ${Buffer.from(`opencode:${process.env.OPENCODE_SERVER_PASSWORD ?? ''}`).toString('base64')}`
+					Authorization: `Basic ${Buffer.from(`user:${process.env.OPENCODE_SERVER_PASSWORD ?? ''}`).toString('base64')}`
 				},
 				signal: AbortSignal.timeout(90000)
 			}

@@ -164,7 +164,7 @@ function assistantAuthorization(homeDir: string): string {
 	if (!existsSync(path)) throw new Error(`OpenCode password is missing: ${path}`);
 	const password = readFileSync(path, 'utf8').replace(/[\r\n]+$/, '');
 	if (!password) throw new Error('OpenCode password is empty');
-	return `Basic ${Buffer.from(`opencode:${password}`, 'utf8').toString('base64')}`;
+	return `Basic ${Buffer.from(`user:${password}`, 'utf8').toString('base64')}`;
 }
 
 async function responseJson(response: Response, maxBytes = MAX_RESPONSE_BYTES): Promise<unknown> {
