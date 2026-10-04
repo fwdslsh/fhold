@@ -244,23 +244,36 @@ describe('personal memory capture', () => {
 });
 
 describe('Assistant scheduler health', () => {
-	it('requires every essential process and fresh successful task reconciliation', () => {
+	it('requires every essential process and fresh successful task reconciliation', async () => {
 		const root = home();
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
-		const run = () =>
-			Bun.spawnSync(['bash', script], {
-				env: { ...process.env, FH_RUNTIME_DIR: root },
+		const run = async () => {
+			const child = Bun.spawn(['bash', script], {
+				env: {
+					...process.env,
+					FH_RUNTIME_DIR: root,
+					FH_SCHEDULER_ENABLED: '1',
+					FH_RECOVERY_URL: ''
+				},
+				stdin: 'ignore',
 				stdout: 'ignore',
-				stderr: 'ignore'
-			}).exitCode;
-		expect(run()).not.toBe(0);
+				stderr: 'ignore',
+				timeout: 2000,
+				killSignal: 'SIGKILL'
+			});
+			const exitCode = await child.exited;
+			// A killed or timed-out shell is not a successful unhealthy-state check.
+			expect(child.signalCode).toBeNull();
+			return exitCode;
+		};
+		expect(await run()).toBe(1);
 		for (const child of ['assistant', 'scheduler', 'reconciliation'])
 			writeFileSync(join(root, `${child}.pid`), String(process.pid));
 		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
-		expect(run()).not.toBe(0);
+		expect(await run()).toBe(1);
 		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
 		writeFileSync(join(root, 'scheduler.pid'), '999999999');
-		expect(run()).not.toBe(0);
+		expect(await run()).toBe(1);
 	});
 });
 
