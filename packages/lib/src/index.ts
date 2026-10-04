@@ -1,6 +1,7 @@
 export type { FholdState } from './control-plane/foundation.js';
 export {
 	createFholdState,
+	defaultFholdHome,
 	customComposeFile,
 	ensureHomeDirs,
 	managedComposeFile,

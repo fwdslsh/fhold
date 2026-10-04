@@ -11,6 +11,7 @@ For example, on Linux x64:
 ```bash
 curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610040821-alpha.3/fhold-cli-linux-x64
 chmod +x fhold
+export FH_HOME="$HOME/fhold/instances/personal-agent"
 ./fhold install --name personal-agent
 ./fhold setup
 ```
@@ -41,8 +42,8 @@ docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS
 docker build --build-arg GUARDIAN_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/guardian/Dockerfile -t "fhold/fhold-guardian:$fhold_build_version" .
 docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/portal/Dockerfile -t "fhold/fhold-portal:$fhold_build_version" .
 ./packages/cli/dist/fhold-cli --version
-FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli install --no-start
-./packages/cli/dist/fhold-cli setup
+FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli --instance personal-agent install --no-start
+./packages/cli/dist/fhold-cli --instance personal-agent setup
 ```
 
 These are local source-build instructions, not an identical-byte release retry.
@@ -58,14 +59,46 @@ Build the matching local images before setup or start. The persisted literal
 local builds without registry contact. A missing image requires a local build;
 explicit `update --pull` is refused rather than treating `fhold/` as Docker Hub.
 
-The home defaults to `~/.fhold`. Set `FH_HOME` to an absolute directory for an
-explicit instance. CLI and Admin derive the same stable per-home Compose
-project. Give a new instance a name with `fhold install --name personal-agent`
-or the **Instance name** field in Admin setup. The name is persisted in
+## Select an instance
+
+The source CLI (next release) selects a home in this order:
+
+1. `--instance` or `-i`: a directory name beneath `~/fhold/instances/`, or an absolute path.
+2. `FH_HOME`, if explicitly set in your shell.
+3. The current working directory when neither is supplied.
+
+No environment variable is required. The selector works before or after a
+command, including nested commands. For example:
+
+```bash
+fhold --instance personal-agent install
+fhold -i personal-agent status
+fhold --instance /srv/fhold/another-agent status
+```
+
+With `FH_HOME` unset, running `fhold install` from an empty directory installs
+there; running `fhold status` from an existing home manages that home. Relative
+paths such as `./agent` are not selectors: change directory or pass the full path.
+Admin suggests `~/fhold/instances/<name>` and uses `~/fhold/instances/default`
+as its unnamed default. `~/fhold` itself is not an instance; it may also hold
+backups, docs and other local directories. Custom locations remain supported.
+Existing homes are never moved automatically; continue selecting their original
+location explicitly.
+
+The published alpha.3 CLI predates `--instance` and the cwd fallback. Use
+`FH_HOME` with that binary, as in the download example above. These new selection
+features are in source; published artifacts have not been replaced.
+
+CLI and Admin derive the same stable per-home Compose
+project. A DNS-safe directory name under the default instances root is also the
+initial instance name. Override the identity with
+`fhold -i chosen-folder install --name personal-agent`, or the **Instance name**
+field in Admin setup; `--name` does not change the selected home. The name is persisted in
 `deployment.projectName`, produces containers such as `personal-agent-assistant-1`
 and sets the Assistant's OS hostname to `personal-agent`. Use lowercase letters,
-numbers and hyphens, up to 63 characters. Omitting a name in CLI keeps the
-unique per-home default. Names are chosen during installation; existing homes
+numbers and hyphens, up to 63 characters. Under the default layout the folder name
+is the initial instance name; custom homes retain a unique per-home suggestion.
+Names are chosen during installation; existing homes
 keep their project identity. Additional instances need distinct names. Fresh setup
 prefers ports 3810/3830; if either is already in use, it chooses an available pair
 and saves those exact ports. CLI `install --config` preserves explicitly supplied
@@ -98,8 +131,9 @@ bun run --cwd packages/electron start
 ```
 
 Admin opens at Welcome: choose the default, previous/recent instance or another
-folder, or expand **Create new instance**. Choose a folder or enter a full path,
-then continue to setup, name the instance and confirm **Install fhold**. Port
+folder, or expand **Create new instance**. Enter a name to get a suggested
+`~/fhold/instances/<name>` folder, or choose a folder/enter a full path to override it.
+Then continue to setup and confirm **Install fhold**. Port
 selection is automatic; expand **Advanced** and turn off automatic selection
 only if you need specific ports. New setup refuses non-empty folders and rejects a
 name already used by Docker before writing installation files. Folder selection

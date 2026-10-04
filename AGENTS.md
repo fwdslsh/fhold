@@ -45,7 +45,12 @@ Prefer a small, maintainable solution over another helper, service or exception.
 
 ## Ownership and data safety
 
-`FH_HOME` defaults to `~/.fhold`. Product-owned variables use `FH_*` only.
+New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
+is `~/fhold/instances/default`. CLI selection is `--instance`/`-i` (a directory
+name under that root or an absolute path), then `FH_HOME`, then the current
+directory. `FH_HOME` is optional. Admin's folder picker accepts custom locations.
+Existing homes are never relocated automatically. Reserve `~/fhold` for instances
+and other local directories such as backups/docs. Product-owned variables use `FH_*` only.
 `state/stack.json` owns intent and must identify `product: "fhold"`.
 Other products' or incompatible homes must be refused before writes.
 Never adopt an existing installation or copy its runtime authority.

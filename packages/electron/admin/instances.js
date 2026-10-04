@@ -2,7 +2,19 @@ import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setSkipTarget, setText } from './ui.js';
 
+function suggestInstanceHome() {
+	if (!state.instancesDirectory) return;
+	const name = byId('new-instance-name').value.trim();
+	if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) return;
+	const field = byId('new-instance-home');
+	const suggested = `${state.instancesDirectory}/${name}`;
+	if (!field.value || field.value === field.dataset.suggestedHome) field.value = suggested;
+	field.dataset.suggestedHome = suggested;
+}
+
 export function renderWelcome(welcome) {
+	state.instancesDirectory = welcome.instancesDirectory || '';
+	suggestInstanceHome();
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
 	byId('install-section').hidden = true;
@@ -83,6 +95,7 @@ export async function showInstances() {
 }
 
 export function bindInstanceEvents() {
+	byId('new-instance-name').addEventListener('input', suggestInstanceHome);
 	byId('choose-instance').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
 		const directory = await state.api.chooseDirectory({ purpose: 'instance' }).catch((error) => {
@@ -104,7 +117,10 @@ export function bindInstanceEvents() {
 	});
 	byId('new-instance-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		await openInstance({ kind: 'local', homeDir: byId('new-instance-home').value.trim() }, true);
+		await openInstance(
+			{ kind: 'local', homeDir: byId('new-instance-home').value.trim(), name: byId('new-instance-name').value.trim() },
+			true
+		);
 	});
 	for (const button of all('[data-instance-switch]'))
 		button.addEventListener('click', () => void showInstances());

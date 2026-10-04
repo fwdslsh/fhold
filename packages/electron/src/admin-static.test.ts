@@ -137,6 +137,7 @@ beforeEach(() => {
 	);
 	selectors = new Map();
 	control('install-automatic-ports').checked = true;
+	control('new-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
 	control('install-gateway-port').disabled = true;
 	globalThis.document = {
@@ -299,9 +300,21 @@ describe('Admin static security boundary', () => {
 		control('new-instance-home').value = ' /chosen/new-instance ';
 		bindInstanceEvents();
 		await control('new-instance-form').listeners.get('submit')?.({ preventDefault() {} });
-		expect(target).toEqual({ kind: 'local', homeDir: '/chosen/new-instance' });
+		expect(target).toEqual({ kind: 'local', homeDir: '/chosen/new-instance', name: 'personal-agent' });
 		expect(reloads).toBe(1);
 		expect(state.operationInFlight).toBe(false);
+	});
+	it('suggests a named default folder and leaves manually chosen folders alone', () => {
+		bindInstanceEvents();
+		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default' }, instancesDirectory: '/user/fhold/instances', recentInstances: [] });
+		expect(control('new-instance-home').value).toBe('/user/fhold/instances/personal-agent');
+		control('new-instance-name').value = 'april';
+		control('new-instance-name').listeners.get('input')?.({});
+		expect(control('new-instance-home').value).toBe('/user/fhold/instances/april');
+		control('new-instance-home').value = '/custom/my-agent';
+		control('new-instance-name').value = 'may';
+		control('new-instance-name').listeners.get('input')?.({});
+		expect(control('new-instance-home').value).toBe('/custom/my-agent');
 	});
 	it('keeps the new folder input after rejection and blocks duplicate submissions', async () => {
 		let calls = 0;

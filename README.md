@@ -23,12 +23,18 @@ Trusted OpenCode and experimental native Codex/Claude workers bypass Guardian.
 Both native supervisors start by default; either can be explicitly disabled.
 Native sign-in, workspace trust and consent remain explicit user decisions.
 
-All instance data lives below `FH_HOME` (default `~/.fhold`). Different homes
-receive separate Compose projects. Welcome can create another instance in a
-chosen folder; name it and setup chooses available ports automatically.
-Manual port overrides are under Advanced. CLI supports
-`fhold install --name personal-agent`. The name sets container naming and the
-Assistant's hostname without another configuration layer.
+New named homes live under `~/fhold/instances/<name>`, leaving `~/fhold` available
+for backups, docs and other local files. The source CLI accepts
+`fhold --instance personal-agent install` or an absolute instance path. Selection
+is argument → optional `FH_HOME` → current directory, so one shell can manage
+multiple instances without exporting variables. Admin's unnamed default is
+`~/fhold/instances/default`; its folder picker still supports any custom location.
+Published alpha.3 does not have the new selector yet; see [installation](docs/installation.md#select-an-instance).
+Existing homes are never moved automatically. Different homes receive separate
+Compose projects. Welcome can create another instance; name it, accept or change
+the suggested folder, and setup chooses free ports. Manual port overrides are
+under Advanced. `install --name` overrides the container/hostname identity,
+not the selected directory. No second instance-name registry is introduced.
 Never point fhold at a foreign or unrelated nonempty home. Supported portable
 restore requires fhold's own backup manifest; no old-product import is provided.
 

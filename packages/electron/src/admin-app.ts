@@ -155,12 +155,14 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	const candidate = managedState();
 	const installState = classifyInstall(candidate.homeDir);
 	if (installState === 'not_installed') {
+		const config = defaultStackConfig(candidate.homeDir);
+		if (instances.setupName) config.deployment.projectName = instances.setupName;
 		return {
 			installationReadiness: await ensureDockerReady(),
 			phase: 'not_installed',
 			homeDir: candidate.homeDir,
 			configPath: stackConfigFile(candidate.homeDir),
-			config: defaultStackConfig(candidate.homeDir),
+			config,
 			services: [],
 			portalMappings: {},
 			portalSecrets: {}
@@ -168,7 +170,7 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	}
 	if (installState === 'incompatible_home') {
 		throw new Error(
-			'The selected FH_HOME is incompatible with fhold. Choose an empty directory for installation.'
+			'The selected folder is incompatible with fhold. Choose an empty directory for installation.'
 		);
 	}
 	const current = state();

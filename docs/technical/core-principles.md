@@ -65,8 +65,14 @@ without importing internal source modules.
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned
 managed files, seed missing operator files and never synchronize or delete
-whole trees. `FH_HOME` defaults to `~/.fhold`; home selection is explicit and
-canonical. Each home has stable independent project intent and saved concrete ports.
+whole trees. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
+default is `~/fhold/instances/default`. CLI home selection is an explicit
+`--instance`/`-i` directory name under that root or an absolute path, then optional
+`FH_HOME`, then cwd. Admin selects a default, recent or custom folder. `~/fhold`
+may also hold backups/docs; it is not itself an instance or a new configuration layer.
+Home selection is canonical; default changes never relocate existing homes or
+rename their persisted project identity. Each home has stable independent project
+intent and saved concrete ports.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
@@ -140,8 +146,8 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - `state/stack.env` contains non-secret derived input. Child processes use
   argument arrays; lifecycle commands never interpolate shell strings.
 - Compiled CLI launches do not automatically read the invoking directory's
-  dotenv or Bun configuration. Instance selection comes from explicit shell
-  environment and product intent, not unrelated project files.
+  dotenv or Bun configuration. Instance selection comes from the explicit CLI
+  argument, optional shell environment or cwd, never unrelated project files.
 - Assistant Bun helper/AKM launches disable workspace dotenv and bunfig loading
   with native image runtime options; `/work/bunfig.toml` is not managed preload
   authority. This does not add a launcher or configuration service.

@@ -5,7 +5,17 @@ This document describes the active runtime. The executable source is
 
 ## Host layout
 
-`FH_HOME` defaults to `~/.fhold`.
+New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
+is `~/fhold/instances/default`. CLI `--instance`/`-i` selects a directory name
+under that root or an absolute path. If absent, explicit `FH_HOME` takes
+precedence over cwd. The CLI resolves that choice once for every command and
+its child processes; users do not need to export a variable. Admin uses its
+default/recent home or a selected custom folder. Default changes never move an
+existing home; select its original path explicitly to continue managing it.
+`~/fhold` can contain sibling `backups/`, `docs/` or other local directories;
+only the selected instance directory is managed or backed up.
+
+The following paths are relative to that instance's home, not `~/fhold`:
 
 | Host path | Owner | Purpose |
 |---|---|---|

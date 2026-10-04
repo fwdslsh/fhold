@@ -23,17 +23,21 @@ import { chooseInstallPorts } from './install-ports.js';
 export async function installHome(
 	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {}
 ): Promise<string> {
-	const state = createFholdState(options.homeDir);
-	if (classifyInstall(state.homeDir) !== 'not_installed') {
-		throw new Error('fhold is already installed or the selected home is not empty.');
-	}
 	if (options.name !== undefined && !isInstanceName(options.name)) {
 		throw new Error(
 			'Instance name must be 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.'
 		);
 	}
-	const intent = options.config ?? defaultStackConfig(state.homeDir);
-	const parsed = parseStackConfig(intent);
+	const supplied = options.config === undefined ? undefined : parseStackConfig(options.config);
+	if (supplied && !supplied.ok) throw new Error(supplied.error);
+	const name =
+		options.name ??
+		(supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined);
+	const state = createFholdState(options.homeDir, name);
+	if (classifyInstall(state.homeDir) !== 'not_installed') {
+		throw new Error('fhold is already installed or the selected home is not empty.');
+	}
+	const parsed = supplied ?? parseStackConfig(defaultStackConfig(state.homeDir));
 	if (!parsed.ok) throw new Error(parsed.error);
 	// Ambient bootstrap values are captured once, never consulted by refresh.
 	if (!options.config) {

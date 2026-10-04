@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+New named instances live under `~/fhold/instances/<name>`, leaving room beside
+`instances/` for backups, docs and other local files. CLI `--instance`/`-i`
+accepts a directory name under that root or an absolute path, with precedence
+argument → optional `FH_HOME` → current directory. The selector works before or
+after commands. `install --name` controls container/hostname identity separately.
+Admin suggests the folder as a new instance is named; its unnamed default is
+`~/fhold/instances/default`, and custom folder choices remain supported.
+Existing homes, project names, ports, credentials and data are not relocated or
+changed automatically. Published alpha.3 artifacts are unchanged; use `FH_HOME`
+explicitly with that release until the new CLI is published.
+
 ## 0.1.2610040821-alpha.3 — public Linux alpha
 
 First public GitHub/Docker Hub release: standalone Linux x64/ARM64 CLI, optional

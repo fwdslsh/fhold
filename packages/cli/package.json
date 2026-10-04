@@ -13,7 +13,7 @@
   "homepage": "https://github.com/fwdslsh/fhold",
   "scripts": {
     "start": "bun run src/main.ts",
-    "test": "bun test --isolate src/main.test.ts src/commands/*.test.ts src/compiled-boundary.test.ts src/lib/action.test.ts",
+    "test": "bun test --isolate src/main.test.ts src/commands/*.test.ts src/compiled-boundary.test.ts src/lib/*.test.ts",
     "typecheck": "tsc --noEmit",
     "install:local": "bun run src/main.ts install --no-start",
     "pack:embedded": "bun run scripts/pack-embedded-assets.ts",

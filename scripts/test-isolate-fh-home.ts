@@ -34,6 +34,7 @@ const REPO_ROOT = resolve(_scriptDir, "..");
 // ── Forbidden path prefixes ─────────────────────────────────────────────────
 
 const FORBIDDEN: string[] = [
+  join(homedir(), "fhold"),
   join(homedir(), ".fhold"),
   join(REPO_ROOT, ".dev"),
   join(homedir(), ".config"),
@@ -56,7 +57,7 @@ function assertSafeOpHome(value: string | undefined, label: string): void {
     throw new Error(
       `[test-isolation TRIPWIRE] ${label}: FH_HOME="${value}" resolves to a protected directory.\n` +
       `  Resolved: ${abs}\n` +
-      `  Tests must never write to ~/.fhold or .dev. Use a mkdtempSync() temp dir and restore FH_HOME in afterEach.`
+      `  Tests must never write to ~/fhold, ~/.fhold or .dev. Use a mkdtempSync() temp dir and restore FH_HOME in afterEach.`
     );
   }
 }

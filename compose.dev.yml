@@ -12,7 +12,7 @@
 #     up --pull never --build -d
 #
 # The --project-directory . flag is REQUIRED when the managed compose files live
-# in a different directory (.fhold/system/stack/ or .dev/system/stack/).
+# in a different directory (~/fhold/instances/<name>/system/stack/ or .dev/system/stack/).
 # Without it, Docker Compose resolves build contexts relative to the first -f
 # file's directory, which breaks builds.
 

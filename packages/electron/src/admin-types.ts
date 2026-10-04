@@ -38,6 +38,7 @@ export type StackAction = 'start' | 'restart' | 'stop';
 export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminWelcome = {
 	defaultInstance: AdminInstance;
+	instancesDirectory: string;
 	recentInstances: AdminInstance[];
 	selectedInstance?: AdminInstance;
 	preferenceError?: string;
@@ -46,7 +47,7 @@ export type AdminWelcome = {
 export type AdminApi = {
 	welcome(): Promise<AdminWelcome>;
 	openInstance(target: AdminInstance): Promise<void>;
-	prepareNewInstance(target: AdminInstance): Promise<void>;
+	prepareNewInstance(target: AdminInstance & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
 	codexRecall(value: {
 		action: 'review' | 'approve' | 'disable';

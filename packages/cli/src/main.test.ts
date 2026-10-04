@@ -1,4 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
+import { join } from 'node:path';
+import { defaultFholdHome, resolveFholdHome } from '@fhold/lib';
 
 import { helpText, main } from './main.js';
 
@@ -29,6 +31,9 @@ describe('CLI help', () => {
 			expect(help).toContain(command);
 		}
 		expect(help).not.toContain('uninstall');
+		expect(help).toContain('--instance <name|absolute-path>');
+		expect(help).toContain('~/fhold/instances');
+		expect(help).toContain('then FH_HOME, then the current directory');
 		expect(() => helpText('addon')).toThrow('Unknown command');
 		expect(() => helpText('import')).toThrow('Unknown command');
 		expect(helpText('config')).toContain('assistant');
@@ -53,6 +58,24 @@ describe('CLI help', () => {
 			expect(output.mock.calls[0]?.[0]).toContain('remote enable');
 			expect(output.mock.calls[1]?.[0]).toContain('experimental');
 		} finally {
+			output.mockRestore();
+		}
+	});
+	it('uses the selected home for nested commands without changing the calling process environment', async () => {
+		const previous = process.env.FH_HOME;
+		const output = spyOn(console, 'log').mockImplementation(() => {});
+		try {
+			process.env.FH_HOME = '/tmp/fhold-ambient-selection';
+			await main(['config', 'path', '--instance', 'selected-agent']);
+			expect(output.mock.calls.at(-1)?.[0]).toBe(join(resolveFholdHome(defaultFholdHome('selected-agent')), 'state', 'stack.json'));
+			expect(process.env.FH_HOME).toBe('/tmp/fhold-ambient-selection');
+			delete process.env.FH_HOME;
+			await main(['config', 'path']);
+			expect(output.mock.calls.at(-1)?.[0]).toBe(join(resolveFholdHome(process.cwd()), 'state', 'stack.json'));
+			expect(process.env.FH_HOME).toBeUndefined();
+		} finally {
+			if (previous === undefined) delete process.env.FH_HOME;
+			else process.env.FH_HOME = previous;
 			output.mockRestore();
 		}
 	});

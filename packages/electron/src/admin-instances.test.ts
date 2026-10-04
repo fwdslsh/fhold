@@ -9,8 +9,8 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createFholdState, defaultStackConfig, writeStackConfig } from '@fhold/lib';
+import { dirname, join } from 'node:path';
+import { createFholdState, defaultFholdHome, defaultStackConfig, resolveFholdHome, writeStackConfig } from '@fhold/lib';
 import { AdminInstances, validateInstance } from './admin-instances.js';
 
 const roots: string[] = [];
@@ -36,6 +36,7 @@ describe('Admin instance selection', () => {
 		const instances = new AdminInstances(profile, home);
 		expect(instances.welcome()).toEqual({
 			defaultInstance: { kind: 'local', homeDir: home },
+			instancesDirectory: dirname(resolveFholdHome(defaultFholdHome())),
 			recentInstances: []
 		});
 		expect(() => instances.current()).toThrow('welcome screen');
@@ -158,6 +159,21 @@ describe('Admin instance selection', () => {
 			expect(existsSync(join(folder, 'state'))).toBe(false);
 		}
 		expect(existsSync(join(root, 'new-parent'))).toBe(false);
+	});
+
+	it('keeps a new setup name separate from saved instance identity and honors a custom folder', () => {
+		const { root, home, profile } = fixture();
+		const folder = join(root, 'custom-folder');
+		const instances = new AdminInstances(profile, home);
+		instances.prepareNew({ kind: 'local', homeDir: folder, name: 'april' });
+		expect(instances.current().homeDir).toBe(folder);
+		expect(instances.setupName).toBe('april');
+		expect(existsSync(folder)).toBe(false);
+		for (const name of ['', '../april', 'April'])
+			expect(() => instances.prepareNew({ kind: 'local', homeDir: join(root, 'other'), name })).toThrow('instance name');
+		expect(instances.setupName).toBe('april');
+		instances.close();
+		expect(instances.setupName).toBeUndefined();
 	});
 
 	it('refuses new setup on installed, populated or file targets without changing selection or preferences', () => {

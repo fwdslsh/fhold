@@ -15,14 +15,15 @@ import { runNativeProviderLogin } from './provider.js';
 import { enableRemote } from './remote.js';
 
 export async function completeSetup(options: {
+	homeDir?: string;
 	provider?: string;
 	method?: string;
 	claudeRemote?: boolean;
 	codexRemote?: boolean;
 }): Promise<void> {
-	const state = createFholdState();
+	const state = createFholdState(options.homeDir);
 	requireInstall(state.homeDir);
-	await runStartAction();
+	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
 
 	let readiness = await testAssistantReadiness(state.homeDir);
@@ -34,7 +35,7 @@ export async function completeSetup(options: {
 			);
 		}
 		console.log(`Provider readiness needs attention: ${readiness.error}`);
-		await runNativeProviderLogin(options);
+		await runNativeProviderLogin({ ...options, homeDir: state.homeDir });
 		readiness = await testAssistantReadiness(
 			state.homeDir,
 			options.provider ? { provider: options.provider } : {}
@@ -50,13 +51,13 @@ export async function completeSetup(options: {
 	markInstalled(state.homeDir);
 	const config = readStackConfig(state.homeDir);
 	if (!config.ok) throw new Error(config.error);
-	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction();
+	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction(state.homeDir);
 	console.log('fhold setup is complete.');
 	console.log(
 		`Verified a real Assistant response${readiness.provider ? ` from ${readiness.provider}` : ''}${readiness.model ? `/${readiness.model}` : ''}.`
 	);
-	if (options.claudeRemote) await enableRemote('claude');
-	if (options.codexRemote) await enableRemote('codex');
+	if (options.claudeRemote) await enableRemote('claude', { homeDir: state.homeDir });
+	if (options.codexRemote) await enableRemote('codex', { homeDir: state.homeDir });
 }
 
 export default defineCommand({

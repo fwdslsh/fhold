@@ -28,14 +28,15 @@ function readKey(path: string): string {
 }
 
 export async function runNativeProviderLogin(options: {
+	homeDir?: string;
 	provider?: string;
 	method?: string;
 }): Promise<void> {
-	const state = createFholdState();
+	const state = createFholdState(options.homeDir);
 	requireInstall(state.homeDir);
 	const docker = await ensureDockerReady();
 	if (!docker.ok) throw new Error(docker.message);
-	await runStartAction();
+	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
 	const args = [...buildComposeCliArgs(state), 'exec', 'assistant', 'opencode', 'auth', 'login'];
 	if (options.provider) args.push('--provider', options.provider);

@@ -68,9 +68,19 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 						};
 						check();
 					});
-					await window.fholdAdmin.openInstance(welcome.defaultInstance);
+					const name = document.querySelector('#new-instance-name');
+					const folder = document.querySelector('#new-instance-home');
+					name.value = 'smoke-agent';
+					name.dispatchEvent(new Event('input', {bubbles:true}));
+					if (folder.value !== welcome.instancesDirectory + '/smoke-agent') throw new Error('Named instance folder was not suggested.');
+					folder.value = welcome.defaultInstance.homeDir;
+					name.value = 'custom-agent';
+					name.dispatchEvent(new Event('input', {bubbles:true}));
+					if (folder.value !== welcome.defaultInstance.homeDir) throw new Error('Custom folder was overwritten.');
+					await window.fholdAdmin.prepareNewInstance({...welcome.defaultInstance, name:'custom-agent'});
 					const snapshot = await window.fholdAdmin.snapshot();
 					if (snapshot.phase !== 'not_installed') throw new Error('Smoke home is not fresh.');
+					if (snapshot.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
 				})()`);
 			})(),
 			new Promise<never>((_resolve, reject) => {

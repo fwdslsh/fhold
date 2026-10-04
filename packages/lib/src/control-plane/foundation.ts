@@ -23,9 +23,20 @@ export type FholdState = {
 	stackDir: string;
 };
 
-export function resolveFholdHome(requestedHome?: string): string {
+/** A user-chosen instance name is also its Linux hostname. */
+export function isInstanceName(value: unknown): value is string {
+	return typeof value === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
+}
+
+export function defaultFholdHome(instanceName = 'default'): string {
+	if (!isInstanceName(instanceName))
+		throw new Error('Invalid instance name for deployment.projectName.');
+	return join(homedir() || tmpdir(), 'fhold', 'instances', instanceName);
+}
+
+export function resolveFholdHome(requestedHome?: string, instanceName?: string): string {
 	const requested = requestedHome?.trim() || process.env.FH_HOME?.trim();
-	const path = resolve(requested || join(homedir() || tmpdir(), '.fhold'));
+	const path = resolve(requested || defaultFholdHome(instanceName));
 	let existing = path;
 	const missing: string[] = [];
 	while (!existsSync(existing)) {
@@ -37,8 +48,8 @@ export function resolveFholdHome(requestedHome?: string): string {
 	return resolve(realpathSync(existing), ...missing);
 }
 
-export function createFholdState(requestedHome?: string): FholdState {
-	const homeDir = resolveFholdHome(requestedHome);
+export function createFholdState(requestedHome?: string, instanceName?: string): FholdState {
+	const homeDir = resolveFholdHome(requestedHome, instanceName);
 	return {
 		homeDir,
 		configDir: join(homeDir, 'config'),

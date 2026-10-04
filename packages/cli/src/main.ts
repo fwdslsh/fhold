@@ -11,6 +11,7 @@ import {
 } from '@fhold/lib';
 
 import cliPackage from '../package.json' with { type: 'json' };
+import { instanceArguments, resolveInstanceHome } from './lib/instance.js';
 
 async function assistantHealthy(): Promise<boolean> {
 	const homeDir = resolveFholdHome();
@@ -41,7 +42,7 @@ async function autoRun(): Promise<void> {
 	}
 	if (installState === 'incompatible_home') {
 		throw new Error(
-			`Refusing incompatible fhold home at ${homeDir}. Choose an empty FH_HOME for a new installation.`
+			`Refusing incompatible fhold home at ${homeDir}. Use --instance with a new directory name or an empty absolute path.`
 		);
 	}
 	if (installState === 'setup_incomplete') {
@@ -124,12 +125,14 @@ export function helpText(command?: string): string {
 	if (command) {
 		const usage = COMMAND_USAGE[command];
 		if (!usage) throw new Error(`Unknown command: ${command}`);
-		return `Usage: ${usage}\n${['remote', 'setup', 'config'].includes(command) ? 'Codex and Claude Code native remote access is experimental; host and account support vary.\n' : ''}`;
+		return `Usage: ${usage.replace(/^fhold /, 'fhold [--instance <name|absolute-path>] ')}\nInstance selection: --instance (or -i), then FH_HOME, then the current directory.\n${['remote', 'setup', 'config'].includes(command) ? 'Codex and Claude Code native remote access is experimental; host and account support vary.\n' : ''}`;
 	}
 	return [
 		'fhold — manage your self-hosted personal agent',
 		'',
-		'Usage: fhold <command> [options]',
+		'Usage: fhold [--instance <name|absolute-path>] <command> [options]',
+		'Instance selection: --instance (or -i), then FH_HOME, then the current directory.',
+		'Names resolve under ~/fhold/instances. Absolute paths can select any instance.',
 		'',
 		'Commands:',
 		...Object.entries(COMMAND_USAGE).map(([name, usage]) =>
@@ -154,6 +157,8 @@ export const mainCommand = defineCommand({
 const commandNames = new Set([...Object.keys(subCommands), '--help', '-h', 'help']);
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
+	const selected = await instanceArguments(argv, mainCommand);
+	argv = selected.argv;
 	if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
 		console.log(cliPackage.version);
 		return;
@@ -170,14 +175,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		console.log(helpText(argv[0]));
 		return;
 	}
-	if (argv.length === 0) {
-		await autoRun();
-		return;
-	}
-	if (!commandNames.has(argv[0] ?? '')) {
+	if (argv.length && !commandNames.has(argv[0] ?? '')) {
 		throw new Error(`Unknown command: ${argv[0]}. Run \`fhold --help\` for available commands.`);
 	}
-	await runCommand(mainCommand, { rawArgs: argv });
+	const previousHome = process.env.FH_HOME;
+	process.env.FH_HOME = resolveInstanceHome(selected.instance);
+	try {
+		if (argv.length === 0) await autoRun();
+		else await runCommand(mainCommand, { rawArgs: argv });
+	} finally {
+		if (previousHome === undefined) delete process.env.FH_HOME;
+		else process.env.FH_HOME = previousHome;
+	}
 }
 
 if (import.meta.main) {

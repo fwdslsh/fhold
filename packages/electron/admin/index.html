@@ -41,8 +41,12 @@
         <button id="choose-instance" class="secondary instance-picker" type="button">Open another folder…</button>
         <details id="new-instance-details" class="disclosure">
           <summary>Create new instance</summary>
-          <p class="help-text">Each instance has its own agent, knowledge and settings. Choose an empty or new folder; setup chooses available connection ports for you.</p>
+          <p class="help-text">Each instance has its own agent, knowledge and settings. Name your instance; setup chooses available connection ports for you.</p>
           <form id="new-instance-form">
+            <label class="field" for="new-instance-name">
+              Instance name
+              <input id="new-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" />
+            </label>
             <div class="field">
               <label for="new-instance-home">New instance folder</label>
               <div class="instance-folder-input">
@@ -50,7 +54,7 @@
                 <button id="new-instance-browse" class="secondary" type="button">Choose folder…</button>
               </div>
             </div>
-            <p id="new-instance-help" class="help-text">Choose a folder or enter its full path. Nothing is installed until you confirm on the next screen.</p>
+            <p id="new-instance-help" class="help-text">Defaults to ~/fhold/instances/ followed by the instance name. You can choose a different folder. Nothing is installed until you confirm on the next screen.</p>
             <button id="create-instance" class="primary" type="submit">Continue to setup</button>
           </form>
         </details>

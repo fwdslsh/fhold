@@ -34,8 +34,8 @@ export function describeRecall(review: CodexRecallReview): string {
 	);
 }
 
-async function guideRecall(reader: ReturnType<typeof createInterface>): Promise<void> {
-	const state = createFholdState();
+async function guideRecall(reader: ReturnType<typeof createInterface>, homeDir?: string): Promise<void> {
+	const state = createFholdState(homeDir);
 	const review = await reviewCodexRecall(state);
 	if (review.status === 'ready') {
 		console.log('Automatic knowledge recall: Ready (previous approval retained).');
@@ -58,7 +58,7 @@ async function guideRecall(reader: ReturnType<typeof createInterface>): Promise<
 
 export async function enableRemote(
 	toolValue: unknown,
-	options: { trust?: boolean; browser?: boolean; sandbox?: string } = {}
+	options: { homeDir?: string; trust?: boolean; browser?: boolean; sandbox?: string } = {}
 ): Promise<void> {
 	const tool = remoteTool(toolValue);
 	if (options.sandbox !== undefined && !isCodexSandbox(options.sandbox))
@@ -89,13 +89,13 @@ export async function enableRemote(
 			'Follow the native sign-in prompts. Browser links open automatically when a desktop is available. Trust and consent require your answers; Ctrl+C cancels.'
 		);
 		if (tool === 'codex') {
-			await runStartAction();
-			await guideRecall(reader);
+			await runStartAction(options.homeDir);
+			await guideRecall(reader, options.homeDir);
 		}
 		const opened = new Set<string>();
 		let displayed = '';
 		let stage = '';
-		const session = await beginRemoteEnable(createFholdState(), tool, {
+		const session = await beginRemoteEnable(createFholdState(options.homeDir), tool, {
 			trusted: true,
 			sandbox: options.sandbox as CodexSandbox | undefined,
 			update(progress) {

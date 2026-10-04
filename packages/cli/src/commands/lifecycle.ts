@@ -18,10 +18,10 @@ import type { FholdState } from '@fhold/lib';
 
 import { defineAction } from '../lib/action.js';
 
-async function readyState(): Promise<FholdState> {
+async function readyState(homeDir?: string): Promise<FholdState> {
 	const docker = await ensureDockerReady();
 	if (!docker.ok) throw new Error(docker.message);
-	const state = createFholdState();
+	const state = createFholdState(homeDir);
 	requireInstall(state.homeDir);
 	return state;
 }
@@ -39,8 +39,8 @@ async function withLock(
 	}
 }
 
-export async function runStartAction(): Promise<void> {
-	const state = await readyState();
+export async function runStartAction(homeDir?: string): Promise<void> {
+	const state = await readyState(homeDir);
 	await withLock(state, (lock) =>
 		activateComposeCommand(state, ['up', '-d', '--remove-orphans', '--wait'], { lock })
 	);
@@ -51,8 +51,8 @@ export async function runStopAction(): Promise<void> {
 	await withLock(state, (lock) => deactivateComposeCommand(state, { lock }));
 }
 
-export async function runRestartAction(): Promise<void> {
-	const state = await readyState();
+export async function runRestartAction(homeDir?: string): Promise<void> {
+	const state = await readyState(homeDir);
 	await withLock(state, (lock) =>
 		activateComposeCommand(
 			state,
@@ -86,7 +86,7 @@ export async function readStatus(): Promise<Record<string, unknown>> {
 
 export const startCommand = defineCommand({
 	meta: { name: 'start', description: 'Start the configured stack' },
-	run: defineAction(runStartAction)
+	run: defineAction(() => runStartAction())
 });
 
 export const stopCommand = defineCommand({
@@ -96,7 +96,7 @@ export const stopCommand = defineCommand({
 
 export const restartCommand = defineCommand({
 	meta: { name: 'restart', description: 'Recreate the configured stack' },
-	run: defineAction(runRestartAction)
+	run: defineAction(() => runRestartAction())
 });
 
 export const logsCommand = defineCommand({

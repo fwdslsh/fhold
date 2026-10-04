@@ -146,7 +146,7 @@ export default defineCommand({
 		const state = createFholdState();
 		if (classifyInstall(state.homeDir) !== 'setup_incomplete') {
 			throw new Error(
-				'Restore requires a fresh, not-yet-completed fhold installation. Run `fhold install --no-start` with a new FH_HOME first.'
+				'Restore requires a fresh, not-yet-completed fhold installation. Select an empty or new folder with --instance and run `fhold install --no-start` first.'
 			);
 		}
 		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');

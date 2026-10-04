@@ -1,9 +1,11 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import {
+	defaultFholdHome,
+	isInstanceName,
 	mergeEnvContent,
 	resolveFholdHome,
 	stackConfigFile,
@@ -13,6 +15,7 @@ import {
 import { FH_RELEASE_VERSION } from './release.js';
 
 export { stackConfigFile } from './foundation.js';
+export { isInstanceName } from './foundation.js';
 
 export const STACK_CONFIG_VERSION = 1 as const;
 export const CREDENTIAL_REGISTRY_VERSION = 1 as const;
@@ -102,11 +105,6 @@ export function isCredentialId(value: unknown): value is string {
 	return typeof value === 'string' && CREDENTIAL_ID_RE.test(value);
 }
 
-/** A user-chosen instance name is also its Linux hostname. */
-export function isInstanceName(value: unknown): value is string {
-	return typeof value === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
-}
-
 export function createCredentialId(): string {
 	return `cred_${Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
 		byte.toString(16).padStart(2, '0')
@@ -114,12 +112,16 @@ export function createCredentialId(): string {
 }
 
 export function defaultStackConfig(homeDir?: string): StackConfig {
-	const suffix = createHash('sha256').update(resolveFholdHome(homeDir)).digest('hex').slice(0, 12);
+	const home = resolveFholdHome(homeDir);
+	const suffix = createHash('sha256').update(home).digest('hex').slice(0, 12);
+	const name = basename(home);
+	const namedHome =
+		dirname(home) === dirname(resolveFholdHome(defaultFholdHome())) && isInstanceName(name);
 	return {
 		product: 'fhold',
 		version: STACK_CONFIG_VERSION,
 		deployment: {
-			projectName: `fhold-${suffix}`,
+			projectName: namedHome ? name : `fhold-${suffix}`,
 			imageNamespace: 'fwdslsh',
 			images: {
 				assistant: FH_RELEASE_VERSION,

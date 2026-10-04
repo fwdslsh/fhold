@@ -1,7 +1,25 @@
 # Managing fhold
 
-Commands act on `FH_HOME` (default `~/.fhold`). Keep nondefault home selection
-explicit. CLI and Admin use the same canonical instance and stable Compose
+Select an instance with `--instance` or `-i`: a directory name always means
+`~/fhold/instances/<name>`, while an absolute path can select any location.
+The argument takes precedence over optional `FH_HOME`; without either, commands
+act on the current directory. No environment variable or shell restart is needed
+to manage different instances:
+
+```bash
+fhold --instance personal-agent status
+fhold -i another-agent status
+fhold --instance /srv/fhold/team-agent status
+```
+
+These selectors describe the source CLI/next release. Published alpha.3 still
+uses `FH_HOME`; see [installation](installation.md#select-an-instance).
+With `FH_HOME` unset, change into an instance's home and use the shorter commands
+below. Existing homes are not moved by updates: use their saved absolute path,
+cwd, `FH_HOME` or Admin's folder picker, not a name that resolves elsewhere.
+`~/fhold` can hold `instances/`, `backups/`, `docs/` and other local directories;
+those sibling directories are not part of any instance.
+CLI and Admin use the same canonical instance and stable Compose
 project. Different instances need distinct names; fresh setup chooses free ports.
 
 ## Lifecycle and Admin
@@ -36,8 +54,9 @@ An explicitly configured nonlocal registry namespace retains its default pull
 behavior; `--no-pull` selects existing local copies for that registry intent.
 
 Admin starts at Welcome: previous/default instance, recent paths or a folder
-picker. **Create new instance** accepts a chosen empty folder or full path, then
-opens setup with an editable instance name. Ports are chosen automatically:
+picker. **Create new instance** suggests `~/fhold/instances/<name>` as you enter a name;
+choose another empty folder or full path to override it. It then opens setup
+with the chosen editable instance name. Ports are chosen automatically:
 3810/3830 when available, otherwise a generated free pair. **Advanced** offers
 manual overrides. Saved ports remain stable on refresh/update. Each installation
 keeps its own knowledge, credentials, workspace and runtime data. Names are the
@@ -109,9 +128,9 @@ explicit bind intent and appropriate transport security.
 
 ```bash
 fhold backup --to /private/path/backup
-FH_HOME=/absolute/path/new-instance fhold install --no-start
-FH_HOME=/absolute/path/new-instance fhold restore --from /private/path/backup --dry-run
-FH_HOME=/absolute/path/new-instance fhold restore --from /private/path/backup --apply
+fhold --instance /absolute/path/new-instance install --no-start
+fhold --instance /absolute/path/new-instance restore --from /private/path/backup --dry-run
+fhold --instance /absolute/path/new-instance restore --from /private/path/backup --apply
 ```
 
 A required `fhold-backup.json` with `product: "fhold"`, supported format and

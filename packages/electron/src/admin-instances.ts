@@ -1,6 +1,6 @@
 import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
-import { classifyInstall, readStackConfig, resolveFholdHome, writeFileAtomic } from '@fhold/lib';
+import { dirname, isAbsolute, join } from 'node:path';
+import { classifyInstall, defaultFholdHome, isInstanceName, readStackConfig, resolveFholdHome, writeFileAtomic } from '@fhold/lib';
 import type { AdminInstance, AdminWelcome } from './admin-types.js';
 
 // Targets are kept separate from local control-plane operations. An SSH target
@@ -38,6 +38,7 @@ export function validateInstance(value: unknown): AdminInstance {
 
 export class AdminInstances {
 	private selected?: AdminInstance;
+	private newName?: string;
 	private recent: AdminInstance[] = [];
 	private preferenceError?: string;
 	private operations = 0;
@@ -73,6 +74,7 @@ export class AdminInstances {
 	welcome(): AdminWelcome {
 		return {
 			defaultInstance: this.defaultInstance,
+			instancesDirectory: dirname(resolveFholdHome(defaultFholdHome())),
 			recentInstances: this.recent,
 			...(this.selected ? { selectedInstance: this.selected } : {}),
 			...(this.preferenceError ? { preferenceError: this.preferenceError } : {})
@@ -82,6 +84,10 @@ export class AdminInstances {
 	current(): AdminInstance {
 		if (!this.selected) throw new Error('Open an instance from the welcome screen first.');
 		return this.selected;
+	}
+
+	get setupName(): string | undefined {
+		return this.newName;
 	}
 
 	assertIdle(): void {
@@ -107,6 +113,9 @@ export class AdminInstances {
 	prepareNew(value: unknown): void {
 		this.assertIdle();
 		const target = localInstance(value);
+		const name = (value as { name?: unknown }).name;
+		if (name !== undefined && !isInstanceName(name))
+			throw new Error('Choose an instance name with 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.');
 		if (
 			existsSync(target.homeDir) &&
 			(!statSync(target.homeDir).isDirectory() || readdirSync(target.homeDir).length > 0)
@@ -115,6 +124,7 @@ export class AdminInstances {
 				'Choose an empty or new folder for this instance. To manage an existing instance, use Open another folder. Nothing was changed.'
 			);
 		this.select(target);
+		this.newName = name;
 	}
 
 	private select(target: AdminInstance): void {
@@ -127,11 +137,13 @@ export class AdminInstances {
 		this.recent = recent;
 		this.preferenceError = undefined;
 		this.selected = target;
+		this.newName = undefined;
 	}
 
 	close(): void {
 		this.assertIdle();
 		this.selected = undefined;
+		this.newName = undefined;
 	}
 
 	async run<T>(operation: () => T | Promise<T>): Promise<T> {

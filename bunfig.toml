@@ -4,6 +4,6 @@
 
 [test]
 # Force a throwaway FH_HOME for every bun test run so tests can never
-# accidentally touch ~/.fhold or the repo's .dev directory.
+# accidentally touch ~/fhold, older ~/.fhold homes or the repo's .dev directory.
 # See scripts/test-isolate-fh-home.ts for the tripwire logic.
 preload = ["./scripts/test-isolate-fh-home.ts"]

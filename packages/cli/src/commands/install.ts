@@ -33,10 +33,6 @@ async function readConfigFile(path: string): Promise<unknown> {
 }
 
 export async function bootstrapInstall(options: InstallOptions): Promise<void> {
-	const state = createFholdState();
-	if (classifyInstall(state.homeDir) !== 'not_installed') {
-		throw new Error('fhold is already installed. Use `fhold update` to refresh it.');
-	}
 	// Validate operator input before writing any installation state, so a typo
 	// remains a retryable fresh install rather than a half-materialized home.
 	const supplied = options.configFile
@@ -47,6 +43,13 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		throw new Error(
 			'Choose an instance name with 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.'
 		);
+	const name =
+		options.name ??
+		(supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined);
+	const state = createFholdState(undefined, name);
+	if (classifyInstall(state.homeDir) !== 'not_installed') {
+		throw new Error('fhold is already installed. Use `fhold update` to refresh it.');
+	}
 
 	if (options.start) {
 		const docker = await ensureDockerReady();
@@ -70,14 +73,14 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		state.homeDir
 	);
 
-	if (options.start) await completeSetup({});
+	if (options.start) await completeSetup({ homeDir: state.homeDir });
 	const configPath = `${state.homeDir}/state/stack.json`;
 	console.log(`fhold installed at ${state.homeDir}`);
 	console.log(`Stack intent: ${configPath}`);
 	console.log(
 		options.start
 			? 'Assistant and provider are ready.'
-			: 'Run `fhold setup` to start and verify your provider.'
+			: 'Run `fhold setup` from this directory, or select it with `--instance`, to start and verify your provider.'
 	);
 }
 
@@ -100,7 +103,7 @@ export default defineCommand({
 		name: {
 			type: 'string',
 			description:
-				'Instance name for containers and the agent hostname (lowercase letters, numbers, hyphens)'
+				'Instance name for containers and hostname; use --instance to select its directory'
 		}
 	},
 	async run({ args }) {
