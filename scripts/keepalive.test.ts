@@ -156,21 +156,99 @@ test('a hook-reporting error remains unknown until a new boot', () => {
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
-test('an OpenCode observation failure does not reject a native prompt or tool', async () => {
+async function withOpenCode(
+	run: (plugin: Awaited<ReturnType<typeof FholdPlugin>>, root: string) => Promise<void>
+) {
 	const root = fixture();
 	const previous = process.env.FH_RUNTIME_DIR;
 	process.env.FH_RUNTIME_DIR = root;
 	try {
-		const plugin = await FholdPlugin();
-		await plugin['chat.message']({ sessionID: undefined });
-		expect(activityStatus(root, [])).toBe('unknown');
-		await plugin['tool.execute.before']({ sessionID: 'still-works', callID: 'tool' });
-		await plugin['tool.execute.after']({ sessionID: 'still-works', callID: 'tool' });
-		expect(activityStatus(root, [])).toBe('unknown');
+		await run(await FholdPlugin(), root);
 	} finally {
 		if (previous === undefined) delete process.env.FH_RUNTIME_DIR;
 		else process.env.FH_RUNTIME_DIR = previous;
 	}
+}
+
+test('an OpenCode observation failure does not reject a native event', async () => {
+	await withOpenCode(async (plugin, root) => {
+		await plugin.event({
+			event: { type: 'session.status', properties: { status: { type: 'busy' } } }
+		});
+		expect(activityStatus(root, [])).toBe('unknown');
+		await plugin.event({
+			event: { type: 'session.idle', properties: { sessionID: 'still-works' } }
+		});
+		expect(activityStatus(root, [])).toBe('unknown');
+	});
+});
+
+test('OpenCode append-only messages do not invent active work', async () => {
+	await withOpenCode(async (plugin, root) => {
+		// The native noReply path runs chat.message, but never starts a turn.
+		if ('chat.message' in plugin) await plugin['chat.message']({ sessionID: 'append-only' });
+		await plugin.event({
+			event: {
+				type: 'message.updated',
+				properties: { info: { sessionID: 'append-only', role: 'user' } }
+			}
+		});
+		expect(activityStatus(root, [])).toBe('idle');
+	});
+});
+
+test('OpenCode tool terminal events release errors and preserve overlapping work', async () => {
+	await withOpenCode(async (plugin, root) => {
+		const part = async (id: string, type: string, sessionID = 'a') =>
+			plugin.event({
+				event: {
+					type: 'message.part.updated',
+					properties: { part: { type: 'tool', id, sessionID, state: { status: type } } }
+				}
+			});
+		await part('one', 'running');
+		await part('two', 'pending');
+		expect(activityStatus(root, [])).toBe('busy');
+		await part('one', 'error');
+		expect(activityStatus(root, [])).toBe('busy');
+		await part('two', 'completed');
+		expect(activityStatus(root, [])).toBe('idle');
+		await part('one', 'running');
+		await part('other', 'running', 'b');
+		await plugin.event({ event: { type: 'session.deleted', properties: { info: { id: 'a' } } } });
+		expect(activityStatus(root, [])).toBe('busy');
+		await part('other', 'error', 'b');
+		expect(activityStatus(root, [])).toBe('idle');
+	});
+});
+
+test('Claude batch completion releases denied and cancelled tools without ending the turn', () => {
+	const root = fixture();
+	event(root, 'PreToolUse', { tool_use_id: 'denied' }, 'claude');
+	event(root, 'PreToolUse', { tool_use_id: 'cancelled' }, 'claude');
+	event(
+		root,
+		'PostToolBatch',
+		{ tool_calls: [{ tool_use_id: 'denied' }, { tool_use_id: 'cancelled' }] },
+		'claude'
+	);
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'Stop', { background_tasks: [], session_crons: [] }, 'claude');
+	expect(activityStatus(root, [])).toBe('idle');
+});
+
+test('Claude subagent completion refreshes the parent background-work inventory', () => {
+	const root = fixture();
+	event(root, 'SubagentStart', { agent_id: 'child' }, 'claude');
+	event(root, 'Stop', { background_tasks: [{ id: 'child' }], session_crons: [] }, 'claude');
+	expect(activityStatus(root, [])).toBe('busy');
+	event(
+		root,
+		'SubagentStop',
+		{ agent_id: 'child', background_tasks: [], session_crons: [] },
+		'claude'
+	);
+	expect(activityStatus(root, [])).toBe('idle');
 });
 
 test('boot observations are reset without touching native user state', () => {

@@ -69,6 +69,14 @@ export function activity(tool, session, token, active, root = runtime()) {
 	}
 }
 
+export function endSession(tool, session, root = runtime()) {
+	// Validate before deriving a prefix, including events without an active turn.
+	marker(tool, session, 'turn', root);
+	const path = directory(root);
+	const prefix = `${tool}-${hash(session)}-`;
+	for (const file of readdirSync(path)) if (file.startsWith(prefix)) remove(join(path, file));
+}
+
 export function coverage(tool, ready, root = runtime()) {
 	if (!harnesses.includes(tool)) throw Error('Invalid harness');
 	const file = join(directory(root), `${tool}.ready`);
@@ -95,6 +103,12 @@ export function nativeEvent(tool, input, root = runtime()) {
 	if (!['claude', 'codex'].includes(tool)) throw Error('Invalid native harness');
 	const session = input.session_id;
 	const mark = (token, busy) => activity(tool, session, token, busy, root);
+	const background = () => {
+		if (tool !== 'claude') return;
+		// Missing task metadata cannot prove that background work finished.
+		mark('background', !Array.isArray(input.background_tasks) || input.background_tasks.length > 0);
+		mark('native-schedules', !Array.isArray(input.session_crons) || input.session_crons.length > 0);
+	};
 	switch (input.hook_event_name) {
 		case 'SessionStart':
 			// Compaction/resume can happen during a turn. Never clear activity here.
@@ -112,24 +126,22 @@ export function nativeEvent(tool, input, root = runtime()) {
 		case 'PostToolUseFailure':
 			if (input.tool_use_id) mark(`tool:${input.tool_use_id}`, false);
 			break;
+		case 'PostToolBatch':
+			if (tool !== 'claude' || !Array.isArray(input.tool_calls)) throw Error('Invalid tool batch');
+			// Permission denials and cancellations do not emit PostToolUseFailure.
+			// Native batch completion covers those outcomes without reading results.
+			for (const call of input.tool_calls)
+				if (call.tool_use_id) mark(`tool:${call.tool_use_id}`, false);
+			break;
 		case 'SubagentStart':
 			mark(`agent:${input.agent_id || 'unknown'}`, true);
 			break;
 		case 'SubagentStop':
 			if (input.agent_id) mark(`agent:${input.agent_id}`, false);
+			background();
 			break;
 		case 'Stop':
-			if (tool === 'claude') {
-				// Missing task metadata cannot prove that background work finished.
-				mark(
-					'background',
-					!Array.isArray(input.background_tasks) || input.background_tasks.length > 0
-				);
-				mark(
-					'native-schedules',
-					!Array.isArray(input.session_crons) || input.session_crons.length > 0
-				);
-			}
+			background();
 			mark('turn', false);
 			break;
 		case 'StopFailure':
@@ -137,12 +149,9 @@ export function nativeEvent(tool, input, root = runtime()) {
 			// Tools/subagents still need their own completion signals.
 			mark('turn', false);
 			break;
-		case 'SessionEnd': {
-			const prefix = `${tool}-${hash(session)}-`;
-			for (const file of readdirSync(directory(root)))
-				if (file.startsWith(prefix)) remove(join(directory(root), file));
+		case 'SessionEnd':
+			endSession(tool, session, root);
 			break;
-		}
 		default:
 			throw Error('Unsupported activity event');
 	}

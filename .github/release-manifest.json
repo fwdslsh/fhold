@@ -8,7 +8,9 @@
 		"packages/portal/package.json",
 		"packages/electron/package.json",
 		"packages/claude-desktop/package.json",
-		"packages/claude-desktop/manifest.json"
+		"packages/claude-desktop/manifest.json",
+		"plugins/fhold/.claude-plugin/plugin.json",
+		"plugins/fhold/.codex-plugin/plugin.json"
 	],
 	"compose": ["packages/skeleton/system/stack/stack.compose.yml"]
 }

@@ -1,9 +1,11 @@
 {
-	"name": "fhold",
-	"version": "0.1.0",
-	"description": "Built-in fhold runtime skills and activity reporting for conditional HTTP keep-alive",
-	"author": { "name": "fhold" },
-	"license": "MIT",
-	"skills": "./skills/",
-	"hooks": "./hooks/codex.json"
+  "name": "fhold",
+  "version": "0.1.2610040740-alpha.3",
+  "description": "Built-in fhold runtime skills and activity reporting for conditional HTTP keep-alive",
+  "author": {
+    "name": "fhold"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/codex.json"
 }

@@ -5,7 +5,7 @@ Claude Code and Codex. The image build runs each vendor's installer against
 pinned local marketplaces. Startup seeds the generated caches and missing
 defaults; it never installs software, replaces customized native settings or
 pre-approves hooks. The fhold plugins share one activity reporter and the same
-release-owned skills. This feature has no Databasin dependency.
+release-owned skills.
 
 ## Skills and identity
 
@@ -28,9 +28,11 @@ AKM's seeded configuration includes this read-only source:
 ```
 
 This entry belongs under `bundles`. `/stash` remains the default writable bundle.
-An operator-supplied AKM configuration must retain this source; startup checks
-it without overwriting operator configuration. Ordinary CLI updates preserve
-existing operator files, so add the source when upgrading an older config.
+Ordinary CLI updates preserve existing operator files. Add this source to an
+older AKM configuration if you want its catalog to discover the built-in skills.
+An absent, disabled or inherited source does not prevent startup: the skills
+remain available through the native harness integrations. fhold does not rewrite
+the operator's catalog or change their default write target.
 The image directory is read-only even to an agent with unrestricted native
 tool permissions; the container has no root escalation capability.
 
@@ -39,6 +41,15 @@ and update any absolute paths in external recovery include files and native
 plugin settings. The managed Compose mount keeps the same host-side
 `data/assistant` directory. This change does not rewrite old recovery manifests,
 remap custom absolute paths or migrate an already-running deployment.
+
+Native plugin defaults refresh automatically only while their generated files
+remain untouched. Customized Claude settings and plugin registrations are
+preserved. After an image update, use Claude's native plugin manager to install
+or update `fhold@fhold-plugins` and `akm@akm-plugins` from the baked local
+marketplaces if those customized registrations still select an older version.
+No network install is needed. The fhold plugin version follows the product
+release so a new image never reuses a stale versioned plugin cache. Codex keeps
+its native hook-review requirement when definitions change.
 
 ## Conditional HTTP heartbeat
 

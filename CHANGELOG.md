@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.2610040740-alpha.3 — unreleased combined source candidate
+
+Combine the dependency refresh with native fhold plugins in all three harnesses,
+shared image-baked skills, and opt-in conditional HTTP keep-alive using the
+existing scheduler. Keep-alive can run with user scheduling disabled. Native
+hook approval remains explicit; no accounts or trust decisions are image-baked.
+
+Agents now run as `fhold` at `/home/fhold`; the native OpenCode HTTP username is
+`user`. Custom deployments must update their mounts, absolute plugin/recovery
+paths and clients before activating this candidate. Managed homes keep the
+same host data directory. Customized native plugin registrations are preserved;
+use the native plugin manager to update their selected baked versions.
+
+Review fixes use native completion events for failed/cancelled tools and
+background subagents, avoid treating append-only history as active work, and
+version native fhold plugins with the product release. Older AKM catalogs no
+longer prevent startup. The combined candidate passed 496 tests with no skips,
+all image smokes, and directory/Blob-emulator recovery. The existing npm security
+gate remains unresolved; this is not a published release or merge approval.
+
 ## 0.1.2610040637-alpha.3 — unreleased public source candidate
 
 GitHub is the canonical source and contribution host. Product documentation,

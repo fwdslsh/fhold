@@ -78,6 +78,9 @@ try {
   await pause(22000);
   assert.equal(count, quiet, 'Idle native sessions must not send keep-alive');
   const session = await api('/session?directory=%2Fwork', {title:'Disposable keep-alive qualification'});
+  await api('/session/' + session.id + '/message?directory=%2Fwork', {noReply:true, parts:[{type:'text', text:'Append-only history fixture; do not execute.'}]});
+  await pause(500);
+  assert.equal(activityStatus('/tmp/fhold-runtime', []), 'idle', 'Append-only history is not active work');
   const task = api('/session/' + session.id + '/shell?directory=%2Fwork', {agent:'build', command:'sleep 45; printf fhold-keepalive-complete'});
   await until(() => activityStatus('/tmp/fhold-runtime', []) === 'busy', 10);
   console.log('Native OpenCode work was observed; waiting for real scheduler ticks.');

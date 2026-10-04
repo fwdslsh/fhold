@@ -217,20 +217,9 @@ prepare_filesystem() {
     echo 'assistant: fhold task helper is missing' >&2
     exit 1
   fi
-  # Supplied configuration must retain the built-in read-only bundle. Do not
-  # silently rewrite operator config or redirect their default write target.
-  node --input-type=module <<'BUNDLE'
-import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR || '/etc/akm', 'config.json'), 'utf8'));
-const source = Object.values(config.bundles || {}).find(bundle => bundle.path === '/fhold-bundle');
-const skills = source?.components?.skills;
-const directory = statSync('/fhold-bundle');
-if (!source || source.writable !== false || source.enabled === false || skills?.root !== 'skills' || skills?.adapter !== 'agent-skills' || skills?.writable !== false || directory.uid !== 0 || (directory.mode & 0o222)) {
-  console.error('assistant: retain the read-only /fhold-bundle skills source in AKM configuration; see docs/harness-plugins.md');
-  process.exit(1);
-}
-BUNDLE
+  # AKM bundle selection is operator-owned. Built-in skills are also exposed
+  # natively, so an older/custom AKM catalog must not prevent the server booting.
+  # The image filesystem, not a duplicate JSON validator, protects built-ins.
 }
 
 load_opencode_password() {

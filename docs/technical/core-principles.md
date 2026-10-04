@@ -27,6 +27,8 @@ explicit off settings remain off.
 No software is installed at container startup.
 Built-in skills are ordinary image-baked managed assets, shared through the
 native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
+Operator-owned AKM catalogs may omit that source without blocking startup;
+the built-in skills remain available through native harness integrations.
 AKM and fhold plugins are preinstalled in all three native harnesses without
 pre-trusting hooks. Agents run as `fhold`, with home `/home/fhold`; the native
 OpenCode HTTP username is `user`. Claude and Codex sign-in guidance preserve native login processes

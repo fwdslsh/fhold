@@ -87,12 +87,24 @@ describe('release manifest', () => {
 		expect(new Set(release.manifests).size).toBe(release.manifests.length);
 		expect(release.manifests).toContain('packages/electron/package.json');
 		expect(release.manifests).toContain('packages/claude-desktop/manifest.json');
+		expect(release.manifests).toContain('plugins/fhold/.claude-plugin/plugin.json');
+		expect(release.manifests).toContain('plugins/fhold/.codex-plugin/plugin.json');
 		expect(release.compose).toEqual(['packages/skeleton/system/stack/stack.compose.yml']);
 	});
 
 	test('every listed manifest exists on disk', () => {
 		for (const manifest of release.manifests) {
 			expect(existsSync(join(ROOT, manifest))).toBe(true);
+		}
+	});
+
+	test('native fhold plugin caches track the product release', () => {
+		const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+		for (const harness of ['claude', 'codex']) {
+			const plugin = JSON.parse(
+				readFileSync(join(ROOT, `plugins/fhold/.${harness}-plugin/plugin.json`), 'utf8')
+			);
+			expect(plugin.version).toBe(version);
 		}
 	});
 });
@@ -180,7 +192,9 @@ describe('release workflows', () => {
 			platform: 'linux/amd64',
 			runner: 'ubuntu-latest'
 		});
-		expect(images.steps.some((step) => step.uses?.startsWith('docker/setup-qemu-action@'))).toBe(false);
+		expect(images.steps.some((step) => step.uses?.startsWith('docker/setup-qemu-action@'))).toBe(
+			false
+		);
 		expect(
 			images.steps.some((step) => step.name === 'Assert native architecture for runtime tests')
 		).toBe(true);
@@ -220,7 +234,9 @@ describe('image tool pins', () => {
 		expect(dockerfile).toMatch(/^ARG NPM_VERSION=\d+\.\d+\.\d+$/m);
 		expect(dockerfile).toContain('npm install --global "npm@${NPM_VERSION}"');
 		expect(dockerfile).toContain('test "$(npm --version)" = "${NPM_VERSION}"');
-		expect(dockerfile).toContain('COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm');
+		expect(dockerfile).toContain(
+			'COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm'
+		);
 		expect(smoke).toContain('test "$(docker exec "$container" npm --version)" = "$expected_npm"');
 		expect(smoke).toContain('test "$(docker exec "$container" npx --version)" = "$expected_npm"');
 	});
@@ -382,13 +398,17 @@ describe('release completeness gate', () => {
 		expect(validate?.run).toContain(
 			"process.env.DRY_RUN !== 'true' && process.env.FH_PUBLICATION_CONFIGURED !== 'true'"
 		);
-		const login = workflow.jobs.images.steps.find((step) => step.uses?.startsWith('docker/login-action@'));
+		const login = workflow.jobs.images.steps.find((step) =>
+			step.uses?.startsWith('docker/login-action@')
+		);
 		expect(login?.if).toBe('inputs.dry_run != true');
 		expect(login?.with).toEqual({
 			username: '${{ secrets.DOCKERHUB_USERNAME }}',
 			password: '${{ secrets.DOCKERHUB_TOKEN }}'
 		});
-		const cosign = workflow.jobs.images.steps.find((step) => step.uses?.startsWith('sigstore/cosign-installer@'));
+		const cosign = workflow.jobs.images.steps.find((step) =>
+			step.uses?.startsWith('sigstore/cosign-installer@')
+		);
 		expect(cosign?.if).toBe('inputs.dry_run != true');
 		expect(cosign?.with?.['cosign-release']).toBe('v3.1.3');
 		expect(

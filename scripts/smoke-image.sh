@@ -188,10 +188,10 @@ assistant)
 	docker exec "$container" claude plugin validate /akm-marketplace/claude --strict
 	docker exec "$container" claude plugin validate /fhold-plugins/fhold --strict
 	docker exec "$container" claude plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled)) throw Error("Claude built-in plugins not loaded");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.claude-plugin/plugin.json").json()).version; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Claude built-in plugin versions not loaded");'
 	docker exec "$container" claude plugin details akm
 	docker exec "$container" codex plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled)) throw Error("Codex built-in plugins not installed/enabled");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
 	# An image upgrade refreshes only untouched native installer output. A native
@@ -244,6 +244,23 @@ assistant)
 			[[ "$(docker exec "$container" fhold-remote "$tool" status)" == *not-started* ]]
 		done
 	fi
+	# An older operator-owned AKM catalog may not include the optional skills
+	# source. It must remain byte-for-byte intact and must not break startup.
+	node --input-type=module - "$root/akm.json" <<'CONFIG'
+import {readFileSync, writeFileSync} from 'node:fs';
+const file = process.argv[2];
+const config = JSON.parse(readFileSync(file, 'utf8'));
+delete config.bundles.fhold;
+writeFileSync(file, JSON.stringify(config));
+CONFIG
+	before=$(sha256sum "$root/akm.json")
+	docker restart "$container" >/dev/null
+	wait_for_health
+	test "$(sha256sum "$root/akm.json")" = "$before"
+	docker exec "$container" curl -sf -u 'user:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/config >/dev/null
+	docker exec "$container" opencode debug skill | docker exec -i "$container" bun -e \
+		'const skills = await Bun.stdin.json(); if (!skills.some(skill => skill.name === "fhold-admin")) throw Error("Native built-ins require the optional AKM catalog source");'
+	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"
