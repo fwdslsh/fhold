@@ -4,10 +4,12 @@ A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Current source candidate: `0.1.2610040547-alpha.3` (unreleased).
+Current source candidate: `0.1.2610040637-alpha.3` (unreleased).
 Linux is supported through local source builds. Public binary downloads and
 container image publishing are not configured; the CLI is a standalone executable,
 not an npm bootstrap package. Windows and macOS packaging is deferred.
+Release qualification is currently blocked by [upstream npm dependency
+advisories](docs/operations/release.md#runtime-release-blockers).
 The latest qualified Linux artifacts and all three images are
 `0.1.2610040221-alpha.2`. The [qualification record](docs/operations/alpha-qualification.md)
 separates that evidence from changed source and documents ARM64 build-only limits.

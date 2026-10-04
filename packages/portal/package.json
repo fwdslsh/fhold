@@ -1,6 +1,6 @@
 {
   "name": "@fhold/portal",
-  "version": "0.1.2610040547-alpha.3",
+  "version": "0.1.2610040637-alpha.3",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/client": "2.3.0",
     "@slack/bolt": "5.1.0",
     "discord.js": "14.27.0"
   },

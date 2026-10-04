@@ -38,9 +38,12 @@ a PTY; Codex's pinned foreground app-server uses its private native Unix control
 socket for standard pairing, without a runtime-installed/self-updating daemon.
 Temporary control sockets are not recovery data. Running, account sign-in and
 pairing remain separate from a verified native-client tool request.
-Assistant includes npm/npx from the same pinned upstream Node image so ordinary
-stdio MCP clients can launch their declared commands. No desktop keyring service
-or vendor-specific client dependency is added to work around a headless client bug.
+Assistant includes pinned, upstream npm/npx compatible with its pinned Node runtime,
+installed through npm's standard global upgrade at image build time so ordinary
+stdio MCP clients can launch their declared commands. Bundled dependency advisories
+remain subject to the image scan gate; do not patch npm's internal dependency tree.
+No desktop keyring service or vendor-specific client dependency is added to work
+around a headless client bug.
 Image-baked native CLIs have standard `/usr/local/bin` launchers, including for
 OpenCode login shells that replace the image's `PATH`; no user exports are needed.
 
@@ -214,7 +217,7 @@ not an empty timestamp-release migration registry.
 
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
 host. Linux is supported through local source builds. The current source
-candidate is `0.1.2610040547-alpha.3` (unreleased). The latest qualified Linux
+candidate is `0.1.2610040637-alpha.3` (unreleased). The latest qualified Linux
 artifacts and all three images are `0.1.2610040221-alpha.2`; that evidence does not
 qualify changed source. Every candidate needs its own artifact and runtime gates.
 Versions use real UTC `X.Y.yyMMddHHmm` timestamps and explicit alpha/beta/rc

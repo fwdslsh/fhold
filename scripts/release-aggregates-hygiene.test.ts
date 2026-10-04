@@ -115,6 +115,32 @@ describe('release workflows', () => {
 		}
 	});
 
+	test('workflows use the reviewed stable Node 24 and composite action releases', () => {
+		const actions = new Set<string>();
+		for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith('.yml'))) {
+			const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, file), 'utf8')) as {
+				jobs: Record<string, { uses?: string; steps?: Array<{ uses?: string }> }>;
+			};
+			for (const job of Object.values(workflow.jobs)) {
+				for (const action of [job.uses, ...(job.steps ?? []).map((step) => step.uses)]) {
+					if (action && !action.startsWith('./')) actions.add(action);
+				}
+			}
+		}
+		expect([...actions].sort()).toEqual([
+			'actions/checkout@v7.0.1',
+			'actions/download-artifact@v8.0.1',
+			'actions/upload-artifact@v7.0.1',
+			'aquasecurity/trivy-action@v0.36.0',
+			'docker/build-push-action@v7.4.0',
+			'docker/login-action@v4.6.0',
+			'docker/setup-buildx-action@v4.4.1',
+			'docker/setup-qemu-action@v4.4.0',
+			'oven-sh/setup-bun@v2.2.0',
+			'sigstore/cosign-installer@v4.1.2'
+		]);
+	});
+
 	test('every runtime image is built, scanned, and smoked on both supported architectures', () => {
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: {
@@ -154,11 +180,11 @@ describe('release workflows', () => {
 			platform: 'linux/amd64',
 			runner: 'ubuntu-latest'
 		});
-		expect(images.steps.some((step) => step.uses === 'docker/setup-qemu-action@v3')).toBe(false);
+		expect(images.steps.some((step) => step.uses?.startsWith('docker/setup-qemu-action@'))).toBe(false);
 		expect(
 			images.steps.some((step) => step.name === 'Assert native architecture for runtime tests')
 		).toBe(true);
-		const build = images.steps.find((step) => step.uses === 'docker/build-push-action@v6');
+		const build = images.steps.find((step) => step.uses?.startsWith('docker/build-push-action@'));
 		expect(build?.with?.platforms).toBe('${{ matrix.platform }}');
 		expect(
 			images.steps.filter((step) => step.uses?.startsWith('aquasecurity/trivy-action@')).length
@@ -166,6 +192,7 @@ describe('release workflows', () => {
 		const scans = images.steps.filter((step) =>
 			step.uses?.startsWith('aquasecurity/trivy-action@')
 		);
+		expect(scans.every((step) => step.with?.version === 'v0.75.0')).toBe(true);
 		expect(
 			scans.some(
 				(step) =>
@@ -187,6 +214,17 @@ describe('release workflows', () => {
 });
 
 describe('image tool pins', () => {
+	test('Assistant upgrades pinned upstream npm at build time and smokes both launchers', () => {
+		const dockerfile = readFileSync(join(ROOT, 'containers/assistant/Dockerfile'), 'utf8');
+		const smoke = readFileSync(join(ROOT, 'scripts/smoke-image.sh'), 'utf8');
+		expect(dockerfile).toMatch(/^ARG NPM_VERSION=\d+\.\d+\.\d+$/m);
+		expect(dockerfile).toContain('npm install --global "npm@${NPM_VERSION}"');
+		expect(dockerfile).toContain('test "$(npm --version)" = "${NPM_VERSION}"');
+		expect(dockerfile).toContain('COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm');
+		expect(smoke).toContain('test "$(docker exec "$container" npm --version)" = "$expected_npm"');
+		expect(smoke).toContain('test "$(docker exec "$container" npx --version)" = "$expected_npm"');
+	});
+
 	// core-principles.md: the assistant and Guardian images install OpenCode
 	// from their own tools manifests, and those two pins must stay in lockstep.
 	test('assistant and guardian opencode-ai pins match', () => {
@@ -344,12 +382,15 @@ describe('release completeness gate', () => {
 		expect(validate?.run).toContain(
 			"process.env.DRY_RUN !== 'true' && process.env.FH_PUBLICATION_CONFIGURED !== 'true'"
 		);
-		const login = workflow.jobs.images.steps.find((step) => step.uses === 'docker/login-action@v3');
+		const login = workflow.jobs.images.steps.find((step) => step.uses?.startsWith('docker/login-action@'));
 		expect(login?.if).toBe('inputs.dry_run != true');
 		expect(login?.with).toEqual({
 			username: '${{ secrets.DOCKERHUB_USERNAME }}',
 			password: '${{ secrets.DOCKERHUB_TOKEN }}'
 		});
+		const cosign = workflow.jobs.images.steps.find((step) => step.uses?.startsWith('sigstore/cosign-installer@'));
+		expect(cosign?.if).toBe('inputs.dry_run != true');
+		expect(cosign?.with?.['cosign-release']).toBe('v3.1.3');
 		expect(
 			workflow.jobs.release.steps.find(
 				(step) => step.name === 'Publish the verified GitHub release'
