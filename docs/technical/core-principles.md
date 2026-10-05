@@ -188,6 +188,21 @@ Unfinished tool calls block by default. Explicit reviewed archival may convert
 them to native terminal interrupted errors without replaying them; raw exports
 remain unchanged and private receipts identify every conversion.
 
+An explicit whole-instance export/import scope preserves the entire stopped home,
+including native sessions/databases (and WAL/SHM), account credentials, permissions,
+plugins, active tasks and deployment identity. Both operations verify stopped Docker
+writers under the ordinary lifecycle lock; other writers must also be stopped.
+The same manifest envelope records all files, directories and unfollowed links,
+with hashes and explicit process-coordination omissions. Full import only accepts
+an empty destination, validates the complete inventory and preserves the original
+home/export. It reconciles generated host paths/owner metadata without seeding,
+changing native authority or upgrading images. Containers remain stopped; partial
+imports block startup and retain private evidence. CLI requires explicit stopped
+confirmation; Admin additionally binds apply to preview and explains sensitive
+data, active schedules, downtime, external sources and single-instance identity.
+External drives/checkpoint namespaces are not rolled back. This is not an active
+clone, cross-version converter or a substitute for ephemeral checkpoint ownership.
+
 Opt-in Assistant-only ephemeral recovery is a separate, sensitive same-instance
 format, not portable import. One image-baked Bun worker restores before default
 seeding or any AKM/native writer, takes bounded SQLite-native snapshots on its

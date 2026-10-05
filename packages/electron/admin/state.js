@@ -18,6 +18,7 @@ export function createAdminState() {
 		noticeTimer: undefined,
 		restorePreviewSignature: null,
 		restorePreviewDigest: null,
+		instanceRestorePreview: null,
 		lastReadiness: null,
 		renderingSnapshot: false,
 		dirtyForms: new Set()

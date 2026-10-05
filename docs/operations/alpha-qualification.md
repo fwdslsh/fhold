@@ -13,6 +13,39 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
+## Unreleased: entire-instance import/export
+
+The source adds an explicit stopped, same-instance scope alongside portable
+content. It does not change the published alpha.6 artifacts or automatic
+Assistant checkpoint format. See [the user guide](../managing-fhold.md#entire-stopped-instance)
+for coverage, confirmation, empty-target and external-storage requirements.
+
+Linux x64 verification on October 5, 2026:
+
+- All 589 source tests passed with loopback socket and native-history checks
+  enabled, with no failures or skips. Type checks, lint, CLI compilation and
+  Admin bundling passed. All Compose profiles validated, including the restored
+  home's secret and mount boundaries.
+- Full-scope fixtures preserved all instance trees, extra root files, native
+  SQLite/WAL conversations, private keys, image pins, dependency links and
+  ordinary permission metadata. Changed/incomplete inventories, unsafe paths,
+  occupied destinations and running/paused/restarting writers were refused.
+  Interrupted imports remained blocked from startup; portable defaults were
+  unchanged.
+- The actual Electron/Docker walkthrough refused a live export, preserved
+  cancellation and a read-only preview, exported after a normal confirmed stop,
+  and imported into an empty folder without installing first. Native confirmation
+  responses were simulated; renderer, IPC, shared library, Docker and the native
+  database were real. Identity and keys remained unchanged, no containers started
+  during import, and the original OpenCode session was retrieved through the
+  authenticated API after an explicit start. Window dimensions stayed unchanged.
+- Isolated homes/projects were used; existing user instances were not stopped or
+  changed. A management fixture bypassed provider readiness for this UI journey:
+  the free provider rejected the setup probe. These checks do not qualify a fresh
+  provider sign-in, vendor remote reconnect, external storage or ARM64 execution.
+
+This is source/build evidence, not a new published release qualification.
+
 ## Alpha.6 changes and local evidence
 
 `0.1.2610050714-alpha.6` adds managed recovery configuration and stopped-writer

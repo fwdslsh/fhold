@@ -96,7 +96,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	provider:
 		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
 	backup:
-		'fhold backup --to <empty-directory> [--include-provider-auth] [--include-user-env] [--include-portal-maps] [--include-oauth]',
+		'fhold backup --to <empty-directory> [--full --confirm-stopped | --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	recovery: 'fhold recovery configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
 	history:
 		'fhold history export --from <source-home> --image <source-assistant-image> --to <new-private-archive> [--runtime <resolved-opencode-data-directory>] | restore --from <archive> --directory-map <file> [--archive-interrupted] [--apply --same-instance]',
@@ -105,7 +105,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	remote:
 		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
 	restore:
-		'fhold restore --from <source-home> [--dry-run|--apply] [--acknowledge-unrestored] [--include-provider-auth] [--include-user-env] [--include-portal-maps] [--include-oauth]',
+		'fhold restore --from <export-directory> [--dry-run|--apply] [--full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
 	update: 'fhold update [--no-start] [--pull|--no-pull] (local fhold images never pull)',
 	guardian: 'fhold guardian enable | disable | configure [--bind <ip>] [--port <port>]',

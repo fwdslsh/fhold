@@ -171,6 +171,38 @@ describe('restore plan output', () => {
 });
 
 describe('restore command safety', () => {
+	it('exports and restores a whole stopped instance through ordinary --name CLI selection', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-full-cli-test-'));
+		const originalHome = process.env.FH_HOME;
+		const originalDocker = process.env.FH_DOCKER_BIN;
+		const originalRepo = process.env.FH_REPO_ROOT;
+		try {
+			const home = join(root, 'source');
+			const restored = join(root, 'restored');
+			const archive = join(root, 'export');
+			process.env.FH_HOME = home;
+			process.env.FH_REPO_ROOT = join(import.meta.dir, '../../../..');
+			process.env.FH_DOCKER_BIN = join(root, 'docker');
+			writeFileSync(process.env.FH_DOCKER_BIN, `#!${process.execPath}\n`, { mode: 0o700 });
+			await bootstrapInstall({ start: false });
+			writeFileSync(join(home, 'data/assistant/native-history'), 'native conversation and accounts');
+			await expect(main(['backup', '--to', archive, '--full'])).rejects.toThrow('confirm-stopped');
+			await main(['--name', home, 'backup', '--to', archive, '--full', '--confirm-stopped']);
+			expect(output()).toContain('sign-ins');
+			expect(output()).toContain('Never run the original and restored copies together');
+			await main(['--name', restored, 'restore', '--from', archive, '--full', '--dry-run']);
+			expect(existsSync(restored)).toBe(false);
+			await expect(main(['--name', restored, 'restore', '--from', archive, '--full', '--apply'])).rejects.toThrow('confirm-stopped');
+			await main(['--name', restored, 'restore', '--from', archive, '--full', '--apply', '--confirm-stopped']);
+			expect(readFileSync(join(restored, 'data/assistant/native-history'), 'utf8')).toBe('native conversation and accounts');
+			expect(output()).toContain('Containers remain stopped');
+		} finally {
+			if (originalHome === undefined) delete process.env.FH_HOME; else process.env.FH_HOME = originalHome;
+			if (originalDocker === undefined) delete process.env.FH_DOCKER_BIN; else process.env.FH_DOCKER_BIN = originalDocker;
+			if (originalRepo === undefined) delete process.env.FH_REPO_ROOT; else process.env.FH_REPO_ROOT = originalRepo;
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
 	it('keeps previews read-only and failed apply atomic for destination conflicts without exposing secrets', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-import-cli-test-'));
 		const originalHome = process.env.FH_HOME;

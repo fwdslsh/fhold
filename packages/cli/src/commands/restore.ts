@@ -5,6 +5,9 @@ import {
 	classifyInstall,
 	createFholdState,
 	planRestore,
+	planInstanceRestore,
+	restoreInstance,
+	INSTANCE_BACKUP_NOTICE,
 	type RestoreOptions,
 	type RestorePlan
 } from '@fhold/lib';
@@ -113,10 +116,12 @@ export function printRestorePlan(plan: RestorePlan, json: boolean): void {
 export default defineCommand({
 	meta: {
 		name: 'restore',
-		description: 'Safely copy selected data from a fhold portable backup into a newly initialized fhold installation'
+		description: 'Import portable content into a fresh install, or an entire stopped instance into an empty folder'
 	},
 	args: {
-		from: { type: 'string', required: true, description: 'fhold portable backup (read only)' },
+		from: { type: 'string', required: true, description: 'fhold export directory (read only)' },
+		full: { type: 'boolean', description: 'restore an entire stopped instance into an empty folder, including sessions and credentials' },
+		'confirm-stopped': { type: 'boolean', description: 'confirm private runtime authority and stopped writers before full import; no containers are started' },
 		apply: { type: 'boolean', description: 'apply a freshly validated restore plan' },
 		'dry-run': { type: 'boolean', description: 'display the plan without writing (the default)' },
 		json: { type: 'boolean', description: 'print the plan as JSON' },
@@ -142,14 +147,30 @@ export default defineCommand({
 				'acknowledge separately preserved or deferred data; does not restore native history'
 		}
 	},
-	run({ args }) {
+	async run({ args }) {
 		const state = createFholdState();
+		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');
+		if (args.full) {
+			if (['include-provider-auth', 'include-user-env', 'include-portal-maps', 'include-oauth', 'acknowledge-unrestored'].some((name) => args[name as keyof typeof args]))
+				throw new Error('--full includes all runtime data; do not combine portable restore options.');
+			const options = { sourceHome: String(args.from), destinationHome: state.homeDir, confirmedStopped: args['confirm-stopped'] === true };
+			const result = args.apply ? await restoreInstance(options) : await planInstanceRestore(options);
+			if (args.json) console.log(JSON.stringify(result, null, 2));
+			else {
+				console.log(INSTANCE_BACKUP_NOTICE);
+				console.log(`Full-instance ${args.apply ? 'import complete' : 'preview'}: ${displayText(result.projectName)} -> ${displayText(result.destinationHome)}`);
+				console.log(`${result.copyCount} entries, ${result.totalBytes} bytes. Native sessions and account state included.`);
+				for (const warning of result.warnings) console.warn(`warning: ${displayText(warning)}`);
+				console.log(args.apply ? 'Containers remain stopped. Review saved settings, then explicitly run `fhold start` for this folder.' : 'Use --apply --confirm-stopped to import into this empty folder. Do not run `install` first.');
+			}
+			return;
+		}
+		if (args['confirm-stopped']) throw new Error('--confirm-stopped applies only to --full.');
 		if (classifyInstall(state.homeDir) !== 'setup_incomplete') {
 			throw new Error(
 				'Restore requires a fresh, not-yet-completed fhold installation. Select an empty or new folder with --name and run `fhold install --no-start` first.'
 			);
 		}
-		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');
 		const options = optionsFromArgs(args as Record<string, unknown>);
 		if (!args.apply) {
 			printRestorePlan(planRestore(options), args.json === true);

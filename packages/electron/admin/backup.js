@@ -1,4 +1,5 @@
 import { loadProviders } from './providers.js';
+import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { byId, message, notice, operation, setBadge } from './ui.js';
 
@@ -88,7 +89,67 @@ export async function chooseDirectory(purpose, inputId) {
 	}
 }
 
+export function updateBackupScope() {
+	const full = byId('backup-scope').value === 'instance';
+	byId('backup-sensitive-options').hidden = full;
+	byId('backup-full-help').hidden = !full;
+	byId('export-backup').textContent = full ? 'Export entire instance' : 'Export portable content';
+}
+
+export function invalidateInstanceRestorePreview() {
+	state.instanceRestorePreview = null;
+	byId('apply-instance-restore').disabled = true;
+}
+
+export function renderInstanceRestorePlan(result) {
+	byId('instance-restore-result').value = JSON.stringify(result, null, 2);
+	const summary = byId('instance-restore-summary');
+	const title = document.createElement('strong');
+	title.textContent = `Restore ${result.projectName}: ${result.copyCount} entries, ${result.totalBytes} bytes.`;
+	const detail = document.createElement('span');
+	detail.textContent = `Destination: ${result.destinationHome}. Conversations, sign-ins, permissions and active task settings are included. External drives and checkpoint storage are not restored. Containers stay stopped.`;
+	summary.className = 'inline-status neutral';
+	summary.replaceChildren(title, detail);
+}
+
+export function bindInstanceRestoreEvents() {
+	byId('instance-restore-panel').addEventListener('toggle', () => {
+		const importing = byId('instance-restore-panel').open;
+		byId('install-form').hidden = importing;
+		if (!importing) invalidateInstanceRestorePreview();
+	});
+	byId('choose-instance-restore-source').addEventListener('click', () => void chooseDirectory('restore', 'instance-restore-source'));
+	for (const event of ['input', 'change']) byId('instance-restore-source').addEventListener(event, invalidateInstanceRestorePreview);
+	byId('instance-restore-form').addEventListener('submit', (event) => event.preventDefault());
+	byId('preview-instance-restore').addEventListener('click', async () => {
+		invalidateInstanceRestorePreview();
+		const sourceHome = byId('instance-restore-source').value.trim();
+		const result = await operation('Previewing entire instance', () => state.api.restoreInstance({ sourceHome }), 'Full-instance preview is ready. Review before importing.');
+		if (!result) return;
+		renderInstanceRestorePlan(result);
+		state.instanceRestorePreview = { sourceHome, digest: result.digest };
+		byId('apply-instance-restore').disabled = false;
+	});
+	byId('apply-instance-restore').addEventListener('click', async () => {
+		const preview = state.instanceRestorePreview;
+		const sourceHome = byId('instance-restore-source').value.trim();
+		if (!preview || preview.sourceHome !== sourceHome) {
+			invalidateInstanceRestorePreview();
+			notice('Preview this full-instance export again before importing.', 'error', { persist: true });
+			return;
+		}
+		if (!(await state.api.confirmRestart('instance-import'))) return;
+		const result = await operation('Importing entire instance', () => state.api.restoreInstance({ sourceHome, apply: true, previewDigest: preview.digest, confirmed: true }), 'Entire instance imported. Containers remain stopped; review settings before starting.');
+		if (!result) return;
+		invalidateInstanceRestorePreview();
+		await refresh(false);
+	});
+}
+
 export function bindBackupEvents() {
+	updateBackupScope();
+	bindInstanceRestoreEvents();
+	byId('backup-scope').addEventListener('change', updateBackupScope);
 	byId('choose-backup-destination').addEventListener(
 		'click',
 		() => void chooseDirectory('backup', 'backup-destination')
@@ -102,17 +163,21 @@ export function bindBackupEvents() {
 	byId('backup-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
 		const destination = byId('backup-destination').value.trim();
+		const full = byId('backup-scope').value === 'instance';
+		if (full && !(await state.api.confirmRestart('instance-export'))) return;
 		const result = await operation(
-			'Exporting portable content',
+			full ? 'Exporting entire instance' : 'Exporting portable content',
 			() =>
 				state.api.backup({
 					destination,
+					...(full ? { full: true, confirmed: true } : {
 					includeProviderAuth: byId('backup-auth').checked,
 					includeUserEnv: byId('backup-env').checked,
 					includePortalMaps: byId('backup-maps').checked,
 					includeOAuth: byId('backup-maps').checked
+					})
 				}),
-			'Export created. Native conversation history is not included.'
+			full ? 'Entire instance exported, including conversations. Containers remain stopped.' : 'Export created. Native conversation history is not included.'
 		);
 		if (!result) return;
 		byId('backup-result').value = JSON.stringify(result, null, 2);
@@ -120,9 +185,11 @@ export function bindBackupEvents() {
 		byId('backup-summary').hidden = false;
 		byId('backup-summary').replaceChildren();
 		const title = document.createElement('strong');
-		title.textContent = `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} exported.`;
+		title.textContent = full ? `${result.files.length} full-instance items exported.` : `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} exported.`;
 		const detail = document.createElement('span');
-		detail.textContent = `Saved to ${destination}. Native history, runtime artifacts and external sources are not included.${result.warnings.length ? ` ${result.warnings.length} warnings need review.` : ''}`;
+		detail.textContent = full
+			? `Saved privately to ${destination}. Conversations, sign-ins, keys and active task settings included. External drives and images need separate protection. Containers remain stopped.${result.warnings.length ? ` ${result.warnings.length} warnings need review.` : ''}`
+			: `Saved to ${destination}. Native history, runtime artifacts and external sources are not included.${result.warnings.length ? ` ${result.warnings.length} warnings need review.` : ''}`;
 		byId('backup-summary').append(title, detail);
 	});
 

@@ -27,9 +27,22 @@ System has one view with four collapsed sections, in order: **Installation
 details**, **Recent logs**, **Import / export**, **Ephemeral container support**.
 Static and rendered checks verify this order, the names, matching setup import
 labels, keyboard traversal and navigation without duplicate backup/diagnostic
-view containers. Import/export still uses the existing portable format and
-shared backup/restore operations; ephemeral support still uses the native
-same-instance recovery engine. The rename does not expand either feature's scope.
+view containers. Import/export distinguishes portable content from the explicit
+whole-instance stopped snapshot; ephemeral support uses the separate native
+same-instance recovery engine.
+
+The full-instance journey creates a native OpenCode session, refuses export
+while containers are live, verifies default-cancel native dialogs, stops through
+the normal Admin action and exports the entire home. It opens an empty folder
+without installing first, previews without creating the destination, cancels
+without writes, then imports while preserving exact stack intent and account
+keys. No containers start during import. After an explicit confirmed Start,
+the original session must be visible through the authenticated native API.
+The restored home has the same project identity; the original is kept and never
+restarted concurrently. Window size remains unchanged. The private directory
+export, restored home and screenshots are retained with test evidence. Native
+vendor reconnect is a separate account/client qualification; this test does not
+claim that a vendor will accept an expired copied token.
 
 The save/apply journey postpones a settings restart, checks that the actual
 container ID and runtime environment remain unchanged, reopens the instance,

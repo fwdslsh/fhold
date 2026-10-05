@@ -4,6 +4,13 @@ Reviewed 2026-10-01. This is a dated source review and focused disposable-fixtur
 
 ## TL;DR
 
+Current extension: CLI/Admin also support a separately selected **full-instance**
+scope. It requires stopped writers and restores the entire home into an empty
+folder, including native history, sign-ins and runtime authority. This dated
+review describes **portable content only**, not that stopped snapshot.
+See [entire stopped instance](../managing-fhold.md#entire-stopped-instance) for
+the full format, confirmations, omissions and same-instance constraints.
+
 Follow-up design review, 2026-10-04: keep portable backup and same-instance
 [runtime recovery](../assistant-recovery.md#choose-the-right-operation) separate.
 Their different credential/authority, task-review, path namespace and native

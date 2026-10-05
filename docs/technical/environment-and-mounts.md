@@ -15,6 +15,12 @@ existing home; select its original path explicitly to continue managing it.
 `~/fhold` can contain sibling `backups/`, `docs/` or other local directories;
 only the selected instance directory is managed or backed up.
 
+Manual full-instance export/import includes all six trees below (and extra
+home-owned files), while containers are stopped. It preserves native sessions,
+credentials and saved identity. Portable content deliberately omits runtime
+authority. Neither captures sources outside this folder or rolls back external
+checkpoint storage; see [import/export](../managing-fhold.md#importexport).
+
 The following paths are relative to that instance's home, not `~/fhold`:
 
 | Host path | Owner | Purpose |

@@ -166,6 +166,12 @@ export {
 	type BackupOptions
 } from './control-plane/backup.js';
 export {
+	exportInstance, planInstanceRestore, restoreInstance,
+	INSTANCE_BACKUP_NOTICE, INSTANCE_BACKUP_EXCLUSIONS,
+	type InstanceBackupManifest, type InstanceBackupEntry,
+	type InstanceBackupOptions, type InstanceRestoreOptions, type InstanceRestorePlan
+} from './control-plane/instance-backup.js';
+export {
 	exportHistory,
 	restoreHistory,
 	validateHistoryDirectories,

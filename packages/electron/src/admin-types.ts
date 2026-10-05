@@ -1,6 +1,8 @@
 import type {
 	AssistantReadiness,
 	BackupManifest,
+	InstanceBackupManifest,
+	InstanceRestorePlan,
 	ConnectionDetails,
 	RestorePlan,
 	ProviderOAuthAuthorization,
@@ -39,7 +41,7 @@ export type AdminSnapshot = {
 };
 
 export type StackAction = 'start' | 'restart' | 'stop';
-export type InterruptingAction = StackAction | 'remote-setup' | 'recovery-init' | 'recovery-restore';
+export type InterruptingAction = StackAction | 'remote-setup' | 'recovery-init' | 'recovery-restore' | 'instance-export' | 'instance-import';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminWelcome = {
@@ -112,11 +114,19 @@ export type AdminApi = {
 	}): Promise<AdminSnapshot>;
 	backup(value: {
 		destination: string;
+		full?: boolean;
+		confirmed?: boolean;
 		includeProviderAuth?: boolean;
 		includeUserEnv?: boolean;
 		includePortalMaps?: boolean;
 		includeOAuth?: boolean;
-	}): Promise<BackupManifest>;
+	}): Promise<BackupManifest | InstanceBackupManifest>;
+	restoreInstance(value: {
+		sourceHome: string;
+		apply?: boolean;
+		previewDigest?: string;
+		confirmed?: boolean;
+	}): Promise<InstanceRestorePlan>;
 	recovery(value: { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string } | { action: 'credential'; connectionString: string } | { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }): Promise<AdminSnapshot | Record<string, unknown> | string>;
 	restoreData(value: {
 		sourceHome: string;
@@ -158,6 +168,7 @@ export const ADMIN_CHANNELS = {
 	mapPortalUser: 'admin:map-portal-user',
 	portalToken: 'admin:portal-token',
 	backup: 'admin:backup',
+	restoreInstance: 'admin:restore-instance',
 	recovery: 'admin:recovery',
 	restoreData: 'admin:restore'
 } as const;

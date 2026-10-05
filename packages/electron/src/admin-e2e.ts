@@ -430,6 +430,7 @@ async function run(): Promise<Record<string, unknown>> {
 	window.setTitle('fhold Admin — automated UI test');
 	window.on('page-title-updated', (event) => event.preventDefault());
 	const otherHome = join(outputDir, 'other-empty-instance');
+	const fullRestoredHome = join(outputDir, 'full-restored-instance');
 	const originalMessageBox = dialog.showMessageBox;
 	const confirmations: number[] = [];
 	const prompts: string[] = [];
@@ -1834,6 +1835,80 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(restoredCustomState.ok && restoredCustomState.stdout.includes('custom state restored'), 'Custom files/SQLite did not survive fresh containers.');
 		assert(window.getSize().join('x') === recoveryWindowSize, 'Recovery controls resized the Admin window.');
 		progress('real managed recovery: deferred save, stop/cancel/init/inspect/start/checkpoint/offline restore and cold custom-file/SQLite resume passed');
+
+		// Exercise full import/export through the real renderer and IPC. Only
+		// human dialog choices are simulated, never Docker or native databases.
+		const instanceAuth = Buffer.from(`user:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`).toString('base64');
+		const nativeSession = await fetch(`http://127.0.0.1:${assistantPort}/session`, {
+			method: 'POST', headers: { authorization: `Basic ${instanceAuth}`, 'content-type': 'application/json' },
+			body: JSON.stringify({ title: 'Full-instance preservation check' }), signal: AbortSignal.timeout(10_000)
+		});
+		assert(nativeSession.ok, 'Could not create the native preservation session.');
+		const savedSession = await nativeSession.json() as { id: string; title: string };
+		const fullExport = join(outputDir, 'full-instance-export');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('[data-view=system]').click();
+			document.querySelector('#import-export').open=true;
+			document.querySelector('#backup-scope').value='instance';
+			document.querySelector('#backup-scope').dispatchEvent(new Event('change'));
+			document.querySelector('#backup-destination').value=${JSON.stringify(fullExport)};
+		})()`);
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('all containers stopped')", 'full export rejects live writers', 30_000, true);
+		assert(!existsSync(fullExport), 'Live export wrote a destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#stop-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelectorAll('#services .service').length===0", 'stopped source before full export');
+		const sourceIntent = readFileSync(join(homeDir, 'state/stack.json'));
+		const sourceKey = readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'));
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click(); document.querySelector('#import-export').open=true");
+		confirmations.push(0);
+		const cancelledExportPrompt = prompts.length + 1;
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForPrompt(cancelledExportPrompt);
+		assert(!existsSync(fullExport), 'Cancelled full export wrote a destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#backup-summary').textContent.includes('full-instance items exported')", 'full stopped export');
+		assert(JSON.parse(readFileSync(join(fullExport, 'fhold-backup.json'), 'utf8')).scope === 'instance', 'Full export did not publish its manifest.');
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').scrollIntoView({block:'start'})");
+		const fullExportScreenshot = await capture(window, outputDir, '08-full-instance-export.png', true);
+		await window.webContents.executeJavaScript(`(async () => {
+			await window.fholdAdmin.closeInstance();
+			await window.fholdAdmin.prepareNewInstance({kind:'local',homeDir:${JSON.stringify(fullRestoredHome)}});
+			location.reload();
+		})()`);
+		await waitForRenderer(window, "document.body.dataset.phase==='not_installed'", 'full import uses an empty folder, before installation');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('#instance-restore-panel').open=true;
+			document.querySelector('#instance-restore-source').value=${JSON.stringify(fullExport)};
+			document.querySelector('#instance-restore-source').dispatchEvent(new Event('input'));
+			document.querySelector('#preview-instance-restore').click();
+		})()`);
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#apply-instance-restore').disabled", 'full import preview');
+		assert(!existsSync(fullRestoredHome), 'Full import preview seeded the target.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#install-form').hidden"), 'Fresh installation remained available while full import was selected.');
+		await window.webContents.executeJavaScript("document.querySelector('#instance-restore-panel').scrollIntoView({block:'start'})");
+		const fullImportScreenshot = await capture(window, outputDir, '08a-full-instance-import.png', true);
+		confirmations.push(0);
+		const cancelledImportPrompt = prompts.length + 1;
+		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
+		await waitForPrompt(cancelledImportPrompt);
+		assert(!existsSync(fullRestoredHome), 'Cancelled full import changed its destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
+		await waitForRenderer(window, "document.body.dataset.phase==='ready' && document.body.dataset.busy!=='true'", 'full import preserves the completed instance, without setup or startup');
+		assert(readFileSync(join(fullRestoredHome, 'state/stack.json')).equals(sourceIntent), 'Full import changed instance intent.');
+		assert(readFileSync(join(fullRestoredHome, 'state/secrets/fhold_opencode_password')).equals(sourceKey), 'Full import replaced the native account key.');
+		assert((await adminSnapshot()).services.length === 0, 'Full import started a service.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#start-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'explicit start of the restored instance');
+		const restoredSession = await fetch(`http://127.0.0.1:${assistantPort}/session/${savedSession.id}`, { headers: { authorization: `Basic ${instanceAuth}` }, signal: AbortSignal.timeout(10_000) });
+		assert(restoredSession.ok && (await restoredSession.json() as { title: string }).title === savedSession.title, 'Native session was not visible after full import/start.');
+		assert(window.getSize().join('x') === recoveryWindowSize, 'Full import/export resized the Admin window.');
+		progress('full stopped instance: live-writer refusal, cancel/confirm, export, empty-folder preview/import, unchanged keys/intent and native session after explicit startup passed');
 		assert(confirmations.length === 0, 'An expected interruption prompt was not shown.');
 		succeeded = true;
 		return {
@@ -1851,6 +1926,7 @@ async function run(): Promise<Record<string, unknown>> {
 			managementUiFixtureUsed: !provider,
 			startupRecoveryVerified: true,
 			restorePreservationVerified: true,
+			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
 			instanceWelcomeVerified: {
 				defaultOneClick: true,
 				folderSelectionAndCancellation: true,
@@ -1914,6 +1990,8 @@ async function run(): Promise<Record<string, unknown>> {
 				toolCount: tools.length
 			},
 			screenshots: [
+				fullExportScreenshot,
+				fullImportScreenshot,
 				welcomeScreenshot,
 				narrowWelcomeScreenshot,
 				newInstanceScreenshot,
@@ -1963,6 +2041,9 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		if (existsSync(join(otherHome, 'system', 'stack', 'stack.compose.yml'))) {
 			await deactivateComposeCommand(createFholdState(otherHome));
+		}
+		if (existsSync(join(fullRestoredHome, 'system/stack/stack.compose.yml'))) {
+			await deactivateComposeCommand(createFholdState(fullRestoredHome));
 		}
 		if (!keepRunning || !succeeded) {
 			try {

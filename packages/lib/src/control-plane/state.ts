@@ -39,6 +39,8 @@ export function readStackEnv(homeDir: string): Record<string, string> {
 export function classifyInstall(homeDir = resolveFholdHome()): InstallState {
 	if (!existsSync(homeDir)) return 'not_installed';
 	if (!lstatSync(homeDir).isDirectory()) return 'incompatible_home';
+	// A failed/interrupted whole-instance import must never admit native writers.
+	if (lstatSync(join(homeDir, 'data/.instance-restore.json'), { throwIfNoEntry: false })) return 'incompatible_home';
 	const hasManagedStack = existsSync(managedComposeFile(homeDir));
 	if (!hasManagedStack)
 		return readdirSync(homeDir).length === 0 ? 'not_installed' : 'incompatible_home';

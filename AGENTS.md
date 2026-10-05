@@ -56,14 +56,21 @@ Existing homes are never relocated automatically. Reserve `~/fhold` for instance
 and other local directories such as backups/docs. Product-owned variables use `FH_*` only.
 `state/stack.json` owns intent and must identify `product: "fhold"`.
 Other products' or incompatible homes must be refused before writes.
-Never adopt an existing installation or copy its runtime authority.
+Never adopt an unrelated installation or implicitly copy its runtime authority.
+Explicit full-instance import is a same-instance continuation from a verified
+stopped export into an empty folder, retaining the named identity and native state.
 
 Managed `system/` files use an explicit allowlist. Operator `config/` is seeded
 only when missing. Knowledge/workspace remain user-owned. State/data are private
 runtime input, not portable user content. Status reads must not mutate any of them.
 Backup restore requires fhold's own verified manifest. Native history recovery
 is separate, offline and explicitly mapped. Restored task definitions remain
-inactive until reviewed for portable/manual restore. Opt-in same-instance runtime
+inactive until reviewed for portable-content restore. Full-instance export/import
+requires stopped writers, informed confirmation and an empty target, includes
+sessions/credentials/active task intent, and leaves containers stopped. Never
+run original/restored copies together or overwrite existing homes; external
+sources/checkpoint authority need separate review. Incomplete imports block startup.
+Opt-in same-instance runtime
 recovery preserves reviewed future-only intent only when scheduling is explicitly
 enabled. Normal updates preserve current authority and schedules.
 

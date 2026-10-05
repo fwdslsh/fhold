@@ -89,6 +89,16 @@
         <p id="install-prerequisite" class="prerequisite" role="status">Checking this computer…</p>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
 
+        <details id="instance-restore-panel" class="disclosure">
+          <summary>Import an entire instance instead</summary>
+          <p class="help-text">Use a full-instance export to restore conversations, sign-ins, access keys and all saved settings. This folder must be empty; do not install first. The original instance must be stopped. Its saved name, ports, plugins and active schedules are retained, and the restored instance stays stopped.</p>
+          <form id="instance-restore-form" class="form-stack">
+            <label class="field" for="instance-restore-source"><span>Full-instance export directory</span><span class="input-action"><input id="instance-restore-source" autocomplete="off" placeholder="/path/to/private-instance-export" required /><button id="choose-instance-restore-source" class="secondary" type="button">Choose folder</button></span></label>
+            <div id="instance-restore-summary" class="inline-status neutral" role="status" aria-live="polite"><strong>No full-instance preview yet.</strong><span>Preview the export before importing. External drives need separate protection.</span></div>
+            <div class="button-row"><button id="preview-instance-restore" class="secondary" type="button">Preview full import</button><button id="apply-instance-restore" class="primary" type="button" disabled>Import entire instance</button></div>
+          </form>
+          <details class="disclosure technical-disclosure"><summary>Full-instance import details</summary><textarea id="instance-restore-result" class="technical-output" readonly spellcheck="false" aria-label="Full-instance import technical details">No full-instance operation has run.</textarea></details>
+        </details>
         <form id="install-form">
           <label class="field" for="install-instance-name">
             <span>Instance name</span>
@@ -564,14 +574,16 @@
             </details>
 
             <details id="import-export" class="panel panel-disclosure">
-              <summary id="backup-heading">Import / export <small>Reviewed content · fresh installations</small></summary>
-              <p class="section-intro">Export knowledge, workspace and reviewed settings to a directory. Import that content into a fresh instance. No native conversations or remote sign-ins.</p>
-              <p class="help-text">To import, create a fresh instance and choose “Import from an fhold export” before completing provider setup. Preview the contents first; imported task definitions remain inactive until reviewed.</p>
+              <summary id="backup-heading">Import / export <small>Entire instance or reviewed content</small></summary>
+              <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
+              <p class="help-text">For a full import, select an empty folder at Welcome and choose “Import an entire instance instead” before installing. To import portable content, create a fresh instance and choose “Import from an fhold export” before completing provider setup; imported task definitions remain inactive until reviewed.</p>
               <p class="help-text">For automatic same-instance continuity after storage is lost, use Ephemeral container support below. These two options use different formats and are not interchangeable.</p>
-              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Knowledge, workspace, allowlisted settings, and task definitions. Native conversations, runtime snapshots, external mounts and symlink targets are not included. Exports are not full-stack backups.</p></details>
+              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></details>
               <form id="backup-form" class="form-stack">
+	                <label class="field" for="backup-scope"><span>Export scope</span><select id="backup-scope"><option value="portable">Portable content</option><option value="instance">Entire instance (must be stopped)</option></select></label>
+	                <p id="backup-full-help" class="help-text" hidden>Stop the instance in Overview first. All containers and other writers must stay stopped until export finishes. The unencrypted export includes private sign-ins and access keys. Import it into an empty folder, and never run both copies together. Export does not automatically stop or restart containers.</p>
 	                <label class="field" for="backup-destination"><span>Export directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
-                <details class="disclosure"><summary>Include sensitive data (optional)</summary>
+                <details id="backup-sensitive-options" class="disclosure"><summary>Include sensitive data (optional)</summary>
                   <fieldset class="option-group">
                   <legend class="visually-hidden">Include sensitive data</legend>
                   <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
@@ -579,7 +591,7 @@
                   <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
                 </fieldset>
                   </details>
-                <button class="primary" type="submit">Export portable content</button>
+                <button id="export-backup" class="primary" type="submit">Export portable content</button>
               </form>
               <div id="backup-summary" class="inline-status neutral" hidden></div>
               <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
@@ -627,7 +639,7 @@
                 <button id="save-recovery-settings" class="secondary" type="submit">Save checkpoint settings</button>
               </form>
               <form id="runtime-recovery-credential-form" class="form-stack" hidden>
-                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. It is not included in an export.</span></label>
+                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. Portable content omits it; an entire-instance export includes it.</span></label>
                 <button class="secondary" type="submit">Save private storage credential</button>
               </form>
               <div class="button-row">

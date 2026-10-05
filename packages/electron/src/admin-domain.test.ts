@@ -12,6 +12,7 @@ import {
 	adminPortalMappings,
 	adminPortalTokens,
 	backupFromAdmin,
+	instanceRestoreFromAdmin,
 	createAdminCredential,
 	externalAdminUrl,
 	restoreFromAdmin,
@@ -67,6 +68,11 @@ describe('Admin domain', () => {
 		expect(interruptionPrompt('recovery-init').detail).toContain('genuinely unused');
 		expect(interruptionPrompt('recovery-restore').detail).toContain('containers remain stopped');
 		expect(interruptionPrompt('remote-setup').detail).toContain('before and after native sign-in');
+		for (const action of ['instance-export', 'instance-import']) {
+			const prompt = interruptionPrompt(action);
+			expect(prompt.buttons[0]).toBe('Cancel');
+			for (const detail of ['stopped', 'conversations', 'sign-ins', 'access keys', 'active task settings', 'unencrypted', 'empty folder', 'Never run the original and restored copies together']) expect(prompt.detail).toContain(detail);
+		}
 		expect(() => interruptionPrompt(['restart'])).toThrow();
 	});
 	it('installs explicitly selected homes with distinct stable Compose projects without changing FH_HOME', async () => {
@@ -284,6 +290,25 @@ describe('Admin domain', () => {
 		const destination = join(root, 'backup');
 		const manifest = await backupFromAdmin(home, { destination });
 		expect(manifest.files.some((entry) => entry.path === 'knowledge/inbox/result.md')).toBe(true);
+	});
+	it('offers whole-instance import before installation, binds it to preview and refuses unconfirmed export', async () => {
+		const { root, home } = await install();
+		const previousDocker = process.env.FH_DOCKER_BIN;
+		try {
+			process.env.FH_DOCKER_BIN = join(root, 'docker');
+			writeFileSync(process.env.FH_DOCKER_BIN, `#!${process.execPath}\n`, { mode: 0o700 });
+			const destination = join(root, 'export');
+			const restored = join(root, 'restored');
+			await expect(backupFromAdmin(home, { destination, full: true })).rejects.toThrow('confirm-stopped');
+			writeFileSync(join(home, 'data/assistant/native-history'), 'whole instance');
+			await backupFromAdmin(home, { destination, full: true, confirmed: true });
+			const preview = await instanceRestoreFromAdmin(restored, { sourceHome: destination });
+			await expect(instanceRestoreFromAdmin(restored, { sourceHome: destination, apply: true, confirmed: true })).rejects.toThrow('Preview');
+			await instanceRestoreFromAdmin(restored, { sourceHome: destination, apply: true, previewDigest: preview.digest, confirmed: true });
+			expect(readFileSync(join(restored, 'data/assistant/native-history'), 'utf8')).toBe('whole instance');
+		} finally {
+			if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN; else process.env.FH_DOCKER_BIN = previousDocker;
+		}
 	});
 
 	it('synchronizes portal bundles when Admin changes a default credential', async () => {

@@ -8,6 +8,7 @@ import {
 	invalidateRestorePreview,
 	renderRestorePlan
 } from '../admin/backup.js';
+import { bindBackupEvents, bindInstanceRestoreEvents, updateBackupScope } from '../admin/backup.js';
 import {
 	bindConnectionsEvents,
 	loadClientKey,
@@ -157,6 +158,42 @@ afterEach(() => {
 });
 
 describe('Admin static security boundary', () => {
+	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
+		expect(html).toContain('Entire instance (must be stopped)');
+		expect(html).toContain('Import an entire instance instead');
+		expect(html).toContain('do not install first');
+		expect(html).toContain('The original instance must be stopped');
+		control('backup-scope').value = 'instance';
+		updateBackupScope();
+		expect(control('backup-full-help').hidden).toBe(false);
+		expect(control('backup-sensitive-options').hidden).toBe(true);
+		expect(control('export-backup').textContent).toBe('Export entire instance');
+		let exported = false;
+		state.api = { confirmRestart: async () => false, backup: async () => { exported = true; } };
+		bindBackupEvents();
+		await control('backup-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(exported).toBe(false);
+	});
+	it('requires a reviewed, unchanged full-instance preview and native confirmation before import', async () => {
+		let imported = false;
+		state.api = { restoreInstance: async () => { imported = true; }, confirmRestart: async () => false };
+		bindInstanceRestoreEvents();
+		control('instance-restore-panel').open = true;
+		control('instance-restore-panel').listeners.get('toggle')?.({});
+		expect(control('install-form').hidden).toBe(true);
+		control('instance-restore-source').value = '/export';
+		await control('apply-instance-restore').listeners.get('click')?.({});
+		expect(imported).toBe(false);
+		state.instanceRestorePreview = { sourceHome: '/export', digest: 'a'.repeat(64) };
+		await control('apply-instance-restore').listeners.get('click')?.({});
+		expect(imported).toBe(false);
+		control('instance-restore-source').listeners.get('input')?.({});
+		expect(state.instanceRestorePreview).toBeNull();
+		expect(control('apply-instance-restore').disabled).toBe(true);
+		control('instance-restore-panel').open = false;
+		control('instance-restore-panel').listeners.get('toggle')?.({});
+		expect(control('install-form').hidden).toBe(false);
+	});
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
 		expect(html).toContain('Import / export');
 		expect(html).toContain('Ephemeral container support');
@@ -165,7 +202,7 @@ describe('Admin static security boundary', () => {
 		expect(html).toContain('native tool versions must match');
 		expect(html).toContain('Guardian/portal state');
 		expect(html).toContain('Initialize new destination');
-		expect(html).toContain('To import, create a fresh instance');
+		expect(html).toContain('To import portable content, create a fresh instance');
 		expect(html).toContain('never overwrites surviving local data');
 		expect(html).toContain('id="runtime-recovery-connection-string" type="password"');
 	});

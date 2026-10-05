@@ -57,6 +57,7 @@ import {
 	adminPortalMappings,
 	adminPortalTokens,
 	backupFromAdmin,
+	instanceRestoreFromAdmin,
 	createAdminCredential,
 	externalAdminUrl,
 	restoreFromAdmin,
@@ -397,6 +398,8 @@ export function registerAdminIpc(): void {
 			cancelId: 0,
 			noLink: true
 		};
+		if (action === 'instance-export' || action === 'instance-import')
+			options.detail += `\n\nSelected instance folder: ${instances.current().homeDir}`;
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
 		return result.response === 1;
@@ -608,6 +611,10 @@ export function registerAdminIpc(): void {
 		if (!value || typeof value !== 'object') throw new Error('Invalid restore request');
 		const current = state();
 		return restoreFromAdmin(current.homeDir, value as never);
+	});
+	handleAdmin(ADMIN_CHANNELS.restoreInstance, (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid full-instance import request.');
+		return instanceRestoreFromAdmin(managedState().homeDir, value as never);
 	});
 }
 

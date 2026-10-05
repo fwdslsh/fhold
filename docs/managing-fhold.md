@@ -145,20 +145,26 @@ settings snapshot is rejected so concurrent changes are not silently lost.
 The **System** page starts with **Installation details** and **Recent logs**.
 Below them, two separate sections explain content transfer and runtime continuity:
 
-- **Import / export** is a manual archive of reviewed knowledge, workspace and
-  allowlisted settings for a fresh installation. It does not preserve native
-  conversations, sign-ins or runtime authority. Sensitive content is opt-in;
-  restored task definitions remain inactive.
+- **Import / export** offers an **entire instance**, requiring stopped containers
+  and including native conversations, sign-ins and runtime authority, or
+  **portable content**, transferring reviewed knowledge, workspace and allowlisted
+  settings into a fresh agent. Portable sensitive content is opt-in and imported
+  task definitions remain inactive; full imports retain active scheduling intent.
 - **Ephemeral container support**, the last section, is opt-in automatic checkpointing for replacing
   the same Assistant after ephemeral storage disappears. It preserves native
   sessions, account files, approvals and consistent SQLite snapshots. It is not
   a host/Guardian/Portal rollback or an archive to import into a different agent.
 
-Admin's import/export uses the existing portable backup format and the same
-`fhold backup` / `fhold restore` CLI commands. Export from the running instance;
-to import, create a fresh instance and choose **Import from an fhold export**
-before completing provider setup. The new labels do not change coverage or
-make exports interchangeable with same-instance checkpoints.
+CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
+Portable content can export while running; import it after installing a fresh
+instance, before provider setup completes. For an entire-instance export, stop
+the instance in Overview first and select **Entire instance (must be stopped)**.
+To import that export, select a new/empty folder at Welcome and choose
+**Import an entire instance instead** on the setup screen, **without installing
+first**. Preview identifies the saved name and destination; the native confirmation
+explains downtime, credentials, active tasks and external-storage limitations.
+Both full operations leave containers stopped. These exports are not interchangeable
+with the automatic same-instance checkpoint format.
 
 Choose a private **local/mounted directory** or an existing **Blob destination**.
 Live SQLite remains on local storage. Directory artifacts require exclusive
@@ -261,7 +267,79 @@ Use [MCP](remote-mcp.md), [Discord](portals/discord-setup.md),
 for each normal connection flow. Never expose native Assistant publicly without
 explicit bind intent and appropriate transport security.
 
-## Import/export (portable backup format)
+## Import/export
+
+### Entire stopped instance
+
+Use this to preserve or relocate **the same instance** with its conversations,
+remote sign-ins, approvals, credentials, policy, plugins and task state. It copies
+the entire selected home, including extra top-level files, dependency trees,
+empty directories, relative links and native SQLite databases **with their WAL
+and SHM files**. All containers—including one-off, paused and restarting writers—
+must be stopped before export/import and stay stopped throughout. Other processes
+writing those files must also be stopped by the operator. Docker must be reachable
+to verify the named project, even for a full import preview.
+
+```bash
+fhold --name personal-agent stop
+fhold --name personal-agent backup --full --to /private/full-export --confirm-stopped
+# Use a new/empty folder. Do NOT run install first.
+fhold --name /absolute/path/restored-agent restore --full --from /private/full-export --dry-run
+fhold --name /absolute/path/restored-agent restore --full --from /private/full-export --apply --confirm-stopped
+# Review saved settings, external mounts and recovery destination, then start explicitly.
+fhold --name /absolute/path/restored-agent start
+```
+
+`--confirm-stopped` acknowledges the inclusion of sensitive runtime authority and
+downtime; it does **not** override the Docker check or stop/restart anything.
+Full import is not a merge into an existing home or an automatic clone with a new
+identity: it keeps the exported instance name, ports, keys, native approvals,
+configuration and exact image versions. Never run the original and restored copies
+together; stop the old project with `fhold stop` (which removes its containers)
+before bringing its identity to a different folder. Existing same-named containers
+owned by another folder are refused even when exited. Original homes and exports
+are kept; retiring them is a separate decision. To restore over an existing home,
+first preserve/move that home yourself and choose an empty destination.
+
+The directory has the same required `fhold-backup.json` envelope with
+`scope: "instance"` and a separate `instance/` payload. A complete inventory
+records files, directories, link targets, ordinary permission bits, timestamps,
+sizes and SHA256 hashes. No supported manifest is published for a failed export.
+Full import checks the complete inventory (including unexpected files), refuses
+overlapping/linked destinations and verifies copied bytes. Import previews are
+read-only; Admin binds apply to the exact reviewed digest. Full CLI apply rebuilds
+the current plan. Limits are 1,000,000 entries and a 128 MiB manifest; file copying
+is streamed rather than loading databases into memory.
+
+Only process coordination is omitted, with exact paths in the manifest: the
+lifecycle/partial-import marker, Codex `tmp`, `.tmp`, `locks`,
+`thread-writer-locks` and app-server socket, and AKM runtime locks. Plugin caches
+and all ordinary files remain included. Links are not followed; external targets
+are reported and preserved as references only. An absolute link into the original
+home is rebased to an equivalent relative link in the restored home. Linked main
+instance/runtime roots are refused instead of claiming their target data was saved.
+Special files outside the known coordination exclusions block export.
+
+Restore changes only generated host-location/owner metadata (`state/stack.env`),
+the installation receipt's `homeDir`, and pending-start status; it adds a private
+completion receipt under `state/instance-restore-receipts/`. Files belong to the
+restoring non-root host user. POSIX ownership, ACLs/xattrs and hard-link inode
+topology are not filesystem-image metadata in this directory format; ordinary
+permissions and content are preserved. No seeding, key regeneration, native data
+conversion, automatic task pausing, image upgrade or container startup happens. A partial import
+leaves a private marker and blocks all managed startup; retain that folder as failure
+evidence and retry into another empty folder rather than deleting or merging data.
+
+Exports are **unencrypted and contain credentials**. Protect the whole directory
+and any copies. Container images, named volumes, external bind sources and link
+targets **outside the home** need separate backups or reattachment. Custom Compose
+absolute paths are not automatically rewritten. Existing recovery settings/receipts
+are preserved, but external checkpoints and ownership are not rolled back: review
+the same-instance recovery destination and stopped-writer ownership before startup,
+never reinitialize an existing namespace. Use matching native images/architecture;
+this is not a cross-version data converter or permission to downgrade engines.
+
+### Portable content
 
 Use this for reviewed user content moving to a fresh installation. For replacing
 an ephemeral container while preserving the same agent's runtime sessions,
