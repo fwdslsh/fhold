@@ -48,6 +48,11 @@ Linux x64 verification on October 5, 2026:
   action targets. Isolated renderer fixtures exercised long paths and stale
   status without changing homes or simulating a real Docker outage. Type, build
   and accessibility checks passed; no dependencies or window resizing were added.
+- A fresh Linux x64 Admin AppImage built from candidate `f11c5aa` passed actual
+  packaged startup with normal host Chromium sandboxing and an isolated profile.
+  The native release smoke exercised Welcome, the renderer/bridge and named
+  instance preparation. The preview retained the alpha.6 version label; it did
+  not replace the installed Admin or change an existing instance.
 - All three Linux x64 images rebuilt and passed standard startup smokes. The new
   AKM pins passed actual OpenCode, Claude and Codex session/prompt recall, both
   default-on and explicitly disabled native workers, preserved customized
