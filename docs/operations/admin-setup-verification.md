@@ -34,6 +34,13 @@ native consent and restart confirmation still use the existing APIs. The older
 Connections renderer/E2E fixtures must be aligned during final qualification;
 this preview does not claim live token, pairing or per-app-save verification.
 
+Access keys is also a current design preview. The prior People & access policy
+table, key-manager selector and separate creation disclosure are replaced by
+per-key cards and one shared create/edit dialog. Connections can copy, create
+or edit the selected key in place. Names, policies, file-backed values and APIs
+are unchanged. The old Access renderer/E2E fixtures need final alignment;
+this preview does not claim live create/copy/edit/replace/revoke verification.
+
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
@@ -60,6 +67,24 @@ draft preservation, masked key handling, pending restart and cancelled restarts.
 MCP cannot be disabled while a saved bot requires it. Run the usual native
 account/pairing verification only after explicit sign-in and workspace consent;
 startup or a running container must never be presented as a connected client.
+
+For Access keys, review the list, permission descriptions and create/edit dialog
+at narrow sizes and 200% zoom. Check keyboard focus, native radio navigation,
+Cancel/Escape, duplicate/invalid names and failed-write messages inside the
+dialog. In a disposable home, create from the list and from each app, then
+verify the selected key and clipboard through a private manual paste (never
+print a key into test output). App-specific names must not collide. New keys
+keep the prior Read files default; existing key IDs/values remain unchanged.
+Edit one shared key, cancel and confirm nothing changed; save and verify only
+that policy changed while other app drafts remained. Concurrent saved-config
+changes must reject a stale editor, not overwrite unrelated settings. Granting
+Full access still requires confirmation. Bot key creation is only a selection
+draft until its app is saved. Replace/revoke must warn, require confirmation,
+invalidate the old key appropriately and enforce assigned/final-key restrictions.
+Advanced value display stays masked, clears on selection/instance changes and
+never persists in preferences. Removing a selected client key must leave a
+Choose a key placeholder across refreshes, not select another more privileged
+key. Read-only status checks must not reset the editor.
 
 ## Final automated qualification
 

@@ -59,7 +59,7 @@
     "credential_key": {
       "type": "string",
       "title": "fhold access key",
-      "description": "Paste the key shown in fhold under People & access. Its access level controls available capabilities.",
+      "description": "In fhold Admin, open Connections → Claude → Claude Desktop, choose an access key and select Copy access key. The selected key’s permissions control what Claude can do.",
       "sensitive": true,
       "required": true
     }

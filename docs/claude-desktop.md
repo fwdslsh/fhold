@@ -34,9 +34,12 @@ In Claude Desktop:
 4. In fhold Admin, open **Connections → Claude → Claude Desktop** and choose
    **Enable access for Claude Desktop** if needed. Confirm whether to restart
    now or apply the saved change later.
-5. Copy the displayed **Local address** and the key for the selected
-   access identity into the extension. Create a dedicated identity under
-   **People & access** first when you do not want to reuse an existing one.
+5. Copy the displayed **Local address**. Choose an access key and select
+   **Copy access key**, then paste it into the extension's **fhold access key** field.
+   The explanation below the key shows what Claude may do. **Create a key for
+   Claude** opens the key editor here; **Edit permissions** changes the selected
+   key for every app using it. Choose Full access only for a trusted app when
+   you need agent tools and file changes, not just conversation or reads.
 6. Restart Claude Desktop if the tools do not appear.
 
 These are Anthropic's documented steps for

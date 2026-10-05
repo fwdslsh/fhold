@@ -57,8 +57,10 @@ Bot ownership does not automatically grant access. A team-owned bot requires
 an operator choice of permitted users. The adapter refuses all use when every
 allowlist is empty; choose permitted users explicitly.
 
-In Admin, expand **Who can use it**, enter the same IDs, choose the default
-access identity, and select **Save connections**. If a required scope or token
+In Admin, open **Connections → Discord → Who can use the bot**, enter the same IDs,
+choose the **Access key used by the bot**, and select **Save Discord settings**.
+The key's explanation shows what the bot may do. Create or edit a key's
+permissions here, without leaving Discord setup. If a required scope or token
 is missing, Admin opens and focuses the exact field that needs attention.
 
 ## 3. Enable and verify
@@ -128,8 +130,9 @@ If the bot replies but says it cannot save knowledge or perform work from a
 restricted session, check `fhold credential mappings discord`. An allowlisted
 user without a mapping still uses the default `discord` credential, normally
 `chat`. Being the bot owner or being allowed into the portal does not select the
-`owner` identity. In Admin, **People & access** can map the exact Discord user
-to an existing full-access identity; the CLI equivalent is:
+`owner` identity. In Admin, **Connections → Discord → Different permissions for
+a user** can assign a key with Full access to the exact Discord user;
+the CLI equivalent is:
 
 ```bash
 fhold credential map discord 123456789012345678 owner

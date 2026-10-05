@@ -46,8 +46,10 @@ blocked user always loses access. Configure users alone to allow direct
 messages; a DM cannot satisfy a channel constraint. The adapter refuses all use
 when both allowlists are empty.
 
-In Admin, expand **Who can use it**, enter the same IDs, choose the default
-access identity, and select **Save connections**. If a required scope or token
+In Admin, open **Connections → Slack → Who can use the bot**, enter the same IDs,
+choose the **Access key used by the bot**, and select **Save Slack settings**.
+The key's explanation shows what the bot may do. Create or edit a key's
+permissions here, without leaving Slack setup. If a required scope or token
 is missing, Admin opens and focuses the exact field that needs attention.
 
 ## 3. Enable and verify

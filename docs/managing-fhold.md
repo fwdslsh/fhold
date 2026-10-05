@@ -172,15 +172,55 @@ Remote Control. Codex contains sign-in, pairing and knowledge recall. Discord
 and Slack each contain their own bot tokens, allowed-user rules, default access
 and individual user overrides; there is no shared token/app selector.
 OpenCode contains its address, password and advanced network settings. MCP
-contains enabling access, connection instructions, identities/keys and its
+contains enabling access, connection instructions, access keys and its
 advanced network settings. Bot setup enables the shared MCP service when needed.
 An app's Save action changes that app, not other apps' unsaved drafts. Restart
 confirmation and the persistent pending-changes alert still apply. Native
 workers remain experimental; startup enabled is not a verified client connection.
-**People & access** owns the reusable named identities and keys, not bot-specific
+**Access keys** owns the reusable named keys and permissions, not bot-specific
 user mappings. System holds installation details, recent logs, import/export,
 then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
+
+### Access keys and app permissions
+
+An access key is the password an app uses to reach your agent through MCP.
+**Access keys** lists each key with its permissions, saved Discord/Slack
+assignments, **Copy key** and **Edit permissions**. There is no separate identity
+selector or global permissions table. **New access key** asks for a name and
+describes the three choices in ordinary language:
+
+- **Chat only:** conversation without agent tools, file changes or tasks.
+- **Read files:** conversation and non-sensitive workspace reads, without file
+  changes or command execution.
+- **Full access:** agent tools and actions within the Assistant's existing
+  permissions. Choose this only for trusted apps or people; confirmation is
+  required when granting it.
+
+New keys retain the existing Read files default. Names are the existing credential
+names, not a new account/display-name registry. Existing keys, policies and bot
+assignments are preserved. Editing permissions changes every use of that key;
+create another key when only one app needs different permissions. Saving a
+permission change uses the configuration baseline and existing restart-now/later
+confirmation. No container is restarted by opening or cancelling the editor.
+
+In **Connections**, Claude Desktop and MCP show **Choose an access key**, explain
+what the app can do, and offer **Copy access key** plus **Edit permissions**.
+**Create a key** opens the same editor without leaving that app and selects the
+new key afterward. An app never silently falls back to another key when its
+selected key disappears. Copy is one explicit action; the private value is not
+displayed or stored in renderer preferences. A masked value can be loaded under
+**View key instead** if needed. Discord/Slack select the key for their bot without
+copying; creating one selects it as an unsaved draft until **Save Discord/Slack
+settings** is chosen. Other app drafts are preserved.
+
+**Replace or revoke** is collapsed on each key. Replacement invalidates the old
+value; update apps where it was pasted. Revocation removes access. Both require
+confirmation. Saved bot assignments and the final key cannot be revoked; backend
+validation also protects other assignments. The list reports only known saved
+Discord/Slack assignments, not a claim that an externally used key is unused.
+These keys do not control OpenCode's native password or Claude Code/Codex account
+connections. Keep copied keys private, like passwords.
 
 ### Import/export and ephemeral container support
 

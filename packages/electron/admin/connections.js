@@ -1,4 +1,4 @@
-import { clearClientKey, updateClientPolicy } from './access.js';
+import { clearClientKey, copyAccessKey, updateClientPolicy } from './access.js';
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { offerRestart } from './restart.js';
 import { csv, endpoint, isHealthy, isRunning } from './model.js';
@@ -198,23 +198,24 @@ export async function loadDirectPassword(copyOnly) {
 
 export async function loadClientKey(client, copyOnly) {
 	const username = byId(`${client}-credential`).value;
-	if (!username) return;
+	if (!username) {
+		notice('Choose an access key first, or create a new one for this app.', 'error');
+		byId(`${client}-credential`).focus();
+		return;
+	}
+	if (copyOnly) return copyAccessKey(username);
 	if (
 		!window.confirm(
-			`${copyOnly ? 'Copy' : 'Load'} the key for ${username}? Its policy controls what this client can do.`
+			`Load the private value of key “${username}”? Keep it private, just like a password.`
 		)
 	)
 		return;
 	const result = await operation(
-		`${copyOnly ? 'Copying' : 'Loading'} access key`,
-		async () => {
-			const value = await state.api.credentialKey(username);
-			if (copyOnly) await state.api.copyText(value.key);
-			return value;
-		},
-		copyOnly ? `Key for ${username} copied.` : `Key for ${username} loaded and kept masked.`
+		'Loading key value',
+		() => state.api.credentialKey(username),
+		`Key “${username}” loaded and kept masked.`
 	);
-	if (result && !copyOnly) byId(`${client}-key`).value = result.key;
+	if (result) byId(`${client}-key`).value = result.key;
 }
 
 export function bindConnectionsEvents() {

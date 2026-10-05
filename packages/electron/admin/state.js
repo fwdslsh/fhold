@@ -38,7 +38,7 @@ export const managedFormIds = [
 	'slack-token-form',
 	'discord-mapping-form',
 	'slack-mapping-form',
-	'access-form',
+	'access-key-form',
 	'opencode-network-form',
 	'mcp-network-form',
 	'runtime-recovery-form',
@@ -56,9 +56,15 @@ export const commonProviders = new Set([
 ]);
 
 export const policyLabels = {
-	chat: 'Conversation only',
+	chat: 'Chat only',
 	read: 'Read files',
-	full: 'Full control'
+	full: 'Full access'
+};
+
+export const policyDescriptions = {
+	chat: 'Chat with the agent. No tool use, file changes or tasks.',
+	read: 'Chat and read non-sensitive workspace files. Cannot change files or run commands.',
+	full: 'Use the agent’s tools, change files and carry out tasks within its existing permissions.'
 };
 
 export const viewMeta = {
@@ -78,9 +84,9 @@ export const viewMeta = {
 		description: 'Choose the app you want to use with your agent.'
 	},
 	access: {
-		kicker: 'PEOPLE & PERMISSIONS',
-		title: 'People & access',
-		description: 'Give each person or app its own key and access level.'
+		kicker: 'APP PERMISSIONS',
+		title: 'Access keys',
+		description: 'Decide what your connected apps can do.'
 	},
 	system: {
 		kicker: 'SYSTEM',

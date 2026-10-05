@@ -322,11 +322,6 @@ button.text-button:hover:not(:disabled) {
 	color: var(--ink-soft);
 }
 
-.policy-explainer span {
-	color: var(--ink-soft);
-	line-height: 1.45;
-}
-
 .form-note,
 .help-text {
 	max-width: 62ch;
@@ -1061,29 +1056,12 @@ input[type="checkbox"] {
 	line-height: 1.5;
 }
 
-.policy-explainer {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 12px;
-	margin: 12px 0;
-}
-
-.policy-explainer > div {
-	display: grid;
-	gap: 5px;
-	padding: 8px 0;
-	font-size: 0.8125rem;
-}
-
-.credential-list,
 .mapping-list {
 	display: grid;
 	gap: 0;
 	margin: 0 0 12px;
 }
 
-.credential-row,
-.credential-columns,
 .mapping-row {
 	display: grid;
 	grid-template-columns: minmax(140px, 1fr) minmax(180px, 0.8fr);
@@ -1094,55 +1072,150 @@ input[type="checkbox"] {
 	background: transparent;
 }
 
-.credential-row,
-.credential-columns {
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 1fr) auto;
-}
-
-.credential-columns {
-	color: var(--ink-faint);
-	font-size: 0.8125rem;
-	font-weight: 600;
-}
-
-.credential-row > small {
-	color: var(--ink-soft);
-}
-
-.credential-row > strong,
-.credential-row > small {
-	overflow-wrap: anywhere;
-}
-
-.credential-identity,
 .mapping-identity {
 	display: grid;
 	gap: 3px;
 	min-width: 0;
 }
 
-.credential-identity small,
 .mapping-identity small {
 	color: var(--ink-soft);
 }
 
-.credential-row select {
-	min-height: 44px;
-	border: 1px solid var(--border);
-	border-radius: 6px;
-	padding: 9px 11px;
-	background: var(--surface-raised);
-	color: var(--ink);
-}
-
-.key-manager {
+.access-keys-intro {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: end;
+	align-items: center;
+	gap: 20px;
+	margin-bottom: 24px;
+}
+
+.access-keys-intro .help-text {
+	margin: 0;
+}
+
+.access-key-list {
+	display: grid;
 	gap: 16px;
-	margin-top: 24px;
-	padding-top: 24px;
-	border-top: 1px solid var(--border-soft);
+}
+
+.access-key-card {
+	margin: 0;
+}
+
+.access-key-card-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.access-key-card-heading h2 {
+	min-width: 0;
+	margin: 0;
+	font-size: 1rem;
+	overflow-wrap: anywhere;
+}
+
+.access-key-card-heading .status-badge {
+	flex: 0 0 auto;
+}
+
+.access-key-usage {
+	margin: 12px 0;
+	color: var(--ink-faint);
+	font-size: 0.8125rem;
+	overflow-wrap: anywhere;
+}
+
+.access-key-more {
+	margin-top: 16px;
+}
+
+.app-key-setup {
+	display: grid;
+	gap: 10px;
+}
+
+.app-key-setup > .field,
+.app-key-setup > .help-text,
+.app-key-setup > .button-row,
+.app-key-setup > .text-button {
+	margin: 0;
+}
+
+.app-key-setup > .text-button {
+	justify-self: start;
+}
+
+.key-value-details {
+	margin-top: 0;
+}
+
+.key-permission-options {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.key-permission-options legend {
+	margin-bottom: 12px;
+	padding: 0;
+	font-size: 0.875rem;
+	font-weight: 600;
+}
+
+.key-permission-option {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 12px;
+	border: 1px solid var(--border-soft);
+	border-radius: 6px;
+	background: var(--surface-muted);
+	cursor: pointer;
+}
+
+.key-permission-option:has(input:checked) {
+	border-color: var(--border);
+	background: var(--surface-raised);
+}
+
+.key-permission-option input {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	min-height: 0;
+	margin: 2px 0 0;
+	padding: 0;
+	accent-color: var(--accent);
+}
+
+.key-permission-option > span {
+	display: grid;
+	gap: 4px;
+}
+
+.key-permission-option strong {
+	font-size: 0.875rem;
+}
+
+.key-permission-option small {
+	color: var(--ink-soft);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.access-key-editor-heading h2 {
+	margin: 0;
+	font-size: 1.125rem;
+	overflow-wrap: anywhere;
+}
+
+.access-key-editor-heading .help-text {
+	margin-bottom: 0;
 }
 
 .detail-list {
@@ -1210,8 +1283,7 @@ input[type="checkbox"] {
 	min-height: 260px;
 }
 
-.status-fieldset,
-.policy-explainer {
+.status-fieldset {
 	min-width: 0;
 	padding: 0;
 	border: 0;
@@ -1343,14 +1415,6 @@ body[data-busy="true"] #main-content {
 		grid-template-columns: repeat(5, minmax(0, 1fr));
 	}
 
-	.credential-row {
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	}
-
-	.credential-columns {
-		display: none;
-	}
-
 	body[data-phase="setup_incomplete"] .sidebar {
 		gap: 0;
 		padding-top: 8px;
@@ -1422,17 +1486,15 @@ body[data-busy="true"] #main-content {
 
 	.field-grid.two-column,
 	.field-grid.three-column,
-	.policy-explainer,
-	.credential-row,
+	.access-keys-intro,
 	.mapping-row,
-	.key-manager,
 	.detail-list > div,
 	.connection-values > div {
 		grid-template-columns: 1fr;
 	}
 
-	.credential-columns {
-		display: none;
+	.access-keys-intro > button {
+		justify-self: start;
 	}
 
 	.span-two,
@@ -1561,7 +1623,8 @@ body[data-busy="true"] #main-content {
 	display: none !important;
 }
 /* Native setup uses existing form components, without an embedded terminal dependency. */
-#remote-dialog {
+#remote-dialog,
+#access-key-dialog {
 	width: min(760px, calc(100vw - 48px));
 	max-height: calc(100vh - 48px);
 	overflow: auto;
@@ -1572,8 +1635,23 @@ body[data-busy="true"] #main-content {
 	color: var(--ink);
 	box-shadow: var(--shadow);
 }
-#remote-dialog::backdrop {
+#remote-dialog::backdrop,
+#access-key-dialog::backdrop {
 	background: rgb(0 0 0 / 55%);
+}
+#access-key-dialog {
+	width: min(540px, calc(100vw - 32px));
+	padding: 24px;
+}
+#access-key-form {
+	gap: 16px;
+	margin: 0;
+}
+#access-key-form > .help-text {
+	margin: 0;
+}
+#access-key-form > .button-row {
+	margin-top: 4px;
 }
 #remote-output {
 	min-height: 120px;

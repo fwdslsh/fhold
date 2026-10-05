@@ -117,13 +117,26 @@ Opening/switching homes never resizes the window or starts/stops a stack.
 Admin Connections is organized by the app the user wants to connect, not by
 protocol, container or harness: Claude, Codex, Discord, Slack, OpenCode and MCP.
 Claude owns both Desktop and Code workflows. Each bot owns its token setup,
-allowlists, default identity and individual user mappings. People & access owns
-reusable identities. OpenCode/MCP network controls stay under that app's Advanced
+allowlists, default key and individual user mappings. Access keys owns
+reusable named keys and permissions. OpenCode/MCP network controls stay under that app's Advanced
 settings. App-scoped saves use the existing intent/baseline/restart path and
 preserve other apps' drafts; bot enablement retains its shared MCP dependency.
 There is no new connection registry, protocol or generic integration engine.
 Configured, running, native startup intent and verified client readiness remain
 distinct. Native workers remain experimental and require native consent.
+
+Admin presents credentials as access keys, not accounts or a policy matrix.
+One small create/edit dialog is shared by Access keys and app setup. It names
+the key and describes Chat only, Read files and Full access; granting Full access
+requires explicit confirmation. Existing registry IDs, values, defaults and
+policy contracts do not change. Copy is an explicit clipboard action without
+preloading or persisting key values. Replacement/revocation explain disruption
+and require confirmation; assignment/final-key restrictions remain native.
+Editing a shared key changes all uses, so the UI explains when to create a
+separate key. It uses the reviewed configuration baseline and existing deferred
+restart path. Bot-specific key creation selects only a draft until bot settings
+are saved. No app-key tracking registry or automatic permission escalation is
+added; usage labels cannot claim to detect external clients.
 
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations
