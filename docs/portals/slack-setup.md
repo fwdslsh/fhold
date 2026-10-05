@@ -26,9 +26,12 @@ Both files must be mode 0600. Do not store the values in Compose environment
 variables.
 
 In fhold Admin, **Connections → Slack** presents the same scopes and event
-checklist and opens Slack's app console. **Add Slack tokens** moves directly to
-the private token form. Both tokens are required initially; afterward either
-one can be rotated without re-entering the other.
+checklist and opens Slack's app console. **Bot tokens → Save Slack tokens** stores
+them privately. Both tokens are required initially; afterward either one can be
+rotated without re-entering the other. Default access, allowed-user rules and
+individual user mappings are in the same Slack section. **Save Slack settings**
+does not save another app's drafts. Restart now or later when prompted; enabling
+Slack also enables the MCP service it needs.
 
 ## 2. Configure a default-deny scope
 

@@ -388,166 +388,185 @@
             </details>
           </section>
 
-	          <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="connections-heading">
-	            <section id="client-setup" class="panel" aria-labelledby="client-setup-heading">
-	              <div class="section-heading"><div><h2 id="client-setup-heading">Choose an app</h2></div></div>
-	              <fieldset class="segmented-control">
-	                <legend class="visually-hidden">Client setup</legend>
-	                <button class="secondary" type="button" data-client-setup="opencode">OpenCode</button>
-	                <button class="secondary" type="button" data-client-setup="claude">Claude Desktop</button>
-	                <button class="secondary" type="button" data-client-setup="mcp">Another MCP app</button>
-	              </fieldset>
-
-	              <article id="client-opencode" class="client-panel" data-client-panel="opencode">
-	                <div class="connection-heading"><div><h3>OpenCode</h3><p>Full access. Use only on this computer or a trusted private network.</p></div></div>
-	                <dl class="connection-values">
-	                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
-	                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
-	                </dl>
-	                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                <div class="button-row compact">
-	                  <button id="load-direct-password" class="secondary" type="button">Load password</button>
-	                  <button id="copy-direct-password" class="secondary" type="button">Copy password</button>
-	                  <label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label>
-	                </div>
-	              </article>
-
-	              <article id="client-claude" class="client-panel" data-client-panel="claude" hidden>
-	                <div class="connection-heading"><div><h3>Claude Desktop</h3><p>Connect through the fhold desktop extension.</p></div></div>
-	                <ol class="numbered-steps">
-	                  <li><div><strong>Enable Guardian</strong><p id="claude-guardian-help">Protected access is currently disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable protected access</button></div></li>
-	                  <li><div><strong>Install the desktop extension</strong><p id="claude-extension-help" class="help-text">Download the matching extension, then install it in Claude Desktop.</p><a id="claude-extension-download" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Download desktop extension</a><button class="text-button" type="button" data-copy-field="claude-extension-help">Copy instructions</button></div></li>
-	                  <li><div><strong>Enter these settings</strong>
-	                    <label class="field" for="claude-credential"><span>Access identity</span><select id="claude-credential"></select></label>
-	                    <p id="claude-policy-help" class="help-text">Choose the least access this client needs.</p>
-	                    <dl class="connection-values"><div><dt>Local fhold address</dt><dd><code id="claude-url">Loading…</code><button class="text-button" type="button" data-copy-field="claude-url">Copy</button></dd></div></dl>
-	                    <label class="field" for="claude-key"><span>Access key</span><input id="claude-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                    <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="claude">Load key</button><button class="secondary" type="button" data-copy-client-key="claude">Copy key</button><label class="check-row compact"><input id="show-claude-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create a dedicated identity</button></div>
-	                  </div></li>
-	                </ol>
-	              </article>
-
-	              <article id="client-mcp" class="client-panel" data-client-panel="mcp" hidden>
-	                <div class="connection-heading"><div><h3>MCP client</h3><p>Streamable HTTP with an access key.</p></div></div>
-	                <div id="mcp-guardian-help" class="inline-status neutral"><strong>Guardian must be enabled.</strong><span>It applies the policy associated with the selected identity.</span></div>
-	                <button class="secondary" type="button" data-enable-gateway>Enable protected access</button>
-	                <label class="field" for="mcp-credential"><span>Access identity</span><select id="mcp-credential"></select></label>
-	                <p id="mcp-policy-help" class="help-text">Choose the least access this client needs.</p>
-	                <dl class="connection-values"><div><dt>Streamable HTTP address</dt><dd><code id="mcp-url">Loading…</code><button class="text-button" type="button" data-copy-field="mcp-url">Copy</button></dd></div><div><dt>Authentication</dt><dd><code>Authorization: Bearer &lt;access key&gt;</code></dd></div></dl>
-	                <label class="field" for="mcp-key"><span>Access key</span><input id="mcp-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="mcp">Load key</button><button class="secondary" type="button" data-copy-client-key="mcp">Copy key</button><label class="check-row compact"><input id="show-mcp-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create another identity</button></div>
-	              </article>
-                <details id="gateway-connection" class="disclosure">
-                  <summary>Guardian MCP settings</summary>
-                  <div class="connection-heading">
-                    <div><h3>Guardian MCP</h3><p>Applies the selected access key’s policy.</p></div>
-                    <label class="switch"><input id="gateway" type="checkbox" form="connections-form" /><span>Enable</span></label>
-                  </div>
-                  <div id="guardian-settings" class="connection-body" hidden>
-                    <div class="endpoint-row"><div><span>Guardian MCP URL</span><code id="guardian-url">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-url">Copy</button></div><span class="status-badge protected">Policy protected</span></div>
-                  </div>
-                  <button id="save-client-connections" class="secondary" type="submit" form="connections-form">Save MCP access</button>
+          <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="view-title">
+            <details id="claude-connection" class="panel panel-disclosure connection-app" data-connection-app="claude" name="connected-app">
+              <summary><span>Claude<small>Desktop chat or Claude Code remote sessions.</small></span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure connection-method" name="claude-method">
+                  <summary>Claude Desktop</summary>
+                  <ol class="numbered-steps">
+                    <li><div><strong>Enable access</strong><p id="claude-guardian-help">MCP access is disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable access for Claude Desktop</button></div></li>
+                    <li><div><strong>Install the desktop extension</strong><p id="claude-extension-help" class="help-text">Download the matching extension, then install it in Claude Desktop.</p><a id="claude-extension-download" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Download desktop extension</a><button class="text-button" type="button" data-copy-field="claude-extension-help">Copy instructions</button></div></li>
+                    <li><div><strong>Connect to this instance</strong>
+                      <label class="field" for="claude-credential"><span>Access identity</span><select id="claude-credential"></select></label>
+                      <p id="claude-policy-help" class="help-text"></p>
+                      <dl class="connection-values"><div><dt>Local address</dt><dd><code id="claude-url">Loading…</code><button class="text-button" type="button" data-copy-field="claude-url">Copy</button></dd></div></dl>
+                      <label class="field" for="claude-key"><span>Access key</span><input id="claude-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
+                      <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="claude">Load key</button><button class="secondary" type="button" data-copy-client-key="claude">Copy key</button><label class="check-row compact"><input id="show-claude-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create an access identity</button></div>
+                    </div></li>
+                  </ol>
                 </details>
-            </section>
-
-            <details id="chat-apps" class="panel panel-disclosure">
-              <summary id="connections-heading">Chat apps <small>Discord & Slack</small></summary>
-	              <form id="connections-form" class="form-stack" data-managed-form>
-                <details id="discord-connection" class="connection-card">
-                  <summary><span>Discord</span><span id="discord-connection-status" class="status-badge neutral">Not enabled</span></summary>
-                  <div class="connection-heading">
-                    <div><p>Access for approved members.</p></div>
-                    <label class="switch"><input id="discord" type="checkbox" /><span>Enable</span></label>
-                  </div>
-	                  <div id="discord-settings" class="connection-body" hidden>
-	                    <details class="disclosure setup-help"><summary>Discord setup instructions</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with permission to view channels, read message history, and send messages.</li><li>Store its bot token below.</li><li>Add at least one allowed server, role, or user ID.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord Developer Portal</button></details>
-                    <button class="secondary" type="button" data-token-target="discord">Configure Discord token</button>
-                    <button class="text-button" type="button" data-mapping-target="discord">Individual user policies</button>
-                    <label class="field" for="discord-credential"><span>Default access</span><select id="discord-credential"></select></label>
-                    <details id="discord-access-disclosure" class="disclosure">
-                      <summary>Who can use it</summary>
-                      <div class="field-grid two-column disclosure-body">
-                        <label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label>
-                        <label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label>
-                        <label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label>
-                        <label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label>
-                      </div>
-	                      <p class="help-text">Leave a list empty to ignore it. If you fill more than one allowed list, every filled list must match. Blocked users are always denied. Separate IDs with commas.</p>
-                    </details>
-                  </div>
+                <details class="disclosure connection-method" name="claude-method">
+                  <summary><span>Claude Code <small class="card-label">Experimental</small></span></summary>
+                  <p class="help-text">Use Claude Remote Control to work in this instance with your Claude account. Set up guides sign-in and workspace consent; Open session provides the native connection link.</p>
+                  <p><span id="claude-remote-status" class="status-badge neutral">Startup not checked</span></p>
+                  <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up Claude Code</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open session</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
+                  <p class="help-text">Requires an eligible Claude subscription. Claude Code runs its own agent with access to your files; MCP access-key policies do not restrict it. Disabling startup keeps your sign-in. Manage paired devices through Claude.</p>
                 </details>
-
-                <details id="slack-connection" class="connection-card">
-                  <summary><span>Slack</span><span id="slack-connection-status" class="status-badge neutral">Not enabled</span></summary>
-                  <div class="connection-heading">
-                    <div><p>Access for approved members.</p></div>
-                    <label class="switch"><input id="slack" type="checkbox" /><span>Enable</span></label>
-                  </div>
-	                  <div id="slack-settings" class="connection-body" hidden>
-	                    <details class="disclosure setup-help"><summary>Slack setup instructions</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need, then install the app.</li><li>Store the bot and app-level tokens below.</li><li>Add at least one allowed channel or user ID.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
-                    <button class="secondary" type="button" data-token-target="slack">Configure Slack tokens</button>
-                    <button class="text-button" type="button" data-mapping-target="slack">Individual user policies</button>
-                    <label class="field" for="slack-credential"><span>Default access</span><select id="slack-credential"></select></label>
-                    <details id="slack-access-disclosure" class="disclosure">
-                      <summary>Who can use it</summary>
-                      <div class="field-grid two-column disclosure-body">
-                        <label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label>
-                        <label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label>
-                        <label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label>
-                      </div>
-	                      <p class="help-text">Leave a list empty to ignore it. If you fill both allowed lists, both the user and channel must match. Blocked users are always denied. Separate IDs with commas.</p>
-                    </details>
-                  </div>
-                </details>
-                <button class="primary" type="submit">Save connections</button>
-              </form>
-
-            <details id="portal-tokens" class="disclosure">
-              <summary id="tokens-heading"><span>Discord and Slack tokens<small id="token-status" class="status-badge neutral">Not configured</small></span></summary>
-              <form id="portal-token-form" class="form-stack">
-	                <label class="field" for="token-portal"><span>Chat app</span><select id="token-portal"><option value="discord">Discord</option><option value="slack">Slack</option></select></label>
-	                <label class="field" for="bot-token"><span id="bot-token-label">Discord bot token</span><input id="bot-token" type="password" autocomplete="off" /></label>
-	                <label id="app-token-field" class="field" for="app-token" hidden><span>Slack app token</span><input id="app-token" type="password" autocomplete="off" /></label>
-	                <p id="token-help" class="help-text">Tokens are stored in private files and are never shown again.</p>
-                <button class="secondary" type="submit">Store tokens privately</button>
-              </form>
-            </details>
-            </details>
-
-            <details id="native-connections" class="panel panel-disclosure">
-              <summary id="native-connections-heading"><span>Remote coding agents<small>Experimental · Claude Code and Codex</small></span></summary>
-              <p class="section-intro">Separate agents using their own accounts. Experimental; bypasses Guardian policies.</p>
-              <div class="remote-connection-row">
-                <div><h3>Claude Code <span class="card-label">Experimental</span></h3><p>Remote Control with an eligible Claude subscription.</p><span id="claude-remote-status" class="status-badge neutral">Startup off</span></div>
-                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open session</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
               </div>
-              <div class="remote-connection-row">
-                <div><h3>Codex <span class="card-label">Experimental</span></h3><p>ChatGPT account sign-in. Client and host support are required.</p><span id="codex-remote-status" class="status-badge neutral">Startup off</span><p class="help-text">Automatic knowledge recall: <span id="codex-recall-status" class="status-badge neutral">Not checked</span></p><p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p></div>
-                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up</button><button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
-              </div>
-              <details class="disclosure"><summary>Startup & account access</summary><p class="help-text">Setup enables startup automatically. Disabling startup keeps your account sign-in; revoke paired devices through the account provider. Host and account support vary.</p></details>
             </details>
 
-            <details id="network-settings" class="panel panel-disclosure">
-              <summary>Advanced network settings</summary>
-              <div class="warning-callout"><strong>Direct OpenCode access bypasses Guardian.</strong><p>Keep it on this computer or a trusted private network.</p></div>
-	              <form id="network-form" class="form-stack" data-managed-form>
-	                <div class="field-grid two-column">
-	                  <label class="field" for="assistant-bind"><span>Assistant bind address</span><input id="assistant-bind" autocomplete="off" /></label>
-	                  <label class="field" for="assistant-port"><span>Assistant port</span><input id="assistant-port" type="number" min="1" max="65535" /></label>
-	                  <label class="field" for="gateway-bind"><span>Guardian MCP bind address</span><input id="gateway-bind" autocomplete="off" /></label>
-	                  <label class="field" for="gateway-port"><span>Guardian MCP port</span><input id="gateway-port" type="number" min="1" max="65535" /></label>
-	                </div>
-	                <button class="secondary" type="submit">Save network settings</button>
-	              </form>
-	              <p id="guardian-api-status" class="help-text">Checking Guardian MCP…</p>
-              <details class="disclosure"><summary>API endpoints & bind addresses</summary>
-	              <dl class="connection-values">
-	                <div><dt>Guardian MCP URL</dt><dd><code id="guardian-mcp-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-mcp-url-detail">Copy</button></dd></div>
-	                <div><dt>Health-check URL</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div>
-	              </dl>
-              <p class="help-text">Guardian is an API, not a website. Use the full /mcp URL and an access key. The /health check returns JSON; the base address returns “not_found”. A bind address of 127.0.0.1 accepts connections only from this computer. LAN or public access needs explicit network and TLS configuration.</p>
-              </details>
+            <details id="codex-connection" class="panel panel-disclosure connection-app" data-connection-app="codex" name="connected-app">
+              <summary><span>Codex<small>Remote sessions with your ChatGPT account.</small></span><span class="card-label">Experimental</span></summary>
+              <div class="app-connection-body">
+                <p class="help-text">Set up guides sign-in, workspace access and execution settings. Then get a pairing code to connect your Codex client.</p>
+                <p><span id="codex-remote-status" class="status-badge neutral">Startup not checked</span></p>
+                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up Codex</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
+                <details class="disclosure">
+                  <summary>Knowledge recall</summary>
+                  <p class="help-text">Automatic recall: <span id="codex-recall-status" class="status-badge neutral">Not checked</span></p>
+                  <p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p>
+                  <button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button>
+                </details>
+                <p class="help-text">Codex runs its own agent; MCP access-key policies do not restrict it. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
+              </div>
+            </details>
+
+            <details id="discord-connection" class="panel panel-disclosure connection-app" data-connection-app="discord" name="connected-app">
+              <summary><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure setup-help"><summary>Set up your Discord bot</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with permission to view channels, read message history, and send messages.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></details>
+                <details id="discord-tokens" class="disclosure">
+                  <summary><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></summary>
+                  <form id="discord-token-form" class="form-stack" data-managed-form>
+                    <label class="field" for="discord-bot-token"><span id="discord-bot-token-label">Discord bot token</span><input id="discord-bot-token" type="password" autocomplete="off" /></label>
+                    <p id="discord-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
+                    <button class="secondary" type="submit">Save Discord token</button>
+                  </form>
+                </details>
+                <form id="discord-connections-form" class="form-stack" data-managed-form>
+                  <label class="switch"><input id="discord" type="checkbox" /><span>Enable Discord</span></label>
+                  <label class="field" for="discord-credential"><span>Default access</span><select id="discord-credential"></select></label>
+                  <p id="discord-policy-help" class="help-text"></p>
+                  <details id="discord-access-disclosure" class="disclosure">
+                    <summary>Who can use the bot</summary>
+                    <p class="help-text">Add at least one allowed server, role or user ID. Nobody is allowed by default.</p>
+                    <div class="field-grid two-column disclosure-body"><label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label><label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label><label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label><label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label></div>
+                    <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
+                  </details>
+                  <button class="secondary" type="submit">Save Discord settings</button>
+                </form>
+                <details id="discord-user-access" class="disclosure">
+                  <summary>Individual user access</summary>
+                  <p class="help-text">Choose a different access identity for a user. This does not bypass the bot’s allowed-user rules.</p>
+                  <form id="discord-mapping-form" class="field-grid two-column" data-managed-form>
+                    <label class="field" for="discord-mapping-user"><span>Discord user ID</span><input id="discord-mapping-user" autocomplete="off" required /></label>
+                    <label class="field" for="discord-mapping-credential"><span>Access identity</span><select id="discord-mapping-credential"></select></label>
+                    <button class="secondary span-two" type="submit">Save user access</button>
+                  </form>
+                  <div id="discord-mappings" class="mapping-list" aria-live="polite"></div>
+                  <button class="text-button" type="button" data-view-target="access">Manage access identities</button>
+                </details>
+              </div>
+            </details>
+
+            <details id="slack-connection" class="panel panel-disclosure connection-app" data-connection-app="slack" name="connected-app">
+              <summary><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure setup-help"><summary>Set up your Slack bot</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need, then install the app.</li><li>Save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
+                <details id="slack-tokens" class="disclosure">
+                  <summary><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></summary>
+                  <form id="slack-token-form" class="form-stack" data-managed-form>
+                    <label class="field" for="slack-bot-token"><span id="slack-bot-token-label">Slack bot token</span><input id="slack-bot-token" type="password" autocomplete="off" /></label>
+                    <label class="field" for="slack-app-token"><span id="slack-app-token-label">Slack app token</span><input id="slack-app-token" type="password" autocomplete="off" /></label>
+                    <p id="slack-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
+                    <button class="secondary" type="submit">Save Slack tokens</button>
+                  </form>
+                </details>
+                <form id="slack-connections-form" class="form-stack" data-managed-form>
+                  <label class="switch"><input id="slack" type="checkbox" /><span>Enable Slack</span></label>
+                  <label class="field" for="slack-credential"><span>Default access</span><select id="slack-credential"></select></label>
+                  <p id="slack-policy-help" class="help-text"></p>
+                  <details id="slack-access-disclosure" class="disclosure">
+                    <summary>Who can use the bot</summary>
+                    <p class="help-text">Add at least one allowed channel or user ID. Nobody is allowed by default.</p>
+                    <div class="field-grid two-column disclosure-body"><label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label><label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label><label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label></div>
+                    <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
+                  </details>
+                  <button class="secondary" type="submit">Save Slack settings</button>
+                </form>
+                <details id="slack-user-access" class="disclosure">
+                  <summary>Individual user access</summary>
+                  <p class="help-text">Choose a different access identity for a user. This does not bypass the bot’s allowed-user rules.</p>
+                  <form id="slack-mapping-form" class="field-grid two-column" data-managed-form>
+                    <label class="field" for="slack-mapping-user"><span>Slack user ID</span><input id="slack-mapping-user" autocomplete="off" required /></label>
+                    <label class="field" for="slack-mapping-credential"><span>Access identity</span><select id="slack-mapping-credential"></select></label>
+                    <button class="secondary span-two" type="submit">Save user access</button>
+                  </form>
+                  <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
+                  <button class="text-button" type="button" data-view-target="access">Manage access identities</button>
+                </details>
+              </div>
+            </details>
+
+            <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
+              <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <div class="app-connection-body">
+                <p class="help-text">Open the server address and sign in with the username and password below. This gives full native access: use it only on this computer or a trusted private network.</p>
+                <dl class="connection-values">
+                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
+                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
+                </dl>
+                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
+                <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
+                <details class="disclosure">
+                  <summary>Advanced · network access</summary>
+                  <form id="opencode-network-form" class="form-stack" data-managed-form>
+                    <div class="field-grid two-column">
+                      <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
+                      <label class="field" for="assistant-port"><span>Port</span><input id="assistant-port" type="number" min="1" max="65535" required /></label>
+                    </div>
+                    <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>
+                    <button class="secondary" type="submit">Save OpenCode network settings</button>
+                  </form>
+                </details>
+              </div>
+            </details>
+
+            <details id="mcp-connection" class="panel panel-disclosure connection-app" data-connection-app="mcp" name="connected-app">
+              <summary><span>MCP<small>Connect other AI apps using an address and access key.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <div class="app-connection-body">
+                <form id="mcp-connections-form" class="form-stack" data-managed-form>
+                  <label class="switch"><input id="gateway" type="checkbox" /><span>Enable MCP access</span></label>
+                  <button class="secondary" type="submit">Save MCP settings</button>
+                </form>
+                <p id="mcp-guardian-help" class="help-text">MCP access is disabled.</p>
+                <ol class="numbered-steps">
+                  <li><div><strong>Enable and apply MCP access</strong><p>Save the setting above, then restart now or later when prompted. Discord, Slack and the Claude Desktop extension use this same access service.</p></div></li>
+                  <li><div><strong>Choose the access your app needs</strong>
+                    <label class="field" for="mcp-credential"><span>Access identity</span><select id="mcp-credential"></select></label>
+                    <p id="mcp-policy-help" class="help-text"></p>
+                    <label class="field" for="mcp-key"><span>Access key</span><input id="mcp-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
+                    <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="mcp">Load key</button><button class="secondary" type="button" data-copy-client-key="mcp">Copy key</button><label class="check-row compact"><input id="show-mcp-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create an access identity</button></div>
+                  </div></li>
+                  <li><div><strong>Add the server to your app</strong><p>Choose Streamable HTTP and use this address with the selected key.</p>
+                    <dl class="connection-values"><div><dt>Server address</dt><dd><code id="mcp-url">Loading…</code><button class="text-button" type="button" data-copy-field="mcp-url">Copy</button></dd></div><div><dt>Authentication</dt><dd><code>Authorization: Bearer &lt;access key&gt;</code></dd></div></dl>
+                  </div></li>
+                </ol>
+                <details class="disclosure">
+                  <summary>Advanced · network & troubleshooting</summary>
+                  <form id="mcp-network-form" class="form-stack" data-managed-form>
+                    <div class="field-grid two-column">
+                      <label class="field" for="gateway-bind"><span>Bind address</span><input id="gateway-bind" autocomplete="off" required /></label>
+                      <label class="field" for="gateway-port"><span>Port</span><input id="gateway-port" type="number" min="1" max="65535" required /></label>
+                    </div>
+                    <button class="secondary" type="submit">Save MCP network settings</button>
+                  </form>
+                  <p id="guardian-api-status" class="help-text"></p>
+                  <dl class="connection-values"><div><dt>Health check</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div></dl>
+                  <p class="help-text">MCP is an API, not a website. Use the full /mcp address, not the base port. The health check returns JSON. 127.0.0.1 accepts connections only from this computer; LAN or public access needs explicit network and TLS configuration.</p>
+                </details>
+              </div>
             </details>
           </section>
 
@@ -590,18 +609,6 @@
               </div>
               </details>
 
-            <details id="chat-user-access" class="panel panel-disclosure">
-              <summary id="mapping-heading"><span>Individual chat app access<small>Optional overrides for Discord and Slack users</small></span></summary>
-
-	              <p class="section-intro">Overrides the app’s default policy. Does not bypass its allowlist.</p>
-              <form id="mapping-form" class="field-grid three-column">
-                <label class="field" for="mapping-portal"><span>Chat app</span><select id="mapping-portal"><option value="discord">Discord</option><option value="slack">Slack</option></select></label>
-                <label class="field" for="mapping-user"><span>Platform user ID</span><input id="mapping-user" autocomplete="off" /></label>
-                <label class="field" for="mapping-credential"><span>Access identity</span><select id="mapping-credential"></select></label>
-                <button class="secondary span-three" type="submit">Save user access</button>
-              </form>
-              <div id="mappings" class="mapping-list" aria-live="polite"></div>
-            </details>
           </section>
 
           <section id="view-system" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="view-title">

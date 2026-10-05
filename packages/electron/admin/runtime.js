@@ -3,6 +3,7 @@ import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { renderRestartStatus, requestStackAction } from './restart.js';
 import { updateRecoveryFields } from './recovery.js';
+import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
 import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
@@ -39,6 +40,8 @@ export function renderRuntimeControls(snapshot) {
 }
 
 export function renderServices(snapshot) {
+	renderConnectionStatus(snapshot);
+	updateGuardianGuide();
 	const unavailable = !!snapshot.dockerError;
 	setText(
 		'runtime-status-detail',

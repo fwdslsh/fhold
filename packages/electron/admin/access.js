@@ -1,6 +1,6 @@
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { policyLabels, state } from './state.js';
-import { all, byId, operation, setOptions } from './ui.js';
+import { all, byId, operation, setFormClean, setOptions } from './ui.js';
 
 export function credentialOptions(snapshot) {
 	return Object.entries(snapshot.config.credentials)
@@ -33,6 +33,7 @@ export function updateClientPolicy(client) {
 
 export function renderCredentials(snapshot) {
 	const usernames = Object.keys(snapshot.config.credentials).sort();
+	const choices = credentialOptions(snapshot);
 	const policies = byId('credential-policies');
 	policies.replaceChildren();
 	for (const username of usernames) {
@@ -73,22 +74,20 @@ export function renderCredentials(snapshot) {
 		policies.append(row);
 	}
 	for (const portal of ['discord', 'slack']) {
-		setOptions(byId(`${portal}-credential`), usernames, snapshot.config.portals[portal].credential);
+		setOptions(byId(`${portal}-credential`), choices, snapshot.config.portals[portal].credential);
 	}
 	const actionName = byId('credential-action-name').value;
 	setOptions(byId('credential-action-name'), usernames, actionName);
 	byId('credential-key').value = '';
 	byId('show-credential-key').checked = false;
 	byId('credential-key').type = 'password';
-	setOptions(
-		byId('mapping-credential'),
-		[
-			{ value: '', label: 'Portal default (remove mapping)' },
-			...usernames.map((value) => ({ value, label: value }))
-		],
-		byId('mapping-credential').value
-	);
-	const choices = credentialOptions(snapshot);
+	for (const portal of ['discord', 'slack']) {
+		setOptions(
+			byId(`${portal}-mapping-credential`),
+			[{ value: '', label: 'Use app default (remove override)' }, ...choices],
+			byId(`${portal}-mapping-credential`).value
+		);
+	}
 	for (const client of ['claude', 'mcp']) {
 		const selected = byId(`${client}-credential`).value || 'owner';
 		setOptions(byId(`${client}-credential`), choices, selected);
@@ -98,19 +97,17 @@ export function renderCredentials(snapshot) {
 }
 
 export function renderMappings(snapshot) {
-	const container = byId('mappings');
-	container.replaceChildren();
-	let count = 0;
 	for (const portal of ['discord', 'slack']) {
+		const container = byId(`${portal}-mappings`);
+		container.replaceChildren();
 		const mappings = snapshot.portalMappings[portal]?.users || {};
 		for (const [userId, username] of Object.entries(mappings)) {
-			count += 1;
 			const row = document.createElement('div');
 			row.className = 'mapping-row';
 			const identity = document.createElement('div');
 			identity.className = 'mapping-identity';
 			const name = document.createElement('strong');
-			name.textContent = `${portal === 'discord' ? 'Discord' : 'Slack'} user ${userId}`;
+			name.textContent = `User ${userId}`;
 			const access = document.createElement('small');
 			access.textContent = `Uses ${username}`;
 			identity.append(name, access);
@@ -124,12 +121,12 @@ export function renderMappings(snapshot) {
 			row.append(identity, remove);
 			container.append(row);
 		}
-	}
-	if (count === 0) {
-		const empty = document.createElement('div');
-		empty.className = 'empty-state';
-		empty.textContent = 'No individual overrides. Chat app users receive the app’s default access.';
-		container.append(empty);
+		if (Object.keys(mappings).length === 0) {
+			const empty = document.createElement('p');
+			empty.className = 'help-text';
+			empty.textContent = 'All allowed users receive the app’s default access.';
+			container.append(empty);
+		}
 	}
 }
 
@@ -236,34 +233,33 @@ export function bindAccessEvents() {
 		byId('credential-key').type = 'password';
 	});
 
-	byId('mapping-form').addEventListener('submit', async (event) => {
-		event.preventDefault();
-		const portal = byId('mapping-portal').value;
-		const userId = byId('mapping-user').value.trim();
-		const username = byId('mapping-credential').value || undefined;
-		const result = await operation(
-			'Saving chat app user access',
-			() => state.api.mapPortalUser({ portal, userId, username }),
-			username ? 'Individual user access saved.' : 'Individual override removed.'
-		);
-		if (result) byId('mapping-user').value = '';
-	});
-
-	byId('mappings').addEventListener('click', (event) => {
-		const button = event.target.closest('[data-remove-mapping]');
-		if (!button) return;
-		if (
-			window.confirm(`Remove the ${button.dataset.portal} override for ${button.dataset.userId}?`)
-		) {
-			void operation(
-				'Removing user override',
-				() =>
-					state.api.mapPortalUser({
-						portal: button.dataset.portal,
-						userId: button.dataset.userId
-					}),
-				'Individual user override removed.'
+	for (const portal of ['discord', 'slack']) {
+		byId(`${portal}-mapping-form`).addEventListener('submit', async (event) => {
+			event.preventDefault();
+			if (state.operationInFlight) return;
+			const userId = byId(`${portal}-mapping-user`).value.trim();
+			const username = byId(`${portal}-mapping-credential`).value || undefined;
+			await operation(
+				'Saving user access',
+				async () => {
+					const saved = await state.api.mapPortalUser({ portal, userId, username });
+					setFormClean(`${portal}-mapping-form`);
+					byId(`${portal}-mapping-user`).value = '';
+					return saved;
+				},
+				username ? 'Individual user access saved.' : 'Individual override removed.'
 			);
-		}
-	});
+		});
+		byId(`${portal}-mappings`).addEventListener('click', (event) => {
+			const button = event.target.closest('[data-remove-mapping]');
+			if (!button || state.operationInFlight) return;
+			if (window.confirm(`Remove the ${portal} override for ${button.dataset.userId}?`)) {
+				void operation(
+					'Removing user override',
+					() => state.api.mapPortalUser({ portal, userId: button.dataset.userId }),
+					'Individual user override removed.'
+				);
+			}
+		});
+	}
 }

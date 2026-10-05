@@ -25,6 +25,15 @@ to the final wizard before running that qualification. This is an unreleased
 preview AppImage, not a new certified release. TypeScript compilation and the
 standard AppImage build are build checks, not end-to-end verification.
 
+Connections is also a current design preview: separate Claude, Codex, Discord,
+Slack, OpenCode and MCP sections replace the old client tabs/chat/native groups.
+Claude contains both Desktop and Code setup. Bot-specific tokens and user
+mappings live with that app. Each app/network form saves only its own settings;
+bot enablement retains the existing shared MCP dependency. Credential handling,
+native consent and restart confirmation still use the existing APIs. The older
+Connections renderer/E2E fixtures must be aligned during final qualification;
+this preview does not claim live token, pairing or per-app-save verification.
+
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
@@ -39,6 +48,18 @@ nothing. Enter in the import form must preview, never install or apply. Import
 must retain digest binding, native confirmation and stopped-writer checks;
 changes made during a pending preview cannot produce a stale actionable review.
 Product navigation must never resize the window.
+
+For Connections, open each app with keyboard and pointer at normal/narrow sizes
+and 200% zoom. Check that only the chosen app's controls appear, Claude offers
+Desktop/Code methods together, and no shared token selector or separate remote
+group remains. In a disposable instance, edit two apps, save one and verify the
+other draft remains unsaved and the saved configuration is unchanged for that
+other app. Repeat for the two network forms and for bot-token/user-mapping saves.
+Confirm denied empty bot allowlists, blank-token preservation, failed-write
+draft preservation, masked key handling, pending restart and cancelled restarts.
+MCP cannot be disabled while a saved bot requires it. Run the usual native
+account/pairing verification only after explicit sign-in and workspace consent;
+startup or a running container must never be presented as a connected client.
 
 ## Final automated qualification
 

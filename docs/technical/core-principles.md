@@ -114,6 +114,17 @@ names already present in Docker. Compose commands check project working-director
 ownership before acting, so a selected folder cannot take over another instance.
 Opening/switching homes never resizes the window or starts/stops a stack.
 
+Admin Connections is organized by the app the user wants to connect, not by
+protocol, container or harness: Claude, Codex, Discord, Slack, OpenCode and MCP.
+Claude owns both Desktop and Code workflows. Each bot owns its token setup,
+allowlists, default identity and individual user mappings. People & access owns
+reusable identities. OpenCode/MCP network controls stay under that app's Advanced
+settings. App-scoped saves use the existing intent/baseline/restart path and
+preserve other apps' drafts; bot enablement retains its shared MCP dependency.
+There is no new connection registry, protocol or generic integration engine.
+Configured, running, native startup intent and verified client readiness remain
+distinct. Native workers remain experimental and require native consent.
+
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations
 use a shared per-home lock and current intent. Foreign/nonempty unrelated

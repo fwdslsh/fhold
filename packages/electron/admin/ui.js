@@ -187,21 +187,10 @@ export function showView(name, options = {}) {
 	if (options.focus === true) byId('view-title').focus();
 }
 
-export function showClient(name, options = {}) {
-	if (!['opencode', 'claude', 'mcp'].includes(name)) return;
-	if (state.currentClient !== name && !byId('notice').className.includes('error')) notice('');
-	state.currentClient = name;
-	byId('gateway-connection').hidden = name === 'opencode';
-	byId('save-client-connections').hidden = name === 'opencode';
-	for (const panel of all('[data-client-panel]')) panel.hidden = panel.dataset.clientPanel !== name;
-	for (const button of all('[data-client-setup]')) {
-		button.setAttribute('aria-pressed', String(button.dataset.clientSetup === name));
-	}
-	if (options.focus === true) {
-		const panel = byId(`client-${name}`);
-		panel.setAttribute('tabindex', '-1');
-		panel.focus();
-	}
+export function showConnectionApp(name) {
+	if (!['opencode', 'claude', 'codex', 'discord', 'slack', 'mcp'].includes(name)) return;
+	showView('connections');
+	byId(`${name}-connection`).open = true;
 }
 
 export function bindUiEvents() {
@@ -240,25 +229,6 @@ export function bindUiEvents() {
 
 	for (const button of all('[data-view-target]')) {
 		button.addEventListener('click', () => showView(button.dataset.viewTarget, { focus: true }));
-	}
-	for (const button of all('[data-mapping-target]')) {
-		button.addEventListener('click', () => {
-			showView('access');
-			byId('chat-user-access').open = true;
-			byId('mapping-portal').value = button.dataset.mappingTarget;
-			byId('mapping-user').focus();
-		});
-	}
-
-	for (const button of all('[data-client-target]')) {
-		button.addEventListener('click', () => {
-			showView('connections', { focus: true });
-			showClient(button.dataset.clientTarget, { focus: true });
-		});
-	}
-
-	for (const button of all('[data-client-setup]')) {
-		button.addEventListener('click', () => showClient(button.dataset.clientSetup, { focus: true }));
 	}
 
 	byId('load-logs').addEventListener('click', async () => {

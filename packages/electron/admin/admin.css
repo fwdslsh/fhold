@@ -57,13 +57,20 @@ summary {
 	font: inherit;
 }
 
-:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+:where(
+	a[href],
+	button,
+	input,
+	select,
+	textarea,
+	summary,
+	[tabindex]:not([tabindex="-1"])
+):focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
 #view-title:focus,
-.client-panel:focus,
 #error-state:focus,
 #instance-welcome:focus,
 #instance-import-section:focus,
@@ -524,24 +531,6 @@ button.text-button:hover:not(:disabled) {
 .view-panel[data-view-panel="system"] + .view-panel {
 	margin-top: 24px;
 }
-:where(.connection-card) > summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	min-height: 52px;
-	cursor: pointer;
-	font-weight: 600;
-}
-:where(.connection-card) > summary::after {
-	content: "+";
-}
-:where(.connection-card[open]) > summary::after {
-	content: "−";
-}
-:where(.connection-card > summary) .status-badge {
-	margin-left: auto;
-}
 
 .ready-hero .primary-link {
 	margin-top: 0;
@@ -927,44 +916,53 @@ input[type="checkbox"] {
 	cursor: pointer;
 }
 
-.connection-card {
+.connection-app {
+	padding: 0;
+}
+.connection-app > summary {
+	min-height: 76px;
+	padding: 16px 22px;
+	border-radius: 6px;
+}
+.connection-app > summary > span:first-child {
+	flex: 1;
+	min-width: 0;
+}
+.connection-app > summary .status-badge,
+.connection-app > summary .card-label {
+	flex: 0 0 auto;
+}
+.connection-app[open] > summary {
+	margin-bottom: 0;
 	border-bottom: 1px solid var(--border-soft);
-	background: transparent;
+	border-radius: 6px 6px 0 0;
 }
-
-.connection-heading {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 20px;
-	padding: 16px 0;
+.app-connection-body {
+	padding: 20px 22px 24px;
 }
-
-.connection-heading h3 {
+.app-connection-body > :first-child {
+	margin-top: 0;
+}
+.app-connection-body .form-stack {
+	gap: 14px;
+	margin: 16px 0;
+}
+.app-connection-body .form-stack > .help-text {
 	margin: 0;
-	font-size: 1.0625rem;
 }
-
-.connection-heading p {
-	margin: 4px 0 0;
-	color: var(--ink-soft);
-	font-size: 0.8125rem;
-	line-height: 1.45;
+.app-connection-body > .field {
+	margin-top: 16px;
 }
-
-.connection-body {
-	padding: 0 0 16px;
-	border-top: 1px solid var(--border-soft);
+.app-connection-body .numbered-steps {
+	margin-top: 20px;
 }
-
-.connection-body > .field:first-child,
-.connection-body > .endpoint-row:first-child {
-	margin-top: 18px;
+.app-connection-body .disclosure .numbered-steps {
+	margin-top: 0;
 }
 
 .setup-help {
 	margin-top: 18px;
-	padding: 0;
+	padding: 0 12px;
 	font-size: 0.8125rem;
 	line-height: 1.5;
 }
@@ -978,36 +976,6 @@ input[type="checkbox"] {
 	color: var(--ink-soft);
 }
 
-.segmented-control {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	min-width: 0;
-	margin-top: 20px;
-	padding: 0;
-	border: 0;
-}
-
-.segmented-control button[aria-pressed="true"] {
-	border-color: var(--border);
-	background: var(--surface-muted);
-	color: var(--ink);
-}
-
-.client-panel {
-	display: grid;
-	gap: 18px;
-	margin-top: 20px;
-	padding: 16px 0 0;
-	border-top: 1px solid var(--border-soft);
-	background: transparent;
-}
-
-.client-panel .connection-heading {
-	padding: 0;
-}
-
-.client-panel > .field,
 .numbered-steps .field {
 	margin-top: 0;
 }
@@ -1091,21 +1059,6 @@ input[type="checkbox"] {
 	color: var(--ink-soft);
 	font-size: 0.8125rem;
 	line-height: 1.5;
-}
-
-.endpoint-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 20px;
-}
-
-.endpoint-row > div {
-	display: grid;
-	gap: 5px;
-	min-width: 0;
-	font-size: 0.75rem;
-	font-weight: 750;
 }
 
 .policy-explainer {
@@ -1487,9 +1440,7 @@ body[data-busy="true"] #main-content {
 		grid-column: auto;
 	}
 
-	.section-heading,
-	.connection-heading,
-	.endpoint-row {
+	.section-heading {
 		align-items: flex-start;
 		flex-direction: column;
 	}
@@ -1514,6 +1465,15 @@ body[data-busy="true"] #main-content {
 	.panel,
 	.hero-card {
 		padding: 18px;
+	}
+	.connection-app {
+		padding: 0;
+	}
+	.connection-app > summary {
+		padding: 14px 16px;
+	}
+	.app-connection-body {
+		padding: 16px;
 	}
 
 	.sidebar {
@@ -1635,36 +1595,6 @@ body[data-busy="true"] #main-content {
 
 .page-header > div > .eyebrow {
 	display: none;
-}
-
-.remote-connection-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 12px;
-	padding: 16px 0;
-	border-bottom: 1px solid var(--border-soft);
-}
-
-.connection-body > .field {
-	margin-top: 16px;
-}
-
-.remote-connection-row h3 {
-	margin: 0 0 6px;
-	font-size: 1rem;
-}
-
-.remote-connection-row > div {
-	min-width: 0;
-	max-width: 100%;
-}
-
-.remote-connection-row p {
-	margin: 0 0 8px;
-	font-size: 0.875rem;
-	color: var(--ink-soft);
 }
 
 .remote-steps {

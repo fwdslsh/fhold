@@ -261,8 +261,8 @@ See [Codex's hook trust model](https://learn.chatgpt.com/docs/hooks#review-and-t
 
 ## Toggles, recovery, and trust
 
-In Admin, expand **Connections → Remote coding agents** and choose **Set up**
-for Claude Code or Codex. Confirm trusted workspace access and select
+In Admin, open **Connections → Claude → Claude Code** and choose **Set up Claude Code**,
+or **Connections → Codex → Set up Codex**. Confirm trusted workspace access and select
 **Continue**. Codex uses workspace-write by default; read-only and explicit
 container isolation are under **Advanced settings**. The latter explains full
 container access before you confirm trust. The browser handles account login;

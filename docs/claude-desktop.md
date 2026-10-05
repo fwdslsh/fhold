@@ -24,16 +24,17 @@ fhold connect claude --credential claude-desktop
 
 Download `fhold-claude-desktop-<version>.mcpb` from the matching
 [GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
-Admin's **Connections → Claude Desktop** panel provides the direct download;
+Admin's **Connections → Claude → Claude Desktop** section provides the direct download;
 `fhold connect claude` prints the same versioned URL. No source build is required.
 In Claude Desktop:
 
 1. Open **Settings → Extensions → Advanced settings**.
 2. In **Extension Developer**, choose **Install Extension…**.
 3. Select the `.mcpb` file.
-4. In fhold Admin, open **Connections → Claude Desktop**. Enable protected
-   access and save Connections if prompted.
-5. Copy the displayed **Local fhold address** and the key for the selected
+4. In fhold Admin, open **Connections → Claude → Claude Desktop** and choose
+   **Enable access for Claude Desktop** if needed. Confirm whether to restart
+   now or apply the saved change later.
+5. Copy the displayed **Local address** and the key for the selected
    access identity into the extension. Create a dedicated identity under
    **People & access** first when you do not want to reuse an existing one.
 6. Restart Claude Desktop if the tools do not appear.

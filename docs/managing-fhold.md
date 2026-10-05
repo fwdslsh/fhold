@@ -164,9 +164,21 @@ the configuration baseline. Unavailable checks do not claim a stopped or healthy
 agent; provider readiness remains in Agent settings. Opening/switching instances
 and automatic status checks never restart containers or resize the window.
 
-Agent settings owns provider readiness, memory and timezone. Connections holds
-OpenCode links, Guardian MCP details and optional portals. People & access owns
-named identities. System holds installation details, recent logs, import/export,
+Agent settings owns provider readiness, memory and timezone. **Connections** is
+organized by app: **Claude**, **Codex**, **Discord**, **Slack**, **OpenCode** and
+**MCP**. Open an app to see its instructions, status, actions and settings.
+Claude contains both Desktop extension setup and experimental Claude Code
+Remote Control. Codex contains sign-in, pairing and knowledge recall. Discord
+and Slack each contain their own bot tokens, allowed-user rules, default access
+and individual user overrides; there is no shared token/app selector.
+OpenCode contains its address, password and advanced network settings. MCP
+contains enabling access, connection instructions, identities/keys and its
+advanced network settings. Bot setup enables the shared MCP service when needed.
+An app's Save action changes that app, not other apps' unsaved drafts. Restart
+confirmation and the persistent pending-changes alert still apply. Native
+workers remain experimental; startup enabled is not a verified client connection.
+**People & access** owns the reusable named identities and keys, not bot-specific
+user mappings. System holds installation details, recent logs, import/export,
 then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 

@@ -5,7 +5,6 @@ export function createAdminState() {
 		currentConfig: null,
 		currentSnapshot: null,
 		currentView: 'overview',
-		currentClient: 'opencode',
 		instancesDirectory: '',
 		recentInstances: [],
 		snapshotPromise: undefined,
@@ -32,9 +31,16 @@ export function createAdminState() {
 export const state = createAdminState();
 
 export const managedFormIds = [
-	'connections-form',
+	'mcp-connections-form',
+	'discord-connections-form',
+	'slack-connections-form',
+	'discord-token-form',
+	'slack-token-form',
+	'discord-mapping-form',
+	'slack-mapping-form',
 	'access-form',
-	'network-form',
+	'opencode-network-form',
+	'mcp-network-form',
 	'runtime-recovery-form',
 	'preferences-form'
 ];
@@ -67,9 +73,9 @@ export const viewMeta = {
 		description: 'AI account, memory, and recurring work.'
 	},
 	connections: {
-		kicker: 'CLIENTS & CHAT APPS',
+		kicker: 'YOUR APPS',
 		title: 'Connections',
-		description: 'Connect an app or manage access from chat.'
+		description: 'Choose the app you want to use with your agent.'
 	},
 	access: {
 		kicker: 'PEOPLE & PERMISSIONS',

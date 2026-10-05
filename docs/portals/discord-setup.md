@@ -24,8 +24,11 @@ Avoid putting the token in shell history; an interactive secret editor or
 password-manager command is preferable.
 
 In fhold Admin, **Connections → Discord** presents the same checklist and
-opens the Discord Developer Portal. **Add Discord token** moves directly to the
-private token form; the value remains masked and is never shown again.
+opens the Discord Developer Portal. **Bot tokens → Save Discord token** stores
+the value privately; it remains masked and is never shown again. Default access,
+allowed-user rules and individual user mappings are in the same Discord section.
+**Save Discord settings** does not save another app's drafts. Restart now or
+later when prompted; enabling Discord also enables the MCP service it needs.
 
 ## 2. Configure a default-deny scope
 

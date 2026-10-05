@@ -19,39 +19,37 @@ export async function saveConfigAndOfferRestart(config, formId, progress, succes
 }
 
 export function bindConfigurationEvents() {
-	byId('network-form').addEventListener('submit', async (event) => {
-		event.preventDefault();
-		if (!state.currentConfig) return;
-		const assistantBind = byId('assistant-bind').value.trim();
-		const assistantPort = Number(byId('assistant-port').value);
-		const gatewayPort = Number(byId('gateway-port').value);
-		if (assistantPort === gatewayPort) {
-			notice('The Assistant and protected-access ports must be different.', 'error', {
-				persist: true
-			});
-			byId('gateway-port').focus();
-			return;
-		}
-		const loopback = assistantBind === '::1' || assistantBind.startsWith('127.');
-		if (
-			!loopback &&
-			!window.confirm(
-				'Direct OpenCode access bypasses Guardian. Continue only on a trusted network with TLS.'
+	for (const app of ['opencode', 'mcp']) {
+		const section = app === 'opencode' ? 'assistant' : 'gateway';
+		byId(`${app}-network-form`).addEventListener('submit', async (event) => {
+			event.preventDefault();
+			if (state.operationInFlight || !state.currentConfig) return;
+			const bindAddress = byId(`${section}-bind`).value.trim();
+			const port = Number(byId(`${section}-port`).value);
+			const otherPort = state.currentConfig[app === 'opencode' ? 'gateway' : 'assistant'].port;
+			if (port === otherPort) {
+				notice('OpenCode and MCP must use different ports.', 'error', { persist: true });
+				byId(`${section}-port`).focus();
+				return;
+			}
+			const loopback = bindAddress === '::1' || bindAddress.startsWith('127.');
+			if (
+				app === 'opencode' &&
+				!loopback &&
+				!window.confirm(
+					'Direct OpenCode access bypasses Guardian. Continue only on a trusted network with TLS.'
+				)
 			)
-		)
-			return;
-		const config = structuredClone(state.currentConfig);
-		config.assistant = { ...config.assistant, bindAddress: assistantBind, port: assistantPort };
-		config.gateway = {
-			...config.gateway,
-			bindAddress: byId('gateway-bind').value.trim(),
-			port: gatewayPort
-		};
-		await saveConfigAndOfferRestart(
-			config,
-			'network-form',
-			'Saving network settings',
-			'Network settings saved.'
-		);
-	});
+				return;
+			const config = structuredClone(state.currentConfig);
+			config[section] = { ...config[section], bindAddress, port };
+			const title = app === 'opencode' ? 'OpenCode' : 'MCP';
+			await saveConfigAndOfferRestart(
+				config,
+				`${app}-network-form`,
+				`Saving ${title} network settings`,
+				`${title} network settings saved.`
+			);
+		});
+	}
 }
