@@ -74,13 +74,16 @@ and exact image reference yourself; this example does not create or delete them:
 
 ```sh
 docker run --rm --entrypoint fhold-recovery \
+  --user "$(id -u):$(id -g)" \
   --mount type=bind,src=/absolute/private-backups,dst=/recovery \
   --env FH_RECOVERY_URL=file:///recovery \
   --env FH_INSTANCE_ID=my-agent \
   YOUR_DIGEST_PINNED_ASSISTANT_IMAGE init --confirm-new-instance
 ```
 
-The mount must be writable by the image's non-root user. Configure ordinary
+The mount must be writable by the configured non-root user. For host-owned bind
+mounts, use the same numeric UID/GID for initialization and every subsequent
+container, as managed fhold installs do. Configure ordinary
 startup with the same destination and instance identity, separate writable local
 native state, and native password secret. Perform native provider/vendor sign-in
 through the image's existing private exec/setup flow after restoration; no Azure
@@ -438,6 +441,10 @@ contact Azure. It uses emulator-only `--skipApiVersionCheck` because shipped
 SDK 12.34.0 requests REST 2026-10-06, newer than that emulator's accepted versions.
 Do not apply that workaround to a cloud endpoint or interpret it as cloud API
 compatibility qualification.
+
+Run the smokes as a non-root Linux user with Docker access. Their containers use
+that user's numeric UID/GID, matching private bind-mount ownership without
+weakening permissions or modifying the candidate image.
 
 Smoke scripts retain private `/tmp/fhold-recovery-smoke-*` and
 `/tmp/fhold-blob-smoke-*` fixtures/reports, including synthetic account/trust

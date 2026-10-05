@@ -11,6 +11,13 @@ import { fileURLToPath } from 'node:url';
 
 const image = process.env.FH_RECOVERY_TEST_IMAGE;
 assert.ok(image, 'Set FH_RECOVERY_TEST_IMAGE to the exact candidate image');
+const uid = process.getuid?.();
+const gid = process.getgid?.();
+assert.ok(
+	Number.isInteger(uid) && uid > 0 && Number.isInteger(gid) && gid >= 0,
+	'Run image qualification as a non-root Linux user with access to Docker'
+);
+const runtimeUser = `${uid}:${gid}`;
 const root = await mkdtemp(join(tmpdir(), 'fhold-recovery-smoke-'));
 await chmod(root, 0o700);
 const backup = join(root, 'backup');
@@ -74,6 +81,7 @@ await writeFile(
 const created = new Set();
 const report = {
 	image,
+	runtimeUser,
 	instance,
 	fixture: root,
 	checks: {},
@@ -109,6 +117,8 @@ function command(executable, args, timeout = 120_000) {
 }
 const docker = (args, timeout) => command('docker', args, timeout);
 const common = [
+	'--user',
+	runtimeUser,
 	'--env-file',
 	envFile,
 	'--mount',
@@ -261,6 +271,9 @@ try {
 	report.checks.missingRequiredMountBlocksNativeStartup = true;
 	report.checks.explicitInitialization = true;
 	const first = await start('first');
+	assert.equal(await docker(['exec', first.id, 'id', '-u']), String(uid));
+	assert.equal(await docker(['exec', first.id, 'id', '-g']), String(gid));
+	report.checks.nonRootHostIdentity = true;
 	const coverage = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'inspect']));
 	assert.equal(
 		coverage.externalMounts.find((mount) => mount.path === '/work/drive-ro').readOnly,
@@ -460,6 +473,8 @@ try {
 			'--rm',
 			'--name',
 			harnessName,
+			'--user',
+			runtimeUser,
 			'--network',
 			'none',
 			'--mount',
