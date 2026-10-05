@@ -7,6 +7,8 @@ export function createAdminState() {
 		currentView: 'overview',
 		currentClient: 'opencode',
 		instancesDirectory: '',
+		recentInstances: [],
+		snapshotPromise: undefined,
 		providerSummaries: [],
 		providersLoaded: false,
 		providerLoadPromise: undefined,

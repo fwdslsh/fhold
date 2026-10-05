@@ -24,38 +24,25 @@ export function renderPhase(phase) {
 	}
 }
 
-export function sidebarRuntimeStatus(snapshot) {
-	if (snapshot.dockerError || !snapshot.services)
-		return { text: 'Status unavailable', tone: 'warning' };
-	const assistant = snapshot.services.find((service) => service.name === 'assistant');
-	if (isHealthy(assistant)) return { text: 'Assistant running', tone: 'success' };
-	return assistant
-		? { text: 'Needs attention', tone: 'warning' }
-		: { text: 'Assistant stopped', tone: 'neutral' };
-}
-
-function renderSidebarStatus(snapshot) {
-	const status = sidebarRuntimeStatus(snapshot);
-	byId('stack-status').textContent = status.text;
-	byId('stack-status').className = `sidebar-status ${status.tone}`;
-	setText('status-detail', snapshot.dockerError ? 'Docker status unavailable' : '');
-	byId('status-detail').hidden = !snapshot.dockerError;
-	byId('refresh').dataset.state = snapshot.dockerError ? 'unavailable' : 'idle';
-}
-
 export function renderRuntimeControls(snapshot) {
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
-	byId('start-stack').disabled = state.operationInFlight || running;
-	byId('restart-stack').disabled = state.operationInFlight || !running;
-	byId('stop-stack').disabled = state.operationInFlight || snapshot.services.length === 0;
-	byId('refresh').disabled =
-		state.operationInFlight || byId('refresh').getAttribute('aria-busy') === 'true';
+	const unavailable = !!snapshot.dockerError;
+	byId('start-stack').disabled = state.operationInFlight || unavailable || running;
+	byId('restart-stack').disabled = state.operationInFlight || unavailable || !running;
+	byId('stop-stack').disabled =
+		state.operationInFlight || unavailable || snapshot.services.length === 0;
 	renderRestartStatus(snapshot);
 	updateRecoveryFields();
 }
 
 export function renderServices(snapshot) {
+	const unavailable = !!snapshot.dockerError;
+	setText(
+		'runtime-status-detail',
+		unavailable ? 'Container status is unavailable. fhold will retry automatically.' : ''
+	);
+	byId('runtime-status-detail').hidden = !unavailable;
 	const services = byId('services');
 	services.replaceChildren();
 	if (snapshot.services.length === 0) {
@@ -89,22 +76,32 @@ export function renderServices(snapshot) {
 	const guardian = snapshot.services.find((service) => service.name === 'guardian');
 	setText(
 		'overview-heading',
-		isHealthy(assistant)
-			? 'Your personal agent is ready.'
-			: assistant
-				? 'Your agent needs attention.'
-				: 'Your agent is stopped.'
+		unavailable
+			? 'Container status is unavailable.'
+			: isHealthy(assistant)
+				? 'Your personal agent is ready.'
+				: assistant
+					? 'Your agent needs attention.'
+					: 'Your agent is stopped.'
 	);
 	setText(
 		'assistant-summary',
-		isHealthy(assistant) ? 'Running normally' : assistant ? 'Needs attention' : 'Stopped'
+		unavailable
+			? 'Status unavailable'
+			: isHealthy(assistant)
+				? 'Running normally'
+				: assistant
+					? 'Needs attention'
+					: 'Stopped'
 	);
 	setText(
 		'guardian-summary',
 		snapshot.config.gateway.enabled
-			? isHealthy(guardian)
-				? 'Enabled and healthy'
-				: 'Enabled · needs attention'
+			? unavailable
+				? 'Status unavailable'
+				: isHealthy(guardian)
+					? 'Enabled and healthy'
+					: 'Enabled · needs attention'
 			: 'Not enabled'
 	);
 	const enabledPortals = ['discord', 'slack'].filter(
@@ -116,7 +113,6 @@ export function renderServices(snapshot) {
 			? enabledPortals.map((portal) => portal[0].toUpperCase() + portal.slice(1)).join(' and ')
 			: 'None enabled'
 	);
-	renderSidebarStatus(snapshot);
 	renderRuntimeControls(snapshot);
 	const needsRecovery = snapshot.phase === 'setup_incomplete' && !isHealthy(assistant);
 	byId('setup-recovery').hidden = !needsRecovery;
@@ -146,7 +142,7 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
-	byId('check-prerequisites').addEventListener('click', () => void refresh(false));
+	byId('check-prerequisites').addEventListener('click', () => void refresh());
 	byId('install-automatic-ports').addEventListener('change', () => {
 		const automatic = byId('install-automatic-ports').checked;
 		byId('install-assistant-port').disabled = automatic;
@@ -177,7 +173,7 @@ export function bindRuntimeEvents() {
 			() => state.api.install(config, automaticPorts),
 			'fhold is installed. Next, connect your AI provider.'
 		);
-		if (!result) await refresh(false);
+		if (!result) await refresh();
 	});
 
 	byId('recovery-form').addEventListener('submit', async (event) => {

@@ -136,16 +136,9 @@
           <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">Setup & settings</span></div>
         </div>
 
-        <section class="sidebar-instance" aria-label="Selected instance">
-          <div class="sidebar-instance-copy">
-            <p class="sidebar-label">Instance</p>
-            <strong id="sidebar-instance-name" class="sidebar-instance-name">Loading…</strong>
-            <span id="selected-instance-path" class="selected-instance">Loading…</span>
-          </div>
-          <button class="sidebar-action instance-switch" type="button" aria-describedby="sidebar-instance-name selected-instance-path" data-instance-switch>
-            <span>Switch instance</span><span aria-hidden="true">↔</span>
-          </button>
-        </section>
+        <select id="instance-picker" class="sidebar-instance-picker" aria-label="Choose instance">
+          <option value="">Loading…</option>
+        </select>
 
         <div class="setup-only setup-progress" hidden>
           <p id="setup-step" class="eyebrow">Step 2 of 3</p>
@@ -177,14 +170,6 @@
         </nav>
         </details>
 
-        <div class="sidebar-footer">
-          <div class="sidebar-runtime-copy" role="status" aria-live="polite" aria-atomic="true">
-            <p class="sidebar-label">Runtime</p>
-            <p id="stack-status" class="sidebar-status neutral">Checking status</p>
-            <p id="status-detail" class="sidebar-status-detail" hidden></p>
-          </div>
-          <button id="refresh" class="sidebar-action sidebar-refresh" type="button" aria-label="Refresh status" aria-busy="false" data-state="idle">Refresh</button>
-        </div>
       </aside>
 
       <div class="workspace">
@@ -210,6 +195,7 @@
             <div class="hero-card ready-hero">
               <div>
                 <h2 id="overview-heading" class="visually-hidden">Your personal agent</h2>
+                <p id="overview-home" class="instance-path"></p>
                 <a id="overview-opencode-link" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode</a>
                 <button class="secondary" type="button" data-view-target="connections">Connect an app</button>
               </div>
@@ -240,6 +226,7 @@
                   <button id="stop-stack" data-action="stop" class="danger subtle" type="button">Stop</button>
                 </div>
               </div>
+              <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
               <div id="services" class="services" aria-live="polite"></div>
             </section>
 

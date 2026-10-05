@@ -279,7 +279,7 @@ export async function verifyProvider(progress, action) {
 		'Provider verified. Your personal agent is ready.'
 	);
 	if (!result?.ok) return false;
-	await refresh(false);
+	await refresh();
 	showView('overview');
 	await offerRestart();
 	return true;

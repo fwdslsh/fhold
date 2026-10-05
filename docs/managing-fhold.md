@@ -128,18 +128,22 @@ persisted Compose project names: `personal-agent` creates
 `personal-agent-assistant-1` with OS hostname `personal-agent`. Setup and lifecycle
 commands refuse to take over a same-named project from a different folder.
 Existing names are not changed when opening a home; System → Installation details
-shows the current name. Switch instance clears transient keys, sign-in steps and previews after
+shows the current name. Switching instances clears transient keys, sign-in steps and previews after
 unsaved-change confirmation; it does not stop a stack. Recent paths are stored
 in the separate `fhold-admin` desktop profile, not instance state. Keys load
 masked and require explicit Show/Copy. Window size remains user-controlled.
 SSH management is not implemented.
 
-The sidebar puts the selected instance name and folder together above navigation;
-long folders stay on one line, with the complete path in Installation details
-and the path tooltip. **Switch instance** opens Welcome without affecting running
-containers. The footer groups Assistant runtime status with **Refresh**. A failed
-check is unavailable/stale, not a stopped or healthy-agent claim; provider readiness
-remains in Agent settings. Refresh never restarts a container or changes window size.
+The sidebar has a single named instance dropdown above navigation. Select a recent
+instance to open it directly, or **Open another instance…** to return to Welcome
+for folder selection or new setup. It shows no paths, status footer or Refresh
+button. **Overview** shows the complete home path and container status; the path
+also remains in System → Installation details. Status checks run every 15 seconds
+while the selected instance is visible and when Admin regains focus. They pause
+during operations and never overwrite drafts, sign-in steps, displayed keys or
+the configuration baseline. Unavailable checks do not claim a stopped or healthy
+agent; provider readiness remains in Agent settings. Opening/switching instances
+and automatic status checks never restart containers or resize the window.
 
 Agent settings owns provider readiness, memory and timezone. Connections holds
 OpenCode links, Guardian MCP details and optional portals. People & access owns

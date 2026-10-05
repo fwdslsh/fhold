@@ -75,7 +75,12 @@ export class AdminInstances {
 		return {
 			defaultInstance: this.defaultInstance,
 			instancesDirectory: dirname(resolveFholdHome(defaultFholdHome())),
-			recentInstances: this.recent,
+			recentInstances: this.recent.map((target) => {
+				const config = readStackConfig(target.homeDir);
+				return config.ok
+					? { ...target, name: config.config.deployment.projectName }
+					: target;
+			}),
 			...(this.selected ? { selectedInstance: this.selected } : {}),
 			...(this.preferenceError ? { preferenceError: this.preferenceError } : {})
 		};

@@ -8,7 +8,8 @@ import {
 } from './connections.js';
 import { isHealthy } from './model.js';
 import { loadProviders, renderReadiness } from './providers.js';
-import { renderPhase, renderServices, sidebarRuntimeStatus } from './runtime.js';
+import { renderPhase, renderServices } from './runtime.js';
+import { renderInstancePicker } from './instances.js';
 import { renderPreferences } from './preferences.js';
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
@@ -25,7 +26,7 @@ import {
 	showView
 } from './ui.js';
 
-let refreshInFlight = false;
+let statusReadInFlight = false;
 
 export function render(snapshot, options = {}) {
 	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
@@ -39,11 +40,7 @@ export function render(snapshot, options = {}) {
 		byId('install-gateway-port').value = String(snapshot.config.gateway.port);
 	}
 	setText('install-home', snapshot.homeDir);
-	const instanceName = snapshot.config.deployment?.projectName || 'Selected instance';
-	setText('sidebar-instance-name', instanceName);
-	byId('sidebar-instance-name').setAttribute('title', `${instanceName}\n${snapshot.homeDir}`);
-	setText('selected-instance-path', snapshot.homeDir);
-	byId('selected-instance-path').setAttribute('title', snapshot.homeDir);
+	renderInstancePicker(snapshot);
 	byId('recovery-assistant-port').value = String(snapshot.config.assistant.port);
 	byId('recovery-gateway-port').value = String(snapshot.config.gateway.port);
 	renderPhase(snapshot.phase);
@@ -63,6 +60,7 @@ export function render(snapshot, options = {}) {
 	}
 
 	setText('home', snapshot.homeDir);
+	setText('overview-home', snapshot.homeDir);
 	setText('instance-name', snapshot.config.deployment?.projectName || '—');
 	setText('config-path', snapshot.configPath);
 	renderNetworkDetails(snapshot);
@@ -143,41 +141,79 @@ export async function showFatalError(error) {
 	byId('error-state').focus();
 }
 
-export async function refresh(announce = false) {
-	if (refreshInFlight) return;
-	refreshInFlight = true;
-	const button = byId('refresh');
-	button.disabled = true;
-	button.dataset.state = 'refreshing';
-	button.setAttribute('aria-busy', 'true');
-	setText('status-detail', 'Checking status…');
-	byId('status-detail').hidden = false;
-	try {
-		const snapshot = await state.api.snapshot();
-		render(snapshot);
-		button.dataset.state = snapshot.dockerError ? 'unavailable' : announce ? 'current' : 'idle';
-		if (announce && !snapshot.dockerError) {
-			setText('status-detail', 'Status refreshed');
-			byId('status-detail').hidden = false;
-			if (!byId('notice').className.includes('error')) byId('notice').hidden = true;
-		}
-	} catch (error) {
-		if (state.currentSnapshot) {
-			const lastKnown = sidebarRuntimeStatus(state.currentSnapshot);
-			setText('stack-status', 'Status unavailable');
-			byId('stack-status').className = 'sidebar-status warning';
-			setText('status-detail', `Refresh failed · last known: ${lastKnown.text.toLowerCase()}`);
-			byId('status-detail').hidden = false;
-			button.dataset.state = 'stale';
-			notice(`Could not refresh status: ${message(error)}`, 'error', { persist: true });
-			return;
-		}
-		button.dataset.state = 'unavailable';
-		await showFatalError(error);
-		notice(message(error), 'error', { persist: true });
-	} finally {
-		refreshInFlight = false;
-		button.disabled = state.operationInFlight;
-		button.setAttribute('aria-busy', 'false');
+export async function refresh({ statusOnly = false } = {}) {
+	if (state.snapshotPromise) {
+		const needsFullRead = !statusOnly && statusReadInFlight;
+		await state.snapshotPromise;
+		if (needsFullRead) await refresh();
+		return;
 	}
+	const previous = state.currentSnapshot;
+	statusReadInFlight = statusOnly;
+	state.snapshotPromise = (async () => {
+		try {
+			const snapshot = await state.api.snapshot();
+			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
+			if (
+				statusOnly &&
+				state.currentSnapshot?.phase === snapshot.phase &&
+				state.currentSnapshot.homeDir === snapshot.homeDir
+			) {
+				// Status reads must not reset forms, keys, hook reviews or the saved
+				// configuration baseline behind an operator's unsaved changes.
+				state.currentSnapshot = {
+					...state.currentSnapshot,
+					services: snapshot.services,
+					dockerError: snapshot.dockerError,
+					pendingRestart: snapshot.pendingRestart
+				};
+				renderServices(snapshot);
+				if (
+					!state.providersLoaded &&
+					!isHealthy(previous.services.find((service) => service.name === 'assistant')) &&
+					isHealthy(snapshot.services.find((service) => service.name === 'assistant'))
+				)
+					queueMicrotask(() => void loadProviders(false));
+			} else render(snapshot);
+		} catch (error) {
+			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
+			if (state.currentSnapshot?.phase !== 'not_installed' && state.currentSnapshot) {
+				state.currentSnapshot = {
+					...state.currentSnapshot,
+					services: [],
+					dockerError: message(error)
+				};
+				renderServices(state.currentSnapshot);
+				if (!statusOnly)
+					notice(`Could not refresh status: ${message(error)}`, 'error', { persist: true });
+			} else {
+				await showFatalError(error);
+				notice(message(error), 'error', { persist: true });
+			}
+		}
+	})();
+	try {
+		await state.snapshotPromise;
+	} finally {
+		state.snapshotPromise = undefined;
+		statusReadInFlight = false;
+	}
+}
+
+export async function refreshVisibleStatus() {
+	if (
+		document.hidden ||
+		state.operationInFlight ||
+		!state.currentSnapshot ||
+		byId('app-shell').hidden ||
+		byId('remote-dialog').open
+	)
+		return;
+	await refresh({ statusOnly: true });
+}
+
+export function bindSnapshotEvents() {
+	window.addEventListener('focus', () => void refreshVisibleStatus());
+	document.addEventListener('visibilitychange', () => void refreshVisibleStatus());
+	window.setInterval(() => void refreshVisibleStatus(), 15_000);
 }

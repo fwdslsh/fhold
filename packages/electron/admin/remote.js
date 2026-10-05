@@ -48,7 +48,7 @@ function renderRecallStatus(review, error) {
 			: review?.status === 'approval-needed'
 				? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
 				: review?.status === 'ready'
-					? 'Native approval was verified in this explicit review. Refresh or restart requires another review.'
+					? 'Native approval was verified in this explicit review. Review again after a restart or hook changes.'
 					: 'Review AKM hooks here; no Codex command is needed. Start Assistant to check approval.');
 }
 
@@ -178,7 +178,7 @@ function showProgress(progress) {
 		byId('remote-sandbox').disabled = false;
 		byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
 		byId('remote-answer').value = '';
-		void refresh(false);
+		void refresh();
 	} else {
 		timer = setTimeout(async () => {
 			try {
@@ -315,7 +315,7 @@ export function bindRemoteEvents() {
 				byId('remote-begin').hidden = true;
 				byId('remote-recall-disable').hidden = false;
 				setBusy(false);
-				await refresh(false);
+				await refresh();
 				renderRecallStatus(recallReview);
 				return;
 			}
@@ -396,7 +396,7 @@ export function bindRemoteEvents() {
 			byId('remote-stage').textContent =
 				'Automatic knowledge recall is off. Native approval is retained; remote startup is unchanged.';
 			byId('remote-begin').hidden = false;
-			await refresh(false);
+			await refresh();
 			await loadRecall();
 		} catch (error) {
 			byId('remote-stage').textContent = message(error);
@@ -415,7 +415,7 @@ export function bindRemoteEvents() {
 				'Remote startup setting saved. Apply it with a restart; account sign-in is retained.'
 			);
 			if (result) {
-				await refresh(false);
+				await refresh();
 				await offerRestart();
 			}
 		});

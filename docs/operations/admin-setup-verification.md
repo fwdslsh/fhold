@@ -23,14 +23,19 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
-Sidebar checks compare its visible name and full-path tooltip against the actual
-selected snapshot, and keep Switch instance/Refresh labeled and keyboard accessible.
-The rendered walkthrough covers one-line long-path truncation, refresh completion,
-clearly stale/unavailable status, expanded narrow navigation and 200% zoom, with
-44px action targets and no horizontal overflow. Long identities and transport
-failure are explicitly isolated renderer fixtures, not real Docker outages.
-Runtime status does not claim provider/account readiness. Only the harness manually
-resizes for responsive checks; product navigation and refresh never resize windows.
+Sidebar checks compare the named recent-instance dropdown against the actual
+selected snapshot, verify direct switching and the **Open another instance…**
+Welcome route, and require no footer, visible path or Refresh button. Overview
+owns the complete path and container status. The rendered walkthrough covers
+long names, clearly unavailable status, automatic recovery on focus, keyboard
+traversal, expanded narrow navigation and 200% zoom, with 44px action targets and
+no horizontal overflow. Long identities and transport failure are explicitly
+isolated renderer fixtures, not real Docker outages. Unit tests verify the
+15-second visible-window polling, busy/hidden pauses, coalesced reads, read-before-
+switch coordination, cancelled/failed switching, drafts/key/review preservation
+and unchanged configuration baselines. Runtime status does not claim provider/
+account readiness. Only the harness manually resizes for responsive checks;
+product navigation and status checks never resize windows.
 
 System has one view with four collapsed sections, in order: **Installation
 details**, **Recent logs**, **Import / export**, **Ephemeral container support**.

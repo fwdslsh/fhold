@@ -62,6 +62,26 @@ describe('Admin instance selection', () => {
 		expect(restarted.welcome().recentInstances.map((item) => item.homeDir)).toEqual([home, other]);
 	});
 
+	it('derives recent labels from current saved names without a second name registry or home writes', () => {
+		const { root, home, profile } = fixture();
+		installed(home);
+		const config = defaultStackConfig(home);
+		config.deployment.projectName = 'april';
+		writeStackConfig(home, config);
+		const instances = new AdminInstances(profile, home);
+		instances.open({ kind: 'local', homeDir: home });
+		const preferences = readFileSync(join(profile, 'instances.json'), 'utf8');
+		const stack = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
+		expect(instances.welcome().recentInstances[0].name).toBe('april');
+		expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(stack);
+		expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
+		expect(preferences).not.toContain('april');
+		const missing = join(root, 'missing');
+		instances.prepareNew({ kind: 'local', homeDir: missing });
+		expect(instances.welcome().recentInstances[0].name).toBeUndefined();
+		expect(existsSync(missing)).toBe(false);
+	});
+
 	it('rejects legacy, unrelated, file, relative and unsupported targets without writing to them', () => {
 		const { root, home, profile } = fixture();
 		mkdirSync(home);

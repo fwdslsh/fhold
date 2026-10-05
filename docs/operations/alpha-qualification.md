@@ -25,7 +25,7 @@ The candidate also refreshes AKM to CLI `0.9.26` and plugin
 
 Linux x64 verification on October 5, 2026:
 
-- All 594 source tests passed with loopback socket and native-history checks
+- All 602 source tests passed with loopback socket and native-history checks
   enabled, with no failures or skips. Type checks, lint, CLI compilation and
   Admin bundling passed. All Compose profiles validated, including the restored
   home's secret and mount boundaries.
@@ -42,17 +42,26 @@ Linux x64 verification on October 5, 2026:
   database were real. Identity and keys remained unchanged, no containers started
   during import, and the original OpenCode session was retrieved through the
   authenticated API after an explicit start. Window dimensions stayed unchanged.
-- The design-reviewed sidebar groups selected identity and switching above
-  navigation, with compact runtime status and Refresh below. Real rendered checks
-  covered saved identity, keyboard navigation, narrow layout, 200% zoom and 44px
-  action targets. Isolated renderer fixtures exercised long paths and stale
-  status without changing homes or simulating a real Docker outage. Type, build
-  and accessibility checks passed; no dependencies or window resizing were added.
-- A fresh Linux x64 Admin AppImage built from candidate `f11c5aa` passed actual
+- The sidebar now has only a named recent-instance picker and navigation, without
+  a status footer, visible path or Refresh button. Overview owns the path and
+  container status. Real rendered checks covered direct switching, cancellation,
+  the Welcome route, keyboard navigation, long names, automatic status recovery,
+  narrow layout, 200% zoom and 44px actions. The complete Electron/Docker journey
+  passed with 44 accessibility/layout audits and no violations or horizontal
+  overflow. Background reads preserved drafts, keys and configuration baselines;
+  switching waited for in-flight reads. No dependencies or production window
+  resizing were added.
+- A fresh Linux x64 Admin AppImage from this source revision passed actual
   packaged startup with normal host Chromium sandboxing and an isolated profile.
   The native release smoke exercised Welcome, the renderer/bridge and named
   instance preparation. The preview retained the alpha.6 version label; it did
   not replace the installed Admin or change an existing instance.
+- During development, one native-window narrow/zoom traversal failed the existing
+  recovery timing-field assertion once. The repeated complete journey passed the
+  unchanged assertion; its failure diagnostics now include non-secret field,
+  saved-value and focus details. The cause was not established, so this is not
+  evidence that a timing-field defect was fixed. Only the test harness resizes
+  windows. The UI tests do not reset timing fields to make an assertion pass.
 - All three Linux x64 images rebuilt and passed standard startup smokes. The new
   AKM pins passed actual OpenCode, Claude and Codex session/prompt recall, both
   default-on and explicitly disabled native workers, preserved customized

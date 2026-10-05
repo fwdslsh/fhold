@@ -42,7 +42,7 @@ export async function requestStackAction(action) {
 		() => state.api.action(action, true),
 		labels[action][1]
 	);
-	if (!result) await refresh(false);
+	if (!result) await refresh();
 	return result;
 }
 

@@ -62,6 +62,7 @@ export function setBusy(value) {
 			? byId('install-section')
 			: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
+	byId('instance-picker').disabled = value;
 	if (value) {
 		state.disabledButtons = all('button').map((button) => ({ button, disabled: button.disabled }));
 		for (const { button } of state.disabledButtons) button.disabled = true;
@@ -207,12 +208,10 @@ export function bindUiEvents() {
 	}
 	byId('dismiss-notice').addEventListener('click', () => notice(''));
 
-	byId('refresh').addEventListener('click', () => void refresh(true));
-
 	byId('retry-snapshot').addEventListener('click', () => {
 		byId('error-state').hidden = true;
 		byId('loading-state').hidden = false;
-		void refresh(false);
+		void refresh();
 	});
 
 	byId('skip-link').addEventListener('click', () => {

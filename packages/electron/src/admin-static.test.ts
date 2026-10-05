@@ -29,11 +29,12 @@ import {
 } from '../admin/remote.js';
 import { resetOAuthAttempt, renderProviders, loadProviders } from '../admin/providers.js';
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
-import { render, refresh } from '../admin/snapshot.js';
+import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
 import {
 	initializeAdmin,
 	renderWelcome,
+	renderInstancePicker,
 	bindInstanceEvents,
 	showInstances
 } from '../admin/instances.js';
@@ -143,7 +144,6 @@ beforeEach(() => {
 	control('new-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
 	control('install-gateway-port').disabled = true;
-	control('refresh').textContent = 'Refresh'; // Static HTML owns this constant action label.
 	globalThis.document = {
 		body: new Control(),
 		getElementById: (id: string) => control(id),
@@ -425,12 +425,10 @@ describe('Admin static security boundary', () => {
 		state.api = { snapshot: async () => ({ ...snapshot, installationReadiness: { ok: true } }) };
 		control('notice').className = 'notice error';
 		control('notice').hidden = false;
-		await refresh(true);
+		await refresh();
 		expect(control('install').disabled).toBe(false);
 		expect(control('check-prerequisites').hidden).toBe(true);
 		expect(control('notice').hidden).toBe(false);
-		expect(control('refresh').textContent).toBe('Refresh');
-		expect(control('refresh').dataset.state).toBe('current');
 	});
 	it('retains a chosen instance name and ports while rechecking prerequisites', () => {
 		const snapshot = {
@@ -812,11 +810,12 @@ describe('Admin static security boundary', () => {
 	});
 });
 
-describe('Admin sidebar identity and status', () => {
+describe('Admin instance picker and automatic status', () => {
 	function emptySnapshot() {
 		return {
 			phase: 'not_installed',
 			homeDir: '/home/person/fhold/instances/a-very-long-personal-instance-folder',
+			services: [],
 			config: {
 				deployment: { projectName: 'personal-agent' },
 				assistant: { port: 3810 },
@@ -825,95 +824,223 @@ describe('Admin sidebar identity and status', () => {
 			installationReadiness: { ok: true }
 		};
 	}
-	it('uses the saved identity, retains the full path and keeps labeled instance/status actions', () => {
+	it('shows only a named recent-instance picker in the sidebar, with no footer or path', () => {
 		const snapshot = emptySnapshot();
+		state.recentInstances = [
+			{ kind: 'local', homeDir: snapshot.homeDir, name: 'old-name' },
+			{ kind: 'local', homeDir: '/custom/folder', name: 'may' },
+			{ kind: 'local', homeDir: '/missing/june' }
+		];
 		render(snapshot);
-		expect(control('sidebar-instance-name').textContent).toBe('personal-agent');
-		expect(control('selected-instance-path').textContent).toBe(snapshot.homeDir);
-		expect(control('selected-instance-path').getAttribute('title')).toBe(snapshot.homeDir);
-		expect(html).toContain('Switch instance');
-		expect(html).toContain('aria-label="Refresh status"');
-		expect(html).toContain('id="status-detail"');
+		expect(control('instance-picker').options.map((option) => option.textContent)).toEqual([
+			'personal-agent', 'may', 'june', 'Open another instance…'
+		]);
+		expect(control('instance-picker').value).toBe(snapshot.homeDir);
+		const sidebar = html.slice(html.indexOf('<aside class="sidebar">'), html.indexOf('</aside>'));
+		expect(sidebar).toContain('aria-label="Choose instance"');
+		for (const removed of ['sidebar-footer', 'stack-status', 'id="refresh"', 'selected-instance-path', 'sidebar-label'])
+			expect(sidebar).not.toContain(removed);
+		expect(html).toContain('id="overview-home" class="instance-path"');
 	});
-	it('reports actual runtime state without equating a container with provider readiness', () => {
-		const snapshot = {
-			phase: 'ready', services: [],
+	it('switches directly to a recent instance through the existing API and reloads transient state', async () => {
+		state.currentSnapshot = emptySnapshot();
+		state.recentInstances = [{ kind: 'local', homeDir: '/other', name: 'other-agent' }];
+		renderInstancePicker(state.currentSnapshot);
+		let opened: unknown;
+		let reloads = 0;
+		window.location = { reload: () => { reloads++; } } as unknown as Location;
+		state.api = { openInstance: async (target) => { opened = target; } };
+		bindInstanceEvents();
+		control('instance-picker').value = '/other';
+		await control('instance-picker').listeners.get('change')?.({});
+		expect(opened).toEqual(state.recentInstances[0]);
+		expect(reloads).toBe(1);
+		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
+	});
+	it('returns to Welcome for another instance and preserves selection when switching is cancelled or fails', async () => {
+		state.currentSnapshot = emptySnapshot();
+		state.recentInstances = [{ kind: 'local', homeDir: '/missing', name: 'missing' }];
+		let closed = false;
+		let reloads = 0;
+		window.location = { reload: () => { reloads++; } } as unknown as Location;
+		state.api = {
+			closeInstance: async () => { closed = true; },
+			openInstance: async () => { throw new Error('Recent instance is unavailable'); }
+		};
+		bindInstanceEvents();
+		const choose = async (value: string) => {
+			control('instance-picker').value = value;
+			await control('instance-picker').listeners.get('change')?.({});
+		};
+		state.dirtyForms.add('preferences-form');
+		await choose('/missing');
+		await choose('open-another');
+		expect(closed).toBe(false);
+		expect(reloads).toBe(0);
+		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
+		state.dirtyForms.clear();
+		await choose('/missing');
+		expect(control('notice-message').textContent).toBe('Recent instance is unavailable');
+		expect(reloads).toBe(0);
+		await choose('open-another');
+		expect(closed).toBe(true);
+		expect(reloads).toBe(1);
+	});
+	it('waits for an automatic status read before switching and disables the picker while busy', async () => {
+		state.currentSnapshot = emptySnapshot();
+		let finish!: () => void;
+		state.snapshotPromise = new Promise<void>((resolve) => { finish = resolve; });
+		let closed = false;
+		window.location = { reload() {} } as unknown as Location;
+		state.api = { closeInstance: async () => { closed = true; } };
+		const switching = showInstances();
+		expect(control('instance-picker').disabled).toBe(true);
+		expect(closed).toBe(false);
+		finish();
+		await switching;
+		expect(closed).toBe(true);
+		expect(control('instance-picker').disabled).toBe(false);
+	});
+	function runtimeSnapshot() {
+		return {
+			phase: 'ready', homeDir: '/personal-agent', services: [],
 			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
 		};
+	}
+	it('reports actual runtime state on Overview without equating a container with account readiness', () => {
+		const snapshot = {
+			...runtimeSnapshot()
+		};
 		for (const [services, label] of [
-			[[{ name: 'assistant', state: 'running', health: 'healthy' }], 'Assistant running'],
+			[[{ name: 'assistant', state: 'running', health: 'healthy' }], 'Running normally'],
 			[[{ name: 'assistant', state: 'running', health: 'unhealthy' }], 'Needs attention'],
-			[[], 'Assistant stopped']
+			[[], 'Stopped']
 		] as const) {
 			renderServices({ ...snapshot, services });
-			expect(control('stack-status').textContent).toBe(label);
-			expect(control('stack-status').textContent).not.toContain('ready');
+			expect(control('assistant-summary').textContent).toBe(label);
+			expect(control('assistant-summary').textContent).not.toContain('ready');
 		}
 		renderServices({ ...snapshot, dockerError: 'Docker is not available.' });
-		expect(control('stack-status').textContent).toBe('Status unavailable');
-		expect(control('stack-status').className).not.toContain('success');
-		expect(control('status-detail').textContent).toBe('Docker status unavailable');
+		expect(control('assistant-summary').textContent).toBe('Status unavailable');
+		expect(control('runtime-status-detail').textContent).toContain('retry automatically');
+		expect(control('start-stack').disabled).toBe(true);
 	});
-	it('keeps refresh compact, visible and single-flight while status is being checked', async () => {
+	it('coalesces overlapping snapshot reads without a manual refresh control', async () => {
 		const snapshot = emptySnapshot();
 		state.currentSnapshot = snapshot;
 		let complete!: (value: unknown) => void;
 		let calls = 0;
 		state.api = { snapshot: () => { calls++; return new Promise((resolve) => { complete = resolve; }); } };
-		const first = refresh(true);
-		const second = refresh(true);
+		const first = refresh();
+		const second = refresh();
 		expect(calls).toBe(1);
-		expect(control('refresh').disabled).toBe(true);
-		expect(control('refresh').getAttribute('aria-busy')).toBe('true');
-		expect(control('refresh').dataset.state).toBe('refreshing');
-		expect(control('status-detail').textContent).toBe('Checking status…');
+		expect(state.snapshotPromise).toBeDefined();
 		complete(snapshot);
 		await Promise.all([first, second]);
-		expect(control('refresh').textContent).toBe('Refresh');
-		expect(control('refresh').disabled).toBe(false);
-		expect(control('refresh').getAttribute('aria-busy')).toBe('false');
-		expect(control('refresh').dataset.state).toBe('current');
-		expect(control('status-detail').textContent).toBe('Status refreshed');
+		expect(state.snapshotPromise).toBeUndefined();
 	});
-	it('marks failed refreshes unavailable instead of leaving a misleading healthy indicator', async () => {
-		state.currentSnapshot = { phase: 'ready', services: [{ name: 'assistant', state: 'running', health: 'healthy' }] };
-		control('stack-status').textContent = 'Assistant running';
-		control('stack-status').className = 'sidebar-status success';
+	it('marks failed automatic checks unavailable on Overview, then recovers without clearing user errors', async () => {
+		state.currentSnapshot = { ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] };
+		renderServices(state.currentSnapshot);
+		control('notice').className = 'notice error';
+		control('notice-message').textContent = 'Unsaved setting needs attention';
 		state.api = { snapshot: async () => { throw new Error('Connection unavailable'); } };
-		await refresh(true);
-		expect(control('stack-status').textContent).toBe('Status unavailable');
-		expect(control('stack-status').className).not.toContain('success');
-		expect(control('status-detail').textContent).toContain('last known');
-		expect(control('refresh').dataset.state).toBe('stale');
-		expect(control('refresh').disabled).toBe(false);
-		expect(control('notice-message').textContent).toContain('Connection unavailable');
+		await refreshVisibleStatus();
+		expect(control('assistant-summary').textContent).toBe('Status unavailable');
+		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
+		state.api.snapshot = async () => ({ ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
+		await refreshVisibleStatus();
+		expect(control('assistant-summary').textContent).toBe('Running normally');
+		expect(control('runtime-status-detail').hidden).toBe(true);
+		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
 	});
-	it('keeps refresh disabled during overlapping work and re-enables it after both operations settle', async () => {
-		for (const readFinishesFirst of [true, false]) {
-			const snapshot = { ...emptySnapshot(), services: [] };
-			state.currentSnapshot = snapshot;
-			selector('button', control('refresh'));
-			let completeRead!: (value: unknown) => void;
-			let completeSave!: (value: string) => void;
-			state.api = { snapshot: () => new Promise((resolve) => { completeRead = resolve; }) };
-			const checking = refresh(true);
-			const saving = operation('Saving', () => new Promise<string>((resolve) => { completeSave = resolve; }));
-			if (readFinishesFirst) {
-				completeRead(snapshot);
-				await checking;
-				expect(control('refresh').disabled).toBe(true);
-				completeSave('saved');
-				await saving;
-			} else {
-				completeSave('saved');
-				await saving;
-				expect(control('refresh').disabled).toBe(true);
-				completeRead(snapshot);
-				await checking;
-			}
-			expect(control('refresh').disabled).toBe(false);
-			expect(control('refresh').getAttribute('aria-busy')).toBe('false');
+	it('updates status without overwriting drafts, configuration baseline, transient keys or explicit hook review', async () => {
+		const snapshot = runtimeSnapshot();
+		state.currentSnapshot = snapshot;
+		state.currentConfig = snapshot.config;
+		state.dirtyForms.add('preferences-form');
+		control('agent-timezone').value = 'my draft';
+		control('credential-key').value = 'transient-key';
+		control('codex-recall-status').textContent = 'Managed · ready';
+		state.api = { snapshot: async () => ({ ...snapshot, config: { ...snapshot.config, assistant: { timezone: 'other writer' } }, pendingRestart: { required: true } }) };
+		await refreshVisibleStatus();
+		expect(control('agent-timezone').value).toBe('my draft');
+		expect(control('credential-key').value).toBe('transient-key');
+		expect(control('codex-recall-status').textContent).toBe('Managed · ready');
+		expect(state.currentConfig).toBe(snapshot.config);
+		expect(control('pending-restart').hidden).toBe(false);
+	});
+	it('discards an old background read if an operation or a newer snapshot has superseded it', async () => {
+		for (const superseded of ['operation', 'snapshot']) {
+			state.currentSnapshot = runtimeSnapshot();
+			let finish!: (value: unknown) => void;
+			state.api = { snapshot: () => new Promise((resolve) => { finish = resolve; }) };
+			const checking = refreshVisibleStatus();
+			if (superseded === 'operation') state.operationInFlight = true;
+			else state.currentSnapshot = { ...runtimeSnapshot(), pendingRestart: { required: true } };
+			control('assistant-summary').textContent = 'Newer result';
+			finish(runtimeSnapshot());
+			await checking;
+			expect(control('assistant-summary').textContent).toBe('Newer result');
+			state.operationInFlight = false;
 		}
+	});
+	it('performs a full read after a pending status-only check when a lifecycle action requests one', async () => {
+		const snapshot = emptySnapshot();
+		state.currentSnapshot = snapshot;
+		let finish!: (value: unknown) => void;
+		let calls = 0;
+		state.api = { snapshot: () => {
+			calls++;
+			return calls === 1 ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(snapshot);
+		} };
+		const checking = refresh({ statusOnly: true });
+		const lifecycleRead = refresh();
+		finish(snapshot);
+		await Promise.all([checking, lifecycleRead]);
+		expect(calls).toBe(2);
+		expect(state.snapshotPromise).toBeUndefined();
+	});
+	it('discovers providers after an externally started Assistant becomes healthy without needing Refresh', async () => {
+		const snapshot = runtimeSnapshot();
+		state.currentSnapshot = { ...snapshot, phase: 'setup_incomplete' };
+		let discoveries = 0;
+		state.api = {
+			snapshot: async () => ({ ...state.currentSnapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] }),
+			providers: async () => { discoveries++; return []; }
+		};
+		await refreshVisibleStatus();
+		await state.providerLoadPromise;
+		expect(discoveries).toBe(1);
+		expect(state.providersLoaded).toBe(true);
+	});
+	it('polls every 15 seconds and on focus/visibility, but pauses for hidden windows, Welcome and busy operations', async () => {
+		state.currentSnapshot = runtimeSnapshot();
+		let calls = 0;
+		state.api = { snapshot: async () => { calls++; return runtimeSnapshot(); } };
+		const events = new Map<string, () => void>();
+		window.addEventListener = ((name, callback) => { events.set(name, callback); }) as typeof window.addEventListener;
+		document.addEventListener = ((name, callback) => { events.set(name, callback); }) as typeof document.addEventListener;
+		let poll!: () => void;
+		window.setInterval = ((callback, interval) => {
+			expect(interval).toBe(15_000);
+			poll = callback;
+			return 1;
+		}) as typeof window.setInterval;
+		bindSnapshotEvents();
+		for (const trigger of [poll, events.get('focus'), events.get('visibilitychange')]) {
+			trigger?.();
+			await state.snapshotPromise;
+		}
+		expect(calls).toBe(3);
+		for (const blocked of ['hidden', 'welcome', 'busy', 'remote']) {
+			Object.assign(document, { hidden: blocked === 'hidden' });
+			control('app-shell').hidden = blocked === 'welcome';
+			state.operationInFlight = blocked === 'busy';
+			control('remote-dialog').open = blocked === 'remote';
+			await refreshVisibleStatus();
+		}
+		expect(calls).toBe(3);
 	});
 });
 
@@ -1028,7 +1155,9 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('applies only after confirmation, retains the alert on failure, and handles stopped instances', async () => {
-		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true } };
+		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true },
+			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
+		};
 		const calls: unknown[] = [];
 		state.api = {
 			confirmRestart: async (action) => { calls.push(action); return true; },

@@ -64,8 +64,8 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Tab');
 	await press('Tab');
 	assert(
-		await window.webContents.executeJavaScript("document.activeElement?.hasAttribute('data-instance-switch')"),
-		'Keyboard did not reach the labeled instance switch after the skip link.'
+		await window.webContents.executeJavaScript("document.activeElement?.id === 'instance-picker'"),
+		'Keyboard did not reach the instance picker after the skip link.'
 	);
 	await press('Tab');
 	assert(
@@ -88,8 +88,8 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	);
 	await press('Tab', ['shift']);
 	assert(
-		await window.webContents.executeJavaScript("document.activeElement?.hasAttribute('data-instance-switch')"),
-		'Reverse traversal did not reach the instance switch.'
+		await window.webContents.executeJavaScript("document.activeElement?.id === 'instance-picker'"),
+		'Reverse traversal did not reach the instance picker.'
 	);
 	await press('Tab', ['shift']);
 	assert(
@@ -115,7 +115,7 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 		),
 		'Selecting a page did not close navigation and focus its heading.'
 	);
-	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance switch, Enter, Space, page selection', passed: true });
+	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance picker, Enter, Space, page selection', passed: true });
 }
 
 function requiredEnvironment(name: string): string {
@@ -312,15 +312,16 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 	try {
 		assert(await window.webContents.executeJavaScript(`(async () => {
 			const snapshot = await window.fholdAdmin.snapshot();
-			const path = document.querySelector('#selected-instance-path');
-			const name = document.querySelector('#sidebar-instance-name');
-			const refresh = document.querySelector('#refresh');
-			return name.textContent === snapshot.config.deployment.projectName && path.textContent === snapshot.homeDir &&
-				path.title === snapshot.homeDir && getComputedStyle(path).whiteSpace === 'nowrap' &&
-				getComputedStyle(path).textOverflow === 'ellipsis' && refresh.textContent === 'Refresh' &&
-				refresh.getAttribute('aria-label') === 'Refresh status' && refresh.getBoundingClientRect().height >= 44 &&
-				document.querySelector('#stack-status').textContent === 'Assistant running';
-		})()`), 'Sidebar did not expose the saved identity, complete folder or compact runtime controls.');
+			const picker = document.querySelector('#instance-picker');
+			return picker.tagName === 'SELECT' && picker.value === snapshot.homeDir &&
+				picker.selectedOptions[0].textContent === snapshot.config.deployment.projectName &&
+				picker.options[picker.options.length-1].textContent === 'Open another instance…' &&
+				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 44 &&
+				!document.querySelector('.sidebar-footer') && !document.querySelector('#refresh') &&
+				!document.querySelector('#selected-instance-path') &&
+				document.querySelector('#overview-home').textContent === snapshot.homeDir &&
+				document.querySelector('#assistant-summary').textContent === 'Running normally';
+		})()`), 'Sidebar did not expose a simple named picker with identity/runtime details on Overview.');
 		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
 		screenshots.push(await capture(window, outputDir, '04d-sidebar-system.png'));
 
@@ -333,31 +334,27 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 				config:{...snapshot.config,deployment:{...snapshot.config.deployment,projectName:'personal-agent-' + 'a'.repeat(48)}}});
 		})()`);
 		assert(await window.webContents.executeJavaScript(`(() => {
-			const path = document.querySelector('#selected-instance-path');
-			const name = document.querySelector('#sidebar-instance-name');
-			return path.title === path.textContent && path.scrollWidth > path.clientWidth &&
-				path.getBoundingClientRect().height < 28 && name.scrollWidth > name.clientWidth &&
+			const picker = document.querySelector('#instance-picker');
+			return picker.selectedOptions[0].textContent.length > 50 && picker.getBoundingClientRect().height < 60 &&
 				document.querySelector('.sidebar').scrollWidth <= document.querySelector('.sidebar').clientWidth + 1;
-		})()`), 'Long identity/path spilled into navigation or lost the full folder.');
-		screenshots.push(await capture(window, outputDir, '04e-sidebar-long-path.png'));
-		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
-		await waitForRenderer(window, "document.querySelector('#refresh').dataset.state === 'current'", 'sidebar refresh completion');
+		})()`), 'Long identity spilled out of the instance picker.');
+		screenshots.push(await capture(window, outputDir, '04e-picker-long-name.png'));
+		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); })()");
 		assert(await window.webContents.executeJavaScript(`(async () => {
 			const {state} = await import('./state.js');
 			const {refresh} = await import('./snapshot.js');
 			const original = state.api;
 			try {
 				state.api = {...original,snapshot:async () => {throw new Error('Isolated renderer transport-failure fixture');}};
-				await refresh(true);
-				return document.querySelector('#stack-status').textContent === 'Status unavailable' &&
-					!document.querySelector('#stack-status').classList.contains('success') &&
-					document.querySelector('#refresh').dataset.state === 'stale' &&
-					document.querySelector('#status-detail').textContent.includes('last known');
+				await refresh({statusOnly:true});
+				return document.querySelector('#assistant-summary').textContent === 'Status unavailable' &&
+					!document.querySelector('#runtime-status-detail').hidden &&
+					!document.querySelector('#services .status-badge.success');
 			} finally {state.api = original;}
-		})()`), 'Failed refresh kept a misleading healthy sidebar.');
-		screenshots.push(await capture(window, outputDir, '04f-sidebar-stale-status.png'));
-		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click(); document.querySelector('#refresh').click()");
-		await waitForRenderer(window, "document.querySelector('#refresh').dataset.state === 'current'", 'sidebar recovers after a failed refresh');
+		})()`), 'Failed status read kept a misleading healthy Overview.');
+		screenshots.push(await capture(window, outputDir, '04f-overview-unavailable.png'));
+		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
+		await waitForRenderer(window, "document.querySelector('#assistant-summary').textContent === 'Running normally' && document.querySelector('#runtime-status-detail').hidden", 'automatic status recovers on focus');
 		for (const zoom of [1, 2]) {
 			await sizeViewport(window, 640, 640, zoom);
 			await window.webContents.executeJavaScript("document.querySelector('#mobile-navigation').open=true; window.scrollTo(0,0)");
@@ -366,9 +363,8 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 					const box = element.getBoundingClientRect();
 					return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
 				};
-				return visible(document.querySelector('#sidebar-instance-name')) &&
-					visible(document.querySelector('.sidebar [data-instance-switch]')) && visible(document.querySelector('#refresh')) &&
-					[...document.querySelectorAll('.sidebar button')].filter(visible).every(button => button.getBoundingClientRect().height >= 44);
+				return visible(document.querySelector('#instance-picker')) &&
+					[...document.querySelectorAll('.sidebar button,.sidebar select')].filter(visible).every(control => control.getBoundingClientRect().height >= 44);
 			})()`), `Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`);
 			await assertRenderedFloor(window, `expanded sidebar at ${zoom * 100}% zoom`);
 			// Keyboard focus can scroll the long System view. Show the actual sidebar
@@ -380,12 +376,12 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 		await sizeViewport(window, viewport.width, viewport.height);
 		await window.webContents.executeJavaScript(`(async () => {
 			const {refresh} = await import('./snapshot.js');
-			await refresh(false);
+			await refresh();
 			document.querySelector('[data-view=overview]').click();
 		})()`);
 	}
 	assert(window.getSize().join('x') === originalSize, 'Sidebar interaction changed the user window size.');
-	progress('sidebar: real identity/runtime, long-path and stale-status fixtures, labeled actions, narrow/200% zoom and stable size passed');
+	progress('sidebar: named picker without footer, Overview identity/runtime, automatic recovery, keyboard, narrow/200% zoom and stable size passed');
 	return screenshots;
 }
 
@@ -838,7 +834,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 
 		await runAdminAction('stop');
-		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
 		await waitForRenderer(
 			window,
 			`document.querySelector('#setup-recovery')?.hidden === false &&
@@ -938,12 +934,12 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			progress('provider failure remained an incomplete setup error');
 			markInstalled(homeDir);
-			await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
 				window,
 				`document.querySelector('#view-overview')?.hidden === false &&
 						document.querySelector('#primary-nav')?.hidden === false &&
-						document.querySelector('#refresh')?.dataset.state === 'current'`,
+						!(await import('./state.js')).state.snapshotPromise`,
 				'the isolated management UI fixture',
 				60_000,
 				true
@@ -1086,10 +1082,10 @@ async function run(): Promise<Record<string, unknown>> {
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		await runAdminAction('restart');
-		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && document.querySelector('#refresh').dataset.state === 'current'",
+			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && !(await import('./state.js')).state.snapshotPromise",
 			'read-only refresh clears the prior explicit recall review',
 			60_000,
 			!provider
@@ -1265,7 +1261,7 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(await containerId() === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
 		assert(await runtimeSettings() === beforeDeferredSave.settings, 'Postponed save applied runtime settings.');
 		assert((await adminSnapshot()).pendingRestart?.required, 'Pending state was not saved with the instance.');
-		await window.webContents.executeJavaScript("document.querySelector('.sidebar [data-instance-switch]').click()");
+		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
 		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'return to Welcome with saved changes');
 		await window.webContents.executeJavaScript("document.querySelector('#open-recent-instance').click()");
 		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden", 'pending restart after reopening the instance');
@@ -1608,7 +1604,8 @@ async function run(): Promise<Record<string, unknown>> {
 			window.confirm = () => true;
 			document.querySelector('#provider-key').value = 'transient-key-must-not-survive';
 			document.querySelector('#credential-key').value = 'transient-credential-must-not-survive';
-			document.querySelector('.sidebar [data-instance-switch]').click();
+			document.querySelector('#instance-picker').value = 'open-another';
+			document.querySelector('#instance-picker').dispatchEvent(new Event('change'));
 		})()`);
 		await waitForRenderer(
 			window,
@@ -1735,7 +1732,7 @@ async function run(): Promise<Record<string, unknown>> {
 		if (provider && providerKey) await connectProviderUi(window, provider, providerKey);
 		else {
 			markInstalled(otherHome);
-			await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
 				window,
 				"document.body.dataset.phase === 'ready'",
@@ -1792,17 +1789,25 @@ async function run(): Promise<Record<string, unknown>> {
 			),
 			'A stale sign-in step was accepted after switching.'
 		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('.sidebar [data-instance-switch]').click()"
-		);
-		await waitForRenderer(
-			window,
-			"document.body.dataset.phase === 'welcome'",
-			'returning to the instance list'
-		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#open-default-instance').click()"
-		);
+		assert(await window.webContents.executeJavaScript(`(() => {
+			const picker = document.querySelector('#instance-picker');
+			window.confirm = () => false;
+			document.querySelector('#agent-timezone').value = 'Unsubmitted draft';
+			document.querySelector('#agent-timezone').dispatchEvent(new Event('input', {bubbles:true}));
+			picker.value = ${JSON.stringify(homeDir)};
+			picker.dispatchEvent(new Event('change'));
+			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#agent-timezone').value === 'Unsubmitted draft';
+		})()`), 'Cancelling a recent-instance switch lost the selection or draft.');
+		assert((await adminSnapshot()).homeDir === otherHome, 'Cancelled picker switch changed the actual managed home.');
+		const instancePickerScreenshot = await capture(window, outputDir, '06c-recent-instance-picker.png');
+		await window.webContents.executeJavaScript(`(() => {
+			window.confirm = () => true;
+			const picker = document.querySelector('#instance-picker');
+			if (!Array.from(picker.options).some(option => option.value === ${JSON.stringify(homeDir)} && option.textContent === ${JSON.stringify(projectName)}))
+				throw new Error('Recent instance picker lost the saved name.');
+			picker.value = ${JSON.stringify(homeDir)};
+			picker.dispatchEvent(new Event('change'));
+		})()`);
 		await waitForRenderer(
 			window,
 			`document.body.dataset.phase === 'ready' && document.querySelector('#home').textContent === ${JSON.stringify(homeDir)}`,
@@ -1905,7 +1910,18 @@ async function run(): Promise<Record<string, unknown>> {
 		const runtimeRecoveryAdvancedScreenshot = await capture(window, outputDir, '07c-runtime-recovery-advanced.png', true);
 		await sizeViewport(window, 640, 640, 2);
 		await assertRenderedFloor(window, 'runtime recovery at minimum size and 200% zoom');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"), 'Recovery timing fields changed during narrow keyboard traversal.');
+		const narrowRecoveryFields = await window.webContents.executeJavaScript(`(async () => {
+			const {state} = await import('./state.js');
+			return {
+			interval: document.querySelector('#runtime-recovery-interval').value,
+			maxUnsaved: document.querySelector('#runtime-recovery-max-unsaved').value,
+			focus: document.activeElement?.id,
+			savedInterval: state.currentSnapshot.config.recovery.intervalSeconds,
+			savedMaxUnsaved: state.currentSnapshot.config.recovery.maxUnsavedSeconds,
+			dirty: [...state.dirtyForms]
+			};
+		})()`);
+		assert(narrowRecoveryFields.interval === '2' && narrowRecoveryFields.maxUnsaved === '120', `Recovery timing fields changed during narrow keyboard traversal: ${JSON.stringify(narrowRecoveryFields)}.`);
 		const runtimeRecoveryNarrowScreenshot = await capture(window, outputDir, '07d-runtime-recovery-reflow.png', true);
 		await sizeViewport(window, recoveryViewport.width, recoveryViewport.height);
 		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open = false");
@@ -2023,7 +2039,7 @@ async function run(): Promise<Record<string, unknown>> {
 			startupRecoveryVerified: true,
 			restorePreservationVerified: true,
 			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
-			sidebarVerified: { savedIdentity: true, fullPathAccessible: true, runtimeNotProviderReadiness: true, staleStatusFixture: true, longPathFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
+			sidebarVerified: { recentInstancePicker: true, footerRemoved: true, identityAndRuntimeOnOverview: true, automaticStatusRecovery: true, unavailableStatusFixture: true, longNameFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
 			instanceWelcomeVerified: {
 				defaultOneClick: true,
 				folderSelectionAndCancellation: true,
@@ -2095,6 +2111,7 @@ async function run(): Promise<Record<string, unknown>> {
 				newInstanceScreenshot,
 				secondInstanceScreenshot,
 				recentScreenshot,
+				instancePickerScreenshot,
 				initialScreenshot,
 				advancedPortsScreenshot,
 				assistantScreenshot,

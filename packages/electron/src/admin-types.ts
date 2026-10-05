@@ -47,7 +47,7 @@ export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminWelcome = {
 	defaultInstance: AdminInstance;
 	instancesDirectory: string;
-	recentInstances: AdminInstance[];
+	recentInstances: Array<AdminInstance & { name?: string }>;
 	selectedInstance?: AdminInstance;
 	preferenceError?: string;
 };

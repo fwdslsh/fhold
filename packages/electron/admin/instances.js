@@ -1,6 +1,35 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
-import { all, byId, message, notice, setBusy, setSkipTarget, setText } from './ui.js';
+import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
+
+export function renderInstancePicker(snapshot) {
+	const others = state.recentInstances.filter((target) => target.homeDir !== snapshot.homeDir);
+	setOptions(
+		byId('instance-picker'),
+		[
+			{
+				value: snapshot.homeDir,
+				label: snapshot.config.deployment?.projectName || 'Selected instance'
+			},
+			...others.map((target) => ({
+				value: target.homeDir,
+				label: target.name || target.homeDir.split('/').filter(Boolean).at(-1) || 'Saved instance'
+			})),
+			{ value: 'open-another', label: 'Open another instance…' }
+		],
+		snapshot.homeDir
+	);
+	byId('instance-picker').disabled = state.operationInFlight;
+}
+
+function confirmInstanceSwitch() {
+	return (
+		!(state.dirtyForms.size || state.activeOAuth) ||
+		window.confirm(
+			'Switch instances? Unsaved changes and unfinished sign-in steps will be discarded. Running stacks will not be stopped.'
+		)
+	);
+}
 
 function suggestInstanceHome() {
 	if (!state.instancesDirectory) return;
@@ -56,9 +85,10 @@ export function renderWelcome(welcome) {
 }
 
 export async function openInstance(target, create = false) {
-	if (state.operationInFlight) return;
+	if (state.operationInFlight || !confirmInstanceSwitch()) return;
 	setBusy(true);
 	try {
+		await state.snapshotPromise;
 		await state.providerLoadPromise?.catch(() => {});
 		if (create) await state.api.prepareNewInstance(target);
 		else await state.api.openInstance(target);
@@ -73,16 +103,10 @@ export async function openInstance(target, create = false) {
 }
 
 export async function showInstances() {
-	if (state.operationInFlight) return;
-	if (
-		(state.dirtyForms.size || state.activeOAuth) &&
-		!window.confirm(
-			'Return to instances? Unsaved changes and unfinished sign-in steps will be discarded. Running stacks will not be stopped.'
-		)
-	)
-		return;
+	if (state.operationInFlight || !confirmInstanceSwitch()) return;
 	setBusy(true);
 	try {
+		await state.snapshotPromise;
 		// Finish the tracked background account lookup before changing its target.
 		await state.providerLoadPromise?.catch(() => {});
 		await state.api.closeInstance();
@@ -95,6 +119,15 @@ export async function showInstances() {
 }
 
 export function bindInstanceEvents() {
+	byId('instance-picker').addEventListener('change', async () => {
+		const requested = byId('instance-picker').value;
+		byId('instance-picker').value = state.currentSnapshot?.homeDir || '';
+		if (requested === 'open-another') await showInstances();
+		else {
+			const target = state.recentInstances.find((item) => item.homeDir === requested);
+			if (target && target.homeDir !== state.currentSnapshot?.homeDir) await openInstance(target);
+		}
+	});
 	byId('new-instance-name').addEventListener('input', suggestInstanceHome);
 	byId('choose-instance').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
@@ -118,7 +151,11 @@ export function bindInstanceEvents() {
 	byId('new-instance-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
 		await openInstance(
-			{ kind: 'local', homeDir: byId('new-instance-home').value.trim(), name: byId('new-instance-name').value.trim() },
+			{
+				kind: 'local',
+				homeDir: byId('new-instance-home').value.trim(),
+				name: byId('new-instance-name').value.trim()
+			},
 			true
 		);
 	});
@@ -129,7 +166,8 @@ export function bindInstanceEvents() {
 export async function initializeAdmin() {
 	try {
 		const welcome = await state.api.welcome();
-		if (welcome.selectedInstance) await refresh(false);
+		state.recentInstances = welcome.recentInstances;
+		if (welcome.selectedInstance) await refresh();
 		else renderWelcome(welcome);
 	} catch (error) {
 		byId('loading-state').hidden = true;

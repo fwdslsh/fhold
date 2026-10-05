@@ -142,7 +142,7 @@ export function bindInstanceRestoreEvents() {
 		const result = await operation('Importing entire instance', () => state.api.restoreInstance({ sourceHome, apply: true, previewDigest: preview.digest, confirmed: true }), 'Entire instance imported. Containers remain stopped; review settings before starting.');
 		if (!result) return;
 		invalidateInstanceRestorePreview();
-		await refresh(false);
+		await refresh();
 	});
 }
 
