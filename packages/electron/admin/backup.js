@@ -2,7 +2,7 @@ import { loadProviders } from './providers.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { prepareInstallTarget } from './instances.js';
-import { byId, message, notice, operation, setBadge } from './ui.js';
+import { all, byId, message, notice, operation, setBadge, setText } from './ui.js';
 
 export function restoreInput(apply) {
 	return {
@@ -100,6 +100,20 @@ export function updateBackupScope() {
 export function invalidateInstanceRestorePreview() {
 	state.instanceRestorePreview = null;
 	byId('apply-instance-restore').disabled = true;
+	renderImportProgress(false);
+}
+
+function renderImportProgress(reviewed) {
+	const importing = byId('instance-restore-panel').open;
+	setText('install-first-step', importing ? 'Import' : 'Install');
+	setText('install-second-step', importing ? 'Review' : 'Connect');
+	setText('install-third-step', importing ? 'Open' : 'Ready');
+	for (const [index, step] of all('#install-progress li').entries()) {
+		const complete = importing && reviewed && index === 0;
+		step.classList.toggle('complete', complete);
+		step.setAttribute('aria-current', index === (importing && reviewed ? 1 : 0) ? 'step' : 'false');
+		step.querySelector('span').textContent = complete ? '✓' : String(index + 1);
+	}
 }
 
 export function renderInstanceRestorePlan(result) {
@@ -116,10 +130,12 @@ export function renderInstanceRestorePlan(result) {
 export function bindInstanceRestoreEvents() {
 	byId('instance-restore-panel').addEventListener('toggle', () => {
 		const importing = byId('instance-restore-panel').open;
-		byId('install-actions').hidden = importing;
-		byId('install-name-field').hidden = importing;
-		byId('install-instance-name-help').hidden = importing;
-		if (!importing) invalidateInstanceRestorePreview();
+		byId('install-form').hidden = importing;
+		// One folder control belongs to the visible workflow, not two independent drafts.
+		if (importing) byId('instance-restore-destination').append(byId('install-folder-field'));
+		else byId('install-advanced').querySelector('summary').after(byId('install-folder-field'));
+		setText('install-home-label', importing ? 'Destination folder' : 'Agent folder');
+		invalidateInstanceRestorePreview();
 	});
 	byId('choose-instance-restore-source').addEventListener('click', () => void chooseDirectory('restore', 'instance-restore-source'));
 	for (const event of ['input', 'change']) byId('instance-restore-source').addEventListener(event, invalidateInstanceRestorePreview);
@@ -128,7 +144,7 @@ export function bindInstanceRestoreEvents() {
 	byId('instance-restore-form').addEventListener('submit', (event) => event.preventDefault());
 	byId('preview-instance-restore').addEventListener('click', async () => {
 		invalidateInstanceRestorePreview();
-		if (!byId('instance-restore-form').reportValidity() || !byId('install-home').reportValidity()) return;
+		if (!byId('instance-restore-form').reportValidity()) return;
 		const sourceHome = byId('instance-restore-source').value.trim();
 		const targetHome = byId('install-home').value.trim();
 		const result = await operation('Previewing entire instance', async () => {
@@ -139,6 +155,7 @@ export function bindInstanceRestoreEvents() {
 		renderInstanceRestorePlan(result);
 		state.instanceRestorePreview = { sourceHome, targetHome, digest: result.digest };
 		byId('apply-instance-restore').disabled = false;
+		renderImportProgress(true);
 	});
 	byId('apply-instance-restore').addEventListener('click', async () => {
 		const preview = state.instanceRestorePreview;

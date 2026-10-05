@@ -127,6 +127,10 @@ to distinguish them; unavailable folders cannot be opened as new installations.
 **Set up a new agent** opens the Install → Connect → Ready wizard. Name the agent
 once; its suggested folder is `~/fhold/instances/<name>`. Docker and Compose
 checks run in the background without blocking typing or selecting a home.
+Successful checks stay out of the way; missing prerequisites show a warning,
+Docker/Compose setup links and **Check again**. The setup screen has no redundant
+creation heading. **Import an existing instance**, above Advanced, switches to
+Import → Review → Open with export and destination fields, not installation controls.
 **Advanced**, collapsed by default, contains the folder picker and port settings.
 **Install fhold** follows Advanced and is the explicit installation confirmation.
 **Back** and **Cancel setup** return to the instance choices without installing.
@@ -145,7 +149,8 @@ in the separate `fhold-admin` desktop profile, not instance state. Keys load
 masked and require explicit Show/Copy. Window size remains user-controlled.
 SSH management is not implemented.
 
-The sidebar has a single named instance dropdown above navigation. Select a recent
+The sidebar has a slash immediately beside a single named instance dropdown;
+there is no separate f/hold wordmark above it. Select a recent
 instance to open it directly, or **Open another instance…** to return to Welcome
 for folder selection or new setup. It shows no paths, status footer or Refresh
 button. **Overview** shows the complete home path and container status; the path
@@ -181,9 +186,10 @@ CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
 Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
-To import that export, choose **Set up a new agent** at Welcome, select a
-new/empty folder under **Advanced** and choose **Import an entire instance instead**,
-**without installing first**. The folder remains editable while importing;
+To import that export, choose **Set up a new agent** at Welcome, then **Import an
+existing instance**, **without installing first**. Choose the entire-instance
+export and a new/empty destination folder in the import workflow. The destination
+is visible rather than hidden under Advanced and remains editable;
 changing it invalidates the preview. Preview identifies the saved name and
 destination; the native confirmation
 explains downtime, credentials, active tasks and external-storage limitations.

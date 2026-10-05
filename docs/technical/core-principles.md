@@ -91,8 +91,14 @@ or update. Availability checks are preflight, not a reservation until Compose st
 Welcome starts with setup/open choices, or a compact named recent list, without
 a redundant welcome heading. New setup is an Install → Connect → Ready wizard;
 naming is requested once and optional folder/port settings share collapsed Advanced.
+The setup screen omits a redundant creation heading. Import is a separate visible
+choice above Advanced, with its own export/destination/review workflow, not an
+installation action. Native import protection remains the same. Disclosure controls
+share the ordinary filled control styling and explicit chevrons. The management
+sidebar combines the slash and named picker on one row without a second wordmark.
 Read-only Docker/Compose checks run independently of instance selection so they
-do not block naming or create a home. Each stage has explicit navigation out of
+do not block naming or create a home. Successful checks add no status clutter;
+missing prerequisites show actionable guidance and an explicit retry. Each stage has explicit navigation out of
 setup; leaving an installed agent does not stop it. Opening an
 existing instance never silently starts a fresh installation. Compatible-home
 labels are read from current intent, not stored in a second registry. Preparing

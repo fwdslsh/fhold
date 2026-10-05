@@ -48,11 +48,15 @@ function suggestInstanceHome() {
 export function renderInstallationReadiness(readiness) {
 	state.installationReadiness = readiness;
 	const ready = readiness?.ok === true;
-	setText('install-prerequisite', ready
-		? 'Docker and Compose are ready.'
-		: readiness?.message || 'Checking Docker and Compose…');
-	byId('install-prerequisite').className = `prerequisite${readiness ? ready ? ' ready' : ' error' : ''}`;
+	const failed = readiness?.ok === false;
+	byId('install-requirements').hidden = ready;
+	byId('install-requirements').className = `install-requirements${failed ? ' warning' : ''}`;
+	byId('install-requirements').setAttribute('role', failed ? 'alert' : 'status');
+	byId('install-requirements-title').hidden = !failed;
+	byId('install-requirements-guidance').hidden = !failed;
+	setText('install-prerequisite', ready ? '' : readiness?.message || 'Checking installation requirements…');
 	byId('install').disabled = state.operationInFlight || !ready;
+	byId('preview-instance-restore').disabled = state.operationInFlight || !ready;
 	byId('check-prerequisites').hidden = !readiness || ready;
 }
 
@@ -91,7 +95,7 @@ export async function prepareInstallTarget({ importing = false } = {}) {
 			...(importing ? {} : { name: byId('install-instance-name').value.trim() })
 		});
 	} catch (error) {
-		byId('install-advanced').open = true;
+		if (!byId('instance-restore-panel').open) byId('install-advanced').open = true;
 		byId('install-home').focus();
 		throw error;
 	}

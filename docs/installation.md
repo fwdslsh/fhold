@@ -138,6 +138,11 @@ the ready instance. New setup asks for a name once and suggests
 `~/fhold/instances/<name>`. Docker and Compose checks run in the background
 while you choose. **Advanced**, collapsed by default, contains both the folder
 location and optional manual ports. Confirm **Install fhold** below it.
+Successful prerequisite checks show no extra status message. If Docker or Compose
+is unavailable, setup shows the problem, official setup guides and **Check again**.
+**Import an existing instance**, above Advanced, switches to an Import → Review →
+Open workflow with an export folder and visible destination folder instead of
+the new-agent name/port controls. It never runs installation first.
 New setup refuses non-empty folders and rejects a
 name already used by Docker before writing installation files. Folder selection
 alone does not install or start anything. Only explicit new setup accepts an

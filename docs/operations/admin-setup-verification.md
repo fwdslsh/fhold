@@ -2,10 +2,16 @@
 
 ## Current UI preview iteration
 
-This iteration removes the Welcome heading and duplicate naming/confirmation
+The current preview removes the Welcome/creation headings and duplicate naming
 screen. The wizard has one editable name, background Docker/Compose checks,
 collapsed Advanced for folder/ports, Install below Advanced, and top-aligned
-Back/Cancel or Instances/Finish later navigation. Preparation still goes through
+Back/Cancel or Instances/Finish later navigation. Successful prerequisite checks
+are hidden; failures show guidance, official Docker/Compose links and retry.
+The sidebar combines the slash/picker and disclosures use filled headers and
+chevrons. Import is above Advanced and has separate Import → Review → Open
+progress with export/destination fields instead of install controls. One folder
+control moves between those two visible workflows; it does not create a second
+configuration value. Preparation still goes through
 the existing native empty-folder validation; installation and full-instance
 import use the existing control-plane operations and protections.
 
@@ -20,9 +26,12 @@ standard AppImage build are build checks, not end-to-end verification.
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
+Check that the slash/picker stays on one row, disclosure headers are clearly
+interactive, and the requirement guides open normally before selecting a home.
 After installing in a disposable home, Finish later must not stop the agent;
 reopening must resume account setup. Review full import with a disposable export:
-folder edits must invalidate preview, Enter in the target field must not install
+folder edits must invalidate preview, closing import must return the same folder
+control below the Advanced summary, Enter in the target field must not install
 while import is selected, and importing must retain the native confirmation and
 stopped-writer checks. Product navigation must never resize the window.
 
