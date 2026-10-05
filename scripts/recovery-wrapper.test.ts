@@ -1,15 +1,63 @@
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { recoveryConfig } from '../containers/assistant/fhold-recovery.mjs';
+import { readRecoveryStatus, recoveryConfig } from '../containers/assistant/fhold-recovery.mjs';
 import { createRecoveryStore } from '../containers/assistant/recovery/storage.mjs';
 
 const base = { FH_RECOVERY_URL: 'file:///tmp/synthetic-backup', FH_INSTANCE_ID: 'synthetic-owner' };
 const wrapper = join(import.meta.dir, '../containers/assistant/fhold-recovery.mjs');
 
 describe('recovery wrapper configuration and private status', () => {
+	it('reads coherent private status while publications are atomically replaced', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-status-publication-'));
+		const statusFile = join(root, 'recovery-status.json');
+		const temporary = join(root, 'status.tmp');
+		const publication = (generation: number) => ({
+			generation,
+			message: String(generation).padStart(4, '0').repeat(1_000)
+		});
+		await writeFile(statusFile, JSON.stringify(publication(0)), { mode: 0o600 });
+		await Promise.all([
+			(async () => {
+				for (let generation = 1; generation <= 300; generation++) {
+					await writeFile(temporary, JSON.stringify(publication(generation)), { mode: 0o600 });
+					await rename(temporary, statusFile);
+				}
+			})(),
+			...Array.from({ length: 4 }, async () => {
+				for (let attempt = 0; attempt < 300; attempt++) {
+					const status = await readRecoveryStatus(statusFile);
+					expect(Number.isInteger(status.generation)).toBe(true);
+					expect(status.generation).toBeGreaterThanOrEqual(0);
+					expect(status.generation).toBeLessThanOrEqual(300);
+					expect(status).toEqual(publication(status.generation));
+				}
+			})
+		]);
+		expect(await readRecoveryStatus(statusFile)).toEqual(publication(300));
+	});
+
+	it('rejects missing, linked, nonregular, oversized or corrupt private status', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-status-invalid-'));
+		await expect(readRecoveryStatus(join(root, 'missing'))).rejects.toThrow();
+		await expect(readRecoveryStatus(root)).rejects.toThrow('type/size');
+		const statusFile = join(root, 'status.json');
+		await writeFile(statusFile, '{bad JSON', { mode: 0o600 });
+		await expect(readRecoveryStatus(statusFile)).rejects.toThrow();
+		await writeFile(statusFile, JSON.stringify({ value: 'x'.repeat(8_192) }));
+		await expect(readRecoveryStatus(statusFile)).rejects.toThrow('type/size');
+		await writeFile(statusFile, '{"healthy":true}');
+		const linkedFile = join(root, 'linked.json');
+		await symlink(statusFile, linkedFile);
+		await expect(readRecoveryStatus(linkedFile)).rejects.toThrow('link');
+		const linkedParent = join(root, 'linked-parent');
+		await symlink(root, linkedParent);
+		await expect(readRecoveryStatus(join(linkedParent, 'status.json'))).rejects.toThrow('link');
+	});
+
 	it('finishes an in-flight capture then checkpoints stopped writers before release on TERM', () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-stop-capture-'));
 		for (const finalFails of [false, true]) {

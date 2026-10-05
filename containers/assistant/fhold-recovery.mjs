@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bun --no-env-file
 // Image-only same-instance recovery. Host deployment and lifecycle stay external.
 import * as fs from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { constants, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createEngine, DEFAULT_LIMITS, sanitizeRecoveryError } from './recovery/engine.mjs';
@@ -97,6 +97,34 @@ async function writeStatus(path, value) {
 	const temp = `${path}.${process.pid}.tmp`;
 	await fs.writeFile(temp, JSON.stringify(value), { mode: 0o600 });
 	await fs.rename(temp, path);
+}
+
+export async function readRecoveryStatus(path) {
+	await assertNoLinks(path);
+	const handle = await fs.open(
+		path,
+		constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+	);
+	try {
+		const limit = 8_192;
+		const stat = await handle.stat();
+		if (!stat.isFile() || stat.size > limit)
+			throw new Error('recovery status file type/size rejected');
+		const buffer = Buffer.alloc(limit + 1);
+		let length = 0;
+		while (length < buffer.length) {
+			const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
+			if (!bytesRead) break;
+			length += bytesRead;
+		}
+		if (length > limit) throw new Error('recovery status file exceeds limit');
+		// The publisher replaces the whole file atomically. This pinned descriptor
+		// reads one complete publication even when rename unlinks its inode and
+		// changes ctime. Ordinary backup files still use stricter capture checks.
+		return JSON.parse(buffer.subarray(0, length).toString());
+	} finally {
+		await handle.close();
+	}
 }
 
 async function nativeReady(env) {
@@ -320,13 +348,8 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 async function main() {
 	const command = process.argv[2];
 	if (command === 'status') {
-		const status = JSON.parse(
-			(
-				await readRegular(
-					join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'recovery-status.json'),
-					8_192
-				)
-			).toString()
+		const status = await readRecoveryStatus(
+			join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'recovery-status.json')
 		);
 		const now = Date.now();
 		const healthy =
