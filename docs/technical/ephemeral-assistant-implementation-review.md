@@ -12,9 +12,10 @@ product qualification and do not establish current account or service readiness.
 | Source | Responsibility |
 | --- | --- |
 | `containers/assistant/entrypoint.sh` | Validate capabilities, restore before seeding/writers, scheduling independence, native startup and separate writer/final-checkpoint shutdown budgets. |
-| `containers/assistant/fhold-recovery.mjs` | Runtime configuration, init/status/unlock interfaces, worker timer, private HTTP probes and the engine's accepted-publication clock. |
+| `containers/assistant/fhold-recovery.mjs` | Runtime configuration, init/inspect/offline-restore/status/unlock interfaces, worker timer, private HTTP probes and the engine's accepted-publication clock. |
 | `containers/assistant/recovery/engine.mjs` | Bounded inventory/snapshots, integrity validation, immutable generations, receipt/journal authority, compatibility, ownership and conditional publication. |
 | `containers/assistant/recovery/catalog.mjs` | Explicit native trees/databases, versioned custom selections, additive catalog validation and permanent transient/private exclusions. |
+| `containers/assistant/recovery/mounts.mjs` | Linux mount visibility, required mounts, network exclusions, local SQLite placement and topology fencing. |
 | `containers/assistant/recovery/sqlite-worker.mjs` | SQLite-native bounded snapshot and integrity subprocess operations. |
 | `containers/assistant/recovery/directory-store.mjs` | Artifact filesystem safety, exclusive ownership, atomic writes and non-destructive namespace handling. |
 | `containers/assistant/recovery/blob-store.mjs` | Azure Blob data plane only: explicit credentials/managed identity, bounded requests, immutable objects, descriptor conditions, leases and persistent owner identity. |
@@ -25,7 +26,7 @@ product qualification and do not establish current account or service readiness.
 ## Reusable verification retained in fhold
 
 `scripts/recovery-engine.test.ts`, `recovery-acceptance.test.ts`,
-`recovery-wrapper.test.ts`, `blob-store.test.ts` and
+`recovery-wrapper.test.ts`, `recovery-mounts.test.ts`, `blob-store.test.ts` and
 `assistant-recovery-runtime.test.ts` cover generic contract/engine/entrypoint
 behavior. `smoke-recovery.mjs` and `smoke-blob-recovery.mjs` exercise the actual
 image against directory/Blob destinations, including optional explicitly scoped

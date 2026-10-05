@@ -13,6 +13,40 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
+## Alpha.5 changes and local evidence
+
+The next alpha includes Admin's confirmed/deferred container activation and
+persistent pending-restart banner, plus
+[mount-aware runtime recovery](../assistant-recovery.md#independently-persistent-mounts).
+Portable backup remains the reviewed-content/fresh-install path; its archive
+does not gain runtime authority or automatic container-path exclusions.
+
+Linux x64 local verification of this candidate:
+
+- Full source suite with socket tests enabled, type checks and lint passed.
+- Seventeen focused mount-policy tests covered namespace visibility/overmounts,
+  explicit and discovered boundaries, missing mounts, absent SQLite/WAL guards,
+  ownership changes, immutable-publication fencing, partial-restore journals and
+  reviewed fresh-namespace transitions. These fixtures do not qualify SMB/NFS.
+- The actual candidate image passed cold replacement and offline restore with
+  real nested read-only/read-write binds and an external root outside its catalog.
+  External SQLite-named content was never traversed or restored; newer independent
+  contents survived. Native sessions, registered databases and custom files
+  restored, periodic/final checkpoints published, and ownership released.
+- Blob-emulator transport conformance and the same native-image mount/replacement
+  checks passed, including stale publisher rejection and failed upload handling.
+- Real AKM recalls passed through OpenCode, Claude and Codex's native plugins.
+  These are synthetic account/trust fixtures, not real vendor account readiness.
+- CLI compilation, Admin bundling and unsigned MCPB packing passed. Admin's
+  retained real Electron/Docker E2E covered deferred save without a restart,
+  pending-state preservation after closing/reopening, confirmed activation and
+  unchanged window sizing; no provider account was needed for that management path.
+
+Release artifacts and native ARM64 runtime still require their own GitHub gates.
+Actual SMB/NFS/FUSE behavior, live hosted account reconnect and measured RPO/RTO
+remain external qualification. Discovery is opt-in and known required mounts
+should be explicitly declared. Native dependency compatibility rules are unchanged.
+
 ## Alpha.4 scope
 
 `0.1.2610041911-alpha.4` adds native managed harness policies, the global

@@ -4,6 +4,7 @@ import { readRegular } from './directory-store.mjs';
 
 export const CATALOG_VERSION = 1;
 export const CUSTOM_CATALOG_VERSION = 2;
+export const BOUNDARY_CATALOG_VERSION = 3;
 export const DEFAULT_ROOTS = Object.freeze({
 	home: '/home/fhold',
 	stash: '/stash',
@@ -35,7 +36,8 @@ const TREES = [
 	['akmConfig', '']
 ];
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-export const containsPath = (parent, child) => parent === child || child.startsWith(`${parent}/`);
+export const containsPath = (parent, child) =>
+	parent === '/' || parent === child || child.startsWith(`${parent}/`);
 export const overlapsPath = (a, b) => containsPath(a, b) || containsPath(b, a);
 export const validPathCharacters = (value) =>
 	!value.includes('\\') &&
@@ -54,21 +56,68 @@ export function canonicalPath(value) {
 /** Literal container paths, not globs or shell-expanded expressions. Resource
  * bounds apply to the resulting catalog, not to an arbitrary list-length cap. */
 export function normalizeSelection(value = {}) {
+	const versioned = value?.version === 1;
+	const keys = versioned
+		? [
+				'version',
+				'paths',
+				'sqlite',
+				'excludePaths',
+				'externalMounts',
+				'autoExcludeNetworkMounts',
+				'recoverMounts'
+			]
+		: ['paths', 'sqlite'];
 	if (
 		!value ||
 		typeof value !== 'object' ||
 		Array.isArray(value) ||
-		Object.keys(value).some((key) => !['paths', 'sqlite'].includes(key))
+		Object.keys(value).some((key) => !keys.includes(key))
 	)
 		throw new Error('recovery include file requires paths and sqlite arrays');
-	const result = {};
-	for (const key of ['paths', 'sqlite']) {
+	const result = versioned ? { version: 1 } : {};
+	for (const key of versioned
+		? ['paths', 'sqlite', 'excludePaths', 'externalMounts', 'recoverMounts']
+		: ['paths', 'sqlite']) {
 		const list = value[key] === undefined ? [] : value[key];
 		if (!Array.isArray(list) || list.some((item) => !canonicalPath(item)))
 			throw new Error('recovery include paths must be canonical absolute paths');
 		result[key] = [...new Set(list)].sort();
 	}
+	if (versioned) {
+		if (
+			value.autoExcludeNetworkMounts !== undefined &&
+			typeof value.autoExcludeNetworkMounts !== 'boolean'
+		)
+			throw new Error('recovery network mount discovery must be boolean');
+		result.autoExcludeNetworkMounts = value.autoExcludeNetworkMounts ?? false;
+		result.excludePaths = result.excludePaths.filter(
+			(item, index, all) =>
+				!all.some((parent, other) => other !== index && containsPath(parent, item))
+		);
+		if (
+			result.recoverMounts.some((item) =>
+				[...result.excludePaths, ...result.externalMounts].some((excluded) =>
+					overlapsPath(item, excluded)
+				)
+			)
+		)
+			throw new Error('recovery mount policies conflict');
+	}
 	return result;
+}
+
+export function boundaryPolicy(selection) {
+	return {
+		excludePaths: selection.excludePaths ?? [],
+		externalMounts: selection.externalMounts ?? [],
+		autoExcludeNetworkMounts: selection.autoExcludeNetworkMounts ?? false,
+		recoverMounts: selection.recoverMounts ?? []
+	};
+}
+
+export function normalizeNetworkMounts(value) {
+	return normalizeSelection({ paths: value }).paths;
 }
 
 export async function readSelection(file, maximum) {
@@ -84,8 +133,7 @@ export async function readSelection(file, maximum) {
 }
 
 function defaultExcluded(root, name) {
-	if (root === 'akmData')
-		return /^(index\.db(?:-wal|-shm)?|cache(?:\/|$))/.test(name);
+	if (root === 'akmData') return /^(index\.db(?:-wal|-shm)?|cache(?:\/|$))/.test(name);
 	if (root !== 'home') return false;
 	return (
 		/^\.config\/opencode\/node_modules(\/|$)/.test(name) ||
@@ -107,19 +155,27 @@ export function selectionCovers(current, previous) {
 export function createCatalog(
 	baseRoots,
 	value,
-	{ privateDir, runtimeDir, store, includeFile } = {}
+	{ privateDir, runtimeDir, store, includeFile, networkMounts = [] } = {}
 ) {
 	const selection = normalizeSelection(value);
+	const policy = boundaryPolicy(selection);
+	const networkRoots = normalizeNetworkMounts(networkMounts);
+	if (networkRoots.length && !policy.autoExcludeNetworkMounts)
+		throw new Error('recovery selection identity rejected');
+	const exclusions = [...policy.excludePaths, ...policy.externalMounts, ...networkRoots];
 	// Process coordination is never durable data. Selecting a native home may
 	// include plugin caches, but must not opt into command wrappers or live locks.
 	const blocked = [
 		privateDir,
+		path.join(baseRoots.home, '.fhold-recovery'),
 		runtimeDir,
-		...['tmp', '.tmp', 'locks', 'thread-writer-locks'].map((name) => path.join(baseRoots.home, '.codex', name)),
+		...['tmp', '.tmp', 'locks', 'thread-writer-locks'].map((name) =>
+			path.join(baseRoots.home, '.codex', name)
+		),
 		path.join(baseRoots.home, '.codex/app-server-control/app-server-control.sock'),
 		path.join(baseRoots.akmData, 'locks')
 	].filter(Boolean);
-	const outside = [store.root, ...(store.privatePaths ?? []), includeFile].filter(
+	const outside = [store?.root, ...(store?.privatePaths ?? []), includeFile].filter(
 		(item) => item && !blocked.some((root) => containsPath(root, item))
 	);
 	for (const selected of [...selection.paths, ...selection.sqlite]) {
@@ -155,13 +211,21 @@ export function createCatalog(
 	const sqliteFiles = new Set(
 		[...dbPaths.keys()].flatMap((item) => [item, `${item}-wal`, `${item}-shm`])
 	);
+	if ([...sqliteFiles].some((item) => exclusions.some((root) => containsPath(root, item))))
+		throw new Error('recovery exclusions overlap required SQLite state');
 	const metadata =
-		selection.paths.length || selection.sqlite.length
-			? { catalog: CUSTOM_CATALOG_VERSION, selectionHash: hash(JSON.stringify(selection)) }
-			: { catalog: CATALOG_VERSION };
+		selection.version === 1
+			? {
+					catalog: BOUNDARY_CATALOG_VERSION,
+					selectionHash: hash(JSON.stringify({ selection, networkMounts: networkRoots }))
+				}
+			: selection.paths.length || selection.sqlite.length
+				? { catalog: CUSTOM_CATALOG_VERSION, selectionHash: hash(JSON.stringify(selection)) }
+				: { catalog: CATALOG_VERSION };
 	const excluded = (root, name) => {
 		const target = native(root, name);
 		return (
+			exclusions.some((item) => containsPath(item, target)) ||
 			blocked.some((item) => containsPath(item, target)) ||
 			outside.some((item) => containsPath(item, target)) ||
 			(defaultExcluded(root, name) &&
@@ -186,6 +250,10 @@ export function createCatalog(
 		excluded,
 		allowsFile,
 		metadata,
-		selection
+		selection,
+		networkMounts: networkRoots,
+		policy,
+		protectedPaths: [...blocked, ...outside],
+		exclusions
 	};
 }

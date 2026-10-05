@@ -345,6 +345,26 @@ async function main() {
 		return;
 	}
 	const config = recoveryConfig();
+	if (command === 'inspect' && process.argv.length === 3) {
+		process.stdout.write(
+			`${JSON.stringify(await (await configuredEngine(config, process.env)).inspect())}\n`
+		);
+		return;
+	}
+	if (
+		command === 'restore' &&
+		process.argv[3] === '--confirm-stopped' &&
+		process.argv.length === 4
+	) {
+		const engine = await configuredEngine(config, process.env);
+		try {
+			await engine.acquireRestore();
+			process.stdout.write('Recovery restored and validated without starting native writers.\n');
+		} finally {
+			await engine.release();
+		}
+		return;
+	}
 	if (
 		command === 'init' &&
 		process.argv[3] === '--confirm-new-instance' &&
@@ -374,7 +394,7 @@ async function main() {
 	}
 	if (command !== 'run' || process.argv.length !== 3)
 		throw new Error(
-			'Usage: fhold-recovery init --confirm-new-instance | run | status | unlock --confirm-stopped --owner <nonce>'
+			'Usage: fhold-recovery init --confirm-new-instance | inspect | restore --confirm-stopped | run | status | unlock --confirm-stopped --owner <nonce>'
 		);
 	await runRecovery(config);
 }

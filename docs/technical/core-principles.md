@@ -204,6 +204,15 @@ checkpoints. Additions preserve prior state; narrowing an accepted selection fai
 before claiming or writing targets. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
 No host management schema, backup plugin registry or cloud-specific selector is added.
+Versioned recovery policy may exclude directory roots, require independent mount
+roots and opt into recognized network-mount discovery. Ordinary local volumes
+stay covered. Excluded roots are never traversed/written; missing required mounts
+block startup. Registered SQLite and WAL/SHM paths cannot be excluded or placed
+on recognized network filesystems. Policy/effective exclusions are bound to
+accepted checkpoints; changed ownership needs a stopped-writer transition to a
+fresh namespace. Topology changes abort publication and retain partial-restore
+journals. Private inspection is read-only; confirmed offline restore starts no
+application writers.
 Native process coordination remains excluded even under an explicitly selected
 parent; plugin caches may be included without restoring temporary wrappers or
 live locks. This does not relax the prohibition on arbitrary links.

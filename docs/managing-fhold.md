@@ -189,6 +189,12 @@ explicit bind intent and appropriate transport security.
 
 ## Portable backup and own-backup restore
 
+Use this for reviewed user content moving to a fresh installation. For replacing
+an ephemeral container while preserving the same agent's runtime sessions,
+accounts and approvals, use [Assistant recovery](assistant-recovery.md), not a
+portable archive. Independently persistent container mounts are configured only
+in that recovery policy; they do not alter host-side portable backup selection.
+
 ```bash
 fhold backup --to /private/path/backup
 fhold --name /absolute/path/new-instance install --no-start

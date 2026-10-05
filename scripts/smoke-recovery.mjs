@@ -23,6 +23,7 @@ const password = 'synthetic-recovery-smoke-only';
 const envFile = join(root, 'runtime.env');
 const includeFile = join(root, 'include.json');
 const customSelection = {
+	version: 1,
 	paths: [
 		'/home/fhold/.claude',
 		'/home/fhold/.codex',
@@ -35,8 +36,23 @@ const customSelection = {
 		'/tmp/fhold-extra state/nested/app.sqlite',
 		'/tmp/fhold-independent.sqlite',
 		'/work/custom.sqlite'
-	]
+	],
+	excludePaths: ['/work/volatile'],
+	externalMounts: ['/work/drive-ro', '/stash/drive', '/mounted-drive'],
+	autoExcludeNetworkMounts: false,
+	recoverMounts: []
 };
+const external = Object.fromEntries(
+	['read-only', 'read-write', 'outside'].map((name) => [name, join(root, name)])
+);
+for (const [name, directory] of Object.entries(external)) {
+	await mkdir(directory, { mode: 0o755 });
+	await writeFile(join(directory, 'external.txt'), `initial-${name}`, { mode: 0o644 });
+	// An independently owned database is intentionally not cataloged or traversed.
+	await writeFile(join(directory, 'external.sqlite'), 'externally-owned-synthetic-content', {
+		mode: 0o644
+	});
+}
 await writeFile(includeFile, JSON.stringify(customSelection), { mode: 0o644 });
 await writeFile(
 	envFile,
@@ -99,6 +115,12 @@ const common = [
 	`type=bind,source=${backup},target=/backup`,
 	'--mount',
 	`type=bind,source=${includeFile},target=/run/fhold-recovery-includes.json,readonly`,
+	'--mount',
+	`type=bind,source=${external['read-only']},target=/work/drive-ro,readonly`,
+	'--mount',
+	`type=bind,source=${external['read-write']},target=/stash/drive`,
+	'--mount',
+	`type=bind,source=${external.outside},target=/mounted-drive`,
 	...(network ? ['--network', network] : []),
 	...(credentialFile
 		? [
@@ -163,15 +185,25 @@ async function released() {
 		.catch((error) => error.code === 'ENOENT');
 	assert.equal(ownerGone, true, 'ownership lock released after final checkpoint');
 	assert.match(descriptor.generation, /^[a-f0-9]{64}$/);
-	assert.equal(descriptor.catalog, 2);
+	assert.equal(descriptor.catalog, 3);
 	const manifest = JSON.parse(
 		await readFile(join(backup, 'manifests', descriptor.generation), 'utf8')
 	);
 	assert.equal(manifest.selectionHash, descriptor.selectionHash);
 	assert.deepEqual(manifest.selection, {
+		version: 1,
 		paths: [...customSelection.paths].sort(),
-		sqlite: [...customSelection.sqlite].sort()
+		sqlite: [...customSelection.sqlite].sort(),
+		excludePaths: customSelection.excludePaths,
+		externalMounts: [...customSelection.externalMounts].sort(),
+		recoverMounts: [],
+		autoExcludeNetworkMounts: false
 	});
+	assert.deepEqual(manifest.networkMounts, []);
+	assert.equal(
+		manifest.members.some((member) => /^(drive-ro|drive|volatile)(\/|$)/.test(member.path)),
+		false
+	);
 	assert.equal(
 		manifest.members.filter((member) => member.kind === 'sqlite' && member.id.startsWith('custom-'))
 			.length,
@@ -182,6 +214,7 @@ async function released() {
 		false
 	);
 	report.checks.customSelectionRecordedAndSqliteSnapshotted = true;
+	report.checks.externalMountsAbsentFromCheckpoint = true;
 	report.descriptor = {
 		epoch: descriptor.epoch,
 		generation: descriptor.generation,
@@ -206,8 +239,38 @@ try {
 		'init',
 		'--confirm-new-instance'
 	]);
+	const outsideIndex = common.indexOf(`type=bind,source=${external.outside},target=/mounted-drive`);
+	assert.ok(outsideIndex > 0);
+	const missingMount = [...common.slice(0, outsideIndex - 1), ...common.slice(outsideIndex + 1)];
+	const missingName = `fhold-recovery-smoke-${instance}-missing-mount`;
+	created.add(missingName);
+	await assert.rejects(
+		docker([
+			'run',
+			'--rm',
+			'--name',
+			missingName,
+			...missingMount,
+			'--entrypoint',
+			'fhold-recovery',
+			image,
+			'run'
+		]),
+		/required external mount missing/
+	);
+	report.checks.missingRequiredMountBlocksNativeStartup = true;
 	report.checks.explicitInitialization = true;
 	const first = await start('first');
+	const coverage = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'inspect']));
+	assert.equal(
+		coverage.externalMounts.find((mount) => mount.path === '/work/drive-ro').readOnly,
+		true
+	);
+	assert.equal(
+		coverage.externalMounts.find((mount) => mount.path === '/mounted-drive').readOnly,
+		false
+	);
+	report.checks.realMountNamespaceInspected = true;
 	assert.equal((await api(first, '/global/health', {}, false)).status, 401);
 	report.checks.authenticationRejectsAnonymous = true;
 	const createdSession = await api(first, '/session', {
@@ -270,6 +333,7 @@ try {
 		`
 		import{mkdir,writeFile}from'node:fs/promises';import{Database}from'bun:sqlite';
 		for(const p of ['/home/fhold/.custom-client','/tmp/fhold-extra state/nested'])await mkdir(p,{recursive:true});
+		await mkdir('/work/volatile',{recursive:true});await writeFile('/work/volatile/ignored.sqlite','not traversed');
 		await writeFile('/home/fhold/.custom-client/auth.json','synthetic-custom-client-account',{mode:0o600});
 		await writeFile('/tmp/fhold-extra state/nested/note','synthetic-extra-directory',{mode:0o700});
 		await writeFile('/tmp/fhold-settings.json','synthetic-individual-file');
@@ -304,8 +368,19 @@ try {
 	report.checks.realPinnedCatalogInspected = true;
 	await stop(first);
 	await released();
+	for (const [name, directory] of Object.entries(external))
+		await writeFile(join(directory, 'external.txt'), `newer-${name}`, { mode: 0o644 });
 	report.checks.gracefulFinalCheckpointAndRelease = true;
 	const second = await start('replacement');
+	await execBun(
+		second.id,
+		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';
+		for(const [name,root]of Object.entries({'read-only':'/work/drive-ro','read-write':'/stash/drive',outside:'/mounted-drive'})){
+			assert.equal(await readFile(root+'/external.txt','utf8'),'newer-'+name);
+			assert.equal(await readFile(root+'/external.sqlite','utf8'),'externally-owned-synthetic-content');
+		}assert.equal(await access('/work/volatile').then(()=>true).catch(()=>false),false);`
+	);
+	report.checks.independentReadOnlyAndWritableMountsPreserved = true;
 	const sessionsResponse = await api(second, '/session');
 	assert.equal(sessionsResponse.ok, true);
 	const sessions = await sessionsResponse.json();
@@ -347,6 +422,35 @@ try {
 	report.checks.schedulerDisabled = true;
 	await stop(second);
 	await released();
+	const offlineName = `fhold-recovery-smoke-${instance}-offline`;
+	created.add(offlineName);
+	await docker([
+		'run',
+		'--name',
+		offlineName,
+		...common,
+		'--entrypoint',
+		'fhold-recovery',
+		image,
+		'restore',
+		'--confirm-stopped'
+	]);
+	const offlineState = JSON.parse(
+		await docker(['inspect', offlineName, '--format', '{{json .State}}'])
+	);
+	assert.equal(offlineState.Running, false);
+	assert.equal(offlineState.ExitCode, 0);
+	await docker([
+		'cp',
+		`${offlineName}:/work/recovery-fixture.txt`,
+		join(root, 'offline-workspace.txt')
+	]);
+	assert.equal(
+		await readFile(join(root, 'offline-workspace.txt'), 'utf8'),
+		'Synthetic workspace marker.'
+	);
+	await released();
+	report.checks.offlineRestoreWithoutNativeWritersAndRelease = true;
 	const harnessPath = join(dirname(fileURLToPath(import.meta.url)), 'smoke-akm-harnesses.mjs');
 	const harnessName = `fhold-recovery-smoke-${instance}-harnesses`;
 	created.add(harnessName);

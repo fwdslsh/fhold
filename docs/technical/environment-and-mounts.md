@@ -151,6 +151,13 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
 
+Standalone recovery optionally uses externally supplied
+`FH_RECOVERY_INCLUDE_FILE` for additional paths/SQLite and versioned mount policy.
+Explicit exclusions, required external mounts and opt-in network discovery do
+not change normal Compose volume coverage. SQLite stays local; fhold neither
+provisions nor restores independent mounts. See [Assistant recovery](../assistant-recovery.md)
+for the schema, private inspection and stopped-writer policy transition.
+
 Optional native Codex/Claude Code remote workers inherit the same nonroot
 container boundary, with no additional mounts or ports. Their own native sign-in
 state persists under `data/assistant`; it is not a delegated Guardian credential

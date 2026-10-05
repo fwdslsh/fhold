@@ -8,14 +8,18 @@ import { assertNoLinks, createDirectoryStore, readRegular } from './directory-st
 import {
 	CATALOG_VERSION,
 	CUSTOM_CATALOG_VERSION,
+	BOUNDARY_CATALOG_VERSION,
 	DEFAULT_ROOTS,
 	canonicalPath,
 	containsPath,
 	createCatalog,
 	normalizeSelection,
+	normalizeNetworkMounts,
+	boundaryPolicy,
 	selectionCovers,
 	validPathCharacters
 } from './catalog.mjs';
+import { inspectMounts, readMountInfo } from './mounts.mjs';
 
 export const FORMAT_VERSION = 1;
 export { CATALOG_VERSION, DEFAULT_ROOTS };
@@ -94,7 +98,18 @@ const SAFE_FAILURES = new Set([
 	'recovery include path overlaps protected state or destination',
 	'recovery SQLite path must name a file',
 	'recovery selection does not cover the saved catalog',
-	'recovery selection identity rejected'
+	'recovery selection identity rejected',
+	'recovery network mount discovery must be boolean',
+	'recovery mount policies conflict',
+	'recovery mount table rejected',
+	'recovery SQLite must use local storage',
+	'recovery required external mount missing',
+	'recovery external mount must be a directory',
+	'recovery excluded path must be a directory',
+	'recovery included mount missing',
+	'recovery exclusions overlap required SQLite state',
+	'recovery mount topology changed; stop writers and review mounts',
+	'recovery boundary policy changed; prepare a new namespace with stopped writers'
 ]);
 export function sanitizeRecoveryError(error) {
 	if (error && SAFE_FAILURES.has(error.message)) return error.message;
@@ -232,7 +247,22 @@ export function createEngine(config, options = {}) {
 		(config.includeFile && !canonicalPath(config.includeFile))
 	)
 		throw new Error('recovery include paths must be canonical absolute paths');
-	const catalog = createCatalog(roots, config.selection, catalogOptions);
+	let catalog = createCatalog(roots, config.selection, catalogOptions);
+	let mountBoundary;
+	async function checkMounts() {
+		const reviewed = await inspectMounts(catalog, await (options.readMounts ?? readMountInfo)());
+		if (mountBoundary && mountBoundary.fingerprint !== reviewed.fingerprint)
+			throw new Error('recovery mount topology changed; stop writers and review mounts');
+		if (!mountBoundary) {
+			catalog = createCatalog(roots, config.selection, {
+				...catalogOptions,
+				networkMounts: reviewed.networkMounts
+			});
+			mountBoundary = reviewed;
+		}
+		checkDeadline();
+		return reviewed;
+	}
 	if (serialize(catalog.selection).length > limits.maxManifestBytes)
 		throw new Error('recovery manifest exceeds budget');
 	if (
@@ -259,7 +289,7 @@ export function createEngine(config, options = {}) {
 			throw new Error('recovery operation deadline exceeded');
 	}
 	const stages = new Set();
-	const { native } = catalog;
+	const native = (root, name) => catalog.native(root, name);
 	const receiptPath = path.join(privateDir, 'receipt.json');
 	const journalPath = path.join(privateDir, 'restore-journal.json');
 	const validateDescriptor = (value) => {
@@ -268,7 +298,9 @@ export function createEngine(config, options = {}) {
 			value.format !== FORMAT_VERSION ||
 			value.product !== 'fhold' ||
 			value.kind !== 'assistant-instance' ||
-			![CATALOG_VERSION, CUSTOM_CATALOG_VERSION].includes(value.catalog) ||
+			![CATALOG_VERSION, CUSTOM_CATALOG_VERSION, BOUNDARY_CATALOG_VERSION].includes(
+				value.catalog
+			) ||
 			value.instanceId !== instanceId ||
 			!same(value.versions, versions) ||
 			!Number.isSafeInteger(value.epoch) ||
@@ -277,7 +309,7 @@ export function createEngine(config, options = {}) {
 		)
 			throw new Error('recovery descriptor identity/version rejected');
 		if (
-			(value.catalog === CUSTOM_CATALOG_VERSION && !/^[a-f0-9]{64}$/.test(value.selectionHash)) ||
+			(value.catalog !== CATALOG_VERSION && !/^[a-f0-9]{64}$/.test(value.selectionHash)) ||
 			(value.catalog === CATALOG_VERSION && value.selectionHash !== undefined)
 		)
 			throw new Error('recovery selection identity rejected');
@@ -288,14 +320,28 @@ export function createEngine(config, options = {}) {
 			if (manifest.selection !== undefined || manifest.selectionHash !== undefined)
 				throw new Error('recovery selection identity rejected');
 			selection = normalizeSelection();
-		} else if (manifest.catalog === CUSTOM_CATALOG_VERSION) {
+		} else if ([CUSTOM_CATALOG_VERSION, BOUNDARY_CATALOG_VERSION].includes(manifest.catalog)) {
 			selection = normalizeSelection(manifest.selection);
 			if (!same(selection, manifest.selection))
 				throw new Error('recovery selection identity rejected');
 		} else throw new Error('recovery selection identity rejected');
+		let networkMounts = [];
+		if (manifest.catalog === BOUNDARY_CATALOG_VERSION) {
+			networkMounts = normalizeNetworkMounts(manifest.networkMounts);
+			if (selection.version !== 1 || !same(networkMounts, manifest.networkMounts))
+				throw new Error('recovery selection identity rejected');
+		} else if (manifest.networkMounts !== undefined || selection.version !== undefined)
+			throw new Error('recovery selection identity rejected');
+		if (
+			!same(boundaryPolicy(selection), catalog.policy) ||
+			!same(networkMounts, catalog.networkMounts)
+		)
+			throw new Error(
+				'recovery boundary policy changed; prepare a new namespace with stopped writers'
+			);
 		if (!selectionCovers(catalog.selection, selection))
 			throw new Error('recovery selection does not cover the saved catalog');
-		const saved = createCatalog(roots, selection, catalogOptions);
+		const saved = createCatalog(roots, selection, { ...catalogOptions, networkMounts });
 		if (
 			saved.metadata.catalog !== manifest.catalog ||
 			saved.metadata.selectionHash !== manifest.selectionHash ||
@@ -311,12 +357,14 @@ export function createEngine(config, options = {}) {
 		await fs.mkdir(privateDir, { recursive: true, mode: 0o700 });
 		await fs.chmod(privateDir, 0o700);
 	}
-	async function owned() {
+	async function owned(checkBoundary = false) {
 		checkDeadline();
+		if (checkBoundary) await checkMounts();
 		if (!ownership) throw new Error('recovery not owned');
 		await store.renew(ownership);
 	}
 	async function sqlite(operation, source, destination) {
+		await checkMounts();
 		await assertNoLinks(source);
 		const maximum = limits.maxDatabaseBytes;
 		let inputBytes = 0;
@@ -379,6 +427,7 @@ export function createEngine(config, options = {}) {
 			throw new Error('SQLite source replaced during capture');
 	}
 	async function inventory(previousPresence = {}) {
+		await checkMounts();
 		const members = [];
 		const presence = {};
 		const seen = new Set();
@@ -456,7 +505,9 @@ export function createEngine(config, options = {}) {
 			manifest.format !== FORMAT_VERSION ||
 			manifest.product !== 'fhold' ||
 			manifest.kind !== 'assistant-instance' ||
-			![CATALOG_VERSION, CUSTOM_CATALOG_VERSION].includes(manifest.catalog) ||
+			![CATALOG_VERSION, CUSTOM_CATALOG_VERSION, BOUNDARY_CATALOG_VERSION].includes(
+				manifest.catalog
+			) ||
 			manifest.instanceId !== instanceId ||
 			!same(manifest.versions, versions) ||
 			!Array.isArray(manifest.members) ||
@@ -530,6 +581,7 @@ export function createEngine(config, options = {}) {
 		return manifest;
 	}
 	async function writeReceipt(generation) {
+		await checkMounts();
 		await privateWrite(receiptPath, {
 			format: FORMAT_VERSION,
 			product: 'fhold',
@@ -550,6 +602,7 @@ export function createEngine(config, options = {}) {
 			failure = null;
 			try {
 				const result = await task();
+				await checkMounts();
 				checkDeadline();
 				return result;
 			} finally {
@@ -580,8 +633,23 @@ export function createEngine(config, options = {}) {
 		}
 	}
 	return {
+		async inspect() {
+			const reviewed = await checkMounts();
+			return {
+				...catalog.metadata,
+				selection: catalog.selection,
+				trees: catalog.trees.map(([root, name]) => native(root, name)),
+				sqlite: [...catalog.dbPaths.keys()],
+				exclusions: catalog.policy.excludePaths.map((item) => ({
+					path: item,
+					reason: 'excluded-path'
+				})),
+				externalMounts: reviewed.externalMounts
+			};
+		},
 		async initialize() {
 			return operation(async () => {
+				await checkMounts();
 				await store.initialize({
 					format: FORMAT_VERSION,
 					product: 'fhold',
@@ -598,6 +666,7 @@ export function createEngine(config, options = {}) {
 		async acquireRestore() {
 			if (ownership) throw new Error('recovery already acquired');
 			return operation(async () => {
+				await checkMounts();
 				const previous = await store.readDescriptor();
 				if (!previous) throw new Error('recovery namespace requires explicit initialization');
 				validateDescriptor(previous.value);
@@ -609,7 +678,15 @@ export function createEngine(config, options = {}) {
 				const saved = manifest ? savedCatalog(manifest, previous.value) : null;
 				if (
 					!manifest &&
-					previous.value.catalog === CUSTOM_CATALOG_VERSION &&
+					previous.value.catalog === CATALOG_VERSION &&
+					!same(catalog.policy, boundaryPolicy(normalizeSelection()))
+				)
+					throw new Error(
+						'recovery boundary policy changed; prepare a new namespace with stopped writers'
+					);
+				if (
+					!manifest &&
+					previous.value.catalog !== CATALOG_VERSION &&
 					previous.value.selectionHash !== catalog.metadata.selectionHash
 				)
 					throw new Error('recovery selection identity rejected');
@@ -669,11 +746,12 @@ export function createEngine(config, options = {}) {
 							await fs.writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
 							if (member.kind === 'sqlite') await sqlite('verify', target);
 						}
+						await checkMounts();
 						await privateWrite(journalPath, { instanceId, generation, stage, phase: 'publishing' });
 						// All staged content validated before first native target write. The
 						// journal prevents partial publication from ever starting writers.
 						for (const member of manifest.members) {
-							await owned();
+							await owned(true);
 							const target = saved.native(member.root, member.path);
 							await assertNoLinks(target);
 							await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -715,7 +793,7 @@ export function createEngine(config, options = {}) {
 		async checkpoint() {
 			return operation(async () => {
 				if (!ready) throw new Error('recovery startup not complete');
-				await owned();
+				await owned(true);
 				const previous = head.value.generation ? await manifestAt(head.value.generation) : null;
 				const { members, presence } = await inventory(previous?.presence);
 				const startedAt = Date.now();
@@ -755,8 +833,9 @@ export function createEngine(config, options = {}) {
 					product: 'fhold',
 					kind: 'assistant-instance',
 					...catalog.metadata,
-					...(catalog.metadata.catalog === CUSTOM_CATALOG_VERSION
-						? { selection: catalog.selection }
+					...(catalog.metadata.catalog !== CATALOG_VERSION ? { selection: catalog.selection } : {}),
+					...(catalog.metadata.catalog === BOUNDARY_CATALOG_VERSION
+						? { networkMounts: catalog.networkMounts }
 						: {}),
 					instanceId,
 					versions,
@@ -775,7 +854,7 @@ export function createEngine(config, options = {}) {
 				const generation = digest(bytes);
 				checkDeadline();
 				await store.createImmutable(`manifests/${generation}`, bytes, ownership);
-				checkDeadline();
+				await owned(true);
 				head = await store.compareAndSwap(
 					head.token,
 					{ ...head.value, ...catalog.metadata, generation, checkpointAt: manifest.finishedAt },
@@ -790,7 +869,7 @@ export function createEngine(config, options = {}) {
 		},
 		async renew() {
 			try {
-				await owned();
+				await owned(true);
 			} catch (error) {
 				ready = false;
 				failure = sanitizeRecoveryError(error);
