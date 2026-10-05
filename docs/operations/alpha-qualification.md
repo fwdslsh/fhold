@@ -46,6 +46,32 @@ post-publication checks. Live Blob storage, network-mount behavior, remote
 client reconnection and measured RPO/RTO remain deployment-specific qualification.
 ARM64 Admin startup is not qualified by the local x64 tests.
 
+The [published alpha.6](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6)
+passed [GitHub release run 37276782651](https://github.com/fwdslsh/fhold/actions/runs/37276782651)
+from `f20630e0019e5261a74671fbebfc543f721ebe06`. Source quality, all six native
+x64/ARM64 image gates, native history and real directory recovery passed, as did
+CLI, MCPB and packaged x64 Admin gates. The corresponding
+[main CI run](https://github.com/fwdslsh/fhold/actions/runs/37276783835) also passed.
+
+Independent post-publication checks validated the complete downloaded checksum
+and asset-manifest set, an anonymous x64 CLI download, all three anonymous image
+pulls and amd64/arm64 manifests, and image signatures bound to the exact GitHub
+workflow, issuer and release commit. The downloaded x64 Admin passed its actual
+AppImage startup on Linux with normal host sandboxing and an isolated profile.
+ARM64 Admin remains build-only.
+
+An existing live instance was upgraded through the released CLI after a private
+full stopped-state backup. Before application writers restarted, exact hashes
+confirmed preservation of 10,252 existing operator/native account files and all
+208 sessions, 6,630 messages and 30,251 message parts. Effective intent was
+unchanged apart from managed image pins; recovery remained disabled. All three
+services became healthy with zero restarts and no pending activation. Native API
+authentication, a real no-tool provider response, authenticated MCP tool listing
+and a read-only session call passed. Discord reconnected without a test message;
+Claude remained signed in and both native workers restarted. This does not
+qualify a fresh remote-client pairing or vendor reconnect, and both integrations
+remain experimental.
+
 ## Alpha.5 changes and local evidence
 
 `0.1.2610050129-alpha.5` includes Admin's confirmed/deferred container activation and
