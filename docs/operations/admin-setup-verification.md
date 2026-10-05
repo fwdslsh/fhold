@@ -23,6 +23,15 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
+Sidebar checks compare its visible name and full-path tooltip against the actual
+selected snapshot, and keep Switch instance/Refresh labeled and keyboard accessible.
+The rendered walkthrough covers one-line long-path truncation, refresh completion,
+clearly stale/unavailable status, expanded narrow navigation and 200% zoom, with
+44px action targets and no horizontal overflow. Long identities and transport
+failure are explicitly isolated renderer fixtures, not real Docker outages.
+Runtime status does not claim provider/account readiness. Only the harness manually
+resizes for responsive checks; product navigation and refresh never resize windows.
+
 System has one view with four collapsed sections, in order: **Installation
 details**, **Recent logs**, **Import / export**, **Ephemeral container support**.
 Static and rendered checks verify this order, the names, matching setup import

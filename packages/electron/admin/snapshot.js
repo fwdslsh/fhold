@@ -8,7 +8,7 @@ import {
 } from './connections.js';
 import { isHealthy } from './model.js';
 import { loadProviders, renderReadiness } from './providers.js';
-import { renderPhase, renderServices } from './runtime.js';
+import { renderPhase, renderServices, sidebarRuntimeStatus } from './runtime.js';
 import { renderPreferences } from './preferences.js';
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
@@ -25,6 +25,8 @@ import {
 	showView
 } from './ui.js';
 
+let refreshInFlight = false;
+
 export function render(snapshot, options = {}) {
 	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
 	const previousPhase = state.currentSnapshot?.phase;
@@ -37,7 +39,11 @@ export function render(snapshot, options = {}) {
 		byId('install-gateway-port').value = String(snapshot.config.gateway.port);
 	}
 	setText('install-home', snapshot.homeDir);
+	const instanceName = snapshot.config.deployment?.projectName || 'Selected instance';
+	setText('sidebar-instance-name', instanceName);
+	byId('sidebar-instance-name').setAttribute('title', `${instanceName}\n${snapshot.homeDir}`);
 	setText('selected-instance-path', snapshot.homeDir);
+	byId('selected-instance-path').setAttribute('title', snapshot.homeDir);
 	byId('recovery-assistant-port').value = String(snapshot.config.assistant.port);
 	byId('recovery-gateway-port').value = String(snapshot.config.gateway.port);
 	renderPhase(snapshot.phase);
@@ -138,19 +144,40 @@ export async function showFatalError(error) {
 }
 
 export async function refresh(announce = false) {
+	if (refreshInFlight) return;
+	refreshInFlight = true;
+	const button = byId('refresh');
+	button.disabled = true;
+	button.dataset.state = 'refreshing';
+	button.setAttribute('aria-busy', 'true');
+	setText('status-detail', 'Checking status…');
+	byId('status-detail').hidden = false;
 	try {
 		const snapshot = await state.api.snapshot();
 		render(snapshot);
-		if (announce) {
-			byId('refresh').textContent = 'Status up to date';
+		button.dataset.state = snapshot.dockerError ? 'unavailable' : announce ? 'current' : 'idle';
+		if (announce && !snapshot.dockerError) {
+			setText('status-detail', 'Status refreshed');
+			byId('status-detail').hidden = false;
 			if (!byId('notice').className.includes('error')) byId('notice').hidden = true;
 		}
 	} catch (error) {
 		if (state.currentSnapshot) {
+			const lastKnown = sidebarRuntimeStatus(state.currentSnapshot);
+			setText('stack-status', 'Status unavailable');
+			byId('stack-status').className = 'sidebar-status warning';
+			setText('status-detail', `Refresh failed · last known: ${lastKnown.text.toLowerCase()}`);
+			byId('status-detail').hidden = false;
+			button.dataset.state = 'stale';
 			notice(`Could not refresh status: ${message(error)}`, 'error', { persist: true });
 			return;
 		}
+		button.dataset.state = 'unavailable';
 		await showFatalError(error);
 		notice(message(error), 'error', { persist: true });
+	} finally {
+		refreshInFlight = false;
+		button.disabled = state.operationInFlight;
+		button.setAttribute('aria-busy', 'false');
 	}
 }

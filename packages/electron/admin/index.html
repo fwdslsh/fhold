@@ -136,6 +136,17 @@
           <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">Setup & settings</span></div>
         </div>
 
+        <section class="sidebar-instance" aria-label="Selected instance">
+          <div class="sidebar-instance-copy">
+            <p class="sidebar-label">Instance</p>
+            <strong id="sidebar-instance-name" class="sidebar-instance-name">Loading…</strong>
+            <span id="selected-instance-path" class="selected-instance">Loading…</span>
+          </div>
+          <button class="sidebar-action instance-switch" type="button" aria-describedby="sidebar-instance-name selected-instance-path" data-instance-switch>
+            <span>Switch instance</span><span aria-hidden="true">↔</span>
+          </button>
+        </section>
+
         <div class="setup-only setup-progress" hidden>
           <p id="setup-step" class="eyebrow">Step 2 of 3</p>
           <ol>
@@ -167,10 +178,12 @@
         </details>
 
         <div class="sidebar-footer">
-          <span id="selected-instance-path" class="instance-path selected-instance">Loading…</span>
-          <button class="text-button" type="button" data-instance-switch>Switch instance</button>
-          <span id="stack-status" class="status-badge neutral"><span class="status-dot" aria-hidden="true"></span>Checking status</span>
-          <button id="refresh" class="text-button" type="button">Refresh status</button>
+          <div class="sidebar-runtime-copy" role="status" aria-live="polite" aria-atomic="true">
+            <p class="sidebar-label">Runtime</p>
+            <p id="stack-status" class="sidebar-status neutral">Checking status</p>
+            <p id="status-detail" class="sidebar-status-detail" hidden></p>
+          </div>
+          <button id="refresh" class="sidebar-action sidebar-refresh" type="button" aria-label="Refresh status" aria-busy="false" data-state="idle">Refresh</button>
         </div>
       </aside>
 

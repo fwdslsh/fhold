@@ -143,6 +143,7 @@ beforeEach(() => {
 	control('new-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
 	control('install-gateway-port').disabled = true;
+	control('refresh').textContent = 'Refresh'; // Static HTML owns this constant action label.
 	globalThis.document = {
 		body: new Control(),
 		getElementById: (id: string) => control(id),
@@ -428,7 +429,8 @@ describe('Admin static security boundary', () => {
 		expect(control('install').disabled).toBe(false);
 		expect(control('check-prerequisites').hidden).toBe(true);
 		expect(control('notice').hidden).toBe(false);
-		expect(control('refresh').textContent).toBe('Status up to date');
+		expect(control('refresh').textContent).toBe('Refresh');
+		expect(control('refresh').dataset.state).toBe('current');
 	});
 	it('retains a chosen instance name and ports while rechecking prerequisites', () => {
 		const snapshot = {
@@ -806,6 +808,111 @@ describe('Admin static security boundary', () => {
 				match[0].includes(`id="${id}"`)
 			)?.[0];
 			expect(element).toMatch(/\bhidden\b/);
+		}
+	});
+});
+
+describe('Admin sidebar identity and status', () => {
+	function emptySnapshot() {
+		return {
+			phase: 'not_installed',
+			homeDir: '/home/person/fhold/instances/a-very-long-personal-instance-folder',
+			config: {
+				deployment: { projectName: 'personal-agent' },
+				assistant: { port: 3810 },
+				gateway: { port: 3830 }
+			},
+			installationReadiness: { ok: true }
+		};
+	}
+	it('uses the saved identity, retains the full path and keeps labeled instance/status actions', () => {
+		const snapshot = emptySnapshot();
+		render(snapshot);
+		expect(control('sidebar-instance-name').textContent).toBe('personal-agent');
+		expect(control('selected-instance-path').textContent).toBe(snapshot.homeDir);
+		expect(control('selected-instance-path').getAttribute('title')).toBe(snapshot.homeDir);
+		expect(html).toContain('Switch instance');
+		expect(html).toContain('aria-label="Refresh status"');
+		expect(html).toContain('id="status-detail"');
+	});
+	it('reports actual runtime state without equating a container with provider readiness', () => {
+		const snapshot = {
+			phase: 'ready', services: [],
+			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
+		};
+		for (const [services, label] of [
+			[[{ name: 'assistant', state: 'running', health: 'healthy' }], 'Assistant running'],
+			[[{ name: 'assistant', state: 'running', health: 'unhealthy' }], 'Needs attention'],
+			[[], 'Assistant stopped']
+		] as const) {
+			renderServices({ ...snapshot, services });
+			expect(control('stack-status').textContent).toBe(label);
+			expect(control('stack-status').textContent).not.toContain('ready');
+		}
+		renderServices({ ...snapshot, dockerError: 'Docker is not available.' });
+		expect(control('stack-status').textContent).toBe('Status unavailable');
+		expect(control('stack-status').className).not.toContain('success');
+		expect(control('status-detail').textContent).toBe('Docker status unavailable');
+	});
+	it('keeps refresh compact, visible and single-flight while status is being checked', async () => {
+		const snapshot = emptySnapshot();
+		state.currentSnapshot = snapshot;
+		let complete!: (value: unknown) => void;
+		let calls = 0;
+		state.api = { snapshot: () => { calls++; return new Promise((resolve) => { complete = resolve; }); } };
+		const first = refresh(true);
+		const second = refresh(true);
+		expect(calls).toBe(1);
+		expect(control('refresh').disabled).toBe(true);
+		expect(control('refresh').getAttribute('aria-busy')).toBe('true');
+		expect(control('refresh').dataset.state).toBe('refreshing');
+		expect(control('status-detail').textContent).toBe('Checking status…');
+		complete(snapshot);
+		await Promise.all([first, second]);
+		expect(control('refresh').textContent).toBe('Refresh');
+		expect(control('refresh').disabled).toBe(false);
+		expect(control('refresh').getAttribute('aria-busy')).toBe('false');
+		expect(control('refresh').dataset.state).toBe('current');
+		expect(control('status-detail').textContent).toBe('Status refreshed');
+	});
+	it('marks failed refreshes unavailable instead of leaving a misleading healthy indicator', async () => {
+		state.currentSnapshot = { phase: 'ready', services: [{ name: 'assistant', state: 'running', health: 'healthy' }] };
+		control('stack-status').textContent = 'Assistant running';
+		control('stack-status').className = 'sidebar-status success';
+		state.api = { snapshot: async () => { throw new Error('Connection unavailable'); } };
+		await refresh(true);
+		expect(control('stack-status').textContent).toBe('Status unavailable');
+		expect(control('stack-status').className).not.toContain('success');
+		expect(control('status-detail').textContent).toContain('last known');
+		expect(control('refresh').dataset.state).toBe('stale');
+		expect(control('refresh').disabled).toBe(false);
+		expect(control('notice-message').textContent).toContain('Connection unavailable');
+	});
+	it('keeps refresh disabled during overlapping work and re-enables it after both operations settle', async () => {
+		for (const readFinishesFirst of [true, false]) {
+			const snapshot = { ...emptySnapshot(), services: [] };
+			state.currentSnapshot = snapshot;
+			selector('button', control('refresh'));
+			let completeRead!: (value: unknown) => void;
+			let completeSave!: (value: string) => void;
+			state.api = { snapshot: () => new Promise((resolve) => { completeRead = resolve; }) };
+			const checking = refresh(true);
+			const saving = operation('Saving', () => new Promise<string>((resolve) => { completeSave = resolve; }));
+			if (readFinishesFirst) {
+				completeRead(snapshot);
+				await checking;
+				expect(control('refresh').disabled).toBe(true);
+				completeSave('saved');
+				await saving;
+			} else {
+				completeSave('saved');
+				await saving;
+				expect(control('refresh').disabled).toBe(true);
+				completeRead(snapshot);
+				await checking;
+			}
+			expect(control('refresh').disabled).toBe(false);
+			expect(control('refresh').getAttribute('aria-busy')).toBe('false');
 		}
 	});
 });

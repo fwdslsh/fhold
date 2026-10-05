@@ -134,6 +134,13 @@ in the separate `fhold-admin` desktop profile, not instance state. Keys load
 masked and require explicit Show/Copy. Window size remains user-controlled.
 SSH management is not implemented.
 
+The sidebar puts the selected instance name and folder together above navigation;
+long folders stay on one line, with the complete path in Installation details
+and the path tooltip. **Switch instance** opens Welcome without affecting running
+containers. The footer groups Assistant runtime status with **Refresh**. A failed
+check is unavailable/stale, not a stopped or healthy-agent claim; provider readiness
+remains in Agent settings. Refresh never restarts a container or changes window size.
+
 Agent settings owns provider readiness, memory and timezone. Connections holds
 OpenCode links, Guardian MCP details and optional portals. People & access owns
 named identities. System holds installation details, recent logs, import/export,

@@ -13,7 +13,7 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
-## Unreleased: entire-instance import/export
+## Unreleased: entire-instance import/export and sidebar refinement
 
 The source adds an explicit stopped, same-instance scope alongside portable
 content. It does not change the published alpha.6 artifacts or automatic
@@ -22,7 +22,7 @@ for coverage, confirmation, empty-target and external-storage requirements.
 
 Linux x64 verification on October 5, 2026:
 
-- All 589 source tests passed with loopback socket and native-history checks
+- All 594 source tests passed with loopback socket and native-history checks
   enabled, with no failures or skips. Type checks, lint, CLI compilation and
   Admin bundling passed. All Compose profiles validated, including the restored
   home's secret and mount boundaries.
@@ -39,6 +39,12 @@ Linux x64 verification on October 5, 2026:
   database were real. Identity and keys remained unchanged, no containers started
   during import, and the original OpenCode session was retrieved through the
   authenticated API after an explicit start. Window dimensions stayed unchanged.
+- The design-reviewed sidebar groups selected identity and switching above
+  navigation, with compact runtime status and Refresh below. Real rendered checks
+  covered saved identity, keyboard navigation, narrow layout, 200% zoom and 44px
+  action targets. Isolated renderer fixtures exercised long paths and stale
+  status without changing homes or simulating a real Docker outage. Type, build
+  and accessibility checks passed; no dependencies or window resizing were added.
 - Isolated homes/projects were used; existing user instances were not stopped or
   changed. A management fixture bypassed provider readiness for this UI journey:
   the free provider rejected the setup probe. These checks do not qualify a fresh

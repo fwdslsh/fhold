@@ -64,6 +64,11 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Tab');
 	await press('Tab');
 	assert(
+		await window.webContents.executeJavaScript("document.activeElement?.hasAttribute('data-instance-switch')"),
+		'Keyboard did not reach the labeled instance switch after the skip link.'
+	);
+	await press('Tab');
+	assert(
 		await window.webContents.executeJavaScript(
 			"document.activeElement?.id === 'mobile-navigation-label'"
 		),
@@ -83,9 +88,15 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	);
 	await press('Tab', ['shift']);
 	assert(
+		await window.webContents.executeJavaScript("document.activeElement?.hasAttribute('data-instance-switch')"),
+		'Reverse traversal did not reach the instance switch.'
+	);
+	await press('Tab', ['shift']);
+	assert(
 		await window.webContents.executeJavaScript("document.activeElement?.id === 'skip-link'"),
 		'Reverse traversal did not reach the skip link.'
 	);
+	await press('Tab');
 	await press('Tab');
 	await press('Return');
 	await press('Tab');
@@ -104,7 +115,7 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 		),
 		'Selecting a page did not close navigation and focus its heading.'
 	);
-	visualAudits.push({ keyboard: 'Tab, Shift+Tab, Enter, Space, page selection', passed: true });
+	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance switch, Enter, Space, page selection', passed: true });
 }
 
 function requiredEnvironment(name: string): string {
@@ -292,6 +303,90 @@ async function assertRenderedFloor(window: BrowserWindow, label: string): Promis
 		result.focus !== null && result.focus.style !== 'none' && result.focus.width !== '0px',
 		`${label} does not expose a visible focus outline: ${JSON.stringify(result.focus)}`
 	);
+}
+
+async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<string[]> {
+	const originalSize = window.getSize().join('x');
+	const viewport = await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');
+	const screenshots: string[] = [];
+	try {
+		assert(await window.webContents.executeJavaScript(`(async () => {
+			const snapshot = await window.fholdAdmin.snapshot();
+			const path = document.querySelector('#selected-instance-path');
+			const name = document.querySelector('#sidebar-instance-name');
+			const refresh = document.querySelector('#refresh');
+			return name.textContent === snapshot.config.deployment.projectName && path.textContent === snapshot.homeDir &&
+				path.title === snapshot.homeDir && getComputedStyle(path).whiteSpace === 'nowrap' &&
+				getComputedStyle(path).textOverflow === 'ellipsis' && refresh.textContent === 'Refresh' &&
+				refresh.getAttribute('aria-label') === 'Refresh status' && refresh.getBoundingClientRect().height >= 44 &&
+				document.querySelector('#stack-status').textContent === 'Assistant running';
+		})()`), 'Sidebar did not expose the saved identity, complete folder or compact runtime controls.');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		screenshots.push(await capture(window, outputDir, '04d-sidebar-system.png'));
+
+		// Presentation-only extremes use the ordinary renderer. They never alter
+		// the selected home, Docker, account policy or persisted configuration.
+		await window.webContents.executeJavaScript(`(async () => {
+			const {render} = await import('./snapshot.js');
+			const snapshot = await window.fholdAdmin.snapshot();
+			render({...snapshot, homeDir:'/home/person/fhold/instances/' + 'long-folder-'.repeat(14),
+				config:{...snapshot.config,deployment:{...snapshot.config.deployment,projectName:'personal-agent-' + 'a'.repeat(48)}}});
+		})()`);
+		assert(await window.webContents.executeJavaScript(`(() => {
+			const path = document.querySelector('#selected-instance-path');
+			const name = document.querySelector('#sidebar-instance-name');
+			return path.title === path.textContent && path.scrollWidth > path.clientWidth &&
+				path.getBoundingClientRect().height < 28 && name.scrollWidth > name.clientWidth &&
+				document.querySelector('.sidebar').scrollWidth <= document.querySelector('.sidebar').clientWidth + 1;
+		})()`), 'Long identity/path spilled into navigation or lost the full folder.');
+		screenshots.push(await capture(window, outputDir, '04e-sidebar-long-path.png'));
+		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+		await waitForRenderer(window, "document.querySelector('#refresh').dataset.state === 'current'", 'sidebar refresh completion');
+		assert(await window.webContents.executeJavaScript(`(async () => {
+			const {state} = await import('./state.js');
+			const {refresh} = await import('./snapshot.js');
+			const original = state.api;
+			try {
+				state.api = {...original,snapshot:async () => {throw new Error('Isolated renderer transport-failure fixture');}};
+				await refresh(true);
+				return document.querySelector('#stack-status').textContent === 'Status unavailable' &&
+					!document.querySelector('#stack-status').classList.contains('success') &&
+					document.querySelector('#refresh').dataset.state === 'stale' &&
+					document.querySelector('#status-detail').textContent.includes('last known');
+			} finally {state.api = original;}
+		})()`), 'Failed refresh kept a misleading healthy sidebar.');
+		screenshots.push(await capture(window, outputDir, '04f-sidebar-stale-status.png'));
+		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click(); document.querySelector('#refresh').click()");
+		await waitForRenderer(window, "document.querySelector('#refresh').dataset.state === 'current'", 'sidebar recovers after a failed refresh');
+		for (const zoom of [1, 2]) {
+			await sizeViewport(window, 640, 640, zoom);
+			await window.webContents.executeJavaScript("document.querySelector('#mobile-navigation').open=true; window.scrollTo(0,0)");
+			assert(await window.webContents.executeJavaScript(`(() => {
+				const visible = (element) => {
+					const box = element.getBoundingClientRect();
+					return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+				};
+				return visible(document.querySelector('#sidebar-instance-name')) &&
+					visible(document.querySelector('.sidebar [data-instance-switch]')) && visible(document.querySelector('#refresh')) &&
+					[...document.querySelectorAll('.sidebar button')].filter(visible).every(button => button.getBoundingClientRect().height >= 44);
+			})()`), `Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`);
+			await assertRenderedFloor(window, `expanded sidebar at ${zoom * 100}% zoom`);
+			// Keyboard focus can scroll the long System view. Show the actual sidebar
+			// header in responsive screenshots without clearing its tested focus state.
+			await window.webContents.executeJavaScript('window.scrollTo(0, 0)');
+			screenshots.push(await capture(window, outputDir, zoom === 1 ? '04g-sidebar-narrow.png' : '04h-sidebar-zoom.png', true));
+		}
+	} finally {
+		await sizeViewport(window, viewport.width, viewport.height);
+		await window.webContents.executeJavaScript(`(async () => {
+			const {refresh} = await import('./snapshot.js');
+			await refresh(false);
+			document.querySelector('[data-view=overview]').click();
+		})()`);
+	}
+	assert(window.getSize().join('x') === originalSize, 'Sidebar interaction changed the user window size.');
+	progress('sidebar: real identity/runtime, long-path and stale-status fixtures, labeled actions, narrow/200% zoom and stable size passed');
+	return screenshots;
 }
 
 function rpcPayload(text: string): Record<string, unknown> | null {
@@ -848,7 +943,7 @@ async function run(): Promise<Record<string, unknown>> {
 				window,
 				`document.querySelector('#view-overview')?.hidden === false &&
 						document.querySelector('#primary-nav')?.hidden === false &&
-						document.querySelector('#refresh')?.textContent === 'Status up to date'`,
+						document.querySelector('#refresh')?.dataset.state === 'current'`,
 				'the isolated management UI fixture',
 				60_000,
 				true
@@ -994,7 +1089,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && document.querySelector('#refresh').textContent === 'Status up to date'",
+			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && document.querySelector('#refresh').dataset.state === 'current'",
 			'read-only refresh clears the prior explicit recall review',
 			60_000,
 			!provider
@@ -1026,6 +1121,7 @@ async function run(): Promise<Record<string, unknown>> {
 			"document.querySelector('[data-view=overview]').click()"
 		);
 		const overviewScreenshot = await capture(window, outputDir, '04b-overview.png');
+		const sidebarScreenshots = await verifySidebar(window, outputDir);
 		assert(
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#stop-stack').getBoundingClientRect().bottom < innerHeight && !document.querySelector('#starter-heading') && !document.querySelector('.choice-grid')"
@@ -1927,6 +2023,7 @@ async function run(): Promise<Record<string, unknown>> {
 			startupRecoveryVerified: true,
 			restorePreservationVerified: true,
 			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
+			sidebarVerified: { savedIdentity: true, fullPathAccessible: true, runtimeNotProviderReadiness: true, staleStatusFixture: true, longPathFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
 			instanceWelcomeVerified: {
 				defaultOneClick: true,
 				folderSelectionAndCancellation: true,
@@ -1990,6 +2087,7 @@ async function run(): Promise<Record<string, unknown>> {
 				toolCount: tools.length
 			},
 			screenshots: [
+				...sidebarScreenshots,
 				fullExportScreenshot,
 				fullImportScreenshot,
 				welcomeScreenshot,
