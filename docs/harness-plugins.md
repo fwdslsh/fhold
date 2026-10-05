@@ -8,6 +8,14 @@ The image registers the existing AKM/fhold handlers as native system-managed
 hooks so fresh sessions need no personal hook approval. The fhold plugins share one activity reporter and the same
 release-owned skills.
 
+The exact AKM CLI and OpenCode plugin pins live in
+`containers/assistant/tools/package.json` and the workspace lockfile. Claude and
+Codex use the same plugin release from the checksum-verified immutable archive
+in `containers/assistant/Dockerfile`. Update these pins together. Image smokes
+check the installed versions and execute real session/prompt recall in all three
+harnesses, without a vendor account or model request. Guardian and Portal do not
+install AKM or native harness plugins.
+
 ## Skills and identity
 
 The skills in `packages/skeleton/system/assistant/skills` are baked into

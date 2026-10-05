@@ -13,12 +13,15 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
-## Unreleased: entire-instance import/export and sidebar refinement
+## Unreleased source verification
 
 The source adds an explicit stopped, same-instance scope alongside portable
 content. It does not change the published alpha.6 artifacts or automatic
 Assistant checkpoint format. See [the user guide](../managing-fhold.md#entire-stopped-instance)
 for coverage, confirmation, empty-target and external-storage requirements.
+The candidate also refreshes AKM to CLI `0.9.26` and plugin
+`0.9.26202610051302` in all three Assistant harnesses; see
+[the harness guide](../harness-plugins.md) for the pin and installation contract.
 
 Linux x64 verification on October 5, 2026:
 
@@ -45,6 +48,15 @@ Linux x64 verification on October 5, 2026:
   action targets. Isolated renderer fixtures exercised long paths and stale
   status without changing homes or simulating a real Docker outage. Type, build
   and accessibility checks passed; no dependencies or window resizing were added.
+- All three Linux x64 images rebuilt and passed standard startup smokes. The new
+  AKM pins passed actual OpenCode, Claude and Codex session/prompt recall, both
+  default-on and explicitly disabled native workers, preserved customized
+  settings, native managed policy, real conditional keep-alive ticks and cold
+  directory recovery. Recall passed again after recovery. The duplicate older
+  OpenCode-plugin CLI dependency is gone; no runtime updater or vendor patch was
+  added. The existing dependency audit policy passed with its unchanged reviewed
+  build-only exception. These are isolated, account-free runtime checks, not
+  vendor sign-in or remote-client reconnection evidence.
 - Isolated homes/projects were used; existing user instances were not stopped or
   changed. A management fixture bypassed provider readiness for this UI journey:
   the free provider rejected the setup probe. These checks do not qualify a fresh
