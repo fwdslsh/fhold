@@ -433,6 +433,12 @@ async function run(): Promise<Record<string, unknown>> {
 	const originalMessageBox = dialog.showMessageBox;
 	const confirmations: number[] = [];
 	const prompts: string[] = [];
+	const waitForPrompt = async (count: number) => {
+		const deadline = Date.now() + 10_000;
+		while (prompts.length < count && Date.now() < deadline)
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		assert(prompts.length === count, 'Expected native confirmation was not presented.');
+	};
 	// Only replace the human's native dialog response. Save, IPC, Compose and
 	// health checks below all exercise the real application and Docker daemon.
 	dialog.showMessageBox = (async (...args: unknown[]) => {
@@ -1704,6 +1710,119 @@ async function run(): Promise<Record<string, unknown>> {
 			'Returning to the original instance resized Admin.'
 		);
 		progress('two-instance isolation, renderer key reset and stale sign-in rejection verified');
+		// Exercise the actual managed recovery path, not a separately wired container.
+		const checkpointDirectory = join(outputDir, 'runtime-checkpoints');
+		const beforeRecoverySave = await containerId();
+		const recoveryWindowSize = window.getSize().join('x');
+		const recoveryViewport = await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('[data-view=system]').click();
+			document.querySelector('#runtime-recovery').open = true;
+			document.querySelector('#runtime-recovery').scrollIntoView({block:'start'});
+		})()`);
+		await assertRenderedFloor(window, 'portable versus runtime recovery');
+		const runtimeRecoveryOffScreenshot = await capture(window, outputDir, '07-runtime-recovery-off.png');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('#runtime-recovery-enabled').checked = true;
+			document.querySelector('#runtime-recovery-enabled').dispatchEvent(new Event('change', {bubbles:true}));
+			document.querySelector('#runtime-recovery-directory').value = ${JSON.stringify(checkpointDirectory)};
+			document.querySelector('#runtime-recovery-paths').value = '/tmp/fhold-custom-client';
+			document.querySelector('#runtime-recovery-sqlite').value = '/tmp/fhold-custom-client/state.sqlite';
+			document.querySelector('#runtime-recovery-interval').value = '2';
+			document.querySelector('#runtime-recovery-max-unsaved').value = '120';
+			document.querySelector('#runtime-recovery-directory').dispatchEvent(new Event('input', {bubbles:true}));
+			document.querySelector('#runtime-recovery-form').requestSubmit();
+		})()`);
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery settings saved.') && !document.querySelector('#pending-restart').hidden",
+			'saved recovery settings without initializing or restarting');
+		assert(await containerId() === beforeRecoverySave, 'Saving recovery restarted the Assistant.');
+		assert(!existsSync(join(checkpointDirectory, 'descriptor.json')), 'Saving settings initialized the namespace.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').disabled && document.querySelector('#restore-runtime-recovery').disabled"), 'Offline actions were enabled with live writers.');
+		assert(await window.webContents.executeJavaScript("window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"), 'Backend initialized with live writers.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.') && !document.querySelector('#initialize-recovery').disabled",
+			'confirmed stop enables offline recovery operations');
+		confirmations.push(0);
+		const promptsBeforeInitCancellation = prompts.length;
+		await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').click()");
+		await waitForPrompt(promptsBeforeInitCancellation + 1);
+		await waitForRenderer(window, "document.body.dataset.busy !== 'true'", 'cancelled recovery remains idle');
+		assert(!existsSync(join(checkpointDirectory, 'descriptor.json')), 'Cancelling initialized the namespace.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').click()");
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('New destination initialized.')",
+			'explicit initialization of an unused destination');
+		assert(existsSync(join(checkpointDirectory, 'descriptor.json')), 'Native namespace was not initialized.');
+		const initializedDescriptor = readFileSync(join(checkpointDirectory, 'descriptor.json'));
+		assert(await window.webContents.executeJavaScript("window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, () => true)"), 'Native initialization accepted an existing namespace.');
+		assert(readFileSync(join(checkpointDirectory, 'descriptor.json')).equals(initializedDescriptor), 'Refused reinitialization modified checkpoint authority.');
+		const operatorContainers = await runDocker(['ps', '-a', '--filter', `label=com.docker.compose.project=${projectName}`, '--format', '{{.Names}}']);
+		assert(operatorContainers.ok && !operatorContainers.stdout.includes('-recovery-'), 'A failed operator run left its container behind.');
+		await window.webContents.executeJavaScript("document.querySelector('#inspect-recovery').click()");
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#runtime-recovery-details').value.startsWith('{')",
+			'read-only image coverage inspection');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.') && document.querySelector('#pending-restart').hidden",
+			'starting initialized recovery with saved settings');
+		const customState = await runDocker(['exec', `${projectName}-assistant-1`, 'bun', '--no-env-file', '-e',
+			`const fs=require('node:fs');const {Database}=require('bun:sqlite');fs.mkdirSync('/tmp/fhold-custom-client',{recursive:true});fs.writeFileSync('/tmp/fhold-custom-client/settings.json','preserved operator settings');const db=new Database('/tmp/fhold-custom-client/state.sqlite');db.exec("PRAGMA journal_mode=WAL;CREATE TABLE state(value TEXT);INSERT INTO state VALUES('preserved SQLite data')");db.close();`]);
+		assert(customState.ok, 'Could not create synthetic custom state using native SQLite.');
+		const publishedBefore = Date.now();
+		await window.webContents.executeJavaScript(`(async () => {
+			const deadline = Date.now() + 90000;
+			while (Date.now() < deadline) {
+				document.querySelector('#check-recovery-status').click();
+				await new Promise(resolve => setTimeout(resolve, 1500));
+				const status = JSON.parse(document.querySelector('#runtime-recovery-details').value);
+				if (status.healthy === true && status.lastPublishedAt >= ${publishedBefore}) return;
+			}
+			throw new Error('No fresh accepted checkpoint of the custom state.');
+		})()`);
+		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-status').textContent.includes('Checkpoint accepted.')"), 'Admin did not display actual accepted publication.');
+		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()");
+		await assertRenderedFloor(window, 'running runtime recovery');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open && document.querySelector('#runtime-recovery-storage').getBoundingClientRect().height > 0"), 'Runtime recovery controls were not visible for their rendered audit.');
+		const runtimeRecoveryReadyScreenshot = await capture(window, outputDir, '07b-runtime-recovery-ready.png', true);
+		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()");
+		await assertRenderedFloor(window, 'additional runtime paths and SQLite coverage');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open && document.querySelector('#runtime-recovery-sqlite').getBoundingClientRect().height > 0"), 'Additional SQLite controls were not visible for their rendered audit.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"), 'Keyboard traversal changed saved recovery timing fields.');
+		const runtimeRecoveryAdvancedScreenshot = await capture(window, outputDir, '07c-runtime-recovery-advanced.png', true);
+		await sizeViewport(window, 640, 640, 2);
+		await assertRenderedFloor(window, 'runtime recovery at minimum size and 200% zoom');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"), 'Recovery timing fields changed during narrow keyboard traversal.');
+		const runtimeRecoveryNarrowScreenshot = await capture(window, outputDir, '07d-runtime-recovery-reflow.png', true);
+		await sizeViewport(window, recoveryViewport.width, recoveryViewport.height);
+		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open = false");
+		const priorContainer = await containerId();
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.')", 'final managed checkpoint and stopped writers');
+		confirmations.push(0);
+		const promptsBeforeRestoreCancellation = prompts.length;
+		await window.webContents.executeJavaScript("document.querySelector('#restore-runtime-recovery').click()");
+		await waitForPrompt(promptsBeforeRestoreCancellation + 1);
+		await waitForRenderer(window, "document.body.dataset.busy !== 'true'", 'cancelled offline restore');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#restore-runtime-recovery').click()");
+		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery validated.')", 'native offline restore leaves writers stopped');
+		assert((await adminSnapshot()).services.length === 0, 'Offline validation started a service.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'transparent same-instance recovery after container removal');
+		assert(await containerId() !== priorContainer, 'Recovery reused the old container.');
+		const restoredCustomState = await runDocker(['exec', `${projectName}-assistant-1`, 'bun', '--no-env-file', '-e',
+			`const fs=require('node:fs');const {Database}=require('bun:sqlite');if(fs.readFileSync('/tmp/fhold-custom-client/settings.json','utf8')!=='preserved operator settings')throw Error('settings lost');const db=new Database('/tmp/fhold-custom-client/state.sqlite',{readonly:true});if(db.query('PRAGMA integrity_check').get().integrity_check!=='ok'||db.query('SELECT value FROM state').get().value!=='preserved SQLite data')throw Error('database lost');console.log('custom state restored');db.close();`]);
+		assert(restoredCustomState.ok && restoredCustomState.stdout.includes('custom state restored'), 'Custom files/SQLite did not survive fresh containers.');
+		assert(window.getSize().join('x') === recoveryWindowSize, 'Recovery controls resized the Admin window.');
+		progress('real managed recovery: deferred save, stop/cancel/init/inspect/start/checkpoint/offline restore and cold custom-file/SQLite resume passed');
 		assert(confirmations.length === 0, 'An expected interruption prompt was not shown.');
 		succeeded = true;
 		return {
@@ -1759,6 +1878,7 @@ async function run(): Promise<Record<string, unknown>> {
 				noRemoteStartup: true
 			},
 			restartConfirmation: { prompts, deferredSave: true, pendingAfterReopen: true, realContainerRecreated: true, runtimeSettingsVerified: true, windowSizePreserved: true },
+			runtimeRecoveryVerified: { savedWithoutRestart: true, noAutomaticInitialization: true, liveWriterRefused: true, cancelVerified: true, readOnlyInspect: true, acceptedPublication: true, stoppedRestore: true, coldContainerCustomFilesAndSqlite: true, windowSizeStable: true },
 			agentPreferencesVerified: {
 				timezone: 'Europe/London',
 				memoryOptOutPersisted: true,
@@ -1814,7 +1934,11 @@ async function run(): Promise<Record<string, unknown>> {
 				...(readyScreenshot ? [readyScreenshot] : []),
 				guardianScreenshot,
 				narrowAccessScreenshot,
-				keyboardScreenshot
+				keyboardScreenshot,
+				runtimeRecoveryOffScreenshot,
+				runtimeRecoveryReadyScreenshot,
+				runtimeRecoveryAdvancedScreenshot,
+				runtimeRecoveryNarrowScreenshot
 			],
 			keptRunning: keepRunning,
 			homeRetained: process.env.FH_ADMIN_E2E_KEEP_HOME === 'true'

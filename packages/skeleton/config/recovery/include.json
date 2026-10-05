@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "paths": [],
+  "sqlite": [],
+  "excludePaths": [],
+  "externalMounts": [],
+  "autoExcludeNetworkMounts": false,
+  "recoverMounts": []
+}

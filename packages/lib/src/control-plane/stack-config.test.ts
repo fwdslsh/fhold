@@ -104,6 +104,7 @@ describe('StackConfig', () => {
 			product: 'fhold',
 			deployment: defaultStackConfig().deployment,
 			version: 1,
+			recovery: defaultStackConfig().recovery,
 			assistant: {
 				bindAddress: '127.0.0.1',
 				port: 3810,

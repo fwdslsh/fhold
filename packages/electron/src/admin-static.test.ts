@@ -19,6 +19,7 @@ import { bindConfigurationEvents } from '../admin/configuration.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import { endpoint, isHealthy, promptVisible } from '../admin/model.js';
 import { bindPreferencesEvents, renderPreferences } from '../admin/preferences.js';
+import { bindRecoveryEvents, recoveryInput, renderRecovery, renderRecoveryStatus, updateRecoveryFields } from '../admin/recovery.js';
 import {
 	bindRemoteEvents,
 	renderRemoteStatus,
@@ -156,6 +157,17 @@ afterEach(() => {
 });
 
 describe('Admin static security boundary', () => {
+	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
+		expect(html).toContain('Backups and recovery');
+		expect(html).toContain('different formats and are not interchangeable');
+		expect(html).toContain('No native conversations or remote sign-ins');
+		expect(html).toContain('native tool versions must match');
+		expect(html).toContain('Guardian/portal state');
+		expect(html).toContain('Initialize new destination');
+		expect(html).toContain('To restore, create a fresh instance');
+		expect(html).toContain('never overwrites surviving local data');
+		expect(html).toContain('id="runtime-recovery-connection-string" type="password"');
+	});
 	it('never programmatically resizes production windows; size changes exist only in the E2E harness', () => {
 		const sourceDirectory = join(import.meta.dir);
 		const productionSources = readdirSync(sourceDirectory)
@@ -723,8 +735,9 @@ describe('Admin static security boundary', () => {
 			'app-token',
 			'credential-key',
 			'direct-password',
-			'claude-key',
-			'mcp-key'
+		'claude-key',
+		'mcp-key',
+		'runtime-recovery-connection-string'
 		]) {
 			const input = [...html.matchAll(/<input\b[^>]*>/g)].find((match) =>
 				match[0].includes(`id="${id}"`)
@@ -742,6 +755,94 @@ describe('Admin static security boundary', () => {
 			)?.[0];
 			expect(element).toMatch(/\bhidden\b/);
 		}
+	});
+});
+
+	describe('Admin runtime recovery controls', () => {
+	function fixture(running = true) {
+		const settings = { enabled: false, destination: '', instanceId: 'my-agent', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, authentication: 'connection-string', clientId: '' };
+		const recovery = { settings, selection: { version: 1, paths: [], sqlite: [], excludePaths: [], externalMounts: [], recoverMounts: [], autoExcludeNetworkMounts: false }, digest: 'reviewed-digest', credentialConfigured: false, policyPath: '/home/config/recovery/include.json' };
+		state.currentSnapshot = { config: { recovery: settings }, recovery, services: running ? [{ name: 'assistant', state: 'running', health: 'healthy' }] : [] };
+		renderRecovery(state.currentSnapshot);
+		return state.currentSnapshot;
+	}
+	it('defaults off, hides advanced storage fields and refuses offline operations while writers run', () => {
+		const snapshot = fixture();
+		expect(control('runtime-recovery-settings').hidden).toBe(true);
+		expect(control('runtime-recovery-status').children[0].textContent).toContain('off');
+		snapshot.config.recovery.enabled = true;
+		renderRecovery(snapshot);
+		expect(control('runtime-recovery-settings').hidden).toBe(false);
+		expect(control('initialize-recovery').disabled).toBe(true);
+		expect(control('restore-runtime-recovery').disabled).toBe(true);
+		snapshot.services = [];
+		updateRecoveryFields();
+		expect(control('initialize-recovery').disabled).toBe(false);
+	});
+	it('recomputes offline controls after a completed lifecycle operation rather than restoring stale disabled flags', async () => {
+		const snapshot = fixture();
+		snapshot.config.recovery.enabled = true;
+		renderRecovery(snapshot);
+		selector('button', control('initialize-recovery'), control('restore-runtime-recovery'));
+		await operation('Stopping', async () => {
+			snapshot.services = [];
+			updateRecoveryFields();
+			expect(control('initialize-recovery').disabled).toBe(true);
+			return 'stopped';
+		});
+		expect(control('initialize-recovery').disabled).toBe(false);
+		expect(control('restore-runtime-recovery').disabled).toBe(false);
+		snapshot.services = [{ name: 'assistant', state: 'paused', health: '' }];
+		updateRecoveryFields();
+		expect(control('initialize-recovery').disabled).toBe(true);
+	});
+	it('supports a directory with spaces and arbitrary path/database lists without copying credentials into the payload', () => {
+		fixture();
+		control('runtime-recovery-enabled').checked = true;
+		control('runtime-recovery-directory').value = '/private/my backups#1?test';
+		control('runtime-recovery-paths').value = '/home/fhold/.my-client\n/work/additional';
+		control('runtime-recovery-sqlite').value = '/home/fhold/.my-client/state.sqlite';
+		control('runtime-recovery-connection-string').value = 'secret must not enter settings';
+		const value = recoveryInput();
+		expect(value.settings.destination).toBe('file:///private/my%20backups%231%3Ftest');
+		expect(value.selection.paths).toEqual(['/home/fhold/.my-client', '/work/additional']);
+		expect(value.selection.sqlite).toEqual(['/home/fhold/.my-client/state.sqlite']);
+		expect(value.baselineDigest).toBe('reviewed-digest');
+		expect(JSON.stringify(value)).not.toContain('secret must');
+	});
+	it('shows Blob credential presence without revealing it and guides deployment identity without host auth discovery', () => {
+		const snapshot = fixture();
+		snapshot.config.recovery.enabled = true;
+		snapshot.config.recovery.destination = 'azblob://account123/private/my-agent';
+		snapshot.recovery.credentialConfigured = true;
+		renderRecovery(snapshot);
+		expect(control('runtime-recovery-directory-field').hidden).toBe(true);
+		expect(control('runtime-recovery-blob-field').hidden).toBe(false);
+		expect(control('runtime-recovery-credential-status').textContent).toContain('value is not shown');
+		expect(control('runtime-recovery-credential-form').hidden).toBe(false);
+		control('runtime-recovery-auth').value = 'managed-identity';
+		updateRecoveryFields();
+		expect(control('runtime-recovery-client-id-field').hidden).toBe(false);
+		expect(control('runtime-recovery-credential-form').hidden).toBe(true);
+	});
+	it('requires native confirmation for init/restore; cancel performs no recovery operation', async () => {
+		const snapshot = fixture(false);
+		snapshot.config.recovery.enabled = true;
+		const calls: string[] = [];
+		state.api = { confirmRestart: async (action: string) => { calls.push(action); return false; }, recovery: async () => { throw new Error('must not run after cancellation'); } };
+		bindRecoveryEvents();
+		await control('initialize-recovery').listeners.get('click')?.({});
+		await control('restore-runtime-recovery').listeners.get('click')?.({});
+		expect(calls).toEqual(['recovery-init', 'recovery-restore']);
+	});
+	it('never claims checkpoint readiness from configuration or a stopped worker', () => {
+		fixture();
+		renderRecoveryStatus({ state: 'configured' });
+		expect(control('runtime-recovery-status').children[0].textContent).toContain('not checked');
+		renderRecoveryStatus({ state: 'stopped' });
+		expect(control('runtime-recovery-status').children[0].textContent).toContain('stopped');
+		renderRecoveryStatus({ state: 'ready', lastPublishedAt: Date.now() });
+		expect(control('runtime-recovery-status').children[0].textContent).toBe('Checkpoint accepted.');
 	});
 });
 
@@ -829,8 +930,9 @@ describe('Admin renderer behavior', () => {
 		expect(link).not.toContain('onclick');
 		const css = readFileSync(join(admin, 'admin.css'), 'utf8');
 		expect(css).toContain(
-			':where(a[href], button, input, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible'
+			':where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible'
 		);
+		expect(css).toContain('.field textarea {');
 	});
 
 	it('renders a normal browser link and copyable dialable Guardian endpoints', async () => {

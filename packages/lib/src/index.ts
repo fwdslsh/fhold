@@ -117,6 +117,8 @@ export {
 } from './control-plane/state.js';
 export { installHome } from './control-plane/install.js';
 export { updateHome } from './control-plane/update.js';
+export { defaultRecoverySettings, directoryRecoveryDestination, type RecoverySettings } from './control-plane/recovery-config.js';
+export { recoverySnapshot, recoveryStatus, readRecoverySelection, saveRecoverySettings, saveRecoveryCredential, runRecoveryOperation, type RecoverySelection } from './control-plane/recovery.js';
 export {
 	mutateStack,
 	createCredential,

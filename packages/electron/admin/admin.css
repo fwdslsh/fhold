@@ -52,11 +52,12 @@ body {
 button,
 input,
 select,
+textarea,
 summary {
 	font: inherit;
 }
 
-:where(a[href], button, input, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
@@ -123,7 +124,7 @@ summary {
 	margin-bottom: 8px;
 }
 
-:where(a[href], button, input, select, summary):focus:not(:focus-visible) {
+:where(a[href], button, input, select, textarea, summary):focus:not(:focus-visible) {
 	outline: none;
 }
 
@@ -850,7 +851,8 @@ code {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
 	width: 100%;
 	min-width: 0;
 	min-height: 44px;
@@ -862,7 +864,14 @@ code {
 	font-weight: 500;
 }
 
-.field input::placeholder {
+.field textarea {
+	resize: vertical;
+	line-height: 1.5;
+	font-family: ui-monospace, monospace;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
 	color: var(--ink-faint);
 }
 

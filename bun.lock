@@ -28,7 +28,7 @@
     },
     "packages/claude-desktop": {
       "name": "@fhold/claude-desktop",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "dependencies": {
         "@modelcontextprotocol/client": "2.3.0",
         "@modelcontextprotocol/server": "2.3.0",
@@ -41,7 +41,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.4",
@@ -53,7 +53,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.4",
@@ -65,7 +65,7 @@
     },
     "packages/guardian": {
       "name": "@fhold/guardian",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "dependencies": {
         "@modelcontextprotocol/server": "2.3.0",
         "@opencode-ai/sdk": "1.18.34",
@@ -80,7 +80,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "devDependencies": {
         "bun-types": "^1.4.2",
         "typescript": "^7.0.2",
@@ -88,7 +88,7 @@
     },
     "packages/portal": {
       "name": "@fhold/portal",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
       "dependencies": {
         "@modelcontextprotocol/client": "2.3.0",
         "@slack/bolt": "5.1.0",
@@ -101,7 +101,7 @@
     },
     "packages/skeleton": {
       "name": "@fhold/skeleton",
-      "version": "0.1.2610050129-alpha.5",
+      "version": "0.1.2610050447-alpha.6",
     },
   },
   "overrides": {

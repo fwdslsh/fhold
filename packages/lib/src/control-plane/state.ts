@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -19,6 +19,7 @@ import { ensureOAuthFiles } from './oauth-store.js';
 import { syncPortalCredentialBundles } from './portal-credential-store.js';
 import { ensureStackConfig, readStackConfig } from './stack-config.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { recoveryDirectory } from './recovery-config.js';
 
 const PRIVATE_FILE_MODE = 0o600;
 
@@ -143,12 +144,21 @@ export function ensureRuntime(state: FholdState): void {
 	if (!existsSync(composePath)) throw new Error(`Managed stack file is missing: ${composePath}`);
 	ensureStackEnv(state);
 	const config = ensureStackConfig(state.homeDir);
+	const destination = recoveryDirectory(state.homeDir, config.recovery);
+	if (!existsSync(destination)) {
+		// Directory initialization remains explicit; this prepares only the bind root.
+		// Never chmod an existing operator/network directory.
+		mkdirSync(destination, { recursive: true, mode: 0o700 });
+	}
+	if (!lstatSync(destination).isDirectory() || lstatSync(destination).isSymbolicLink()) throw new Error('Recovery backup directory must be a real directory.');
+	updateEnvFile(stackEnvFile(state.homeDir), { FH_RECOVERY_DIRECTORY: destination });
 	ensureCredentialKeys(state.homeDir, config);
 	ensureOAuthFiles(state.homeDir);
 	syncPortalCredentialBundles(state.homeDir, config);
 	ensureRegularFile(join(state.homeDir, 'knowledge', 'secrets', 'auth.json'), '{}\n');
 	ensureRegularFile(join(state.homeDir, 'knowledge', 'env', 'user.env'), '');
 	ensureSecrets(state.homeDir);
+	ensureRegularFile(stateSecretFile(state.homeDir, 'fhold_recovery_connection_string'), '\n');
 }
 
 export function markInstalled(homeDir: string): void {

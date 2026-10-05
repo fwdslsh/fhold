@@ -545,10 +545,75 @@
             </details>
           </section>
 
-          <section id="view-backup" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="backup-heading">
+          <section id="view-backup" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="backup-overview-heading">
+            <section class="panel" aria-labelledby="backup-overview-heading">
+              <h2 id="backup-overview-heading">Backups and recovery</h2>
+              <p class="section-intro">Choose what you need to preserve. These two options use different formats and are not interchangeable.</p>
+              <dl class="detail-list">
+                <div><dt>Portable backup</dt><dd>A manual copy of knowledge, workspace and reviewed settings for a fresh installation. No native conversations or remote sign-ins.</dd></div>
+                <div><dt>Runtime recovery</dt><dd>Automatic checkpoints of this same Assistant, including sessions, sign-ins and approvals. Restores before startup after local storage is lost; native tool versions must match.</dd></div>
+              </dl>
+              <p class="help-text">Neither option is a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
+            </section>
+            <details id="runtime-recovery" class="panel panel-disclosure">
+              <summary>Runtime recovery <small>Automatic · same-instance continuity</small></summary>
+              <p class="section-intro">Optional for ordinary local installs. Useful when the Assistant’s disk can disappear. Keep checkpoints private: they can contain conversations, account credentials and trust decisions.</p>
+              <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Recovery is off.</strong><span>Local data remains in this instance’s home.</span></div>
+              <form id="runtime-recovery-form" class="form-stack" data-managed-form>
+                <label class="check-row"><input id="runtime-recovery-enabled" type="checkbox" /> Enable automatic runtime recovery</label>
+                <div id="runtime-recovery-settings" class="form-stack" hidden>
+                  <label class="field" for="runtime-recovery-storage"><span>Backup location</span><select id="runtime-recovery-storage"><option value="directory">Local or mounted directory</option><option value="blob">Azure Blob storage</option></select></label>
+                  <label id="runtime-recovery-directory-field" class="field" for="runtime-recovery-directory"><span>Private backup directory</span><span class="input-action"><input id="runtime-recovery-directory" autocomplete="off" placeholder="/path/to/private-checkpoints" /><button id="choose-recovery-directory" class="secondary" type="button">Choose folder</button></span></label>
+                  <p id="runtime-recovery-directory-help" class="help-text">Choose a location outside the instance home. A network directory must support atomic creation and rename. Live databases always stay on local storage.</p>
+                  <label id="runtime-recovery-blob-field" class="field" for="runtime-recovery-blob" hidden><span>Blob destination</span><input id="runtime-recovery-blob" autocomplete="off" placeholder="azblob://account/container/agent" /><span class="help-text">Use an existing private container. fhold does not create cloud resources.</span></label>
+                  <div id="runtime-recovery-blob-auth" class="form-stack" hidden>
+                    <label class="field" for="runtime-recovery-auth"><span>Storage authentication</span><select id="runtime-recovery-auth"><option value="connection-string">Private connection-string file</option><option value="managed-identity">Deployment managed identity</option></select></label>
+                    <p id="runtime-recovery-credential-status" class="help-text">No connection string saved.</p>
+                    <label id="runtime-recovery-client-id-field" class="field" for="runtime-recovery-client-id" hidden><span>Optional managed identity client ID</span><input id="runtime-recovery-client-id" autocomplete="off" placeholder="Leave empty for the system identity" /><span class="help-text">The deployment must supply an identity with Blob access. Host CLI sign-in is not used.</span></label>
+                  </div>
+                  <details id="runtime-recovery-advanced" class="disclosure"><summary>Advanced recovery settings</summary>
+                    <div class="form-stack">
+                      <label class="field" for="runtime-recovery-instance-id"><span>Stable recovery instance ID</span><input id="runtime-recovery-instance-id" autocomplete="off" /><span class="help-text">Keep this ID unchanged when replacing storage. Never share it between running replicas.</span></label>
+                      <div class="field-grid three-column">
+                        <label class="field" for="runtime-recovery-interval"><span>Checkpoint interval (seconds)</span><input id="runtime-recovery-interval" type="number" min="1" max="86400" /></label>
+                        <label class="field" for="runtime-recovery-max-unsaved"><span>Maximum unsaved age (seconds)</span><input id="runtime-recovery-max-unsaved" type="number" min="5" max="604800" /></label>
+                        <label class="field" for="runtime-recovery-timeout"><span>Operation timeout (seconds)</span><input id="runtime-recovery-timeout" type="number" min="1" max="3600" /></label>
+                      </div>
+                      <p class="help-text">These bound recovery work, not a zero-loss guarantee. fhold sets the container’s termination grace to allow writer shutdown and a final checkpoint. Recovery is independent of scheduled tasks.</p>
+                      <label class="field" for="runtime-recovery-paths"><span>Additional files or directories</span><textarea id="runtime-recovery-paths" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client"></textarea></label>
+                      <label class="field" for="runtime-recovery-sqlite"><span>Additional SQLite database files</span><textarea id="runtime-recovery-sqlite" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client/state.sqlite"></textarea></label>
+                      <p class="help-text">One absolute container path per line; no glob or home expansion. Existing native databases are already included. SQLite is snapshotted consistently, including committed WAL changes; it is never a live file copy. Paths must already be accessible in the container—this does not mount drives.</p>
+                      <label class="field" for="runtime-recovery-exclusions"><span>Exclude directory roots</span><textarea id="runtime-recovery-exclusions" rows="2" spellcheck="false" placeholder="/work/scratch"></textarea></label>
+                      <label class="field" for="runtime-recovery-external"><span>Required independently persistent mounts</span><textarea id="runtime-recovery-external" rows="2" spellcheck="false" placeholder="/work/shared-drive"></textarea></label>
+                      <label class="check-row"><input id="runtime-recovery-auto-network" type="checkbox" /> Automatically exclude recognized SMB/NFS mounts</label>
+                      <label class="field" for="runtime-recovery-recover-mounts"><span>Mounts to keep despite automatic exclusion</span><textarea id="runtime-recovery-recover-mounts" rows="2" spellcheck="false"></textarea></label>
+                      <p class="help-text">Ordinary local volumes remain covered. Missing required mounts stop recovery. Native or registered SQLite files and their WAL/SHM cannot be excluded or placed on recognized network filesystems.</p>
+                      <p class="help-text">Changing established mount ownership requires a stopped-writer transition to a new recovery namespace, not editing old receipts. Additional paths/databases may be added, but removing captured coverage is refused by the native engine.</p>
+                      <p class="help-text">Editable policy file: <code id="runtime-recovery-policy-path">config/recovery/include.json</code></p>
+                    </div>
+                  </details>
+                </div>
+                <button id="save-recovery-settings" class="secondary" type="submit">Save recovery settings</button>
+              </form>
+              <form id="runtime-recovery-credential-form" class="form-stack" hidden>
+                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. It is not included in a portable backup.</span></label>
+                <button class="secondary" type="submit">Save private storage credential</button>
+              </form>
+              <div class="button-row">
+                <button id="check-recovery-status" class="secondary" type="button">Check checkpoint status</button>
+                <button id="inspect-recovery" class="secondary" type="button">Inspect saved coverage</button>
+              </div>
+              <details class="disclosure"><summary>Initialize or restore while stopped</summary>
+                <p id="runtime-recovery-offline-help" class="help-text">Save the settings, stop this instance, then initialize a genuinely new destination once. Start it to publish its first checkpoint. For an existing namespace, do not initialize again: startup restores automatically before writers run. Offline validation/restoration leaves containers stopped and never overwrites surviving local data.</p>
+                <div class="button-row"><button id="initialize-recovery" class="secondary" type="button" disabled>Initialize new destination</button><button id="restore-runtime-recovery" class="secondary" type="button" disabled>Validate / restore same instance</button></div>
+                <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
+              </details>
+              <details class="disclosure technical-disclosure"><summary>Private recovery details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private recovery status and selected container paths">No recovery operation has run.</textarea></details>
+            </details>
             <details id="portable-backup" class="panel panel-disclosure">
               <summary id="backup-heading">Portable backup</summary>
               <p class="section-intro">Saves knowledge & workspace. No native history or external data; not a full rollback.</p>
+              <p class="help-text">To restore, create a fresh instance and choose “Restore from an fhold backup” before completing provider setup. Preview the contents first; restored task definitions remain inactive until reviewed.</p>
               <details class="disclosure"><summary>What is included?</summary><p class="help-text">Knowledge, workspace, settings, and task definitions. Native conversations, runtime snapshots, external mounts and symlink targets are not included.</p></details>
               <form id="backup-form" class="form-stack">
 	                <label class="field" for="backup-destination"><span>Backup directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-backup" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>

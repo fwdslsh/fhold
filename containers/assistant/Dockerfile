@@ -151,6 +151,7 @@ ARG BUILD_DATE
 ENV PLATFORM_VERSION=${PLATFORM_VERSION}
 LABEL org.opencontainers.image.title="fhold Assistant" \
     dev.fwdslsh.fhold.managed-harness-policy="1" \
+    dev.fwdslsh.fhold.recovery-partial-resume="1" \
     org.opencontainers.image.description="A home for your personal AI: OpenCode, persistent knowledge and recurring work" \
     org.opencontainers.image.source="https://github.com/fwdslsh/fhold" \
     org.opencontainers.image.url="https://github.com/fwdslsh/fhold" \

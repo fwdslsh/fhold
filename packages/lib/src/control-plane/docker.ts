@@ -70,7 +70,7 @@ function friendlyError(stderr: string): string {
 
 export function runDocker(
 	args: string[],
-	options: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}
+	options: { timeoutMs?: number; maxOutputBytes?: number; env?: NodeJS.ProcessEnv } = {}
 ): Promise<DockerResult> {
 	return new Promise((resolve) => {
 		execFile(
@@ -78,6 +78,7 @@ export function runDocker(
 			args,
 			{
 				timeout: options.timeoutMs ?? 120_000,
+				maxBuffer: options.maxOutputBytes ?? 1024 * 1024,
 				env: { ...process.env, ...options.env }
 			},
 			(error, stdout, stderr) => {

@@ -11,6 +11,7 @@ import { loadProviders, renderReadiness } from './providers.js';
 import { renderPhase, renderServices } from './runtime.js';
 import { renderPreferences } from './preferences.js';
 import { renderRemoteStatus } from './remote.js';
+import { renderRecovery, updateRecoveryFields } from './recovery.js';
 import { state } from './state.js';
 import {
 	byId,
@@ -80,11 +81,13 @@ export function render(snapshot, options = {}) {
 	renderServices(snapshot);
 	renderPreferences(snapshot);
 	renderRemoteStatus(snapshot);
+	renderRecovery(snapshot);
 	renderCredentials(snapshot);
 	renderMappings(snapshot);
 	renderPortalSecrets(snapshot);
 	renderConnectionDetails(snapshot);
 	restoreDirtyForms(drafts);
+	updateRecoveryFields();
 	updateConditionalConnections();
 	updatePortalTokenFields();
 	state.renderingSnapshot = false;

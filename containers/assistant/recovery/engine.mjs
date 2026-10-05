@@ -699,6 +699,7 @@ export function createEngine(config, options = {}) {
 						throw new Error('incomplete recovery journal requires operator review');
 					const generation = head.value.generation;
 					const local = await inventory();
+					let restoreMembers = [];
 					const receiptBytes = (await exists(receiptPath))
 						? await readRegular(receiptPath, 64 * 1024)
 						: null;
@@ -716,22 +717,32 @@ export function createEngine(config, options = {}) {
 							receipt.epoch !== previous.value.epoch
 						)
 							throw new Error('local recovery receipt authority unresolved');
-						if (manifest) await inventory(manifest.presence);
 						// Local disk may contain writes newer than remote. Validate SQLite and
-						// presence but deliberately do not require old content hashes.
+						// preserve every surviving member, without requiring old hashes.
 						for (const member of local.members)
 							if (member.kind === 'sqlite')
 								await sqlite('verify', native(member.root, member.path));
+						// Mixed storage can lose only its ephemeral members. Exact receipt
+						// authority permits filling those holes from the accepted checkpoint,
+						// never overwriting surviving (potentially newer) local state.
+						const surviving = new Set(
+							local.members.map((member) => native(member.root, member.path))
+						);
+						restoreMembers =
+							manifest?.members.filter(
+								(member) => !surviving.has(saved.native(member.root, member.path))
+							) ?? [];
 					} else if (local.members.length) {
 						if (generation) throw new Error('unreceipted local state would be overwritten');
 						// Explicitly initialized empty namespace may adopt locally provisioned
 						// native state only in its first ownership epoch.
 						if (previous.value.epoch !== 0)
 							throw new Error('unreceipted local initialization unresolved');
-					} else if (manifest) {
+					} else if (manifest) restoreMembers = manifest.members;
+					if (restoreMembers.length) {
 						const stage = await fs.mkdtemp(path.join(privateDir, 'restore-'));
 						stages.add(stage);
-						for (const member of manifest.members) {
+						for (const member of restoreMembers) {
 							await owned();
 							const bytes = await store.read(`objects/${member.hash}`, member.bytes);
 							if (bytes.length !== member.bytes || digest(bytes) !== member.hash)
@@ -750,7 +761,7 @@ export function createEngine(config, options = {}) {
 						await privateWrite(journalPath, { instanceId, generation, stage, phase: 'publishing' });
 						// All staged content validated before first native target write. The
 						// journal prevents partial publication from ever starting writers.
-						for (const member of manifest.members) {
+						for (const member of restoreMembers) {
 							await owned(true);
 							const target = saved.native(member.root, member.path);
 							await assertNoLinks(target);
@@ -774,10 +785,12 @@ export function createEngine(config, options = {}) {
 								await directory.close();
 							}
 						}
+						await inventory(manifest.presence);
 						await writeReceipt(generation);
 						await fs.unlink(journalPath);
 						await fs.rm(stage, { recursive: true });
 					}
+					if (manifest && !restoreMembers.length) await inventory(manifest.presence);
 					await writeReceipt(generation);
 					lastCheckpointAt = manifest?.finishedAt ?? null;
 					ready = true;

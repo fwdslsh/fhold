@@ -7,8 +7,18 @@ import {
 import type { StackAction } from './admin-types.js';
 
 export function interruptionPrompt(action: unknown) {
-	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup'].includes(action))
+	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup', 'recovery-init', 'recovery-restore'].includes(action))
 		throw new Error('Invalid restart confirmation request.');
+	if (action === 'recovery-init') return {
+		message: 'Initialize a new recovery destination?',
+		detail: 'The instance must be stopped. This is a one-time operation for a genuinely unused destination and instance ID. It does not restore data, start containers or overwrite an existing recovery namespace. Keep the destination private.',
+		buttons: ['Cancel', 'Initialize new destination']
+	};
+	if (action === 'recovery-restore') return {
+		message: 'Validate and restore this same instance?',
+		detail: 'The instance must be stopped. Its accepted checkpoint is validated before missing native files are restored. Existing local data is not overwritten, incompatible native versions are refused, and containers remain stopped. This is not a portable import or rollback.',
+		buttons: ['Cancel', 'Validate / restore']
+	};
 	if (action === 'remote-setup') return {
 		message: 'Continue remote setup?',
 		detail: 'Setup may restart containers before and after native sign-in. Active work and connections may be interrupted, and all saved settings will be applied. Your data is kept. You can cancel now and set this up later.',

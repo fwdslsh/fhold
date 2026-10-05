@@ -12,10 +12,11 @@ x-logging: &logging
 
 services:
   assistant:
-    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-assistant:${FH_ASSISTANT_VERSION:-0.1.2610050129-alpha.5}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-assistant:${FH_ASSISTANT_VERSION:-0.1.2610050447-alpha.6}
     hostname: ${FH_INSTANCE_HOSTNAME:-fhold}
     init: true
     restart: unless-stopped
+    stop_grace_period: ${FH_ASSISTANT_STOP_GRACE:-30s}
     logging: *logging
     user: "${FH_UID:-1000}:${FH_GID:-1000}"
     cap_drop: [ALL]
@@ -41,6 +42,15 @@ services:
       FH_CODEX_REMOTE: ${FH_CODEX_REMOTE:-1}
       FH_CODEX_SANDBOX: ${FH_CODEX_SANDBOX:-workspace-write}
       FH_CLAUDE_REMOTE: ${FH_CLAUDE_REMOTE:-1}
+      FH_RECOVERY_URL: ${FH_RECOVERY_URL:-}
+      FH_INSTANCE_ID: ${FH_INSTANCE_ID:-fhold}
+      FH_RECOVERY_INTERVAL_SECONDS: ${FH_RECOVERY_INTERVAL_SECONDS:-60}
+      FH_RECOVERY_MAX_UNSAVED_SECONDS: ${FH_RECOVERY_MAX_UNSAVED_SECONDS:-300}
+      FH_RECOVERY_OPERATION_TIMEOUT_SECONDS: ${FH_RECOVERY_OPERATION_TIMEOUT_SECONDS:-120}
+      FH_RECOVERY_INCLUDE_FILE: ${FH_RECOVERY_INCLUDE_FILE:-/run/fhold-recovery/include.json}
+      FH_RECOVERY_STATE_DIR: ${FH_RECOVERY_STATE_DIR:-/home/fhold/.fhold-recovery}
+      FH_RECOVERY_CREDENTIAL_FILE: ${FH_RECOVERY_CREDENTIAL_FILE:-}
+      AZURE_CLIENT_ID: ${FH_RECOVERY_CLIENT_ID:-}
       AKM_AUTO_MEMORY: "0"
       AKM_AUTO_LEARNING: "0"
       AKM_REDACT_HIGH_ENTROPY: "1"
@@ -73,8 +83,12 @@ services:
       - ${FH_HOME:?}/data/akm/cache:/opt/akm/cache
       - ${FH_HOME:?}/data/akm/data:/opt/akm/data
       - ${FH_HOME:?}/workspace:/work
+      - ${FH_HOME:?}/config/recovery/include.json:/run/fhold-recovery/include.json:ro
+      - ${FH_HOME:?}/data/recovery:/run/fhold-recovery-state
+      - ${FH_RECOVERY_DIRECTORY:-${FH_HOME}/state/recovery-storage}:/recovery
     secrets:
       - opencode_server_password
+      - recovery_connection_string
     networks: [agent_net]
     healthcheck:
       test: ["CMD", "fhold-healthcheck"]
@@ -85,7 +99,7 @@ services:
 
   guardian:
     profiles: [gateway, discord, slack]
-    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-guardian:${FH_GUARDIAN_VERSION:-0.1.2610050129-alpha.5}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-guardian:${FH_GUARDIAN_VERSION:-0.1.2610050447-alpha.6}
     init: true
     restart: unless-stopped
     logging: *logging
@@ -149,7 +163,7 @@ services:
 
   discord:
     profiles: [discord]
-    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610050129-alpha.5}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610050447-alpha.6}
     init: true
     restart: unless-stopped
     logging: *logging
@@ -186,7 +200,7 @@ services:
 
   slack:
     profiles: [slack]
-    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610050129-alpha.5}
+    image: ${FH_IMAGE_NAMESPACE:-fwdslsh}/fhold-portal:${FH_PORTAL_VERSION:-0.1.2610050447-alpha.6}
     init: true
     restart: unless-stopped
     logging: *logging
@@ -230,6 +244,8 @@ networks:
   ingress_net: {}
 
 secrets:
+  recovery_connection_string:
+    file: ${FH_HOME:?}/state/secrets/fhold_recovery_connection_string
   opencode_server_password:
     file: ${FH_HOME:?}/state/secrets/fhold_opencode_password
   guardian_handle_key:

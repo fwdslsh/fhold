@@ -20,6 +20,36 @@ those sibling directories are not part of any instance.
 CLI and Admin use the same canonical instance and stable Compose
 project. Different instances need distinct names; fresh setup chooses free ports.
 
+### Move an existing instance home
+
+Changing the default location does not move an existing installation. A move is
+not a portable restore: preserve the **entire stopped home**, including `state/`
+and `data/`, to retain native history, accounts and the same instance authority.
+
+1. Select the old absolute path and run `fhold --name /old/home stop`. Stop any
+   separately launched writer using its files. Take and verify a full stopped-home
+   filesystem backup outside that home; a portable archive is insufficient.
+2. Choose an unused destination and move the whole directory there. Keep the
+   backup. Do not merge it into another home or change `deployment.projectName`,
+   ports, keys or native account files.
+3. In the moved `state/installation.json`, change **only** `homeDir` from the old
+   verified absolute path to the new absolute path. Preserve its release and
+   managed-image receipt. This is an explicit relocation metadata correction,
+   not permission to adopt an unrelated home.
+4. Reconcile derived paths without restarting by re-saving the existing
+   Assistant port: `fhold --name /new/home config assistant --port <saved-port>
+   --no-apply`. This regenerates `state/stack.env`; do not hand-edit that file.
+   Review any operator-authored absolute bind paths in the custom Compose file
+   separately. An update attempted before reconciliation safely refuses stale
+   paths rather than mounting another home.
+5. Run `fhold --name /new/home update`, then `doctor --readiness` for that same
+   home. Verify history, native sign-ins, hostname, ports and client access.
+   Open the new folder in Admin; an old recent-path entry does not relocate data.
+
+Use the matching released CLI/Admin. A moved default home can then be selected by
+its short name, for example `fhold --name april status` for
+`~/fhold/instances/april`. Keep the full backup until the cutover is verified.
+
 ## Lifecycle and Admin
 
 ```bash
@@ -108,6 +138,42 @@ Agent settings owns provider readiness, memory and timezone. Connections holds
 OpenCode links, Guardian MCP details and optional portals. People & access owns
 named identities. System holds backup, restore, logs and diagnostics. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
+
+### Backups and recovery
+
+**System → Backups and recovery** explains two distinct jobs:
+
+- **Portable backup** is a manual archive of reviewed knowledge, workspace and
+  allowlisted settings for a fresh installation. It does not preserve native
+  conversations, sign-ins or runtime authority. Sensitive content is opt-in;
+  restored task definitions remain inactive.
+- **Assistant runtime recovery** is opt-in automatic checkpointing for replacing
+  the same Assistant after ephemeral storage disappears. It preserves native
+  sessions, account files, approvals and consistent SQLite snapshots. It is not
+  a host/Guardian/Portal rollback or an archive to import into a different agent.
+
+Choose a private **local/mounted directory** or an existing **Blob destination**.
+Live SQLite remains on local storage. Directory artifacts require exclusive
+creation and atomic rename; Blob credentials use a private file or a deployment
+managed identity, never a secret environment value or host CLI login.
+
+Save leaves running containers alone and records a pending restart. For a
+**genuinely new** destination/instance ID: save, confirm Stop, explicitly
+**Initialize new destination** once, then confirm Start and **Check checkpoint
+status**. Configuration alone is not a successful backup. For an existing
+namespace, do not initialize again: start restores before writers run.
+**Inspect saved coverage** is read-only; **Validate / restore same instance**
+requires stopped writers and confirmation, leaves containers stopped, and
+refuses conflicting surviving files. No automatic owner takeover is provided.
+
+Advanced settings expose bounded timing, extra container paths/SQLite files and
+external-mount/exclusion policy through the editable
+`config/recovery/include.json`. They do not mount drives. Storage credentials and
+runtime recovery policy are intentionally not ported by a portable archive.
+See [Assistant recovery](assistant-recovery.md#configure-through-admin-or-cli)
+for the same operations through `fhold recovery`, exact coverage and transition
+limits. Managed recovery requires the updated Compose assets; an older instance
+must be explicitly updated before these settings can be saved.
 
 ### Save changes, restart when ready
 

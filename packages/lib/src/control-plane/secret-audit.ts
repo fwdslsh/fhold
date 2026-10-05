@@ -10,6 +10,7 @@ import {
 	type StackConfig
 } from './stack-config.js';
 import libPackage from '../../package.json' with { type: 'json' };
+import { recoveryDirectory, recoveryEnvironment, recoveryStopGrace } from './recovery-config.js';
 
 const SECRET_KEY = /(?:password|secret|token|api[_-]?key|credential|private[_-]?key)/i;
 const CORE_GRANTS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -125,7 +126,8 @@ const MANAGED_SECRET_FILES: Readonly<Record<string, string>> = {
 	guardian_handle_key: 'state/secrets/fhold_guardian_handle_key',
 	discord_bot_token: 'state/secrets/discord_bot_token',
 	slack_bot_token: 'state/secrets/slack_bot_token',
-	slack_app_token: 'state/secrets/slack_app_token'
+	slack_app_token: 'state/secrets/slack_app_token',
+	recovery_connection_string: 'state/secrets/fhold_recovery_connection_string'
 };
 
 const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -200,7 +202,8 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 		'FH_CLAUDE_REMOTE',
 		'FH_KEEPALIVE_URL',
 		'FH_KEEPALIVE_AUTH',
-		'FH_KEEPALIVE_AUTHORIZATION_FILE'
+		'FH_KEEPALIVE_AUTHORIZATION_FILE',
+		...Object.keys(recoveryEnvironment({ enabled: false, destination: '', instanceId: 'fhold', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, authentication: 'connection-string', clientId: '' }))
 	]),
 	guardian: new Set([
 		'GUARDIAN_ALLOWED_ORIGINS',
@@ -315,7 +318,8 @@ function auditCoreMounts(
 	value: unknown,
 	homeDir: string,
 	issues: string[],
-	expected: readonly MountGrant[] = CORE_MOUNTS[name] ?? []
+	expected: readonly MountGrant[] = CORE_MOUNTS[name] ?? [],
+	recoveryMounts: readonly MountGrant[] = []
 ): void {
 	// This optional native file makes Claude's MCP catalog exclusive. Operators
 	// add it explicitly; an empty default would suppress plugin-provided servers.
@@ -329,7 +333,7 @@ function auditCoreMounts(
 					}
 				]
 			: [];
-	const byTarget = new Map([...expected, ...optional].map((grant) => [grant.target, grant]));
+	const byTarget = new Map([...expected, ...optional, ...recoveryMounts].map((grant) => [grant.target, grant]));
 	const found = new Set<string>();
 	if (!Array.isArray(value)) {
 		for (const grant of expected)
@@ -354,7 +358,7 @@ function auditCoreMounts(
 			continue;
 		}
 		found.add(target);
-		if (normalizedPath(mount.source) !== normalizedPath(join(homeDir, grant.source))) {
+		if (normalizedPath(mount.source) !== normalizedPath(isAbsolute(grant.source) ? grant.source : join(homeDir, grant.source))) {
 			issues.push(`service ${name} must mount ${grant.source} at ${target}`);
 		}
 		if ((mount.read_only === true) !== grant.readOnly) {
@@ -369,9 +373,10 @@ function auditCoreMounts(
 	}
 }
 
-function auditCoreSecrets(name: string, value: unknown, issues: string[]): Set<string> {
-	const expected = CORE_GRANTS[name] ?? new Set<string>();
+function auditCoreSecrets(name: string, value: unknown, issues: string[], recoveryEnabled = false): Set<string> {
+	const expected = new Set(CORE_GRANTS[name] ?? []);
 	const granted = new Set(secretNames(value));
+	if (name === 'assistant' && (recoveryEnabled || granted.has('recovery_connection_string'))) expected.add('recovery_connection_string');
 	for (const grant of setDifference(granted, expected)) {
 		issues.push(`service ${name} has unexpected secret ${grant}`);
 	}
@@ -569,7 +574,7 @@ export function auditCompose(
 		const environment = record(service.environment) ?? {};
 		if (isCore) auditCoreEnvironment(name, environment, issues);
 		const granted = isCore
-			? auditCoreSecrets(name, service.secrets, issues)
+			? auditCoreSecrets(name, service.secrets, issues, stackConfig.ok && stackConfig.config.recovery.enabled)
 			: new Set(secretNames(service.secrets));
 		for (const [key, value] of Object.entries(environment)) {
 			if (SECRET_KEY.test(key) && !key.endsWith('_FILE')) {
@@ -652,7 +657,15 @@ export function auditCompose(
 			) {
 				issues.push(`service ${name} must retain bounded local logging`);
 			}
-			auditCoreMounts(name, service.volumes, homeDir, issues);
+			let recoveryMounts: MountGrant[] = [];
+			if (name === 'assistant' && stackConfig.ok) {
+				try { recoveryMounts = [
+					{ source: 'config/recovery/include.json', target: '/run/fhold-recovery/include.json', readOnly: true },
+					{ source: 'data/recovery', target: '/run/fhold-recovery-state', readOnly: false },
+					{ source: recoveryDirectory(homeDir, stackConfig.config.recovery), target: '/recovery', readOnly: false }
+				]; } catch { issues.push('Recovery backup directory is invalid for this instance.'); }
+			}
+			auditCoreMounts(name, service.volumes, homeDir, issues, CORE_MOUNTS[name], recoveryMounts);
 		}
 		const networks = new Set(strings(service.networks));
 		if (networks.has('agent_net') && networks.has('ingress_net') && name !== 'guardian') {
@@ -672,6 +685,18 @@ export function auditCompose(
 		}
 		if (name === 'assistant') {
 			if (stackConfig.ok) {
+				const expectedRecovery = recoveryEnvironment(stackConfig.config.recovery);
+				// Older installed Compose files remain readable while recovery is off.
+				const hasRecovery = environment.FH_RECOVERY_URL !== undefined || stackConfig.config.recovery.enabled;
+				if (hasRecovery) {
+					for (const [key, expected] of Object.entries(expectedRecovery)) if (environment[key] !== expected) issues.push(`assistant ${key} must match recovery intent`);
+					for (const target of ['/recovery', '/run/fhold-recovery/include.json', '/run/fhold-recovery-state']) if (!Array.isArray(service.volumes) || !service.volumes.some((mount) => record(mount)?.target === target)) issues.push(`assistant recovery requires mount ${target}`);
+				}
+				if (stackConfig.config.recovery.enabled) {
+					const duration = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(String(service.stop_grace_period));
+					const seconds = duration ? Number(duration[1] || 0) * 3600 + Number(duration[2] || 0) * 60 + Number(duration[3] || 0) : 0;
+					if (seconds < recoveryStopGrace(stackConfig.config.recovery)) issues.push('Assistant termination grace must cover writer shutdown and both recovery phases.');
+				}
 				if (
 					service.hostname !== undefined &&
 					service.hostname !== stackConfigEnv(stackConfig.config).FH_INSTANCE_HOSTNAME

@@ -32,6 +32,34 @@ are real. Every expected prompt is accounted for, and Escape/default choice must
 postpone. Unit tests also cover failed activation, failed image verification,
 settings edited during activation and live credential changes that need no restart.
 
+The managed recovery journey uses the normal Admin IPC and shipping Compose
+assets, with the native `fhold-recovery` command from the selected image. It
+checks the portable/runtime distinction, saves an opt-in private directory and
+custom file/SQLite coverage without restarting or initializing, refuses offline
+operations while writers run, and verifies default-cancel native confirmations.
+After a confirmed stop it initializes an unused namespace, inspects coverage,
+starts normally and verifies a fresh **accepted checkpoint**, not merely a PID.
+It then removes the running containers through normal Stop, validates recovery
+offline, starts fresh containers and verifies restored custom account-style
+files and SQLite integrity/content. These custom paths are under the disposable
+container's `/tmp`, outside every persistent bind mount: the test must actually
+lose them on Stop and recover them from the checkpoint, not merely read a
+surviving host volume. The persistent native data and exact receipt survive,
+exercising mixed-storage recovery. Focused engine tests also preserve newer
+surviving files/databases and refuse unreceipted state, orphan WAL and corrupt
+objects before target writes. The second named agent remains independent.
+Window size must remain unchanged throughout. Reports and private checkpoints
+are retained separately from credentials. This local-directory qualification
+does not certify a real network filesystem, Blob account or vendor sign-in.
+
+Focused library/CLI tests cover arbitrary coverage lists, stale saves, optional
+earlier intent defaulting off, final instance identity, private storage credential
+presence without disclosure, no portable credential copy, persistent restart
+tracking, audited mounts/stop grace, and refusal to silently change accepted mount
+ownership. Paused, restarting and one-off project writers also block offline
+operations. Failed operator runs remove only their uniquely named container;
+cleanup uncertainty must be reported, never hidden as a successful restore.
+
 Linux needs an accessible display or Xvfb and a compatible Electron runtime.
 Use native Node.js 22.12+ for the launcher/tooling. The E2E launcher invokes
 Electron's installed official `install.js` before reading its runtime path;

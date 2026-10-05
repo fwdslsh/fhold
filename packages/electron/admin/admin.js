@@ -9,6 +9,7 @@ import { bindPreferencesEvents } from './preferences.js';
 import { bindRemoteEvents } from './remote.js';
 import { bindInstanceEvents, initializeAdmin } from './instances.js';
 import { bindRestartEvents } from './restart.js';
+import { bindRecoveryEvents } from './recovery.js';
 import { state } from './state.js';
 
 state.api = window.fholdAdmin;
@@ -18,6 +19,7 @@ bindAccessEvents();
 bindConnectionsEvents();
 bindProvidersEvents();
 bindBackupEvents();
+bindRecoveryEvents();
 bindConfigurationEvents();
 bindPreferencesEvents();
 bindRemoteEvents();

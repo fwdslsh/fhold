@@ -30,6 +30,7 @@ export const managedFormIds = [
 	'connections-form',
 	'access-form',
 	'network-form',
+	'runtime-recovery-form',
 	'preferences-form'
 ];
 

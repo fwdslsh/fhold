@@ -8,6 +8,7 @@ import type {
 	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
+import type { recoverySnapshot } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
 
@@ -33,10 +34,12 @@ export type AdminSnapshot = {
 	codexRecall?: CodexRecallReview;
 	codexRecallError?: string;
 	pendingRestart?: RestartStatus;
+	recovery?: ReturnType<typeof recoverySnapshot>;
+	recoveryError?: string;
 };
 
 export type StackAction = 'start' | 'restart' | 'stop';
-export type InterruptingAction = StackAction | 'remote-setup';
+export type InterruptingAction = StackAction | 'remote-setup' | 'recovery-init' | 'recovery-restore';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminWelcome = {
@@ -89,7 +92,7 @@ export type AdminApi = {
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
 	chooseDirectory(value: {
-		purpose: 'backup' | 'restore' | 'instance' | 'new-instance';
+		purpose: 'backup' | 'restore' | 'instance' | 'new-instance' | 'recovery';
 	}): Promise<string | undefined>;
 	credential(value: {
 		action: 'create' | 'rotate' | 'remove';
@@ -114,6 +117,7 @@ export type AdminApi = {
 		includePortalMaps?: boolean;
 		includeOAuth?: boolean;
 	}): Promise<BackupManifest>;
+	recovery(value: { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string } | { action: 'credential'; connectionString: string } | { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }): Promise<AdminSnapshot | Record<string, unknown> | string>;
 	restoreData(value: {
 		sourceHome: string;
 		apply?: boolean;
@@ -154,5 +158,6 @@ export const ADMIN_CHANNELS = {
 	mapPortalUser: 'admin:map-portal-user',
 	portalToken: 'admin:portal-token',
 	backup: 'admin:backup',
+	recovery: 'admin:recovery',
 	restoreData: 'admin:restore'
 } as const;

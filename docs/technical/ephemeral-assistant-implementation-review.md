@@ -15,6 +15,7 @@ product qualification and do not establish current account or service readiness.
 | `containers/assistant/fhold-recovery.mjs` | Runtime configuration, init/inspect/offline-restore/status/unlock interfaces, worker timer, private HTTP probes and the engine's accepted-publication clock. |
 | `containers/assistant/recovery/engine.mjs` | Bounded inventory/snapshots, integrity validation, immutable generations, receipt/journal authority, compatibility, ownership and conditional publication. |
 | `containers/assistant/recovery/catalog.mjs` | Explicit native trees/databases, versioned custom selections, additive catalog validation and permanent transient/private exclusions. |
+| `containers/assistant/recovery/selection.mjs` | Pure selection normalization/ownership policy shared by the image engine and host settings; no host authority or second backup writer. |
 | `containers/assistant/recovery/mounts.mjs` | Linux mount visibility, required mounts, network exclusions, local SQLite placement and topology fencing. |
 | `containers/assistant/recovery/sqlite-worker.mjs` | SQLite-native bounded snapshot and integrity subprocess operations. |
 | `containers/assistant/recovery/directory-store.mjs` | Artifact filesystem safety, exclusive ownership, atomic writes and non-destructive namespace handling. |
@@ -22,6 +23,8 @@ product qualification and do not establish current account or service readiness.
 | `containers/assistant/recovery/storage.mjs` | Destination adapter selection; no cloud provisioning/control. |
 | `containers/assistant/healthcheck.sh` | Runtime health plus scheduling checks only when scheduling is enabled. |
 | `containers/assistant/Dockerfile` | Standard non-root image-baked tools, assets and helpers; no cloud management client or third-party-specific plugin. |
+| `packages/lib/src/control-plane/recovery-config.ts`, `recovery.ts` | Optional managed intent, private credential file, coverage editing, audited mounts/shutdown budget and explicit native operator operations under the lifecycle lock. |
+| `packages/cli/src/commands/recovery.ts`, `packages/electron/admin/recovery.js` | CLI/Admin over the same library: save-only settings, checkpoint status/inspection, and confirmed stopped initialization/restoration. Portable archives retain their separate scope. |
 
 ## Reusable verification retained in fhold
 

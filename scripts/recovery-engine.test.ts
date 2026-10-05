@@ -809,6 +809,69 @@ describe('same-instance local recovery engine', () => {
 		expect(await readFile(path.join(f.roots.work, 'note.txt'), 'utf8')).toBe('newer unsaved');
 		await second.release();
 	});
+	test('receipted mixed storage restores missing files/databases and preserves newer surviving state', async () => {
+		const f = await fixture();
+		const ephemeral = path.join(f.dir, 'ephemeral');
+		await mkdir(ephemeral);
+		const extraDatabase = path.join(ephemeral, 'client.sqlite');
+		const durableDatabase = path.join(f.roots.akmData, 'state.db');
+		for (const file of [extraDatabase, durableDatabase]) {
+			const db = new Database(file);
+			db.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('checkpoint')");
+			db.close();
+		}
+		await writeFile(path.join(ephemeral, 'settings.json'), 'restore this missing account-style file');
+		await writeFile(path.join(f.roots.work, 'note.txt'), 'checkpoint');
+		const config = { ...f.config, selection: { paths: [ephemeral], sqlite: [extraDatabase] } };
+		const first = createEngine(config, f.options);
+		await first.initialize(); await first.acquireRestore(); await first.checkpoint(); await first.release();
+		const newer = new Database(durableDatabase);
+		newer.exec("INSERT INTO marker VALUES('newer local commit')"); newer.close();
+		await writeFile(path.join(f.roots.work, 'note.txt'), 'newer local text');
+		const durableBytes = await readFile(durableDatabase);
+		// Only the generated ephemeral portion disappears; native data and the exact receipt survive.
+		await rm(ephemeral, { recursive: true });
+		const replacement = createEngine(config, f.options);
+		await replacement.acquireRestore();
+		expect(await readFile(path.join(ephemeral, 'settings.json'), 'utf8')).toBe('restore this missing account-style file');
+		expect(await readFile(durableDatabase)).toEqual(durableBytes);
+		expect(await readFile(path.join(f.roots.work, 'note.txt'), 'utf8')).toBe('newer local text');
+		const restored = new Database(extraDatabase, { readonly: true });
+		expect(restored.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+		expect(restored.query('SELECT value FROM marker').get()).toEqual({ value: 'checkpoint' });
+		restored.close();
+		await replacement.checkpoint(); await replacement.release();
+		const { manifest } = await savedManifest(f);
+		expect(Object.values(manifest.presence).filter(Boolean)).toHaveLength(2);
+	});
+	for (const failure of ['unreceipted', 'orphaned SQLite sidecar', 'corrupt object'])
+		test(`mixed-storage restore refuses ${failure} before filling any missing target`, async () => {
+			const f = await fixture();
+			const ephemeral = path.join(f.dir, 'ephemeral'); await mkdir(ephemeral);
+			const extraDatabase = path.join(ephemeral, 'client.sqlite');
+			const db = new Database(extraDatabase); db.exec('CREATE TABLE marker(value TEXT)'); db.close();
+			await writeFile(path.join(ephemeral, 'settings.json'), 'checkpoint');
+			await writeFile(path.join(f.roots.work, 'note.txt'), 'checkpoint');
+			const config = { ...f.config, selection: { paths: [ephemeral], sqlite: [extraDatabase] } };
+			const first = createEngine(config, f.options);
+			await first.initialize(); await first.acquireRestore(); await first.checkpoint(); await first.release();
+			await rm(ephemeral, { recursive: true });
+			await writeFile(path.join(f.roots.work, 'note.txt'), 'keep newer surviving content');
+			if (failure === 'unreceipted') await rm(f.config.privateDir, { recursive: true });
+			else if (failure === 'orphaned SQLite sidecar') {
+				await mkdir(ephemeral); await writeFile(`${extraDatabase}-wal`, 'unresolved local WAL');
+			} else {
+				const { manifest } = await savedManifest(f);
+				const member = manifest.members.find((member: { path: string }) => member.path.endsWith('settings.json'));
+				await writeFile(path.join(f.dir, 'backup/objects', member.hash), 'corrupted');
+			}
+			const replacement = createEngine(config, f.options);
+			await expect(replacement.acquireRestore()).rejects.toThrow(failure === 'unreceipted' ? 'unreceipted' : failure === 'orphaned SQLite sidecar' ? 'SQLite input type' : 'checksum');
+			expect(await stat(extraDatabase).catch(() => null)).toBeNull();
+			expect(await stat(path.join(ephemeral, 'settings.json')).catch(() => null)).toBeNull();
+			expect(await readFile(path.join(f.roots.work, 'note.txt'), 'utf8')).toBe('keep newer surviving content');
+			expect(replacement.status().ready).toBe(false);
+		});
 	test('initialized database disappearance fails closed', async () => {
 		const f = await fixture();
 		const db = new Database(path.join(f.roots.akmData, 'state.db'));
