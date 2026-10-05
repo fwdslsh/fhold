@@ -53,7 +53,7 @@ behavior; `--no-pull` selects existing local copies for that registry intent.
 
 ### Upgrade from alpha.3
 
-Download the new CLI or Admin from the [alpha.4 release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4)
+Download the new CLI or Admin from the [Linux release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050129-alpha.5)
 first; `fhold update` updates the selected instance, not the CLI executable.
 Select the existing home's **absolute path** in the new CLI, or open that folder
 in the new Admin, then update:
@@ -63,7 +63,7 @@ fhold --name /absolute/path/to/existing-instance update
 ```
 
 This keeps the existing location, saved identity, ports, data and credentials.
-Managed image defaults advance to alpha.4. Explicit image pins remain pins;
+Managed image defaults advance to the installed CLI/Admin release. Explicit image pins remain pins;
 review and update an older pin before activating the new managed policy mounts.
 The CLI refuses an incompatible Assistant image rather than silently disabling
 its hooks. CLI/Admin and image must come from the matching release.

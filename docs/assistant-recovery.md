@@ -411,6 +411,8 @@ independent drive:
 4. Supply the new policy, a **genuinely unused recovery namespace**, and a fresh
    `FH_RECOVERY_STATE_DIR` outside captured trees. Retain the old private directory;
    `/home/fhold/.fhold-recovery` stays excluded even under whole-home selection.
+   If the old private directory used a custom location, keep it outside selection
+   or explicitly exclude it in the new policy too.
    Never edit/copy old receipts or manifests to invent new authority.
 5. Initialize once and start normally. The first ownership epoch can adopt the
    reviewed local state. Verify an accepted checkpoint and cold replacement
