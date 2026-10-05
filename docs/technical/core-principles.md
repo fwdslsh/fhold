@@ -74,6 +74,14 @@ may also hold backups/docs; it is not itself an instance or a new configuration 
 Home selection is canonical; default changes never relocate existing homes or
 rename their persisted project identity. Each home has stable independent project
 intent and saved concrete ports.
+Admin separates saving configuration from applying it. Container-disrupting
+actions require explicit confirmation, with postponement as the default. A
+private, per-home applied-runtime digest records known startup inputs, not
+credentials or agent data. Read-only snapshots report pending changes across
+Admin restarts and instance switches. Only successful healthy activation clears
+the pending state; updates also verify their selected image identities first.
+The existing lifecycle lock and Compose path own application. No background
+service, automatic restart or second configuration store is introduced.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
@@ -196,6 +204,15 @@ checkpoints. Additions preserve prior state; narrowing an accepted selection fai
 before claiming or writing targets. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
 No host management schema, backup plugin registry or cloud-specific selector is added.
+Versioned recovery policy may exclude directory roots, require independent mount
+roots and opt into recognized network-mount discovery. Ordinary local volumes
+stay covered. Excluded roots are never traversed/written; missing required mounts
+block startup. Registered SQLite and WAL/SHM paths cannot be excluded or placed
+on recognized network filesystems. Policy/effective exclusions are bound to
+accepted checkpoints; changed ownership needs a stopped-writer transition to a
+fresh namespace. Topology changes abort publication and retain partial-restore
+journals. Private inspection is read-only; confirmed offline restore starts no
+application writers.
 Native process coordination remains excluded even under an explicitly selected
 parent; plugin caches may be included without restoring temporary wrappers or
 live locks. This does not relax the prohibition on arbitrary links.

@@ -20,6 +20,7 @@ import {
 	createBackup,
 	defaultStackConfig,
 	writeStackConfig,
+	restartStatus,
 	releaseStackLock
 } from '@fhold/lib';
 
@@ -149,6 +150,7 @@ if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'te
 		await expect(main(['update', '--pull'])).rejects.toThrow('Build the reviewed images locally');
 		await main(['update']);
 		await main(['update', '--no-pull']);
+		expect(restartStatus(home).required).toBe(false);
 		const calls = readFileSync(callsPath, 'utf8')
 			.trim()
 			.split('\n')
@@ -173,6 +175,7 @@ if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'te
 		// container actually reports. A successful `up` alone is not completion.
 		writeFileSync(fakeDocker, readFileSync(fakeDocker, 'utf8').replace(`sha256:${'a'.repeat(64)}`, `sha256:${'b'.repeat(64)}`));
 		await expect(updateStack({ start: true, pull: false })).rejects.toThrow('preflight-selected image identities');
+		expect(restartStatus(home).required).toBe(true);
 		const receipts = readdirSync(join(home, 'state/update-receipts')).map((directory) => JSON.parse(readFileSync(join(home, 'state/update-receipts', directory, 'receipt.json'), 'utf8')));
 		const failed = receipts.find((receipt) => receipt.phase === 'failed');
 		expect(failed.failedPhase).toBe('verifying-images');

@@ -1,6 +1,7 @@
 import { friendlyServiceName, isHealthy, isRunning } from './model.js';
 import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
+import { renderRestartStatus, requestStackAction } from './restart.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
 export function renderPhase(phase) {
@@ -29,6 +30,7 @@ export function renderRuntimeControls(snapshot) {
 	byId('start-stack').disabled = state.operationInFlight || running;
 	byId('restart-stack').disabled = state.operationInFlight || !running;
 	byId('stop-stack').disabled = state.operationInFlight || snapshot.services.length === 0;
+	renderRestartStatus(snapshot);
 }
 
 export function renderServices(snapshot) {
@@ -174,26 +176,22 @@ export function bindRuntimeEvents() {
 		const config = structuredClone(state.currentConfig);
 		config.assistant.port = assistantPort;
 		config.gateway.port = gatewayPort;
-		await operation(
-			'Retrying fhold startup',
+		const saved = await operation(
+			'Saving startup settings',
 			async () => {
 				const saved = await state.api.saveConfig({ config, baseConfig: state.currentConfig });
 				render(saved);
-				return state.api.action('start');
+				return saved;
 			},
-			'fhold started. Now connect your AI provider.'
+			'Startup settings saved.'
 		);
+		if (saved) await requestStackAction('start');
 	});
 
 	all('[data-action]').forEach((button) => {
 		button.addEventListener('click', () => {
 			const action = button.dataset.action;
-			const labels = {
-				start: ['Starting fhold', 'fhold started.'],
-				restart: ['Restarting fhold', 'fhold restarted.'],
-				stop: ['Stopping fhold', 'fhold stopped. Your data is unchanged.']
-			};
-			void operation(labels[action][0], () => state.api.action(action), labels[action][1]);
+			void requestStackAction(action);
 		});
 	});
 }

@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { byId } from './ui.js';
-import { saveConfigAndApply } from './configuration.js';
+import { saveConfigAndOfferRestart } from './configuration.js';
 
 export function renderPreferences(snapshot) {
 	byId('agent-timezone').value = snapshot.config.assistant.timezone;
@@ -14,12 +14,11 @@ export function bindPreferencesEvents() {
 		const config = structuredClone(state.currentConfig);
 		config.assistant.timezone = byId('agent-timezone').value.trim();
 		config.assistant.automaticMemory = byId('automatic-memory').checked;
-		await saveConfigAndApply(
+		await saveConfigAndOfferRestart(
 			config,
 			'preferences-form',
-			'restart',
 			'Saving agent preferences',
-			'Agent preferences saved and fhold restarted.'
+			'Agent preferences saved.'
 		);
 	});
 }

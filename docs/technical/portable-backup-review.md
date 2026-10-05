@@ -4,6 +4,15 @@ Reviewed 2026-10-01. This is a dated source review and focused disposable-fixtur
 
 ## TL;DR
 
+Follow-up design review, 2026-10-04: keep portable backup and same-instance
+[runtime recovery](../assistant-recovery.md#choose-the-right-operation) separate.
+Their different credential/authority, task-review, path namespace and native
+version guarantees are useful product boundaries, not duplicate functionality.
+The current recovery mount policy belongs to the container catalog and is not
+automatically mapped into portable host archives. Native history also retains
+its explicit cross-installation authority handling. No generic archive abstraction
+or format conversion is justified by this feature.
+
 fhold's backup is a private **directory of portable user files**, with a required size/hash manifest. Restore accepts only its own supported format and a fresh, not-yet-completed target; it does not clone deployment settings, credentials, native conversations or runtime authority. Tasks are staged inactive. Conflicts fail closed, and partial apply is recorded rather than rolled back. This is useful for moving knowledge/workspace into a fresh instance, but is neither disaster-recovery coverage nor an engine-downgrade rollback point. Native history has a separate offline workflow.
 
 The implementation largely follows the [persistence contract](core-principles.md#persistence-and-recovery). The most important operator cautions are that backups are not encrypted or secret-scanned, a live backup is not a whole-home consistent snapshot, and CLI apply revalidates the current plan rather than binding it to an earlier preview. Admin does enforce that binding.

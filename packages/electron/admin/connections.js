@@ -1,5 +1,6 @@
 import { clearClientKey, updateClientPolicy } from './access.js';
-import { saveConfigAndApply } from './configuration.js';
+import { saveConfigAndOfferRestart } from './configuration.js';
+import { offerRestart } from './restart.js';
 import { csv, endpoint } from './model.js';
 import { state } from './state.js';
 import { all, byId, notice, operation, setBadge, setText, showClient } from './ui.js';
@@ -288,12 +289,11 @@ export function bindConnectionsEvents() {
 			credential: byId('slack-credential').value,
 			access: slackAccess
 		};
-		await saveConfigAndApply(
+		await saveConfigAndOfferRestart(
 			config,
 			'connections-form',
-			'start',
 			'Saving connections',
-			'Connections saved and fhold is running.'
+			'Connections saved.'
 		);
 	});
 
@@ -383,6 +383,7 @@ export function bindConnectionsEvents() {
 		if (result) {
 			byId('bot-token').value = '';
 			byId('app-token').value = '';
+			await offerRestart(result);
 		}
 	});
 }

@@ -5,6 +5,7 @@ import type {
 	RestorePlan,
 	ProviderOAuthAuthorization,
 	ProviderSummary,
+	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
@@ -31,9 +32,11 @@ export type AdminSnapshot = {
 	};
 	codexRecall?: CodexRecallReview;
 	codexRecallError?: string;
+	pendingRestart?: RestartStatus;
 };
 
 export type StackAction = 'start' | 'restart' | 'stop';
+export type InterruptingAction = StackAction | 'remote-setup';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminWelcome = {
@@ -60,12 +63,14 @@ export type AdminApi = {
 		trusted?: boolean;
 		sandbox?: CodexSandbox;
 		input?: string;
+		restartConfirmed?: boolean;
 	}): Promise<RemoteProgress>;
 	snapshot(): Promise<AdminSnapshot>;
 	selectedHome(): Promise<string>;
 	install(config: StackConfig, automaticPorts?: boolean): Promise<AdminSnapshot>;
 	saveConfig(value: { config: StackConfig; baseConfig: StackConfig }): Promise<AdminSnapshot>;
-	action(action: StackAction): Promise<AdminSnapshot>;
+	confirmRestart(action: InterruptingAction): Promise<boolean>;
+	action(action: StackAction, confirmed?: boolean): Promise<AdminSnapshot>;
 	logs(): Promise<string>;
 	providers(): Promise<ProviderSummary[]>;
 	providerKey(value: { provider: string; key: string }): Promise<AssistantReadiness>;
@@ -133,6 +138,7 @@ export const ADMIN_CHANNELS = {
 	install: 'admin:install',
 	saveConfig: 'admin:save-config',
 	action: 'admin:action',
+	confirmRestart: 'admin:confirm-restart',
 	logs: 'admin:logs',
 	providers: 'admin:providers',
 	providerKey: 'admin:provider-key',

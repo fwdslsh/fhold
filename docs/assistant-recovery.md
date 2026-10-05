@@ -8,6 +8,20 @@ The private runtime format is not a portable user archive and adds no custom
 per-object encryption. Use encrypted storage and narrow access externally;
 hashes detect corruption, not malicious replacement by an authorized writer.
 
+### Choose the right operation
+
+| Need | Use | What it preserves |
+| --- | --- | --- |
+| Move reviewed content into a fresh installation | CLI/Admin portable backup and restore | Knowledge, workspace and allowlisted settings; sensitive content is opt-in and tasks need review. |
+| Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
+| Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history with explicit authority handling, not an entire runtime. |
+
+Keep these contracts/formats separate. Portable imports deliberately do not
+replay runtime credentials or checkpoint authority; recovery must preserve that
+authority and its exact-native-version contract. Combining their writers would
+complicate those guarantees. Container exclusions are never silently applied to
+host portable backup. See [managing fhold](managing-fhold.md) for those flows.
+
 ## Runtime configuration
 
 These are standalone Assistant inputs, not cloud-management settings in CLI/Admin.
@@ -22,7 +36,7 @@ These are standalone Assistant inputs, not cloud-management settings in CLI/Admi
 | `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | `120`; monotonic between-step/SQLite budget, 1–3,600 seconds. |
 | `FH_RECOVERY_PROBE_PORT` | `0` (off); private health-only probe, not the native API port. |
 | `FH_RECOVERY_STATE_DIR` | `/home/fhold/.fhold-recovery`; private staging/receipt, no arbitrary native-tree overlap. |
-| `FH_RECOVERY_INCLUDE_FILE` | Unset keeps the native catalog; absolute JSON file listing additional container `paths` and `sqlite` databases. |
+| `FH_RECOVERY_INCLUDE_FILE` | Unset keeps the native catalog; externally supplied absolute JSON file for additional paths, SQLite registrations and optional mount policy. |
 | `FH_RUNTIME_DIR` | `/tmp/fhold-runtime`; ephemeral private process/status files. |
 | `FH_RECOVERY_CREDENTIAL_FILE` | Unset uses explicit managed identity; otherwise absolute private standard Blob connection-string file. |
 | `AZURE_CLIENT_ID` | Unset uses system managed identity; UUID selects a user-assigned identity. |
@@ -246,8 +260,8 @@ For example, mount it read-only; it contains paths, not authentication keys:
 
 - `paths` selects individual regular files or recursive directories, in addition
   to the native catalog. `sqlite` registers individual database files; those files
-  need not also appear in `paths`. Either list may be omitted or empty. No other
-  keys are supported. There is no fixed entry-count limit; existing capture,
+  need not also appear in `paths`. Either list may be omitted or empty. This
+  unversioned format accepts only those two keys. There is no fixed entry-count limit; existing capture,
   manifest-size and deadline bounds still apply. The include file is at most 4 MiB.
 - Entries are literal, canonical absolute **container** paths. Spaces and Unicode
   are supported; globs, tilde/environment expansion, trailing slashes, dot segments,
@@ -300,6 +314,108 @@ Local CLI/Admin **portable backup** is a different archive: it selects knowledge
 workspace and a small operator-configuration allowlist, with explicit sensitive
 data opt-ins. It does not back up the native runtime home. Use same-instance
 recovery for ephemeral hosting, not a portable archive as full runtime recovery.
+
+### Independently persistent mounts
+
+Use the versioned form of the same externally supplied include file when some
+content belongs to an independent drive/volume rather than recovery:
+
+```json
+{
+  "version": 1,
+  "paths": ["/home/fhold/.my-client"],
+  "sqlite": ["/home/fhold/.my-client/state.sqlite"],
+  "excludePaths": ["/work/scratch"],
+  "externalMounts": ["/work/shared-drive"],
+  "autoExcludeNetworkMounts": false,
+  "recoverMounts": []
+}
+```
+
+Lists default empty; discovery defaults off. This policy works with ordinary
+Docker binds, named volumes and independently provisioned mounts on other hosts.
+There are no hosting selectors or mount-provisioning tools in fhold.
+
+- `excludePaths`: canonical absolute directory roots skipped even when absent
+  or not mounted. Recovery never traverses/restores them. Existing linked paths
+  and non-directories fail; redundant nested entries normalize away.
+- `externalMounts`: exact required visible, readable **directory mount roots**,
+  also excluded recursively. An ordinary directory is not a substitute. Missing
+  mounts block initialization/startup/capture/restore without creating fallback
+  directories. Roots outside the selected catalog work too. External tooling
+  owns backing-volume identity and expected read/write permissions.
+- `autoExcludeNetworkMounts`: opt-in discovery of visible `cifs`, `smb3`, `nfs`
+  and `nfs4` mounts intersecting selected content, including nested, ancestor and
+  file mounts. It never excludes `/` or guesses persistence for local volumes,
+  tmpfs or unknown FUSE. Declare known required mounts explicitly: discovery
+  cannot detect a mount absent on the first boot.
+- `recoverMounts`: exact visible mount roots retained despite network discovery.
+  These must exist, do not select otherwise unselected files, cannot override
+  explicit exclusions, and do not opt in separately mounted descendants.
+  Captured read-only files still require a writable empty restore target.
+  This exception never permits network SQLite.
+
+Ordinary local Compose home/data/workspace volumes retain their coverage. There
+is no “ignore all mounts” switch. External read-only roots are never chmodded or
+written; newer independent content survives cold restore and does not count as
+unreceipted local runtime state.
+
+Built-in and explicitly registered SQLite **and WAL/SHM paths** cannot be
+excluded, even before a database exists. Recognized network placement fails even
+with discovery off or a mount opt-in. Unknown SQLite in retained trees still
+needs registration. Excluded content is not inspected/certified: relocate any
+database an application opens there to local storage. See SQLite's
+[network-filesystem guidance](https://sqlite.org/useovernet.html).
+
+Linux `/proc/self/mountinfo` is read in this container's namespace. Parent
+relationships resolve stacked/hidden and same-device binds; sources/credentials
+are not stored or logged. See the [Linux mountinfo contract](https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html).
+Mount IDs detect changes within this process, never durable identity across boots.
+Topology is rechecked before accepted publication, SQLite snapshots and each
+native restore write. Changes abort; partial restore journals remain and writers
+are not admitted. This cannot protect against a privileged host racing remounts
+between checks. Keep mounts stable; hung I/O needs external termination bounds.
+
+Run the image's **private, read-only** `fhold-recovery inspect` with the same
+configuration/mounts to see selected trees/databases, exclusions and required
+mount read-only state. It never creates a namespace or claims ownership. Its
+path-bearing output is for operators, not public health. `status` remains compact.
+
+Versioned policies use catalog 3: normalized policy and effective automatic
+exclusions are hash-bound to the immutable manifest and descriptor/receipt.
+Catalogs 1/2 and legacy include files remain readable with original coverage;
+old images reject catalog 3 rather than ignoring exclusions. Effective ownership
+must match accepted checkpoints, including previously discovered mount roots.
+Missing/newly excluded drives cannot silently lose historical members or receive
+old restored contents. Additive paths/SQLite remain supported with unchanged
+ownership policy. Policy changes need the explicit transition below.
+
+### Change an established recovery ownership policy
+
+This release supports fresh namespaces and unchanged ownership, not an automatic
+policy-migration engine. For an existing recovered directory moving onto an
+independent drive:
+
+1. Stop and externally confirm all old writers/publishers and descendants have
+   stopped. Retain the checkpoint, original disk, private receipts and logs.
+2. Restore/validate offline with the **original policy** and an exact-native-version
+   compatible image into empty local native paths. Override the normal entrypoint
+   and run `fhold-recovery restore --confirm-stopped` with the old destination,
+   identity and mounts. It releases ownership after validation, without seeding
+   defaults or starting writers. Valid surviving local state is preserved.
+3. Transfer the relevant content offline to the independently provisioned drive;
+   verify it and mount its exact declared root. External tooling owns this move.
+4. Supply the new policy, a **genuinely unused recovery namespace**, and a fresh
+   `FH_RECOVERY_STATE_DIR` outside captured trees. Retain the old private directory;
+   `/home/fhold/.fhold-recovery` stays excluded even under whole-home selection.
+   Never edit/copy old receipts or manifests to invent new authority.
+5. Initialize once and start normally. The first ownership epoch can adopt the
+   reviewed local state. Verify an accepted checkpoint and cold replacement
+   before retiring old artifacts.
+
+`--confirm-stopped` is an operator assertion, not proof that another writer is
+dead. This transition deliberately avoids replaying old copies over independent
+contents or silently narrowing historical coverage.
 
 ## Qualification limits
 

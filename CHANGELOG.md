@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.2610050101-alpha.5 — mount-aware recovery and deferred Admin restarts
+
+Runtime recovery now supports explicit directory exclusions, required independent
+mounts and opt-in network-mount discovery through the versioned
+`FH_RECOVERY_INCLUDE_FILE`. Ordinary local volumes keep their coverage.
+Registered SQLite and WAL/SHM paths must remain local and cannot be excluded.
+Missing required mounts and changed ownership policies block startup rather than
+restoring historical files over independently persistent content.
+See [the policy and stopped-writer transition](docs/assistant-recovery.md#independently-persistent-mounts).
+
+The image adds private read-only `fhold-recovery inspect` and confirmed offline
+`restore --confirm-stopped` without starting application writers. Legacy catalogs
+remain readable; catalog 3 requires a supporting image. Existing namespace policy
+changes require a reviewed transition to a fresh namespace. Portable backup stays
+the fresh-install content-transfer path, with no new runtime authority or archive
+conversion.
+
+Admin settings save without immediately restarting containers. A persistent
+pending-restart notice survives closing/reopening and instance switching.
+Users can confirm activation now or restart later; failed activation leaves
+changes pending. Explicit start/stop/restart and native setup interruptions also
+require confirmation. CLI status reports pending activation, and successful
+activation clears it through the same shared control plane.
+
+Includes mount-policy regressions, real directory/Blob-emulator cold replacement,
+read-only external-content preservation, offline restore and native AKM harness
+checks. GitHub release gates now exercise directory recovery on native amd64 and
+arm64 runners. Actual SMB/NFS/FUSE hosting, real account renewal/reconnect and
+measured RPO/RTO still require deployment-specific qualification.
+
+Fresh CLI/Admin installs default to the matching public Docker Hub images.
+Publishing does not restart or upgrade existing instances. Claude/Codex remote
+workers remain experimental; native ARM64 Admin startup remains unqualified.
+Previously reviewed scoped dependency exceptions remain disclosed.
+
 ## 0.1.2610041911-alpha.4 — managed harness settings and simpler instance selection
 
 OpenCode, Codex and Claude now load operator-owned native policies from the

@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { all, byId, message, notice, operation, setBadge, setBusy } from './ui.js';
 import { refresh } from './snapshot.js';
+import { offerRestart } from './restart.js';
 
 let tool;
 let running = false;
@@ -276,6 +277,10 @@ export function bindRemoteEvents() {
 		byId('remote-prompts').hidden = recallOnly;
 		byId('remote-stage').textContent = 'Preparing Assistant…';
 		try {
+			if (!connectionOnly && !recallOnly && !(await state.api.confirmRestart('remote-setup'))) {
+				byId('remote-stage').textContent = 'Setup postponed. No containers were restarted.';
+				return;
+			}
 			if (!connectionOnly && tool === 'codex' && recallRequested && !recallReview?.managed) {
 				if (!recallReview) throw new Error('Review current AKM hooks first.');
 				{
@@ -321,6 +326,7 @@ export function bindRemoteEvents() {
 							action: 'enable',
 							tool,
 							trusted: true,
+							restartConfirmed: true,
 							...(tool === 'codex' ? { sandbox: byId('remote-sandbox').value } : {})
 						}
 			);
@@ -338,6 +344,7 @@ export function bindRemoteEvents() {
 			}
 		} finally {
 			starting = false;
+			if (!running) setBusy(false);
 			if (!running) byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
 		}
 	});
@@ -405,8 +412,11 @@ export function bindRemoteEvents() {
 			const result = await operation(
 				'Disabling remote startup',
 				() => state.api.remote({ action: 'disable', tool: name }),
-				'Remote startup disabled. Account sign-in is retained.'
+				'Remote startup setting saved. Apply it with a restart; account sign-in is retained.'
 			);
-			if (result) await refresh(false);
+			if (result) {
+				await refresh(false);
+				await offerRestart();
+			}
 		});
 }

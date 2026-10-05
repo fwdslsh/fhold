@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.1.2610041911-alpha.4",
+  "version": "0.1.2610050101-alpha.5",
   "private": true,
   "license": "MIT",
   "packageManager": "bun@1.4.2",
@@ -26,7 +26,7 @@
     "audit": "bun audit --ignore GHSA-86w9-cpqp-85rv",
     "install:dev": "FH_HOME=/tmp/fhold-dev bun run packages/cli/src/main.ts install --no-start",
     "lib:test": "bun run --cwd packages/lib test",
-    "test:recovery": "bun test --isolate scripts/recovery-engine.test.ts scripts/recovery-acceptance.test.ts scripts/recovery-wrapper.test.ts scripts/blob-store.test.ts scripts/assistant-recovery-runtime.test.ts",
+    "test:recovery": "bun test --isolate scripts/recovery-engine.test.ts scripts/recovery-mounts.test.ts scripts/recovery-acceptance.test.ts scripts/recovery-wrapper.test.ts scripts/blob-store.test.ts scripts/assistant-recovery-runtime.test.ts",
     "smoke:recovery": "bun scripts/smoke-recovery.mjs",
     "smoke:recovery:blob": "bun scripts/smoke-blob-recovery.mjs",
     "dev:setup": "./scripts/dev-setup.sh",

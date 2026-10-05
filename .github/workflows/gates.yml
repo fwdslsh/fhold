@@ -168,3 +168,8 @@ jobs:
         env:
           FH_HISTORY_TEST_IMAGE: fhold/assistant:ci
         run: bun test packages/lib/src/control-plane/history.test.ts
+      - name: Verify runtime recovery with real independent directory mounts
+        if: matrix.image == 'assistant'
+        env:
+          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
+        run: node scripts/smoke-recovery.mjs

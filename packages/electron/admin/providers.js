@@ -1,5 +1,6 @@
 import { promptVisible } from './model.js';
 import { refresh } from './snapshot.js';
+import { offerRestart } from './restart.js';
 import { commonProviders, state } from './state.js';
 import {
 	all,
@@ -280,6 +281,7 @@ export async function verifyProvider(progress, action) {
 	if (!result?.ok) return false;
 	await refresh(false);
 	showView('overview');
+	await offerRestart();
 	return true;
 }
 

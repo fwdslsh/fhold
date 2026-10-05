@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { recoveryConfig } from '../containers/assistant/fhold-recovery.mjs';
@@ -130,6 +130,41 @@ describe('recovery wrapper configuration and private status', () => {
 		expect(invalid.stderr).toContain('valid JSON');
 		expect(invalid.stderr).not.toContain('synthetic-private-marker');
 		expect(invalid.stderr).not.toContain(includeFile);
+	});
+
+	it('coverage inspection is read-only; offline restore requires confirmation and an initialized namespace', () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-inspect-'));
+		const includeFile = join(root, 'include.json');
+		writeFileSync(
+			includeFile,
+			JSON.stringify({ version: 1, excludePaths: [join(root, 'excluded')] })
+		);
+		const env = {
+			PATH: process.env.PATH,
+			...base,
+			FH_RECOVERY_URL: `file://${root}/backup`,
+			FH_RECOVERY_INCLUDE_FILE: includeFile,
+			FH_RECOVERY_STATE_DIR: join(root, 'private')
+		};
+		const inspected = spawnSync(process.execPath, ['--no-env-file', wrapper, 'inspect'], {
+			env,
+			encoding: 'utf8'
+		});
+		expect(inspected.status).toBe(0);
+		expect(JSON.parse(inspected.stdout).catalog).toBe(3);
+		expect(JSON.parse(inspected.stdout).exclusions).toEqual([
+			{ path: join(root, 'excluded'), reason: 'excluded-path' }
+		]);
+		for (const args of [['restore'], ['restore', '--confirm-stopped']]) {
+			const result = spawnSync(process.execPath, ['--no-env-file', wrapper, ...args], {
+				env,
+				encoding: 'utf8'
+			});
+			expect(result.status).toBe(1);
+			if (args.length === 2) expect(result.stderr).toContain('requires explicit initialization');
+		}
+		expect(existsSync(join(root, 'private'))).toBe(false);
+		expect(existsSync(join(root, 'backup'))).toBe(false);
 	});
 
 	it('keeps raw Blob namespace text for the actual transport to reject (no network)', async () => {
@@ -322,7 +357,7 @@ describe('recovery wrapper configuration and private status', () => {
 			encoding: 'utf8',
 			timeout: 5_000
 		});
-			expect(result.status).toBe(0);
+		expect(result.status).toBe(0);
 		const events = JSON.parse(result.stdout) as string[];
 		expect(events[0]).toBe('restore');
 		expect(events.filter((event) => event === 'checkpoint').length).toBeGreaterThanOrEqual(3);
@@ -346,12 +381,24 @@ describe('recovery wrapper configuration and private status', () => {
 			finally{clearTimeout(timer);}
 			process.stdout.write(JSON.stringify(observed));
 		`;
-		const result = spawnSync(process.execPath, ['--no-env-file', '--config=/dev/null', '--eval', code], {
-			env: { PATH: process.env.PATH }, encoding: 'utf8', timeout: 5000
-		});
+		const result = spawnSync(
+			process.execPath,
+			['--no-env-file', '--config=/dev/null', '--eval', code],
+			{
+				env: { PATH: process.env.PATH },
+				encoding: 'utf8',
+				timeout: 5000
+			}
+		);
 		expect(result.status).toBe(0);
-		expect(JSON.parse(result.stdout)).toEqual({ healthy: true, lastAttemptFailed: true, accepted: true });
-		expect(result.stderr).toBe('fhold recovery: checkpoint failed (recovery filesystem failure (ENOENT)).\n');
+		expect(JSON.parse(result.stdout)).toEqual({
+			healthy: true,
+			lastAttemptFailed: true,
+			accepted: true
+		});
+		expect(result.stderr).toBe(
+			'fhold recovery: checkpoint failed (recovery filesystem failure (ENOENT)).\n'
+		);
 		expect(result.stdout + result.stderr).not.toContain('synthetic private cleanup path');
 	});
 
@@ -377,11 +424,15 @@ describe('recovery wrapper configuration and private status', () => {
 			finally{clearInterval(observer);clearTimeout(stop);}
 			process.stdout.write(JSON.stringify({finished,publications:new Set(values).size}));
 		`;
-		const result = spawnSync(process.execPath, ['--no-env-file', '--config=/dev/null', '--eval', code], {
-			env: { PATH: process.env.PATH },
-			encoding: 'utf8',
-			timeout: 12_000
-		});
+		const result = spawnSync(
+			process.execPath,
+			['--no-env-file', '--config=/dev/null', '--eval', code],
+			{
+				env: { PATH: process.env.PATH },
+				encoding: 'utf8',
+				timeout: 12_000
+			}
+		);
 		expect(result.status).toBe(0);
 		expect(result.stderr).toBe('');
 		const measured = JSON.parse(result.stdout);

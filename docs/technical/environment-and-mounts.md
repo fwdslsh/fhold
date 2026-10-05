@@ -26,6 +26,7 @@ The following paths are relative to that instance's home, not `~/fhold`:
 | `state/stack.json` | Control plane | Versioned stack intent |
 | `state/stack.env` | Control plane | Non-secret values derived from StackConfig intent |
 | `state/installation.json` | Control plane | Generated release/managed-image provenance, never an identity fallback |
+| `state/applied-runtime.json` | Control plane | Private startup-input digest and pending-activation flag; no secret values; shared by CLI/Admin restart status |
 | `state/credentials/` | Control plane/operator | Named Guardian key directories plus derived key-free registry |
 | `state/portal-credentials/` | Control plane | Derived, adapter-scoped runtime keyrings |
 | `config/guardian/oauth.json` | Operator | OAuth resource-server settings; disabled by default |
@@ -149,6 +150,13 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 `FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
+
+Standalone recovery optionally uses externally supplied
+`FH_RECOVERY_INCLUDE_FILE` for additional paths/SQLite and versioned mount policy.
+Explicit exclusions, required external mounts and opt-in network discovery do
+not change normal Compose volume coverage. SQLite stays local; fhold neither
+provisions nor restores independent mounts. See [Assistant recovery](../assistant-recovery.md)
+for the schema, private inspection and stopped-writer policy transition.
 
 Optional native Codex/Claude Code remote workers inherit the same nonroot
 container boundary, with no additional mounts or ports. Their own native sign-in

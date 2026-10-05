@@ -179,6 +179,10 @@
         </header>
 
         <main id="main-content" tabindex="-1">
+          <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
+            <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
+            <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
+          </aside>
           <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-heading">
             <div class="hero-card ready-hero">
               <div>

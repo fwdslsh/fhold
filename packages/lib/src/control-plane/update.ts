@@ -13,6 +13,7 @@ import { activateComposeCommand, assertManagedHarnessImage } from './activation.
 import { FH_RELEASE_VERSION } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { recordAppliedRuntime, rememberRuntimeBeforeChange } from './runtime-revision.js';
 
 /** Ordinary managed-file update, not native-data rollback or a migration engine. */
 export async function updateHome(options: { homeDir?: string; start: boolean; pull?: boolean }): Promise<{ receipt: string; activated: boolean }> {
@@ -86,13 +87,14 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 			if (existsSync(source)) writeFileAtomic(join(checkpoint, 'before', path), readFileSync(source), 0o600);
 		}
 		phase = 'applying-assets'; record();
+		rememberRuntimeBeforeChange(state.homeDir);
 		await applyHomeSeed(state.homeDir);
 		writeStackConfig(state.homeDir, candidateConfig);
 		phase = 'reconciling'; record();
 		ensureRuntime(state);
 		if (options.start) {
 			phase = 'activating'; record();
-			await activateComposeCommand(state, ['up', '-d', '--pull', 'never', '--force-recreate', '--remove-orphans', '--wait'], { lock });
+			const revision = await activateComposeCommand(state, ['up', '-d', '--pull', 'never', '--force-recreate', '--remove-orphans', '--wait'], { lock, deferAppliedReceipt: true });
 			phase = 'verifying-images'; record();
 			const selected = buildComposeOptions(state);
 			const ps = await runDocker(['compose', ...buildComposeArgs(selected), 'ps', '-q']);
@@ -111,6 +113,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 				return matches.length !== 1 || matches[0]?.imageId !== selected.imageId || matches[0]?.imageReference !== selected.imageReference;
 			})) throw new Error('Running containers do not match the preflight-selected image identities');
 			evidence = { ...evidence, runningContainersUpgraded: true, runningImages: rows };
+			recordAppliedRuntime(state.homeDir, revision);
 		}
 		writeFileAtomic(installationPath, `${JSON.stringify({ product: 'fhold', homeDir: state.homeDir, release: FH_RELEASE_VERSION, managedImages: Object.fromEntries(Object.entries(candidateConfig.deployment.images).filter(([component, tag]) => tag === FH_RELEASE_VERSION && Object.hasOwn(managedImages, component))) }, null, 2)}\n`);
 		phase = options.start ? 'completed' : 'files-refreshed-not-activated'; record();

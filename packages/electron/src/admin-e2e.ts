@@ -430,6 +430,20 @@ async function run(): Promise<Record<string, unknown>> {
 	window.setTitle('fhold Admin — automated UI test');
 	window.on('page-title-updated', (event) => event.preventDefault());
 	const otherHome = join(outputDir, 'other-empty-instance');
+	const originalMessageBox = dialog.showMessageBox;
+	const confirmations: number[] = [];
+	const prompts: string[] = [];
+	// Only replace the human's native dialog response. Save, IPC, Compose and
+	// health checks below all exercise the real application and Docker daemon.
+	dialog.showMessageBox = (async (...args: unknown[]) => {
+		const prompt = args.at(-1) as Electron.MessageBoxOptions;
+		assert(prompt.defaultId === 0 && prompt.cancelId === 0, 'Interrupting action did not default to postponement.');
+		assert(prompt.buttons?.length === 2, 'Restart choice is missing.');
+		const response = confirmations.shift();
+		assert(response !== undefined, `Unexpected interruption prompt: ${prompt.message}`);
+		prompts.push(prompt.message);
+		return { response, checkboxChecked: false };
+	}) as typeof dialog.showMessageBox;
 	let succeeded = false;
 	try {
 		await waitForLoad(window);
@@ -462,6 +476,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await assertRenderedFloor(window, 'create-instance folder form');
 		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-folder.png');
+		const suggestedHome = await window.webContents.executeJavaScript("document.querySelector('#new-instance-home').value");
 		try {
 			dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
 			await window.webContents.executeJavaScript(
@@ -482,7 +497,7 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			assert(
 				await window.webContents.executeJavaScript(
-					"!document.querySelector('#new-instance-home').value && document.body.dataset.phase === 'welcome'"
+					`document.querySelector('#new-instance-home').value === ${JSON.stringify(suggestedHome)} && document.body.dataset.phase === 'welcome'`
 				),
 				'Cancelling new-instance folder selection changed the selection.'
 			);
@@ -735,12 +750,13 @@ async function run(): Promise<Record<string, unknown>> {
 			),
 			'Recovery contradicts the agent status.'
 		);
+		confirmations.push(1);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#recovery-form').requestSubmit()"
 		);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold started. Now connect your AI provider.' &&
+			`document.querySelector('#notice-message')?.textContent === 'fhold started. Saved settings applied.' &&
 					document.querySelector('#setup-recovery')?.hidden === true &&
 					[...document.querySelectorAll('#services .service')].some((row) => row.textContent.includes('Running normally'))`,
 			'the Assistant to recover through setup'
@@ -855,16 +871,16 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#remote-recall-status')?.textContent === 'Approval needed' && !document.querySelector('#remote-recall').disabled`,
+			`document.querySelector('#remote-recall-status')?.textContent === 'Managed · ready' && document.querySelector('#remote-recall').disabled`,
 			'native AKM hook review',
 			60_000,
 			!provider
 		);
 		assert(
 			await window.webContents.executeJavaScript(
-				"!document.querySelector('#remote-recall').checked && !document.querySelector('#remote-recall-field').hidden"
+				"document.querySelector('#remote-recall').checked && !document.querySelector('#remote-recall-field').hidden"
 			),
-			'Recall approval was missing or preaccepted in Codex setup.'
+			'Managed recall was not reported as operator-controlled in Codex setup.'
 		);
 		await assertRenderedFloor(window, 'native remote setup dialog');
 		const nativeRemoteScreenshot = await capture(window, outputDir, '04-native-remote-setup.png');
@@ -951,26 +967,20 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"!document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Approval needed'",
+			"document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Managed · ready'",
 			'standalone native recall review',
 			60_000,
 			!provider
 		);
 		await window.webContents.executeJavaScript(`(async () => {
 			const review = await window.fholdAdmin.codexRecall({action:'review'});
-			let rejected = false;
-			try { await window.fholdAdmin.codexRecall({action:'approve',digest:review.digest}); } catch { rejected = true; }
-			if (!rejected) throw new Error('Recall approval accepted without explicit consent.');
-			document.querySelector('#remote-recall').click();
-			document.querySelector('#remote-form').requestSubmit();
+			if (!review.managed || review.status !== 'ready') throw new Error('Managed recall was not ready.');
+			for (const action of ['approve', 'disable']) {
+				let rejected = false;
+				try { await window.fholdAdmin.codexRecall({action,digest:review.digest,confirmed:true}); } catch { rejected = true; }
+				if (!rejected) throw new Error('Personal approval changed managed hooks.');
+			}
 		})()`);
-		await waitForRenderer(
-			window,
-			"document.querySelector('#remote-stage').textContent.includes('Knowledge recall is ready') && document.querySelector('#codex-recall-status').textContent === 'Ready'",
-			'native recall approval saved',
-			60_000,
-			!provider
-		);
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		await runAdminAction('restart');
@@ -993,24 +1003,14 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"!document.querySelector('#remote-recall-disable').hidden && !document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Ready' && document.querySelector('#codex-recall-status').textContent === 'Ready'",
-			'explicit native review verifies approval persisted after recreation',
-			60_000,
-			!provider
-		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#remote-recall-disable').click()"
-		);
-		await waitForRenderer(
-			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#remote-recall-status').textContent === 'Installed' && !document.querySelector('#remote-recall').checked && document.querySelector('#codex-recall-status').textContent === 'Installed'",
-			'recall opt-out saved',
+			"document.querySelector('#remote-recall-disable').hidden && document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Managed · ready' && document.querySelector('#codex-recall-status').textContent === 'Managed · ready'",
+			'explicit native review verifies managed recall persisted after recreation',
 			60_000,
 			!provider
 		);
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		progress(
-			'native AKM approval required consent, persisted across recreation, and opted out without remote startup or vendor login'
+			'managed AKM recall stayed ready across recreation without personal approval, remote startup or vendor login'
 		);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#native-connections').open = false"
@@ -1120,6 +1120,19 @@ async function run(): Promise<Record<string, unknown>> {
 			"document.querySelector('[data-view=provider]').click()"
 		);
 
+		const containerId = async () => {
+			const result = await runDocker(['inspect', '--format', '{{.Id}}', `${projectName}-assistant-1`]);
+			assert(result.ok, 'Could not inspect the isolated Assistant.');
+			return result.stdout.trim();
+		};
+		const runtimeSettings = async () => {
+			const result = await runDocker(['exec', `${projectName}-assistant-1`, 'printenv', 'TZ', 'FH_AUTOMATIC_MEMORY']);
+			assert(result.ok, 'Could not read non-secret runtime settings.');
+			return result.stdout.trim();
+		};
+		const beforeDeferredSave = { id: await containerId(), settings: await runtimeSettings() };
+		const sizeBeforeSave = window.getSize();
+		confirmations.push(0);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#agent-preferences > summary').click();
 			document.querySelector('#agent-timezone').value = 'Europe/London';
@@ -1129,12 +1142,31 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Agent preferences saved and fhold restarted.' &&
+			`document.querySelector('#notice-message')?.textContent === 'Agent preferences saved.' &&
+				document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
 				document.querySelector('#agent-timezone')?.value === 'Europe/London' &&
 				document.querySelector('#automatic-memory')?.checked === false`,
-			'agent timezone and memory preferences to be applied'
+			'agent preferences saved without restarting'
 		);
-		progress('timezone and automatic-memory preferences saved through the real UI');
+		assert(await containerId() === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
+		assert(await runtimeSettings() === beforeDeferredSave.settings, 'Postponed save applied runtime settings.');
+		assert((await adminSnapshot()).pendingRestart?.required, 'Pending state was not saved with the instance.');
+		await window.webContents.executeJavaScript("document.querySelector('.sidebar [data-instance-switch]').click()");
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'return to Welcome with saved changes');
+		await window.webContents.executeJavaScript("document.querySelector('#open-recent-instance').click()");
+		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden", 'pending restart after reopening the instance');
+		assert(JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave), 'Saving/reopening changed the user window size.');
+		const pendingRestartScreenshot = await capture(window, outputDir, '04o-pending-restart.png');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#apply-pending-restart').click()");
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#pending-restart').hidden && document.querySelector('#notice-message').textContent === 'fhold restarted. Saved settings applied.'",
+			'confirmed restart applies saved settings');
+		assert(await containerId() !== beforeDeferredSave.id, 'Confirmed apply did not recreate Assistant.');
+		assert(await runtimeSettings() === 'Europe/London\n0', 'Recreated Assistant did not load saved settings.');
+		assert(!(await adminSnapshot()).pendingRestart?.required, 'Successful apply left a pending alert.');
+		progress('defer, reopen, persistent alert and confirmed apply verified against real container ID and settings');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=provider]').click(); document.querySelector('#agent-preferences').open = true");
 		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click()");
 		const agentSettingsScreenshot = await capture(window, outputDir, '04i-agent-settings.png');
 
@@ -1243,6 +1275,7 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#discord').dispatchEvent(new Event('change', { bubbles: true }));
 		})()`);
 
+		confirmations.push(1);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#gateway').checked = true;
 			document.querySelector('#gateway').dispatchEvent(new Event('change', { bubbles: true }));
@@ -1250,7 +1283,7 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Connections saved and fhold is running.' &&
+			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
 					[...document.querySelectorAll('#services .service')].some((row) =>
 						row.textContent.includes('guardian') && row.textContent.includes('Running normally'))`,
 			'the Guardian to become healthy'
@@ -1293,13 +1326,14 @@ async function run(): Promise<Record<string, unknown>> {
 		const keyboardScreenshot = await capture(window, outputDir, '05b-keyboard-focus.png', true);
 		await sizeViewport(window, 1120, 780);
 
+		confirmations.push(1);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=overview]').click();
 			document.querySelector('[data-action=restart]').click();
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold restarted.' &&
+			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
 					document.querySelectorAll('#services .service').length === 2 &&
 					[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
 			'a healthy stack restart'
@@ -1432,6 +1466,7 @@ async function run(): Promise<Record<string, unknown>> {
 				savedPreferences.config.assistant.automaticMemory === false,
 			'Agent preferences were not persisted after restart and renderer reload.'
 		);
+		confirmations.push(1);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=overview]').click();
 			document.querySelector('#automatic-memory').checked = true;
@@ -1440,7 +1475,7 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Agent preferences saved and fhold restarted.' &&
+			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
 				document.querySelector('#automatic-memory')?.checked === true &&
 				[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
 			'automatic memory to be restored for runtime acceptance'
@@ -1669,6 +1704,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'Returning to the original instance resized Admin.'
 		);
 		progress('two-instance isolation, renderer key reset and stale sign-in rejection verified');
+		assert(confirmations.length === 0, 'An expected interruption prompt was not shown.');
 		succeeded = true;
 		return {
 			ok: true,
@@ -1717,12 +1753,12 @@ async function run(): Promise<Record<string, unknown>> {
 				subscriptionLoginVerified: false
 			},
 			codexRecall: {
-				explicitConsent: true,
-				nativeApproval: true,
+				managedPolicy: true,
+				personalApprovalRejected: true,
 				restartPersistence: true,
-				optOut: true,
 				noRemoteStartup: true
 			},
+			restartConfirmation: { prompts, deferredSave: true, pendingAfterReopen: true, realContainerRecreated: true, runtimeSettingsVerified: true, windowSizePreserved: true },
 			agentPreferencesVerified: {
 				timezone: 'Europe/London',
 				memoryOptOutPersisted: true,
@@ -1765,6 +1801,7 @@ async function run(): Promise<Record<string, unknown>> {
 				backupScreenshot,
 				systemScreenshot,
 				agentSettingsScreenshot,
+				pendingRestartScreenshot,
 				chatAppsScreenshot,
 				narrowConsentScreenshot,
 				narrowConsentActionsScreenshot,
@@ -1783,6 +1820,7 @@ async function run(): Promise<Record<string, unknown>> {
 			homeRetained: process.env.FH_ADMIN_E2E_KEEP_HOME === 'true'
 		};
 	} finally {
+		dialog.showMessageBox = originalMessageBox;
 		await Promise.all(
 			portBlockers
 				.splice(0)

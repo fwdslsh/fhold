@@ -6,7 +6,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	activateComposeCommand,
 	beginRemoteEnable,
-	disableRemote,
 	remoteTool,
 	remoteBrowserUrls,
 	remoteConnection,
@@ -27,6 +26,8 @@ import {
 	isPortalName,
 	listProviders,
 	markInstalled,
+	mutateStack,
+	restartStatus,
 	parseComposePsRows,
 	parseStackConfig,
 	portalSecretConfigured,
@@ -50,6 +51,8 @@ import { AdminInstances } from './admin-instances.js';
 
 import { ADMIN_CHANNELS, type AdminSnapshot, type StackAction } from './admin-types.js';
 import {
+	confirmedAdminAction,
+	interruptionPrompt,
 	adminPortalMappings,
 	adminPortalTokens,
 	backupFromAdmin,
@@ -190,6 +193,7 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 		configPath: stackConfigFile(current.homeDir),
 		config: config.config,
 		services,
+		pendingRestart: restartStatus(current.homeDir),
 		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' }),
 		portalMappings: adminPortalMappings(current.homeDir),
 		portalSecrets: {
@@ -223,15 +227,10 @@ async function completeAdminReadiness(
 	readiness: AssistantReadiness
 ): Promise<void> {
 	if (!readiness.ok) return;
-	const moderatorUpdated = configureGuardianModeratorModel(
-		homeDir,
-		readiness.provider,
-		readiness.model
-	);
-	markInstalled(homeDir);
-	const config = readStackConfig(homeDir);
-	if (!config.ok) throw new Error(config.error);
-	if (moderatorUpdated && config.config.gateway.enabled) await runAdminAction('restart');
+	mutateStack(homeDir, () => {
+		configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
+		markInstalled(homeDir);
+	});
 }
 
 export function registerAdminIpc(): void {
@@ -286,6 +285,8 @@ export function registerAdminIpc(): void {
 			return { tool, stage: 'connection', output, running: false, enabled: true };
 		}
 		if (input.action === 'enable') {
+			if (input.restartConfirmed !== true)
+				throw new Error('Confirm the possible container restarts before remote setup.');
 			if (remoteStarting || activeRemote?.session.snapshot().running)
 				throw new Error('Finish or cancel the current remote setup first.');
 			if (input.sandbox !== undefined && !isCodexSandbox(input.sandbox))
@@ -311,8 +312,12 @@ export function registerAdminIpc(): void {
 			}
 		}
 		if (input.action === 'disable') {
-			await disableRemote(current, tool);
-			return { tool, stage: 'disabled', output: '', running: false, enabled: false };
+			const read = readStackConfig(current.homeDir);
+			if (!read.ok) throw new Error(read.error);
+			const config = structuredClone(read.config);
+			config.assistant[tool === 'codex' ? 'codexRemote' : 'claudeRemote'] = false;
+			saveAdminConfig(current.homeDir, config, read.config);
+			return { tool, stage: 'saved', output: '', running: false, enabled: false };
 		}
 		if (
 			!activeRemote ||
@@ -374,11 +379,20 @@ export function registerAdminIpc(): void {
 		saveAdminConfig(current.homeDir, parsed.config, baseline.config);
 		return adminSnapshot();
 	});
-	handleAdmin(ADMIN_CHANNELS.action, (_event, action: unknown) => {
-		if (action !== 'start' && action !== 'restart' && action !== 'stop') {
-			throw new Error('Invalid stack action');
-		}
-		return runAdminAction(action);
+	handleAdmin(ADMIN_CHANNELS.confirmRestart, async (event, action: unknown) => {
+		const options = {
+			...interruptionPrompt(action),
+			type: 'question' as const,
+			defaultId: 0,
+			cancelId: 0,
+			noLink: true
+		};
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+		return result.response === 1;
+	});
+	handleAdmin(ADMIN_CHANNELS.action, (_event, input: unknown) => {
+		return runAdminAction(confirmedAdminAction(input));
 	});
 	handleAdmin(ADMIN_CHANNELS.logs, async (_event) => {
 		const current = state();
@@ -551,9 +565,7 @@ export function registerAdminIpc(): void {
 		const configured = portalSecretConfigured(current.homeDir, input.portal);
 		const { botToken, appToken } = adminPortalTokens(value, configured);
 		savePortalTokens(current.homeDir, { portal: input.portal, botToken, appToken });
-		return config.config.portals[input.portal].enabled
-			? runAdminAction('restart')
-			: adminSnapshot();
+		return adminSnapshot();
 	});
 	handleAdmin(ADMIN_CHANNELS.backup, (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid backup request');

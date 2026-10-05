@@ -16,6 +16,7 @@ import {
 	showPortalTokenForm
 } from '../admin/connections.js';
 import { bindConfigurationEvents } from '../admin/configuration.js';
+import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import { endpoint, isHealthy, promptVisible } from '../admin/model.js';
 import { bindPreferencesEvents, renderPreferences } from '../admin/preferences.js';
 import {
@@ -574,7 +575,9 @@ describe('Admin static security boundary', () => {
 		selector('[data-remote-enable], [data-remote-connect], [data-codex-recall-review]', button);
 		let calls = 0;
 		let answer: unknown;
+		let confirmed = false;
 		state.api = {
+			confirmRestart: async () => confirmed,
 			remote: async (request: { action: string; input?: string }) => {
 				calls++;
 				if (request.action === 'input') {
@@ -599,6 +602,11 @@ describe('Admin static security boundary', () => {
 		await control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(calls).toBe(0);
 		control('remote-trust').checked = true;
+		await control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls).toBe(0);
+		expect(control('remote-stage').textContent).toContain('postponed');
+		expect(state.operationInFlight).toBe(false);
+		confirmed = true;
 		await control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(control('remote-stage').textContent).toBe('Native setup prerequisite failed.');
 		expect(state.operationInFlight).toBe(false);
@@ -738,6 +746,46 @@ describe('Admin static security boundary', () => {
 });
 
 describe('Admin renderer behavior', () => {
+	it('keeps pending changes visible when restart is postponed, refreshed or navigation changes', async () => {
+		state.currentSnapshot = {
+			phase: 'ready', services: [{ name: 'assistant', state: 'running', health: 'healthy' }],
+			pendingRestart: { required: true }
+		};
+		let applies = 0;
+		state.api = {
+			confirmRestart: async () => false,
+			action: async () => { applies++; }
+		};
+		renderRestartStatus(state.currentSnapshot);
+		await offerRestart();
+		expect(applies).toBe(0);
+		expect(control('pending-restart').hidden).toBe(false);
+		expect(control('pending-restart-title').textContent).toBe('Pending restart');
+		showView('system');
+		expect(control('pending-restart').hidden).toBe(false);
+		renderRestartStatus(structuredClone(state.currentSnapshot));
+		expect(control('pending-restart').hidden).toBe(false);
+	});
+
+	it('applies only after confirmation, retains the alert on failure, and handles stopped instances', async () => {
+		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true } };
+		const calls: unknown[] = [];
+		state.api = {
+			confirmRestart: async (action) => { calls.push(action); return true; },
+			action: async (...args) => { calls.push(args); throw new Error('Startup failed'); },
+			snapshot: async () => { throw new Error('Docker unavailable'); }
+		};
+		renderRestartStatus(state.currentSnapshot);
+		expect(control('apply-pending-restart').textContent).toBe('Start to apply');
+		await offerRestart();
+		expect(calls).toEqual(['start', ['start', true]]);
+		expect(control('pending-restart').hidden).toBe(false);
+		state.api.action = async (...args) => { calls.push(args); return { ok: true }; };
+		await requestStackAction('restart');
+		expect(calls.at(-1)).toEqual(['restart', true]);
+		renderRestartStatus({ services: [], pendingRestart: { required: false } });
+		expect(control('pending-restart').hidden).toBe(true);
+	});
 	it('groups settings by task and removes the duplicate overview catalog', () => {
 		expect(html).not.toContain('Things to try');
 		expect(html).not.toContain('choice-grid');

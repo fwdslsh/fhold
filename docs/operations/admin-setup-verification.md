@@ -23,6 +23,15 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
+The save/apply journey postpones a settings restart, checks that the actual
+container ID and runtime environment remain unchanged, reopens the instance,
+and checks that the pending banner survives. After confirmation it verifies a
+new healthy container, the saved runtime settings and the cleared banner. Only
+the human response to the native dialog is simulated; persistence, IPC and Docker
+are real. Every expected prompt is accounted for, and Escape/default choice must
+postpone. Unit tests also cover failed activation, failed image verification,
+settings edited during activation and live credential changes that need no restart.
+
 Linux needs an accessible display or Xvfb and a compatible Electron runtime.
 Use native Node.js 22.12+ for the launcher/tooling. The E2E launcher invokes
 Electron's installed official `install.js` before reading its runtime path;

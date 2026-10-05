@@ -4,6 +4,35 @@ import {
  isPortalName, readPortalCredentialMap, readStackConfig, planRestore, saveStackIntent,
  type PortalName, type StackConfig
 } from '@fhold/lib';
+import type { StackAction } from './admin-types.js';
+
+export function interruptionPrompt(action: unknown) {
+	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup'].includes(action))
+		throw new Error('Invalid restart confirmation request.');
+	if (action === 'remote-setup') return {
+		message: 'Continue remote setup?',
+		detail: 'Setup may restart containers before and after native sign-in. Active work and connections may be interrupted, and all saved settings will be applied. Your data is kept. You can cancel now and set this up later.',
+		buttons: ['Set up later', 'Continue setup']
+	};
+	if (action === 'stop') return {
+		message: 'Stop this instance?',
+		detail: 'Active work and connections will be interrupted. Your data and saved settings are kept.',
+		buttons: ['Cancel', 'Stop now']
+	};
+	return {
+		message: action === 'start' ? 'Start and apply saved settings?' : 'Restart and apply saved settings?',
+		detail: 'All saved settings will be applied. Running containers may be recreated, interrupting active work and connections. Your data is kept. You can leave this for later.',
+		buttons: [action === 'start' ? 'Start later' : 'Restart later', action === 'start' ? 'Start now' : 'Restart now']
+	};
+}
+
+export function confirmedAdminAction(value: unknown): StackAction {
+	const input = value as { action?: unknown; confirmed?: unknown } | null;
+	if (!input || typeof input !== 'object' || typeof input.action !== 'string' || !['start', 'restart', 'stop'].includes(input.action))
+		throw new Error('Invalid stack action.');
+	if (input.confirmed !== true) throw new Error('Confirm the container action before continuing.');
+	return input.action as StackAction;
+}
 
 export function isAdminPageUrl(
 	value: unknown,
