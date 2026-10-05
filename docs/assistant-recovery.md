@@ -24,7 +24,77 @@ host portable backup. See [managing fhold](managing-fhold.md) for those flows.
 
 ## Runtime configuration
 
-These are standalone Assistant inputs, not cloud-management settings in CLI/Admin.
+Standalone deployments supply the image inputs below. Managed CLI/Admin installs
+store the same non-secret intent in `state/stack.json` under `recovery`, selection
+in `config/recovery/include.json`, and Blob credentials in the private file
+`state/secrets/fhold_recovery_connection_string`. No cloud management is included.
+
+### Configure through Admin or CLI
+
+Open **System → Ephemeral container support**, the last section after installation
+details, recent logs and import/export. This is the Admin name for the same runtime
+recovery feature; environment variables and `fhold recovery` commands are unchanged.
+Enable **automatic checkpoints and restore**, then choose
+a private local/mounted directory outside the instance home or an existing
+`azblob://account/container/prefix`. The stable instance ID defaults from the
+saved instance name. Blob uses a private connection-string file or the deployment's
+explicit managed identity, never a host CLI account. Saving does not initialize
+storage or restart containers; a persistent alert records unapplied settings.
+
+For a **genuinely new** namespace: save, stop the instance through its confirmed
+lifecycle action, and choose **Initialize new destination**. Confirmation is
+required, existing namespaces are refused, and native writers remain stopped.
+Then start normally and **Check checkpoint status**. Initialization is not a
+checkpoint. For an **existing** namespace, never initialize again: startup
+validates/restores before writers run. **Validate / restore same instance** does
+that offline while stopped; it does not erase surviving data or select an older
+rollback point. Stale ownership still requires separate external verification.
+
+**Inspect saved coverage** is read-only. **Advanced recovery settings** exposes
+additional paths/SQLite and exclusions/required mounts/discovery. These are
+literal container paths, not host names; listing them does not mount a drive.
+The native engine still checks databases, mounts, versions and accepted authority.
+Established ownership changes require the stopped-writer/new-namespace transition
+below, not a checkbox override.
+
+The CLI uses the same shared operations:
+
+```sh
+fhold --name my-agent recovery configure --directory /absolute/private-checkpoints
+# Blob alternative; the input file must be mode 600/400:
+fhold --name my-agent recovery credential --from /absolute/private-connection-string
+fhold --name my-agent recovery configure --to azblob://account/container/my-agent
+fhold --name my-agent recovery show
+fhold --name my-agent stop
+fhold --name my-agent recovery init --confirm-new-instance  # new namespaces ONLY
+fhold --name my-agent start
+fhold --name my-agent recovery status
+fhold --name my-agent recovery inspect
+```
+
+`recovery configure --selection-file /absolute/policy.json` saves a reviewed
+selection. `--interval`, `--max-unsaved` and `--timeout` adjust bounded timing;
+`--instance-id` supplies stable identity. `--managed-identity [--client-id UUID]`
+selects externally supplied identity; `--connection-string` selects the private
+file. `recovery disable` saves an off choice for next restart and keeps all data,
+credentials and checkpoints. `recovery restore --confirm-stopped` validates and
+restores offline, not a portable archive.
+
+Update earlier managed homes with the current CLI before configuring this
+surface, so their allowlisted Compose file has the recovery mounts. Saving never
+updates an old image implicitly. Activation and offline operations also require
+the matching Assistant image's mixed-storage recovery capability; an older image
+is refused before containers or checkpoints are changed. Compose derives termination grace from the
+operation budget (297 seconds by default), mounts the backup root at `/recovery`,
+the policy read-only at `/run/fhold-recovery/include.json`, and private staging/
+receipts from `data/recovery` at
+`/run/fhold-recovery-state/<destination-and-ID-digest>`. Changing a destination
+does not copy or fabricate native authority.
+
+Recovery protects the **Assistant**, not deployment intent, managed system policy,
+Guardian/portal databases or independently persistent drives. Preserve those
+separately. Recovery credentials and selection files are not portable backup
+members. A different home or image does not make a checkpoint portable.
 
 | Input | Default / purpose |
 | --- | --- |
@@ -207,9 +277,14 @@ must be reviewed explicitly rather than advertised as a perfect home clone.
 
 Restore validates identity, versions, member hashes, SQLite integrity and path
 containment before admitting writers. An empty replacement layout restores
-manifest membership, including deletions. Surviving local state must not be
-silently overwritten by an older remote point; unresolved authority fails
-closed. Corruption does not authorize automatic rollback to an older generation.
+manifest membership, including deletions. With an exact surviving recovery
+receipt, a partially ephemeral layout can restore missing checkpoint members,
+including registered SQLite databases, while preserving every surviving local
+file or database, which may contain newer writes. This is not permission to
+adopt unreceipted local state, ignore orphan WAL/SHM files or overwrite existing
+files. A database disappearing during an active capture still blocks publication.
+Unresolved authority fails closed. Corruption does not authorize automatic
+rollback to an older generation.
 
 Container recovery retains the existing native roots (`/home/fhold`,
 `/stash`, `/work`, `/opt/akm/data`, `/etc/akm`). Explicit additional paths restore

@@ -88,6 +88,8 @@ const REQUIRED_DIRS = [
 	'config/portal/discord',
 	'config/portal/slack',
 	'config/stack',
+	'config/recovery',
+	'data/recovery',
 	'data/assistant',
 	'data/assistant/.cache/opencode',
 	'data/assistant/.config/opencode',

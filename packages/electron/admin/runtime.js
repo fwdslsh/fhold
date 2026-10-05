@@ -2,6 +2,7 @@ import { friendlyServiceName, isHealthy, isRunning } from './model.js';
 import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { renderRestartStatus, requestStackAction } from './restart.js';
+import { updateRecoveryFields } from './recovery.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
 export function renderPhase(phase) {
@@ -31,6 +32,7 @@ export function renderRuntimeControls(snapshot) {
 	byId('restart-stack').disabled = state.operationInFlight || !running;
 	byId('stop-stack').disabled = state.operationInFlight || snapshot.services.length === 0;
 	renderRestartStatus(snapshot);
+	updateRecoveryFields();
 }
 
 export function renderServices(snapshot) {
@@ -149,6 +151,7 @@ export function bindRuntimeEvents() {
 		}
 		const config = structuredClone(state.currentConfig);
 		config.deployment.projectName = byId('install-instance-name').value.trim();
+		if (config.recovery) config.recovery.instanceId = config.deployment.projectName;
 		if (!automaticPorts) {
 			config.assistant.port = assistantPort;
 			config.gateway.port = gatewayPort;

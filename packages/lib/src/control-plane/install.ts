@@ -18,6 +18,7 @@ import {
 } from './stack-config.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { chooseInstallPorts } from './install-ports.js';
+import { defaultRecoverySettings } from './recovery-config.js';
 
 /** Shared initialization; frontends own Docker/provider prompts and asset resolution. */
 export async function installHome(
@@ -52,6 +53,8 @@ export async function installHome(
 		}
 	}
 	if (options.name !== undefined) parsed.config.deployment.projectName = options.name;
+	if (options.config === undefined)
+		parsed.config.recovery = defaultRecoverySettings(parsed.config.deployment.projectName);
 	const check = parseStackConfig(parsed.config);
 	if (!check.ok) throw new Error(check.error);
 	const config = (options.automaticPorts ?? options.config === undefined)

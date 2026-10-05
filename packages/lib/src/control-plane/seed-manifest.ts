@@ -28,6 +28,7 @@ export const MANAGED_FILES = [
 
 export const SEEDED_FILES = [
 	'config/stack/custom.compose.yml',
+	'config/recovery/include.json',
 	'config/assistant/.gitignore',
 	'config/assistant/opencode.json',
 	'config/assistant/persona.md',

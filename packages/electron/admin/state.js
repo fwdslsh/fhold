@@ -30,6 +30,7 @@ export const managedFormIds = [
 	'connections-form',
 	'access-form',
 	'network-form',
+	'runtime-recovery-form',
 	'preferences-form'
 ];
 
@@ -73,6 +74,6 @@ export const viewMeta = {
 	system: {
 		kicker: 'SYSTEM',
 		title: 'System',
-		description: 'Backups, logs, and installation details.'
+		description: 'Installation details, logs, import / export, and ephemeral container support.'
 	}
 };

@@ -13,6 +13,7 @@ import {
 	writeFileAtomic
 } from './foundation.js';
 import { FH_RELEASE_VERSION } from './release.js';
+import { defaultRecoverySettings, parseRecoverySettings, recoveryDirectory, recoveryEnvironment, recoveryStopGrace, type RecoverySettings } from './recovery-config.js';
 
 export { stackConfigFile } from './foundation.js';
 export { isInstanceName } from './foundation.js';
@@ -63,6 +64,7 @@ export type StackConfig = {
 		codexSandbox: (typeof CODEX_SANDBOX_MODES)[number];
 		claudeRemote: boolean;
 	};
+	recovery: RecoverySettings;
 	gateway: {
 		enabled: boolean;
 		bindAddress: string;
@@ -138,6 +140,7 @@ export function defaultStackConfig(homeDir?: string): StackConfig {
 			codexSandbox: 'workspace-write',
 			claudeRemote: true
 		},
+		recovery: defaultRecoverySettings(namedHome ? name : `fhold-${suffix}`),
 		gateway: {
 			enabled: false,
 			bindAddress: DEFAULT_BIND_ADDRESS,
@@ -358,6 +361,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			'version',
 			'deployment',
 			'assistant',
+			'recovery',
 			'gateway',
 			'credentials',
 			'portals'
@@ -432,6 +436,9 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 		return { ok: false, error: 'every portal credential must reference a configured credential' };
 	}
 
+	let recovery: RecoverySettings;
+	try { recovery = parseRecoverySettings(root.recovery, deployment.projectName); }
+	catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid recovery settings.' }; }
 	const config: StackConfig = {
 		product: 'fhold',
 		version: STACK_CONFIG_VERSION,
@@ -453,6 +460,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			codexSandbox,
 			claudeRemote
 		},
+		recovery,
 		gateway: {
 			enabled: gateway.enabled || discord.enabled || slack.enabled,
 			bindAddress: gateway.bindAddress,
@@ -516,6 +524,8 @@ export function stackConfigEnv(config: StackConfig): Record<string, string> {
 	if (config.portals.slack.enabled) addons.push('slack');
 
 	return {
+		...Object.fromEntries(Object.entries(recoveryEnvironment(config.recovery)).map(([key, value]) => [key === 'AZURE_CLIENT_ID' ? 'FH_RECOVERY_CLIENT_ID' : key, value])),
+		FH_ASSISTANT_STOP_GRACE: `${recoveryStopGrace(config.recovery)}s`,
 		FH_PROJECT_NAME: config.deployment.projectName,
 		// Existing Compose names may contain underscores or exceed a DNS label.
 		// Keep their project identity; only the derived hostname is normalized.
@@ -553,6 +563,7 @@ export function writeStackConfig(homeDir: string, value: StackConfig): StackConf
 	if (!parsed.ok) throw new Error(parsed.error);
 
 	const config = parsed.config;
+	recoveryDirectory(homeDir, config.recovery);
 	writeFileAtomic(stackConfigFile(homeDir), `${JSON.stringify(config, null, 2)}\n`, 0o600);
 	writeCredentialRegistry(homeDir, config);
 

@@ -13,6 +13,39 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
+## Alpha.6 changes and local evidence
+
+`0.1.2610050652-alpha.6` adds managed recovery configuration and stopped-writer
+operations to CLI/Admin, plus a simpler System view with Installation details,
+Recent logs, Import / export and Ephemeral container support in that order.
+The two data-transfer features retain separate contracts; recovery is opt-in.
+
+Local Linux x64 verification of the implementation before release:
+
+- All 576 source tests passed with loopback socket and native-history checks
+  enabled, with no failures or skips. Type checks, lint, shell syntax,
+  all-profile Compose and secret/mount audits passed.
+- The actual Electron/Docker flow covered directory initialization, live status,
+  a fresh accepted checkpoint, deferred changes and persistent pending activation,
+  confirmed restore and true loss of custom files and SQLite outside persistent
+  mounts. Restoring missing members preserved surviving native state.
+- Setup, export/import omission acknowledgments, independent instances, compact
+  System layout and stable window sizing were exercised. Automated accessibility
+  checks covered normal and narrow layouts and 200% zoom. Native confirmation
+  responses were simulated; the UI, IPC, Compose and recovery engine were real.
+- Concurrent recovery status publication covered 1,200 reads during 300 atomic
+  replacements. Malformed, oversized, symlink and non-regular status files remained
+  rejected; capture-time file mutation checks were not relaxed.
+- All three standard local images built. Native directory and Blob-emulator
+  recovery passed, including repeated cold restore, as did packaged x64 Admin
+  startup. These are synthetic recovery/account fixtures, not live hosted
+  account renewal or provider readiness claims.
+
+Each published artifact still requires its own GitHub workflow gates and
+post-publication checks. Live Blob storage, network-mount behavior, remote
+client reconnection and measured RPO/RTO remain deployment-specific qualification.
+ARM64 Admin startup is not qualified by the local x64 tests.
+
 ## Alpha.5 changes and local evidence
 
 `0.1.2610050129-alpha.5` includes Admin's confirmed/deferred container activation and

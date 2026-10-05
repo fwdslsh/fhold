@@ -31,6 +31,7 @@ const api: AdminApi = {
 	mapPortalUser: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.mapPortalUser, value),
 	portalToken: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.portalToken, value),
 	backup: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.backup, value),
+	recovery: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.recovery, value),
 	restoreData: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.restoreData, value)
 };
 

@@ -21,6 +21,7 @@ The following paths are relative to that instance's home, not `~/fhold`:
 |---|---|---|
 | `system/` | fhold release | Exact managed OpenCode and Compose files |
 | `config/` | Operator | Seed-once OpenCode, Codex, Claude, AKM, and Compose settings |
+| `config/recovery/include.json` | Operator | Same-instance recovery selection/mount policy, not a portable backup member |
 | `knowledge/` | Operator and AKM | Knowledge, task sources, scoped user environment, provider auth |
 | `workspace/` | Operator | Trusted local agent workspace |
 | `state/stack.json` | Control plane | Versioned stack intent |
@@ -33,6 +34,7 @@ The following paths are relative to that instance's home, not `~/fhold`:
 | `config/guardian/oauth-identities.json` | Operator | Exact OAuth issuer/subject to credential maps |
 | `state/secrets/` | Control plane/operator | File-backed runtime credentials |
 | `data/` | Containers | Assistant home, AKM state, portal SQLite files, audit logs |
+| `data/recovery/` | Recovery worker | Private destination/identity-scoped receipts and staging, never portable content |
 
 Updates replace only the allowlisted managed files in `seed.ts`. They seed
 operator files only when absent and never synchronize or delete whole directories.
@@ -68,6 +70,12 @@ The control plane writes or preserves these non-secret values in
 | `SLACK_ALLOWED_CHANNELS` | Derived Slack channel scope |
 | `SLACK_ALLOWED_USERS`, `SLACK_BLOCKED_USERS` | Derived Slack user scope |
 | `FH_SETUP_COMPLETE` | Install completion marker |
+| `FH_RECOVERY_URL`, `FH_INSTANCE_ID` | Derived recovery enable/destination and stable identity; file destinations use `/recovery` inside the container |
+| `FH_RECOVERY_DIRECTORY` | Exact operator backup bind root; off/Blob use an unused private placeholder under `state/` |
+| `FH_RECOVERY_INTERVAL_SECONDS`, `FH_RECOVERY_MAX_UNSAVED_SECONDS`, `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | Bounded capture/health/operation settings from recovery intent |
+| `FH_RECOVERY_INCLUDE_FILE`, `FH_RECOVERY_STATE_DIR` | Fixed policy and namespace-scoped private-state container locations |
+| `FH_RECOVERY_CREDENTIAL_FILE`, `FH_RECOVERY_CLIENT_ID` | Private file path or optional managed identity UUID, never a credential value |
+| `FH_ASSISTANT_STOP_GRACE` | Derived complete writer/final-recovery shutdown budget |
 
 Project, namespace and image pins belong to `deployment` in StackConfig.
 `FH_ASSISTANT_VERSION`, `FH_GUARDIAN_VERSION` and `FH_PORTAL_VERSION` are derived
@@ -95,6 +103,7 @@ file. The same sanitized environment is used for preflight and activation.
 | `discord_bot_token` | Discord adapter |
 | `slack_bot_token` | Slack adapter |
 | `slack_app_token` | Slack adapter |
+| `fhold_recovery_connection_string` | Assistant recovery only; private standard Blob credential file |
 
 Named Guardian keys live at `state/credentials/<username>/key`; generated keys
 contain 32 random bytes encoded as base64url. Guardian mounts the complete
@@ -135,8 +144,10 @@ bypasses Guardian.
 | `data/akm/data` | `/opt/akm/data` | read/write |
 | `workspace` | `/work` | read/write |
 
-Assistant receives only the OpenCode server password. It receives no Guardian,
-portal, bot, Docker, or host-admin credential.
+Assistant's native API credential is the OpenCode server password. It receives
+no Guardian, portal, bot, Docker, or host-admin credential. Optional recovery uses
+a separate storage-only connection-string file; it is not an ingress credential
+and its value never appears in environment settings.
 
 The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
 authentication uses username `user`. `/fhold-bundle` is an image-baked,
@@ -150,6 +161,15 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 `FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
+
+Managed recovery additionally binds `config/recovery/include.json` read-only at
+`/run/fhold-recovery/include.json`, `data/recovery` read/write at
+`/run/fhold-recovery-state`, and the exact selected private backup directory at
+`/recovery`. The destination must be outside the instance home and cannot be its
+parent; links are refused before saving. Off/Blob mode uses an empty private bind
+placeholder. Existing operator directories are not chmodded. These mounts and
+storage-only secret are audited; overlays cannot substitute them or lower the
+enabled recovery shutdown budget. No new service is introduced.
 
 Standalone recovery optionally uses externally supplied
 `FH_RECOVERY_INCLUDE_FILE` for additional paths/SQLite and versioned mount policy.

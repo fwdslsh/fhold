@@ -4,7 +4,7 @@ A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Linux alpha: [0.1.2610050129-alpha.5](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050129-alpha.5).
+Linux alpha: [0.1.2610050652-alpha.6](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050652-alpha.6).
 Download a standalone CLI or optional Admin AppImage for x64 or ARM64.
 Fresh installs use the matching public [Docker Hub images](https://hub.docker.com/r/fwdslsh/fhold-assistant)
 automatically. No npm installation or Docker Hub account is required.
@@ -44,10 +44,13 @@ directory, then restart. Updates preserve these operator-owned files; managed
 policies are read-only inside the container. See [harness configuration](docs/managed-harness-configuration.md)
 for paths, permissions, hooks and the alpha.3 upgrade considerations.
 
-For externally managed ephemeral containers, opt-in [Assistant recovery](docs/assistant-recovery.md)
-uses directory or Blob destinations while working SQLite stays local. Its
-independent backup timer keeps running when user scheduling is disabled. It
-adds no cloud management tools, mandatory sidecars or Admin settings.
+For ephemeral containers, opt-in [Assistant recovery](docs/assistant-recovery.md)
+uses directory or Blob destinations while working SQLite stays local. Configure
+managed instances through Admin's **System → Ephemeral container support** or
+`fhold recovery`; external deployments use the same image-native contract.
+Its independent checkpoint timer keeps running when user scheduling is disabled.
+It adds no cloud management tools or mandatory sidecars. **System → Import / export**
+is the separate manual, reviewed-content transfer path for fresh installations.
 
 ## Develop
 

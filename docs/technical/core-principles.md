@@ -203,7 +203,14 @@ The same versioned selection governs backup/restore; hashes bind it to accepted
 checkpoints. Additions preserve prior state; narrowing an accepted selection fails
 before claiming or writing targets. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
-No host management schema, backup plugin registry or cloud-specific selector is added.
+CLI/Admin expose the same generic settings through StackConfig and an operator
+policy file, not another backup engine, format, service, plugin registry or cloud
+management layer. Saving is deferred. Initialization/offline restore require
+confirmation and stopped local writers; status/coverage inspection are read-only.
+Host tools and the image share the selection normalizer. Blob credentials are
+private files granted only to Assistant, never environment values or portable
+content. Compose adds exact directory/policy/private-state mounts and derives
+adequate termination grace without widening native or ingress authority.
 Versioned recovery policy may exclude directory roots, require independent mount
 roots and opt into recognized network-mount discovery. Ordinary local volumes
 stay covered. Excluded roots are never traversed/written; missing required mounts
@@ -219,8 +226,11 @@ live locks. This does not relax the prohibition on arbitrary links.
 
 Explicit initialization is one-time; an established missing/corrupt/incompatible
 head cannot become a blank agent. Valid newer surviving local state is preserved.
-Partial restores block native startup. Known initialized databases cannot silently
-disappear. Routine capture does not stop the apps, and separately captured databases
+An exact surviving receipt permits restoring only missing accepted checkpoint
+members after ephemeral storage loss, preserving newer surviving local files and
+databases. Unreceipted partial state and orphan WAL/SHM files remain blocked.
+Incomplete restore journals block native startup. Known initialized databases
+cannot silently disappear during active capture. Routine capture does not stop the apps, and separately captured databases
 and files are not one application-wide transaction. Readiness includes ownership
 and accepted-checkpoint age. The engine owns the accepted publication clock;
 health does not maintain a separate timestamp that can diverge after publication.

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.2610050652-alpha.6 — simpler Admin and managed ephemeral support
+
+Admin's System view now presents four compact, collapsed sections in order:
+Installation details, Recent logs, Import / export, and Ephemeral container
+support. Import/export explicitly transfers reviewed content into a fresh
+installation; ephemeral support restores the same instance's runtime state,
+including native history and account configuration. Existing CLI commands and
+archive formats are unchanged.
+
+Admin and CLI can configure directory or Blob checkpoints for managed instances,
+inspect checkpoint status, initialize an explicitly confirmed fresh namespace,
+and restore while application writers are stopped. Configuration changes remain
+pending until confirmed activation. Recovery is opt-in, credentials remain
+private, and no cloud administration, sidecar, startup installer or new service
+is added. See [configuration and safe transitions](docs/assistant-recovery.md).
+
+Recovery now fills missing ephemeral files and registered SQLite databases when
+the exact accepted receipt survives on a persistent mount, without replacing
+newer surviving state. Unreceipted partial state still fails closed. Reading an
+atomically published recovery status no longer falsely fails when its previous
+inode is replaced; strict snapshot capture checks are unchanged.
+
+Includes selection and lifecycle regressions, a concurrent status publication
+test, and real Electron/Docker setup, import/export and cold-recovery checks.
+Fresh CLI/Admin installs use the matching public Docker Hub images. Existing
+homes, names, ports, credentials and policies are preserved during upgrade.
+Claude/Codex remote workers remain experimental; ARM64 Admin startup remains
+unqualified. Previously reviewed scoped dependency exceptions remain disclosed.
+
 ## 0.1.2610050129-alpha.5 — mount-aware recovery and deferred Admin restarts
 
 Runtime recovery now supports explicit directory exclusions, required independent

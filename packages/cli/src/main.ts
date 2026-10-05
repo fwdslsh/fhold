@@ -71,6 +71,7 @@ const subCommands = {
 	setup: () => import('./commands/setup.js').then((module) => module.default),
 	provider: () => import('./commands/provider.js').then((module) => module.default),
 	backup: () => import('./commands/backup.js').then((module) => module.default),
+	recovery: () => import('./commands/recovery.js').then((module) => module.default),
 	history: () => import('./commands/history.js').then((module) => module.default),
 	connect: () => import('./commands/connect.js').then((module) => module.default),
 	remote: () => import('./commands/remote.js').then((module) => module.default),
@@ -96,6 +97,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
 	backup:
 		'fhold backup --to <empty-directory> [--include-provider-auth] [--include-user-env] [--include-portal-maps] [--include-oauth]',
+	recovery: 'fhold recovery configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
 	history:
 		'fhold history export --from <source-home> --image <source-assistant-image> --to <new-private-archive> [--runtime <resolved-opencode-data-directory>] | restore --from <archive> --directory-map <file> [--archive-interrupted] [--apply --same-instance]',
 	connect:

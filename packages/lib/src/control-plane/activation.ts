@@ -9,7 +9,7 @@ import { recordAppliedRuntime, recordRuntimeActivation, restartStatus, runtimeRe
 
 /** Older images must not receive a policy that disables their only hook source. */
 export async function assertManagedHarnessImage(resolved: unknown, prepareMissing?: () => Promise<void>): Promise<void> {
-	const assistant = (resolved as { services?: { assistant?: { image?: string; volumes?: { target?: string }[] } } }).services?.assistant;
+	const assistant = (resolved as { services?: { assistant?: { image?: string; volumes?: { target?: string }[]; environment?: Record<string, unknown> } } }).services?.assistant;
 	// Older installed Compose files keep their original unmanaged hook workflow.
 	if (!assistant?.volumes?.some((mount) => mount.target === '/etc/codex/requirements.toml')) return;
 	if (!assistant.image) throw new Error('Assistant image is missing from the resolved configuration.');
@@ -22,6 +22,11 @@ export async function assertManagedHarnessImage(resolved: unknown, prepareMissin
 	if (!image.ok) throw new Error(`Assistant image ${assistant.image} is not available. Pull or build the matching image before starting this instance.`);
 	if (image.stdout.trim() !== '1')
 		throw new Error(`Assistant image ${assistant.image} does not support managed harness policy. Select the matching fhold release image (or rebuild your local image) before updating or starting this instance. Existing containers have not been restarted.`);
+	if (assistant.environment?.FH_RECOVERY_URL) {
+		const recovery = await runDocker(['image', 'inspect', '--format', '{{index .Config.Labels "dev.fwdslsh.fhold.recovery-partial-resume"}}', assistant.image]);
+		if (!recovery.ok || recovery.stdout.trim() !== '1')
+			throw new Error(`Assistant image ${assistant.image} does not support managed mixed-storage recovery. Select the matching release image before enabling recovery. Existing containers and checkpoints were not changed.`);
+	}
 }
 
 export async function activateComposeCommand(

@@ -23,6 +23,14 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
+System has one view with four collapsed sections, in order: **Installation
+details**, **Recent logs**, **Import / export**, **Ephemeral container support**.
+Static and rendered checks verify this order, the names, matching setup import
+labels, keyboard traversal and navigation without duplicate backup/diagnostic
+view containers. Import/export still uses the existing portable format and
+shared backup/restore operations; ephemeral support still uses the native
+same-instance recovery engine. The rename does not expand either feature's scope.
+
 The save/apply journey postpones a settings restart, checks that the actual
 container ID and runtime environment remain unchanged, reopens the instance,
 and checks that the pending banner survives. After confirmation it verifies a
@@ -31,6 +39,34 @@ the human response to the native dialog is simulated; persistence, IPC and Docke
 are real. Every expected prompt is accounted for, and Escape/default choice must
 postpone. Unit tests also cover failed activation, failed image verification,
 settings edited during activation and live credential changes that need no restart.
+
+The managed recovery journey uses the normal Admin IPC and shipping Compose
+assets, with the native `fhold-recovery` command from the selected image. It
+checks the portable/runtime distinction, saves an opt-in private directory and
+custom file/SQLite coverage without restarting or initializing, refuses offline
+operations while writers run, and verifies default-cancel native confirmations.
+After a confirmed stop it initializes an unused namespace, inspects coverage,
+starts normally and verifies a fresh **accepted checkpoint**, not merely a PID.
+It then removes the running containers through normal Stop, validates recovery
+offline, starts fresh containers and verifies restored custom account-style
+files and SQLite integrity/content. These custom paths are under the disposable
+container's `/tmp`, outside every persistent bind mount: the test must actually
+lose them on Stop and recover them from the checkpoint, not merely read a
+surviving host volume. The persistent native data and exact receipt survive,
+exercising mixed-storage recovery. Focused engine tests also preserve newer
+surviving files/databases and refuse unreceipted state, orphan WAL and corrupt
+objects before target writes. The second named agent remains independent.
+Window size must remain unchanged throughout. Reports and private checkpoints
+are retained separately from credentials. This local-directory qualification
+does not certify a real network filesystem, Blob account or vendor sign-in.
+
+Focused library/CLI tests cover arbitrary coverage lists, stale saves, optional
+earlier intent defaulting off, final instance identity, private storage credential
+presence without disclosure, no portable credential copy, persistent restart
+tracking, audited mounts/stop grace, and refusal to silently change accepted mount
+ownership. Paused, restarting and one-off project writers also block offline
+operations. Failed operator runs remove only their uniquely named container;
+cleanup uncertainty must be reported, never hidden as a successful restore.
 
 Linux needs an accessible display or Xvfb and a compatible Electron runtime.
 Use native Node.js 22.12+ for the launcher/tooling. The E2E launcher invokes

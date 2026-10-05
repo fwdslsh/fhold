@@ -33,15 +33,15 @@ export function renderRestorePlan(result, applied) {
 	const title = document.createElement('strong');
 	const detail = document.createElement('span');
 	if (applied) {
-		title.textContent = 'Portable files restored and verified.';
-		detail.textContent = `${result.copyCount} items copied. This is not complete runtime recovery: history and other unrestored data need separate acceptance. Tasks remain inactive.`;
+		title.textContent = 'Imported portable files verified.';
+		detail.textContent = `${result.copyCount} items copied. This does not restore native conversations, remote sign-ins or other unselected state. Tasks remain inactive.`;
 		summary.className = 'inline-status success';
 	} else if (result.conflicts > 0) {
-		title.textContent = `Restore preview found ${result.conflicts} conflict${result.conflicts === 1 ? '' : 's'}.`;
+		title.textContent = `Import preview found ${result.conflicts} conflict${result.conflicts === 1 ? '' : 's'}.`;
 		detail.textContent = 'Choose a fresh destination or resolve the conflicts before applying.';
 		summary.className = 'inline-status error';
 	} else {
-		title.textContent = `${result.copyCount} item${result.copyCount === 1 ? '' : 's'} ready to restore.`;
+		title.textContent = `${result.copyCount} item${result.copyCount === 1 ? '' : 's'} ready to import.`;
 		detail.textContent = result.warnings.length
 			? `${result.warnings.length} warning${result.warnings.length === 1 ? '' : 's'} need review.`
 			: 'No conflicts or warnings were found.';
@@ -103,7 +103,7 @@ export function bindBackupEvents() {
 		event.preventDefault();
 		const destination = byId('backup-destination').value.trim();
 		const result = await operation(
-			'Creating backup',
+			'Exporting portable content',
 			() =>
 				state.api.backup({
 					destination,
@@ -112,7 +112,7 @@ export function bindBackupEvents() {
 					includePortalMaps: byId('backup-maps').checked,
 					includeOAuth: byId('backup-maps').checked
 				}),
-			'Portable backup created. Native conversation history is not included.'
+			'Export created. Native conversation history is not included.'
 		);
 		if (!result) return;
 		byId('backup-result').value = JSON.stringify(result, null, 2);
@@ -120,7 +120,7 @@ export function bindBackupEvents() {
 		byId('backup-summary').hidden = false;
 		byId('backup-summary').replaceChildren();
 		const title = document.createElement('strong');
-		title.textContent = `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} backed up.`;
+		title.textContent = `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} exported.`;
 		const detail = document.createElement('span');
 		detail.textContent = `Saved to ${destination}. Native history, runtime artifacts and external sources are not included.${result.warnings.length ? ` ${result.warnings.length} warnings need review.` : ''}`;
 		byId('backup-summary').append(title, detail);
@@ -140,9 +140,9 @@ export function bindBackupEvents() {
 	byId('preview-restore').addEventListener('click', async () => {
 		const signature = restoreSignature();
 		const result = await operation(
-			'Previewing restore',
+			'Previewing import',
 			() => state.api.restoreData(restoreInput(false)),
-			'Restore preview is ready for review.'
+			'Import preview is ready for review.'
 		);
 		if (!result) return;
 		renderRestorePlan(result, false);
@@ -167,9 +167,9 @@ export function bindBackupEvents() {
 		)
 			return;
 		const result = await operation(
-			'Applying restore',
+			'Applying import',
 			() => state.api.restoreData(restoreInput(true)),
-			'Restore applied. Your restored data is ready for review.'
+			'Import applied. Your imported data is ready for review.'
 		);
 		if (result) {
 			renderRestorePlan(result, true);

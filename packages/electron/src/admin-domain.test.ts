@@ -63,6 +63,9 @@ describe('Admin domain', () => {
 		}
 		expect(() => confirmedAdminAction({ action: ['start'], confirmed: true })).toThrow();
 		expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+		expect(interruptionPrompt('recovery-init').buttons[0]).toBe('Cancel');
+		expect(interruptionPrompt('recovery-init').detail).toContain('genuinely unused');
+		expect(interruptionPrompt('recovery-restore').detail).toContain('containers remain stopped');
 		expect(interruptionPrompt('remote-setup').detail).toContain('before and after native sign-in');
 		expect(() => interruptionPrompt(['restart'])).toThrow();
 	});

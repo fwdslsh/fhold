@@ -1,7 +1,7 @@
 {
   "name": "@fhold/guardian",
   "description": "Minimal MCP security gateway for a hosted fhold agent",
-  "version": "0.1.2610050129-alpha.5",
+  "version": "0.1.2610050652-alpha.6",
   "private": true,
   "license": "MIT",
   "type": "module",

@@ -39,6 +39,7 @@ import {
 	testAssistantReadiness,
 	savePortalTokens
 } from '@fhold/lib';
+import { recoverySnapshot, recoveryStatus, runRecoveryOperation, saveRecoverySettings, saveRecoveryCredential } from '@fhold/lib';
 import {
 	reviewCodexRecall,
 	changeCodexRecall,
@@ -159,7 +160,10 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	const installState = classifyInstall(candidate.homeDir);
 	if (installState === 'not_installed') {
 		const config = defaultStackConfig(candidate.homeDir);
-		if (instances.setupName) config.deployment.projectName = instances.setupName;
+		if (instances.setupName) {
+			config.deployment.projectName = instances.setupName;
+			config.recovery.instanceId = instances.setupName;
+		}
 		return {
 			installationReadiness: await ensureDockerReady(),
 			phase: 'not_installed',
@@ -187,6 +191,10 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 				health: row.health
 			}))
 		: [];
+	let recovery: ReturnType<typeof recoverySnapshot> | undefined;
+	let recoveryError: string | undefined;
+	try { recovery = recoverySnapshot(current.homeDir); }
+	catch { recoveryError = 'Recovery selection could not be read. Review config/recovery/include.json; no recovery settings were changed.'; }
 	return {
 		phase: installState === 'installed' ? 'ready' : 'setup_incomplete',
 		homeDir: current.homeDir,
@@ -194,6 +202,8 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 		config: config.config,
 		services,
 		pendingRestart: restartStatus(current.homeDir),
+		recovery,
+		recoveryError,
 		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' }),
 		portalMappings: adminPortalMappings(current.homeDir),
 		portalSecrets: {
@@ -496,9 +506,10 @@ export function registerAdminIpc(): void {
 			purpose !== 'backup' &&
 			purpose !== 'restore' &&
 			purpose !== 'instance' &&
+			purpose !== 'recovery' &&
 			purpose !== 'new-instance'
 		) {
-			throw new Error('Directory purpose must be instance, new-instance, backup or restore.');
+			throw new Error('Directory purpose must be instance, new-instance, backup, recovery or restore.');
 		}
 		const options: OpenDialogOptions = {
 			title:
@@ -506,17 +517,21 @@ export function registerAdminIpc(): void {
 					? 'Choose a folder for the new fhold instance'
 					: purpose === 'instance'
 						? 'Open a fhold folder'
-						: purpose === 'backup'
-							? 'Choose an empty backup directory'
-							: 'Choose an fhold backup',
+						: purpose === 'recovery'
+							? 'Choose a private checkpoint directory'
+							: purpose === 'backup'
+							? 'Choose an empty export directory'
+							: 'Choose an fhold export',
 			buttonLabel:
 				purpose === 'new-instance'
 					? 'Use this folder'
 					: purpose === 'instance'
 						? 'Open instance'
-						: purpose === 'backup'
-							? 'Use for backup'
-							: 'Use this backup',
+						: purpose === 'recovery'
+							? 'Use for recovery'
+							: purpose === 'backup'
+							? 'Use for export'
+							: 'Use this export',
 			properties: purpose === 'restore' ? ['openDirectory'] : ['openDirectory', 'createDirectory']
 		};
 		const owner = BrowserWindow.fromWebContents(event.sender);
@@ -571,6 +586,23 @@ export function registerAdminIpc(): void {
 		if (!value || typeof value !== 'object') throw new Error('Invalid backup request');
 		const current = state();
 		return backupFromAdmin(current.homeDir, value as never);
+	});
+	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid recovery request.');
+		const input = value as Record<string, unknown>;
+		const home = state().homeDir;
+		if (input.action === 'save') {
+			if (typeof input.baselineDigest !== 'string') throw new Error('Refresh recovery settings before saving.');
+			saveRecoverySettings(home, { settings: input.settings, selection: input.selection, baselineDigest: input.baselineDigest });
+			return adminSnapshot();
+		}
+		if (input.action === 'credential') {
+			saveRecoveryCredential(home, input.connectionString);
+			return adminSnapshot();
+		}
+		if (input.action === 'status') return recoveryStatus(home);
+		if (input.action === 'inspect' || input.action === 'init' || input.action === 'restore') return runRecoveryOperation(home, input.action, input.confirmed === true);
+		throw new Error('Invalid recovery action.');
 	});
 	handleAdmin(ADMIN_CHANNELS.restoreData, (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid restore request');
