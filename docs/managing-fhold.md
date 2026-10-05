@@ -83,7 +83,7 @@ behavior; `--no-pull` selects existing local copies for that registry intent.
 
 ### Upgrade from alpha.3
 
-Download the new CLI or Admin from the [Linux release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050652-alpha.6)
+Download the new CLI or Admin from the [Linux release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6)
 first; `fhold update` updates the selected instance, not the CLI executable.
 Select the existing home's **absolute path** in the new CLI, or open that folder
 in the new Admin, then update:

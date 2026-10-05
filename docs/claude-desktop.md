@@ -23,7 +23,7 @@ fhold connect claude --credential claude-desktop
 ```
 
 Download `fhold-claude-desktop-<version>.mcpb` from the matching
-[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050652-alpha.6).
+[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
 Admin's **Connections → Claude Desktop** panel provides the direct download;
 `fhold connect claude` prints the same versioned URL. No source build is required.
 In Claude Desktop:

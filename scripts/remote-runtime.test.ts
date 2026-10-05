@@ -12,8 +12,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { claudePrompt, remoteCommand, remoteEnvironment } from '../containers/assistant/fhold-remote.mjs';
 
-async function until(check: () => boolean): Promise<void> {
-	const deadline = Date.now() + 4_000;
+async function until(check: () => boolean, timeoutMs = 4_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
 	while (!check()) {
 		if (Date.now() >= deadline) throw new Error('Remote worker did not reach expected state');
 		await Bun.sleep(20);
@@ -86,7 +86,9 @@ describe('optional native remote workers', () => {
 		const log = join(root, 'state', 'codex.log');
 		writeFileSync(
 			join(root, 'codex'),
-			'#!/usr/bin/env node\nconst fs=require("node:fs"); fs.appendFileSync("attempts", "1"); console.log("pairing-private " + "茶".repeat(100000)); console.log(process.env.OPENCODE_SERVER_PASSWORD ?? "no-assistant-password"); console.log(JSON.stringify(process.argv.slice(2))); process.exit(23);'
+			// A natural exit flushes the large pipe before the supervisor reads it.
+			// process.exit() can truncate the trailing assertions on busy runners.
+			'#!/usr/bin/env node\nconst fs=require("node:fs"); fs.appendFileSync("attempts", "1"); console.log("pairing-private " + "茶".repeat(100000)); console.log(process.env.OPENCODE_SERVER_PASSWORD ?? "no-assistant-password"); console.log(JSON.stringify(process.argv.slice(2))); process.exitCode=23;'
 		);
 		chmodSync(join(root, 'codex'), 0o700);
 		const module = join(import.meta.dir, '../containers/assistant/fhold-remote.mjs');
@@ -112,7 +114,7 @@ describe('optional native remote workers', () => {
 				return (
 					snapshot.state === 'waiting-to-retry' && completedLog.includes('no-assistant-password')
 				);
-			});
+			}, 12_000); // Two attempts can each require the native 3s group cleanup.
 			expect(exitCode).toBe(23);
 			expect(completedLog).toContain('no-assistant-password');
 			expect(completedLog).not.toContain('must-not-leak');
@@ -132,7 +134,7 @@ describe('optional native remote workers', () => {
 			await child.exited;
 			rmSync(root, { recursive: true, force: true });
 		}
-	});
+	}, 15_000);
 	it('terminates a running vendor process and its spawned session on shutdown', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-remote-child-test-'));
 		const pidFile = join(root, 'child.pid');

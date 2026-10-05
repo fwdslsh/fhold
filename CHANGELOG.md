@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2610050652-alpha.6 — simpler Admin and managed ephemeral support
+## 0.1.2610050714-alpha.6 — simpler Admin and managed ephemeral support
 
 Admin's System view now presents four compact, collapsed sections in order:
 Installation details, Recent logs, Import / export, and Ephemeral container
@@ -24,6 +24,8 @@ inode is replaced; strict snapshot capture checks are unchanged.
 
 Includes selection and lifecycle regressions, a concurrent status publication
 test, and real Electron/Docker setup, import/export and cold-recovery checks.
+The native-worker retry fixture now flushes its output before exiting and allows
+the existing bounded process-group cleanup; no runtime retry delay is changed.
 Fresh CLI/Admin installs use the matching public Docker Hub images. Existing
 homes, names, ports, credentials and policies are preserved during upgrade.
 Claude/Codex remote workers remain experimental; ARM64 Admin startup remains

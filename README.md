@@ -4,7 +4,7 @@ A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Linux alpha: [0.1.2610050652-alpha.6](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050652-alpha.6).
+Linux alpha: [0.1.2610050714-alpha.6](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
 Download a standalone CLI or optional Admin AppImage for x64 or ARM64.
 Fresh installs use the matching public [Docker Hub images](https://hub.docker.com/r/fwdslsh/fhold-assistant)
 automatically. No npm installation or Docker Hub account is required.

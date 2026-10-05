@@ -15,7 +15,7 @@ disclosed exceptions, not clean-scan claims.
 
 ## Alpha.6 changes and local evidence
 
-`0.1.2610050652-alpha.6` adds managed recovery configuration and stopped-writer
+`0.1.2610050714-alpha.6` adds managed recovery configuration and stopped-writer
 operations to CLI/Admin, plus a simpler System view with Installation details,
 Recent logs, Import / export and Ephemeral container support in that order.
 The two data-transfer features retain separate contracts; recovery is opt-in.
