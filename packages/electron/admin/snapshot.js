@@ -37,7 +37,8 @@ export function render(snapshot, options = {}) {
 	if (snapshot.phase === 'not_installed' && previousPhase !== 'not_installed') {
 		byId('install-instance-name').value = snapshot.config.deployment.projectName;
 		byId('install-home').value = snapshot.homeDir;
-		byId('install-home').dataset.suggestedHome = `${state.instancesDirectory}/${snapshot.config.deployment.projectName}`;
+		byId('install-home').dataset.suggestedHome =
+			`${state.instancesDirectory}/${snapshot.config.deployment.projectName}`;
 		byId('install-assistant-port').value = String(snapshot.config.assistant.port);
 		byId('install-gateway-port').value = String(snapshot.config.gateway.port);
 	}
@@ -161,6 +162,7 @@ export async function refresh({ statusOnly = false } = {}) {
 					pendingRestart: snapshot.pendingRestart
 				};
 				renderServices(snapshot);
+				updateConditionalConnections();
 				if (
 					!state.providersLoaded &&
 					!isHealthy(previous.services.find((service) => service.name === 'assistant')) &&

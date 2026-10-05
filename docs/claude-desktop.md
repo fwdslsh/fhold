@@ -34,13 +34,24 @@ In Claude Desktop:
 4. In fhold Admin, open **Connections → Claude → Claude Desktop** and choose
    **Enable access for Claude Desktop** if needed. Confirm whether to restart
    now or apply the saved change later.
-5. Copy the displayed **Local address**. Choose an access key and select
-   **Copy access key**, then paste it into the extension's **fhold access key** field.
-   The explanation below the key shows what Claude may do. **Create a key for
-   Claude** opens the key editor here; **Edit permissions** changes the selected
-   key for every app using it. Choose Full access only for a trusted app when
-   you need agent tools and file changes, not just conversation or reads.
-6. Restart Claude Desktop if the tools do not appear.
+5. Under **What can Claude Desktop do?**, choose Chat only, Read files or Full
+   access and select **Save permissions**. Use Full access only for a trusted app
+   needing agent tools and file changes; granting it requires confirmation.
+   To resume an existing setup, choose **Use saved access** rather than creating
+   another identity. fhold does not detect the extension's saved assignment.
+6. In the connection instructions, copy **Local address** and select **Copy
+   access key**, then paste them into the extension's address and **fhold access
+   key** fields. Keys appear here because the extension needs a pasted credential,
+   not as a separate Admin management destination.
+7. Restart Claude Desktop if the tools do not appear.
+
+The revised Admin workflow is a design preview, not live-verified client setup.
+Changing saved permissions affects all apps using that identity and requires
+confirmation; its key and conversations stay attached to the same identity.
+Choosing separate or different saved access requires updating the extension and
+starts separate conversations. **Connections → Advanced access** retains saved
+access maintenance. Claude Code's native sign-in and permissions are independent
+of this Desktop MCP connection.
 
 These are Anthropic's documented steps for
 [installing a custom desktop extension](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop#h_6df82aa934).

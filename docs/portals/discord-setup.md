@@ -57,11 +57,22 @@ Bot ownership does not automatically grant access. A team-owned bot requires
 an operator choice of permitted users. The adapter refuses all use when every
 allowlist is empty; choose permitted users explicitly.
 
-In Admin, open **Connections → Discord → Who can use the bot**, enter the same IDs,
-choose the **Access key used by the bot**, and select **Save Discord settings**.
-The key's explanation shows what the bot may do. Create or edit a key's
-permissions here, without leaving Discord setup. If a required scope or token
-is missing, Admin opens and focuses the exact field that needs attention.
+In the revised Admin preview, open **Connections → Discord → Who can use the bot**
+and enter the same IDs. Choose Chat only, Read files or Full access under
+**What can Discord do?**, then select **Save Discord settings**. Normal bot setup
+does not ask you to choose or copy a fhold key; the existing credential remains
+private plumbing. Full access requires confirmation. If a required scope or token
+is missing, Admin opens and focuses the field that needs attention. The preview
+has not yet been live-verified; see the [Admin runbook](../operations/admin-setup-verification.md).
+
+**Different permissions for a person** lets you enter an exact Discord user ID
+and choose their permissions with **Save person permissions**, without naming a
+key. The user must still pass the
+allowlist. Existing mappings retain their credential IDs. Editing saved
+permissions affects every use of that identity and requires confirmation;
+switching saved access starts a separate conversation, leaving old conversations
+with the old identity. **Use bot permissions** removes an override, not access
+checks. Shared/saved access maintenance is under **Connections → Advanced access**.
 
 ## 3. Enable and verify
 
@@ -131,7 +142,7 @@ restricted session, check `fhold credential mappings discord`. An allowlisted
 user without a mapping still uses the default `discord` credential, normally
 `chat`. Being the bot owner or being allowed into the portal does not select the
 `owner` identity. In Admin, **Connections → Discord → Different permissions for
-a user** can assign a key with Full access to the exact Discord user;
+a person** can explicitly grant Full access to the exact Discord user;
 the CLI equivalent is:
 
 ```bash

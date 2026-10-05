@@ -146,10 +146,12 @@ persisted Compose project names: `personal-agent` creates
 `personal-agent-assistant-1` with OS hostname `personal-agent`. Setup and lifecycle
 commands refuse to take over a same-named project from a different folder.
 Existing names are not changed when opening a home; System → Installation details
-shows the current name. Switching instances clears transient keys, sign-in steps and previews after
+shows the current name. Switching instances clears transient connection choices,
+sign-in steps and previews after
 unsaved-change confirmation; it does not stop a stack. Recent paths are stored
-in the separate `fhold-admin` desktop profile, not instance state. Keys load
-masked and require explicit Show/Copy. Window size remains user-controlled.
+in the separate `fhold-admin` desktop profile, not instance state. Connection keys
+are copy-only and fetched on request; OpenCode's password can still be loaded
+masked or explicitly copied. Window size remains user-controlled.
 SSH management is not implemented.
 
 The sidebar has a slash immediately beside a single named instance dropdown;
@@ -159,7 +161,7 @@ for folder selection or new setup. It shows no paths, status footer or Refresh
 button. **Overview** shows the complete home path and container status; the path
 also remains in System → Installation details. Status checks run every 15 seconds
 while the selected instance is visible and when Admin regains focus. They pause
-during operations and never overwrite drafts, sign-in steps, displayed keys or
+during operations and never overwrite drafts, sign-in steps, connection choices or
 the configuration baseline. Unavailable checks do not claim a stopped or healthy
 agent; provider readiness remains in Agent settings. Opening/switching instances
 and automatic status checks never restart containers or resize the window.
@@ -172,23 +174,20 @@ Remote Control. Codex contains sign-in, pairing and knowledge recall. Discord
 and Slack each contain their own bot tokens, allowed-user rules, default access
 and individual user overrides; there is no shared token/app selector.
 OpenCode contains its address, password and advanced network settings. MCP
-contains enabling access, connection instructions, access keys and its
+contains enabling access, app permissions, connection instructions and its
 advanced network settings. Bot setup enables the shared MCP service when needed.
 An app's Save action changes that app, not other apps' unsaved drafts. Restart
 confirmation and the persistent pending-changes alert still apply. Native
 workers remain experimental; startup enabled is not a verified client connection.
-**Access keys** owns the reusable named keys and permissions, not bot-specific
-user mappings. System holds installation details, recent logs, import/export,
+There is no separate access-manager sidebar destination. System holds
+installation details, recent logs, import/export,
 then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
-### Access keys and app permissions
+### App permissions
 
-An access key is the password an app uses to reach your agent through MCP.
-**Access keys** lists each key with its permissions, saved Discord/Slack
-assignments, **Copy key** and **Edit permissions**. There is no separate identity
-selector or global permissions table. **New access key** asks for a name and
-describes the three choices in ordinary language:
+Choose what an app can do inside **Connections**, alongside its setup.
+Claude Desktop, MCP, Discord and Slack offer three choices:
 
 - **Chat only:** conversation without agent tools, file changes or tasks.
 - **Read files:** conversation and non-sensitive workspace reads, without file
@@ -197,30 +196,45 @@ describes the three choices in ordinary language:
   permissions. Choose this only for trusted apps or people; confirmation is
   required when granting it.
 
-New keys retain the existing Read files default. Names are the existing credential
-names, not a new account/display-name registry. Existing keys, policies and bot
-assignments are preserved. Editing permissions changes every use of that key;
-create another key when only one app needs different permissions. Saving a
-permission change uses the configuration baseline and existing restart-now/later
-confirmation. No container is restarted by opening or cancelling the editor.
+For Claude Desktop or another MCP app, choose permissions and select **Save
+permissions** before copying the address and **Copy access key** into the external
+app's fields. A key is needed only for that connection step. New external access
+retains the existing Read files default. Names use the existing credential
+format, not a new app/account registry. **Use saved access** resumes setup with
+an existing identity; fhold cannot detect which external app uses a copied key.
+Never interpret a saved name as verified client readiness.
 
-In **Connections**, Claude Desktop and MCP show **Choose an access key**, explain
-what the app can do, and offer **Copy access key** plus **Edit permissions**.
-**Create a key** opens the same editor without leaving that app and selects the
-new key afterward. An app never silently falls back to another key when its
-selected key disappears. Copy is one explicit action; the private value is not
-displayed or stored in renderer preferences. A masked value can be loaded under
-**View key instead** if needed. Discord/Slack select the key for their bot without
-copying; creating one selects it as an unsaved draft until **Save Discord/Slack
-settings** is chosen. Other app drafts are preserved.
+Discord and Slack show permissions directly; fhold supplies their own access
+keys without asking you to choose, name or copy one in normal bot setup.
+**Who can use the bot** still controls the allowlist independently.
+**Different permissions for a person → Save person permissions** sets an exact
+platform user's permissions;
+that person must also pass the bot's allowed-user rules. **Use bot permissions**
+removes the override, not the allowlist entry. Other app drafts are preserved.
 
-**Replace or revoke** is collapsed on each key. Replacement invalidates the old
-value; update apps where it was pasted. Revocation removes access. Both require
-confirmation. Saved bot assignments and the final key cannot be revoked; backend
-validation also protects other assignments. The list reports only known saved
-Discord/Slack assignments, not a claim that an externally used key is unused.
-These keys do not control OpenCode's native password or Claude Code/Codex account
-connections. Keep copied keys private, like passwords.
+Existing credentials, values, policies and assignments stay unchanged until an
+explicit save. Changing saved permissions affects every use of that identity,
+including external apps fhold cannot discover. Confirm the shared effect before
+saving; existing conversations remain attached to the same identity. Choosing
+different saved access or explicitly setting up separate access starts separate
+credential-scoped conversations. Old conversations stay with the old identity;
+external apps must be reconfigured when their connection key changes.
+
+**Advanced access**, collapsed at the bottom of Connections, offers compact saved
+access maintenance, not a policy matrix or key-card destination. Replacement
+invalidates the old key; update every external app where it was pasted. Removal
+revokes access. Both require confirmation and preserve assigned/final-key
+restrictions. Only saved bot assignments are known, not external usage.
+Copy fetches a private value only on request; there is no connection-key reveal
+field and values are never stored in renderer preferences. Missing selected access never
+silently selects a more privileged identity.
+
+Permission saves use the existing configuration baseline and restart-now/later
+confirmation; opening or cancelling a form restarts nothing. These permissions
+do not control OpenCode's native password or Claude Code/Codex account access.
+Those connections retain native sign-in, consent and approvals. Keep copied keys
+private, like passwords. This Admin redesign is an unverified preview; see the
+[verification runbook](operations/admin-setup-verification.md).
 
 ### Import/export and ephemeral container support
 

@@ -1,4 +1,4 @@
-import { clearClientKey, copyAccessKey, updateClientPolicy } from './access.js';
+import { applyAppPermissions, copyAccessKey, updateAppPermissions } from './access.js';
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { offerRestart } from './restart.js';
 import { csv, endpoint, isHealthy, isRunning } from './model.js';
@@ -97,7 +97,7 @@ export function updateGuardianGuide() {
 
 export function updateConditionalConnections() {
 	updateGuardianGuide();
-	for (const portal of ['discord', 'slack']) updateClientPolicy(portal);
+	for (const app of ['claude', 'mcp', 'discord', 'slack']) updateAppPermissions(app);
 }
 
 export function updatePortalTokenFields() {
@@ -196,33 +196,9 @@ export async function loadDirectPassword(copyOnly) {
 	if (result && !copyOnly) byId('direct-password').value = result.password;
 }
 
-export async function loadClientKey(client, copyOnly) {
-	const username = byId(`${client}-credential`).value;
-	if (!username) {
-		notice('Choose an access key first, or create a new one for this app.', 'error');
-		byId(`${client}-credential`).focus();
-		return;
-	}
-	if (copyOnly) return copyAccessKey(username);
-	if (
-		!window.confirm(
-			`Load the private value of key “${username}”? Keep it private, just like a password.`
-		)
-	)
-		return;
-	const result = await operation(
-		'Loading key value',
-		() => state.api.credentialKey(username),
-		`Key “${username}” loaded and kept masked.`
-	);
-	if (result) byId(`${client}-key`).value = result.key;
-}
-
 export function bindConnectionsEvents() {
 	for (const id of ['gateway', 'discord', 'slack'])
 		byId(id).addEventListener('change', updateConditionalConnections);
-	for (const portal of ['discord', 'slack'])
-		byId(`${portal}-credential`).addEventListener('change', () => updateClientPolicy(portal));
 
 	for (const button of all('[data-enable-gateway]')) {
 		button.addEventListener('click', async () => {
@@ -315,10 +291,10 @@ export function bindConnectionsEvents() {
 				return;
 			}
 			const config = structuredClone(state.currentConfig);
+			if (!applyAppPermissions(config, portal)) return;
 			config.portals[portal] = {
 				...config.portals[portal],
 				enabled,
-				credential: byId(`${portal}-credential`).value,
 				access
 			};
 			if (enabled) config.gateway.enabled = true;
@@ -346,20 +322,18 @@ export function bindConnectionsEvents() {
 		byId('direct-password').type = byId('show-direct-password').checked ? 'text' : 'password';
 	});
 
-	for (const client of ['claude', 'mcp']) {
-		byId(`${client}-credential`).addEventListener('change', () => clearClientKey(client));
-		byId(`${client}-credential`).addEventListener('change', () => updateClientPolicy(client));
-		byId(`show-${client}-key`).addEventListener('change', () => {
-			byId(`${client}-key`).type = byId(`show-${client}-key`).checked ? 'text' : 'password';
-		});
-	}
-
-	for (const button of all('[data-load-client-key]')) {
-		button.addEventListener('click', () => void loadClientKey(button.dataset.loadClientKey, false));
-	}
-
 	for (const button of all('[data-copy-client-key]')) {
-		button.addEventListener('click', () => void loadClientKey(button.dataset.copyClientKey, true));
+		button.addEventListener('click', () => {
+			const client = button.dataset.copyClientKey;
+			const username = byId(`${client}-credential`).value;
+			const policy = byId(`${client}-permissions`).querySelector('input:checked')?.value;
+			if (!username || state.currentConfig?.credentials[username]?.policy !== policy) {
+				notice('Save permissions before connecting this app.', 'error');
+				byId(`save-${client}-permissions`).focus();
+				return;
+			}
+			if (username) void copyAccessKey(username);
+		});
 	}
 
 	for (const button of all('[data-external-url]')) {

@@ -46,11 +46,22 @@ blocked user always loses access. Configure users alone to allow direct
 messages; a DM cannot satisfy a channel constraint. The adapter refuses all use
 when both allowlists are empty.
 
-In Admin, open **Connections → Slack → Who can use the bot**, enter the same IDs,
-choose the **Access key used by the bot**, and select **Save Slack settings**.
-The key's explanation shows what the bot may do. Create or edit a key's
-permissions here, without leaving Slack setup. If a required scope or token
-is missing, Admin opens and focuses the exact field that needs attention.
+In the revised Admin preview, open **Connections → Slack → Who can use the bot**
+and enter the same IDs. Choose Chat only, Read files or Full access under
+**What can Slack do?**, then select **Save Slack settings**. Normal bot setup does
+not ask you to choose or copy a fhold key; the existing credential remains private
+plumbing. Full access requires confirmation. If a required scope or token is
+missing, Admin opens and focuses the field that needs attention. The preview has
+not yet been live-verified; see the [Admin runbook](../operations/admin-setup-verification.md).
+
+**Different permissions for a person** lets you enter an exact Slack user ID and
+choose their permissions with **Save person permissions**, without naming a key.
+The user must still pass the
+allowlist. Existing mappings retain their credential IDs. Editing saved
+permissions affects every use of that identity and requires confirmation;
+switching saved access starts a separate conversation, leaving old conversations
+with the old identity. **Use bot permissions** removes an override, not access
+checks. Shared/saved access maintenance is under **Connections → Advanced access**.
 
 ## 3. Enable and verify
 

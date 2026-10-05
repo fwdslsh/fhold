@@ -1072,150 +1072,102 @@ input[type="checkbox"] {
 	background: transparent;
 }
 
-.mapping-identity {
-	display: grid;
-	gap: 3px;
-	min-width: 0;
-}
-
-.mapping-identity small {
-	color: var(--ink-soft);
-}
-
-.access-keys-intro {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center;
-	gap: 20px;
-	margin-bottom: 24px;
-}
-
-.access-keys-intro .help-text {
-	margin: 0;
-}
-
-.access-key-list {
-	display: grid;
-	gap: 16px;
-}
-
-.access-key-card {
-	margin: 0;
-}
-
-.access-key-card-heading {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-}
-
-.access-key-card-heading h2 {
-	min-width: 0;
-	margin: 0;
-	font-size: 1rem;
-	overflow-wrap: anywhere;
-}
-
-.access-key-card-heading .status-badge {
-	flex: 0 0 auto;
-}
-
-.access-key-usage {
-	margin: 12px 0;
-	color: var(--ink-faint);
-	font-size: 0.8125rem;
-	overflow-wrap: anywhere;
-}
-
-.access-key-more {
-	margin-top: 16px;
-}
-
-.app-key-setup {
-	display: grid;
-	gap: 10px;
-}
-
-.app-key-setup > .field,
-.app-key-setup > .help-text,
-.app-key-setup > .button-row,
-.app-key-setup > .text-button {
-	margin: 0;
-}
-
-.app-key-setup > .text-button {
-	justify-self: start;
-}
-
-.key-value-details {
-	margin-top: 0;
-}
-
-.key-permission-options {
+.permission-options {
 	display: grid;
 	gap: 8px;
+	min-width: 0;
 	margin: 0;
 	padding: 0;
 	border: 0;
 }
-
-.key-permission-options legend {
+.permission-options legend {
 	margin-bottom: 12px;
 	padding: 0;
-	font-size: 0.875rem;
 	font-weight: 600;
 }
-
-.key-permission-option {
+.permission-option {
 	display: flex;
 	align-items: flex-start;
 	gap: 12px;
-	padding: 12px;
-	border: 1px solid var(--border-soft);
-	border-radius: 6px;
-	background: var(--surface-muted);
+	min-height: 44px;
+	padding: 6px 0;
 	cursor: pointer;
 }
-
-.key-permission-option:has(input:checked) {
-	border-color: var(--border);
-	background: var(--surface-raised);
-}
-
-.key-permission-option input {
+.permission-option input {
 	flex: 0 0 auto;
 	width: 18px;
 	height: 18px;
 	min-height: 0;
-	margin: 2px 0 0;
+	margin: 3px 0 0;
 	padding: 0;
 	accent-color: var(--accent);
 }
-
-.key-permission-option > span {
+.permission-option > span {
 	display: grid;
-	gap: 4px;
+	gap: 3px;
+	min-width: 0;
 }
-
-.key-permission-option strong {
+.permission-option strong {
 	font-size: 0.875rem;
 }
-
-.key-permission-option small {
+.permission-option small {
 	color: var(--ink-soft);
 	font-size: 0.8125rem;
 	line-height: 1.5;
 }
-
-.access-key-editor-heading h2 {
+.permission-option:focus-within {
+	outline: 2px solid var(--focus);
+	outline-offset: 3px;
+	border-radius: 3px;
+}
+.saved-access-list {
+	display: grid;
+	gap: 0;
+	margin: 16px 0;
+}
+.saved-access-list .mapping-row > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.saved-access-list .mapping-row > button {
+	justify-self: end;
+}
+.mapping-row > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.mapping-actions {
+	display: flex;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0;
+}
+.permissions-editor-heading h2 {
 	margin: 0;
 	font-size: 1.125rem;
 	overflow-wrap: anywhere;
 }
-
-.access-key-editor-heading .help-text {
+.permissions-editor-heading .help-text {
 	margin-bottom: 0;
+}
+#advanced-access {
+	margin-top: 24px;
+}
+#claude-connect-details,
+#mcp-connect-details {
+	margin-top: 20px;
+}
+@media (max-width: 520px) {
+	.saved-access-list .mapping-row > button {
+		justify-self: start;
+	}
+	.mapping-actions {
+		justify-content: flex-start;
+	}
+	.mapping-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .detail-list {
@@ -1486,14 +1438,12 @@ body[data-busy="true"] #main-content {
 
 	.field-grid.two-column,
 	.field-grid.three-column,
-	.access-keys-intro,
-	.mapping-row,
 	.detail-list > div,
 	.connection-values > div {
 		grid-template-columns: 1fr;
 	}
 
-	.access-keys-intro > button {
+	.saved-access-list .mapping-row > button {
 		justify-self: start;
 	}
 
@@ -1624,7 +1574,7 @@ body[data-busy="true"] #main-content {
 }
 /* Native setup uses existing form components, without an embedded terminal dependency. */
 #remote-dialog,
-#access-key-dialog {
+#permissions-dialog {
 	width: min(760px, calc(100vw - 48px));
 	max-height: calc(100vh - 48px);
 	overflow: auto;
@@ -1636,21 +1586,21 @@ body[data-busy="true"] #main-content {
 	box-shadow: var(--shadow);
 }
 #remote-dialog::backdrop,
-#access-key-dialog::backdrop {
+#permissions-dialog::backdrop {
 	background: rgb(0 0 0 / 55%);
 }
-#access-key-dialog {
+#permissions-dialog {
 	width: min(540px, calc(100vw - 32px));
 	padding: 24px;
 }
-#access-key-form {
+#permissions-form {
 	gap: 16px;
 	margin: 0;
 }
-#access-key-form > .help-text {
+#permissions-form > .help-text {
 	margin: 0;
 }
-#access-key-form > .button-row {
+#permissions-form > .button-row {
 	margin-top: 4px;
 }
 #remote-output {

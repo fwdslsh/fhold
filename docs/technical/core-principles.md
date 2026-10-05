@@ -117,26 +117,35 @@ Opening/switching homes never resizes the window or starts/stops a stack.
 Admin Connections is organized by the app the user wants to connect, not by
 protocol, container or harness: Claude, Codex, Discord, Slack, OpenCode and MCP.
 Claude owns both Desktop and Code workflows. Each bot owns its token setup,
-allowlists, default key and individual user mappings. Access keys owns
-reusable named keys and permissions. OpenCode/MCP network controls stay under that app's Advanced
+allowlists, inline permissions and individual user mappings. Connections owns
+app permissions; there is no separate access-manager navigation destination.
+OpenCode/MCP network controls stay under that app's Advanced
 settings. App-scoped saves use the existing intent/baseline/restart path and
 preserve other apps' drafts; bot enablement retains its shared MCP dependency.
 There is no new connection registry, protocol or generic integration engine.
 Configured, running, native startup intent and verified client readiness remain
 distinct. Native workers remain experimental and require native consent.
 
-Admin presents credentials as access keys, not accounts or a policy matrix.
-One small create/edit dialog is shared by Access keys and app setup. It names
-the key and describes Chat only, Read files and Full access; granting Full access
-requires explicit confirmation. Existing registry IDs, values, defaults and
-policy contracts do not change. Copy is an explicit clipboard action without
-preloading or persisting key values. Replacement/revocation explain disruption
-and require confirmation; assignment/final-key restrictions remain native.
-Editing a shared key changes all uses, so the UI explains when to create a
-separate key. It uses the reviewed configuration baseline and existing deferred
-restart path. Bot-specific key creation selects only a draft until bot settings
-are saved. No app-key tracking registry or automatic permission escalation is
-added; usage labels cannot claim to detect external clients.
+Guarded apps present inline Chat only, Read files and Full access choices;
+granting Full access requires explicit confirmation. Normal bot setup hides
+fhold keys entirely. Claude Desktop/MCP explicitly save access before showing
+the key-copy step needed by the external app. A collapsed Advanced access section
+at the bottom of Connections offers compact saved-access maintenance, not key
+cards, accounts or a policy matrix. Existing registry IDs, values, defaults and
+policy contracts do not change; no new policy or app-assignment store is added.
+Native OpenCode/Claude Code/Codex access is independent of Guardian permissions.
+Copy fetches connection keys only on explicit request; there is no key-reveal UI
+and values never persist in renderer preferences. Replacement/revocation explain disruption and require
+confirmation; assignment/final-key restrictions remain native.
+Changing a reused identity's permissions affects all uses and requires explicit
+confirmation. Ordinary edits preserve its ID/value and conversation ownership.
+Switching saved access or explicitly creating separate access warns that
+conversations remain with the old identity and external clients need reconnecting;
+never silently fork, transfer or revoke identity. Known bot assignments are shown
+honestly; external key use cannot be detected or inferred from a credential name.
+App-scoped saves preserve other drafts, use the reviewed configuration baseline
+and retain the existing deferred restart path. Opening setup/status creates no
+keys, assigns no access and performs no automatic permission escalation.
 
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations

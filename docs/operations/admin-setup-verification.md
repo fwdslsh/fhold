@@ -34,12 +34,18 @@ native consent and restart confirmation still use the existing APIs. The older
 Connections renderer/E2E fixtures must be aligned during final qualification;
 this preview does not claim live token, pairing or per-app-save verification.
 
-Access keys is also a current design preview. The prior People & access policy
-table, key-manager selector and separate creation disclosure are replaced by
-per-key cards and one shared create/edit dialog. Connections can copy, create
-or edit the selected key in place. Names, policies, file-backed values and APIs
-are unchanged. The old Access renderer/E2E fixtures need final alignment;
-this preview does not claim live create/copy/edit/replace/revoke verification.
+App permissions are also an unverified design preview. The rejected People &
+access / Access keys destinations, policy table and per-key cards are removed.
+Connections owns inline Chat only, Read files and Full access choices. Normal
+Discord/Slack setup never exposes a fhold key. Claude Desktop/MCP explicitly save
+access before showing the copy step required by the external app. A collapsed
+Advanced access section at the bottom of Connections retains compact saved-access
+maintenance. Existing identities, values, bot mappings and policy contracts stay
+unchanged; no app registry or inferred external assignment is introduced. The old
+Access renderer/E2E fixtures need final alignment. Automated tests and rendered
+or live permission/copy/reconnect qualification remain deferred until the user's
+final design iteration. Source review, typechecking and preview AppImage builds
+do not qualify the feature or prove client readiness.
 
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
@@ -63,28 +69,47 @@ group remains. In a disposable instance, edit two apps, save one and verify the
 other draft remains unsaved and the saved configuration is unchanged for that
 other app. Repeat for the two network forms and for bot-token/user-mapping saves.
 Confirm denied empty bot allowlists, blank-token preservation, failed-write
-draft preservation, masked key handling, pending restart and cancelled restarts.
+draft preservation, copy-only connection keys, pending restart and cancelled restarts.
 MCP cannot be disabled while a saved bot requires it. Run the usual native
 account/pairing verification only after explicit sign-in and workspace consent;
 startup or a running container must never be presented as a connected client.
 
-For Access keys, review the list, permission descriptions and create/edit dialog
-at narrow sizes and 200% zoom. Check keyboard focus, native radio navigation,
-Cancel/Escape, duplicate/invalid names and failed-write messages inside the
-dialog. In a disposable home, create from the list and from each app, then
-verify the selected key and clipboard through a private manual paste (never
-print a key into test output). App-specific names must not collide. New keys
-keep the prior Read files default; existing key IDs/values remain unchanged.
-Edit one shared key, cancel and confirm nothing changed; save and verify only
-that policy changed while other app drafts remained. Concurrent saved-config
-changes must reject a stale editor, not overwrite unrelated settings. Granting
-Full access still requires confirmation. Bot key creation is only a selection
-draft until its app is saved. Replace/revoke must warn, require confirmation,
-invalidate the old key appropriately and enforce assigned/final-key restrictions.
-Advanced value display stays masked, clears on selection/instance changes and
-never persists in preferences. Removing a selected client key must leave a
-Choose a key placeholder across refreshes, not select another more privileged
-key. Read-only status checks must not reset the editor.
+After final design approval, manually review inline permission choices and the
+collapsed Advanced access list at narrow sizes and 200% zoom. There must be no
+access-manager sidebar, policy matrix or credential cards. Check keyboard focus,
+native radio navigation, Cancel/Escape, duplicate/invalid names where external
+access is named, and failed-write messages. In a disposable home, complete a
+personal Discord bot setup without seeing a fhold key, then give an allowed
+person restricted permissions through Save person permissions without a
+key-naming task. Saving a mapping must
+not silently allow that person or change other mappings. Returning to bot
+permissions must warn if access would increase.
+
+For Claude Desktop/MCP, choose permissions, select Save permissions, then privately
+paste the copied key into the app (never into test output). Read-only refresh or
+opening setup must not create access. New external access keeps the prior Read
+files default. Use saved access to resume setup; names must not be presented as
+detected external assignments or connected-client readiness. Copy occurs only
+on request in connection details or explicit advanced maintenance; there is no
+connection-key reveal field. Unsaved permission changes must not offer a
+misleading copy/connect action before Save permissions.
+
+Edit reused access, cancel the impact confirmation and verify nothing changed.
+Confirm a change and verify only that identity's policy changed, its ID/key and
+conversation ownership survived, and other app drafts remained. Explain known
+bot assignments and unknown external reuse before confirmation. Switching saved
+access or explicitly creating separate access must warn about separate
+conversations and reconnecting external clients; never silently fork identities,
+transfer sessions or revoke old access. Concurrent changes reject stale saves.
+Full access still requires confirmation. OpenCode/Claude Code/Codex retain native
+consent and must never display Guardian restrictions as their own permissions.
+
+Advanced replacement/removal must warn, require confirmation and preserve
+assigned/final-key restrictions. Connection-key values never appear in renderer
+fields or persist in preferences. Removing selected external access must
+leave an explicit unselected state, not choose more privileged access. Read-only
+status checks must not reset drafts. Saved changes remain pending until successful
+explicit activation; restart later is still offered.
 
 ## Final automated qualification
 

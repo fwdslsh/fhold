@@ -198,9 +198,6 @@
           <button class="nav-item" type="button" data-view="connections" aria-controls="view-connections">
             <span>Connections</span>
           </button>
-          <button class="nav-item" type="button" data-view="access" aria-controls="view-access">
-            <span>Access keys</span>
-          </button>
           <button class="nav-item" type="button" data-view="system" aria-controls="view-system">
             <span>System</span>
           </button>
@@ -394,18 +391,27 @@
               <div class="app-connection-body">
                 <details class="disclosure connection-method" name="claude-method">
                   <summary>Claude Desktop</summary>
+                  <form id="claude-permissions-form" class="form-stack" data-managed-form>
+                    <fieldset id="claude-permissions" class="permission-options"><legend>What can Claude Desktop do?</legend>
+                      <label class="permission-option"><input id="claude-policy-chat" name="claude-policy" type="radio" value="chat" required /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                      <label class="permission-option"><input id="claude-policy-read" name="claude-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                      <label class="permission-option"><input id="claude-policy-full" name="claude-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                    </fieldset>
+                    <p id="claude-policy-help" class="help-text" role="status"></p>
+                    <button id="save-claude-permissions" class="primary" type="submit">Save permissions</button>
+                    <details class="disclosure"><summary>Advanced · use saved access</summary>
+                      <label class="field" for="claude-credential"><span>Choose saved access</span><select id="claude-credential"></select></label>
+                      <p class="help-text">Use the same saved access to keep existing conversations. Different access starts separate conversations; update the extension with its connection key.</p>
+                      <label class="field" for="claude-access-name"><span>Custom access label (optional)</span><input id="claude-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" /><span class="help-text">Technical label for separate access; leave blank to use the suggested label.</span></label>
+                    </details>
+                  </form>
                   <ol class="numbered-steps">
                     <li><div><strong>Enable access</strong><p id="claude-guardian-help">MCP access is disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable access for Claude Desktop</button></div></li>
                     <li><div><strong>Install the desktop extension</strong><p id="claude-extension-help" class="help-text">Download the matching extension, then install it in Claude Desktop.</p><a id="claude-extension-download" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Download desktop extension</a><button class="text-button" type="button" data-copy-field="claude-extension-help">Copy instructions</button></div></li>
-                    <li><div><strong>Connect to this instance</strong>
+                    <li id="claude-connect-details" hidden><div><strong>Connect to this instance</strong>
                       <dl class="connection-values"><div><dt>Local address</dt><dd><code id="claude-url">Loading…</code><button class="text-button" type="button" data-copy-field="claude-url">Copy</button></dd></div></dl>
-                      <div class="app-key-setup">
-                        <label class="field" for="claude-credential"><span>Choose an access key</span><select id="claude-credential" aria-describedby="claude-policy-help"></select></label>
-                        <p id="claude-policy-help" class="help-text"></p>
-                        <div class="button-row compact"><button class="secondary" type="button" data-copy-client-key="claude">Copy access key</button><button class="text-button" type="button" data-edit-app-key="claude">Edit permissions</button><button class="text-button" type="button" data-new-access-key="claude">Create a key for Claude</button></div>
-                        <p class="help-text">Paste the copied key into the desktop extension’s fhold access key field. A separate key lets you change Claude’s permissions without affecting other apps.</p>
-                        <details class="disclosure key-value-details"><summary>View key instead</summary><label class="field" for="claude-key"><span>Key value</span><input id="claude-key" type="password" readonly autocomplete="off" placeholder="Hidden until loaded" /></label><div class="button-row compact"><button class="secondary" type="button" data-load-client-key="claude">Load key value</button><label class="check-row compact"><input id="show-claude-key" type="checkbox" /> Show value</label></div></details>
-                      </div>
+                      <button class="secondary" type="button" data-copy-client-key="claude">Copy access key</button>
+                      <p class="help-text">Paste it into the desktop extension’s fhold access key field. Keep it private.</p>
                     </div></li>
                   </ol>
                 </details>
@@ -414,7 +420,7 @@
                   <p class="help-text">Use Claude Remote Control to work in this instance with your Claude account. Set up guides sign-in and workspace consent; Open session provides the native connection link.</p>
                   <p><span id="claude-remote-status" class="status-badge neutral">Startup not checked</span></p>
                   <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up Claude Code</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open session</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
-                  <p class="help-text">Requires an eligible Claude subscription. Claude Code runs its own agent with access to your files; MCP access-key policies do not restrict it. Disabling startup keeps your sign-in. Manage paired devices through Claude.</p>
+                  <p class="help-text">Requires an eligible Claude subscription. Claude Code runs its own agent with access to your files. This uses native access; the MCP permissions do not apply. Disabling startup keeps your sign-in. Manage paired devices through Claude.</p>
                 </details>
               </div>
             </details>
@@ -431,7 +437,7 @@
                   <p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p>
                   <button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button>
                 </details>
-                <p class="help-text">Codex runs its own agent; MCP access-key policies do not restrict it. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
+                <p class="help-text">Codex runs its own agent. This uses native access; the MCP permissions do not apply. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
               </div>
             </details>
 
@@ -449,30 +455,27 @@
                 </details>
                 <form id="discord-connections-form" class="form-stack" data-managed-form>
                   <label class="switch"><input id="discord" type="checkbox" /><span>Enable Discord</span></label>
-                  <div class="app-key-setup">
-                    <label class="field" for="discord-credential"><span>Access key used by the bot</span><select id="discord-credential" aria-describedby="discord-policy-help"></select></label>
-                    <p id="discord-policy-help" class="help-text"></p>
-                    <div class="button-row compact"><button class="text-button" type="button" data-edit-app-key="discord">Edit permissions</button><button class="text-button" type="button" data-new-access-key="discord">Create a key for Discord</button></div>
-                    <p class="help-text">Allowed users share these permissions unless you choose a different key for them below. fhold supplies the key to the bot; no copying is needed.</p>
-                  </div>
                   <details id="discord-access-disclosure" class="disclosure">
                     <summary>Who can use the bot</summary>
                     <p class="help-text">Add at least one allowed server, role or user ID. Nobody is allowed by default.</p>
                     <div class="field-grid two-column disclosure-body"><label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label><label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label><label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label><label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label></div>
                     <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
                   </details>
+                  <fieldset id="discord-permissions" class="permission-options"><legend>What can Discord do?</legend>
+                    <label class="permission-option"><input id="discord-policy-chat" name="discord-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                    <label class="permission-option"><input id="discord-policy-read" name="discord-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                    <label class="permission-option"><input id="discord-policy-full" name="discord-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                  </fieldset>
+                  <p id="discord-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Discord settings</button>
+                  <details class="disclosure"><summary>Advanced · use saved access</summary><label class="field" for="discord-credential"><span>Use saved access</span><select id="discord-credential"></select></label></details>
                 </form>
                 <details id="discord-user-access" class="disclosure">
-                  <summary>Different permissions for a user</summary>
-                  <p class="help-text">Assign another key to give a user different permissions. They must still be allowed to use the bot.</p>
-                  <form id="discord-mapping-form" class="field-grid two-column" data-managed-form>
-                    <label class="field" for="discord-mapping-user"><span>Discord user ID</span><input id="discord-mapping-user" autocomplete="off" required /></label>
-                    <label class="field" for="discord-mapping-credential"><span>Access key</span><select id="discord-mapping-credential"></select></label>
-                    <button class="secondary span-two" type="submit">Save user access</button>
-                  </form>
+                  <summary>Different permissions for a person</summary>
+                  <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
+                  <button class="secondary" type="button" data-add-person-permissions="discord">Add person</button>
                   <div id="discord-mappings" class="mapping-list" aria-live="polite"></div>
-                  <button class="text-button" type="button" data-view-target="access">Manage access keys</button>
+
                 </details>
               </div>
             </details>
@@ -492,30 +495,27 @@
                 </details>
                 <form id="slack-connections-form" class="form-stack" data-managed-form>
                   <label class="switch"><input id="slack" type="checkbox" /><span>Enable Slack</span></label>
-                  <div class="app-key-setup">
-                    <label class="field" for="slack-credential"><span>Access key used by the bot</span><select id="slack-credential" aria-describedby="slack-policy-help"></select></label>
-                    <p id="slack-policy-help" class="help-text"></p>
-                    <div class="button-row compact"><button class="text-button" type="button" data-edit-app-key="slack">Edit permissions</button><button class="text-button" type="button" data-new-access-key="slack">Create a key for Slack</button></div>
-                    <p class="help-text">Allowed users share these permissions unless you choose a different key for them below. fhold supplies the key to the bot; no copying is needed.</p>
-                  </div>
                   <details id="slack-access-disclosure" class="disclosure">
                     <summary>Who can use the bot</summary>
                     <p class="help-text">Add at least one allowed channel or user ID. Nobody is allowed by default.</p>
                     <div class="field-grid two-column disclosure-body"><label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label><label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label><label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label></div>
                     <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
                   </details>
+                  <fieldset id="slack-permissions" class="permission-options"><legend>What can Slack do?</legend>
+                    <label class="permission-option"><input id="slack-policy-chat" name="slack-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                    <label class="permission-option"><input id="slack-policy-read" name="slack-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                    <label class="permission-option"><input id="slack-policy-full" name="slack-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                  </fieldset>
+                  <p id="slack-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Slack settings</button>
+                  <details class="disclosure"><summary>Advanced · use saved access</summary><label class="field" for="slack-credential"><span>Use saved access</span><select id="slack-credential"></select></label></details>
                 </form>
                 <details id="slack-user-access" class="disclosure">
-                  <summary>Different permissions for a user</summary>
-                  <p class="help-text">Assign another key to give a user different permissions. They must still be allowed to use the bot.</p>
-                  <form id="slack-mapping-form" class="field-grid two-column" data-managed-form>
-                    <label class="field" for="slack-mapping-user"><span>Slack user ID</span><input id="slack-mapping-user" autocomplete="off" required /></label>
-                    <label class="field" for="slack-mapping-credential"><span>Access key</span><select id="slack-mapping-credential"></select></label>
-                    <button class="secondary span-two" type="submit">Save user access</button>
-                  </form>
+                  <summary>Different permissions for a person</summary>
+                  <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
+                  <button class="secondary" type="button" data-add-person-permissions="slack">Add person</button>
                   <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
-                  <button class="text-button" type="button" data-view-target="access">Manage access keys</button>
+
                 </details>
               </div>
             </details>
@@ -545,28 +545,77 @@
             </details>
 
             <details id="mcp-connection" class="panel panel-disclosure connection-app" data-connection-app="mcp" name="connected-app">
-              <summary><span>MCP<small>Connect other AI apps using an address and access key.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <summary><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
               <div class="app-connection-body">
                 <form id="mcp-connections-form" class="form-stack" data-managed-form>
                   <label class="switch"><input id="gateway" type="checkbox" /><span>Enable MCP access</span></label>
                   <button class="secondary" type="submit">Save MCP settings</button>
                 </form>
                 <p id="mcp-guardian-help" class="help-text">MCP access is disabled.</p>
-                <ol class="numbered-steps">
-                  <li><div><strong>Enable and apply MCP access</strong><p>Save the setting above, then restart now or later when prompted. Discord, Slack and the Claude Desktop extension use this same access service.</p></div></li>
-                  <li><div><strong>Choose what the app can do</strong>
-                    <div class="app-key-setup">
-                      <label class="field" for="mcp-credential"><span>Choose an access key</span><select id="mcp-credential" aria-describedby="mcp-policy-help"></select></label>
-                      <p id="mcp-policy-help" class="help-text"></p>
-                      <div class="button-row compact"><button class="secondary" type="button" data-copy-client-key="mcp">Copy access key</button><button class="text-button" type="button" data-edit-app-key="mcp">Edit permissions</button><button class="text-button" type="button" data-new-access-key="mcp">Create a key for this app</button></div>
-                      <p class="help-text">Paste the copied key into your app’s access-token or bearer-token field. Use a separate key when an app needs its own permissions.</p>
-                      <details class="disclosure key-value-details"><summary>View key instead</summary><label class="field" for="mcp-key"><span>Key value</span><input id="mcp-key" type="password" readonly autocomplete="off" placeholder="Hidden until loaded" /></label><div class="button-row compact"><button class="secondary" type="button" data-load-client-key="mcp">Load key value</button><label class="check-row compact"><input id="show-mcp-key" type="checkbox" /> Show value</label></div></details>
+                <form id="mcp-permissions-form" class="form-stack" data-managed-form>
+                  <fieldset id="mcp-permissions" class="permission-options">
+                    <legend>What can this app do?</legend>
+                    <label class="permission-option">
+                      <input id="mcp-policy-chat" name="mcp-policy" type="radio" value="chat" />
+                      <span>
+                        <strong>Chat only</strong>
+                        <small>Chat without tools or file access.</small>
+                      </span>
+                    </label>
+                    <label class="permission-option">
+                      <input id="mcp-policy-read" name="mcp-policy" type="radio" value="read" checked />
+                      <span>
+                        <strong>Read files</strong>
+                        <small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small>
+                      </span>
+                    </label>
+                    <label class="permission-option">
+                      <input id="mcp-policy-full" name="mcp-policy" type="radio" value="full" />
+                      <span>
+                        <strong>Full access</strong>
+                        <small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small>
+                      </span>
+                    </label>
+                  </fieldset>
+                  <p id="mcp-policy-help" class="help-text" role="status">
+                  </p>
+                  <button id="save-mcp-permissions" class="primary" type="submit">Save permissions</button>
+                  <details class="disclosure">
+                    <summary>Advanced · use saved access</summary>
+                    <label class="field" for="mcp-credential">
+                      <span>Choose saved access</span>
+                      <select id="mcp-credential">
+                      </select>
+                    </label>
+                    <p class="help-text">Use the same saved access to keep existing conversations. Different access starts separate conversations; update your app with its connection key.</p>
+                    <label class="field" for="mcp-access-name">
+                      <span>Custom access label (optional)</span>
+                      <input id="mcp-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" />
+                      <span class="help-text">Technical label for separate access; leave blank to use the suggested label.</span>
+                    </label>
+                  </details>
+                </form>
+                <section id="mcp-connect-details" hidden aria-labelledby="mcp-connect-heading">
+                  <h3 id="mcp-connect-heading">Add the server to your app</h3>
+                  <p class="help-text">Save and apply MCP access first, restarting now or later when prompted. Choose Streamable HTTP in your app.</p>
+                  <dl class="connection-values">
+                    <div>
+                      <dt>Server address</dt>
+                      <dd>
+                        <code id="mcp-url">Loading…</code>
+                        <button class="text-button" type="button" data-copy-field="mcp-url">Copy</button>
+                      </dd>
                     </div>
-                  </div></li>
-                  <li><div><strong>Add the server to your app</strong><p>Choose Streamable HTTP and use this address with the selected key.</p>
-                    <dl class="connection-values"><div><dt>Server address</dt><dd><code id="mcp-url">Loading…</code><button class="text-button" type="button" data-copy-field="mcp-url">Copy</button></dd></div><div><dt>Authentication</dt><dd><code>Authorization: Bearer &lt;access key&gt;</code></dd></div></dl>
-                  </div></li>
-                </ol>
+                    <div>
+                      <dt>Authentication</dt>
+                      <dd>
+                        <code>Authorization: Bearer &lt;access key&gt;</code>
+                      </dd>
+                    </div>
+                  </dl>
+                  <button class="secondary" type="button" data-copy-client-key="mcp">Copy access key</button>
+                  <p class="help-text">Paste it into your app’s access-token or bearer-token field. Keep it private.</p>
+                </section>
                 <details class="disclosure">
                   <summary>Advanced · network & troubleshooting</summary>
                   <form id="mcp-network-form" class="form-stack" data-managed-form>
@@ -582,18 +631,11 @@
                 </details>
               </div>
             </details>
-          </section>
-
-          <section id="view-access" class="view-panel ready-only" data-view-panel="access" hidden aria-labelledby="view-title">
-            <div class="access-keys-intro">
-              <p class="help-text">A key is the password an app uses to reach your agent. Give each app or person a separate key when you want to control their permissions independently.</p>
-              <button class="primary" type="button" data-new-access-key>New access key</button>
-            </div>
-            <div id="access-keys" class="access-key-list"></div>
-            <details class="disclosure">
-              <summary>Which connections use access keys?</summary>
-              <p class="help-text">MCP apps, the Claude Desktop extension, Discord and Slack use these keys. OpenCode has its own username and password. Claude Code and Codex remote sessions use their native account sign-ins instead; these key permissions do not restrict them.</p>
-              <p class="help-text">The list shows saved Discord and Slack assignments. fhold cannot tell which external apps you have pasted a key into. Keep keys private, just like passwords.</p>
+            <details id="advanced-access" class="disclosure">
+              <summary>Advanced access</summary>
+              <p class="help-text">Manage saved access for reuse or recovery. External uses may not be listed. These permissions do not restrict native OpenCode, Claude Code or Codex access.</p>
+              <div id="saved-access" class="saved-access-list"></div>
+              <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
             </details>
           </section>
 
@@ -700,23 +742,67 @@
       </div>
     </div>
 
-    <dialog id="access-key-dialog" aria-labelledby="access-key-heading" aria-describedby="access-key-guidance">
-      <form id="access-key-form" class="form-stack" data-managed-form>
-        <header class="access-key-editor-heading"><h2 id="access-key-heading">New access key</h2><p id="access-key-guidance" class="help-text">Name the key and choose what it allows.</p></header>
-        <label class="field" for="access-key-name"><span>Key name</span><input id="access-key-name" autocomplete="off" spellcheck="false" required maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" title="Start with a lowercase letter. Use lowercase letters, numbers, dots, underscores or hyphens, up to 64 characters." placeholder="my-app" aria-describedby="access-key-name-help" /></label>
-        <p id="access-key-name-help" class="help-text">Use the app or person’s name, such as claude-desktop or alex.</p>
-        <fieldset class="key-permission-options">
-          <legend>What can this key do?</legend>
-          <label class="key-permission-option"><input id="access-key-chat" name="key-permission" type="radio" value="chat" required /><span><strong>Chat only</strong><small>Chat with the agent. No tool use, file changes or tasks.</small></span></label>
-          <label class="key-permission-option"><input id="access-key-read" name="key-permission" type="radio" value="read" required checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
-          <label class="key-permission-option"><input id="access-key-full" name="key-permission" type="radio" value="full" required /><span><strong>Full access</strong><small>Use the agent’s tools, change files and carry out tasks within its existing permissions.</small></span></label>
+    <dialog id="permissions-dialog" aria-labelledby="permissions-heading" aria-describedby="permissions-guidance">
+      <form id="permissions-form" class="form-stack" data-managed-form>
+        <header class="permissions-editor-heading">
+          <h2 id="permissions-heading">Permissions</h2>
+          <p id="permissions-guidance" class="help-text">
+          </p>
+        </header>
+        <label id="person-id-field" class="field" for="person-id" hidden>
+          <span id="person-id-label">Person ID</span>
+          <input id="person-id" autocomplete="off" />
+        </label>
+        <label id="saved-access-name-field" class="field" for="saved-access-name" hidden>
+          <span>Access label</span>
+          <input id="saved-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" />
+          <span class="help-text">Start with a lowercase letter; use lowercase letters, numbers, dots, underscores or hyphens.</span>
+        </label>
+        <fieldset id="dialog-permissions" class="permission-options" tabindex="-1">
+          <legend>What can they do?</legend>
+          <label class="permission-option">
+            <input id="dialog-policy-chat" name="dialog-policy" type="radio" value="chat" />
+            <span>
+              <strong>Chat only</strong>
+              <small>Chat without tools or file access.</small>
+            </span>
+          </label>
+          <label class="permission-option">
+            <input id="dialog-policy-read" name="dialog-policy" type="radio" value="read" checked />
+            <span>
+              <strong>Read files</strong>
+              <small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small>
+            </span>
+          </label>
+          <label class="permission-option">
+            <input id="dialog-policy-full" name="dialog-policy" type="radio" value="full" />
+            <span>
+              <strong>Full access</strong>
+              <small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small>
+            </span>
+          </label>
         </fieldset>
-        <p id="access-key-full-warning" class="help-text" hidden>Only give Full access to apps and people you trust. Your agent’s existing tool permissions still apply.</p>
-        <p id="access-key-error" class="help-text danger-text" role="alert" hidden></p>
-        <div class="button-row"><button id="save-access-key" class="primary" type="submit">Create key</button><button id="cancel-access-key" class="secondary" type="button">Cancel</button></div>
+        <p id="permissions-impact" class="help-text" hidden>
+        </p>
+        <p id="permissions-error" class="help-text danger-text" role="alert" hidden>
+        </p>
+        <div class="button-row">
+          <button id="save-permissions" class="primary" type="submit">Save permissions</button>
+          <button id="cancel-permissions" class="secondary" type="button">Cancel</button>
+        </div>
+        <details id="saved-access-maintenance" class="disclosure" hidden>
+          <summary>Copy, replace or remove access</summary>
+          <p class="help-text">Replacing or removing access interrupts apps using it. After replacement, reconnect external apps with the new access key.</p>
+          <div class="button-row compact">
+            <button id="copy-saved-access" class="secondary" type="button">Copy access key</button>
+            <button id="replace-saved-access" class="secondary" type="button">Replace access key</button>
+            <button id="remove-saved-access" class="danger subtle" type="button">Remove access</button>
+          </div>
+          <p id="saved-access-removal-help" class="help-text">
+          </p>
+        </details>
       </form>
     </dialog>
-
     <dialog id="remote-dialog" aria-labelledby="remote-heading">
       <form id="remote-form" class="form-stack">
         <h2 id="remote-heading">Set up remote access</h2>
