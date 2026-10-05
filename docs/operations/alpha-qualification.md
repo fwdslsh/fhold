@@ -15,7 +15,7 @@ disclosed exceptions, not clean-scan claims.
 
 ## Alpha.5 changes and local evidence
 
-The next alpha includes Admin's confirmed/deferred container activation and
+`0.1.2610050101-alpha.5` includes Admin's confirmed/deferred container activation and
 persistent pending-restart banner, plus
 [mount-aware runtime recovery](../assistant-recovery.md#independently-persistent-mounts).
 Portable backup remains the reviewed-content/fresh-install path; its archive
