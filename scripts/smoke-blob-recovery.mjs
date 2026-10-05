@@ -10,6 +10,13 @@ import { fileURLToPath } from 'node:url';
 
 const image = process.env.FH_RECOVERY_TEST_IMAGE;
 assert.ok(image, 'Set FH_RECOVERY_TEST_IMAGE to the exact Blob-enabled candidate');
+const uid = process.getuid?.();
+const gid = process.getgid?.();
+assert.ok(
+	Number.isInteger(uid) && uid > 0 && Number.isInteger(gid) && gid >= 0,
+	'Run image qualification as a non-root Linux user with access to Docker'
+);
+const runtimeUser = `${uid}:${gid}`;
 const root = await mkdtemp(join(tmpdir(), 'fhold-blob-smoke-'));
 await chmod(root, 0o700);
 const suffix = randomUUID().slice(0, 8);
@@ -48,6 +55,7 @@ const connection = `DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;A
 if (!live) await writeFile(credentialFile, connection, { mode: 0o600 });
 const report = {
 	image,
+	runtimeUser,
 	fixture: root,
 	emulatorVersion: live ? null : '3.37.0',
 	destination: `azblob://${account}/${container}/${prefix || '(emulator fixture)'}`,
@@ -104,6 +112,8 @@ async function imageScript(name, script, timeout = 180000) {
 			'--rm',
 			'--name',
 			target,
+			'--user',
+			runtimeUser,
 			'--network',
 			network,
 			'--mount',
@@ -260,7 +270,7 @@ try {
 			'--network-alias',
 			'azurite',
 			'--user',
-			'1000:1000',
+			runtimeUser,
 			'mcr.microsoft.com/azure-storage/azurite:3.37.0',
 			'azurite-blob',
 			'--blobHost',

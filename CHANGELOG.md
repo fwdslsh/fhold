@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2610050101-alpha.5 — mount-aware recovery and deferred Admin restarts
+## 0.1.2610050129-alpha.5 — mount-aware recovery and deferred Admin restarts
 
 Runtime recovery now supports explicit directory exclusions, required independent
 mounts and opt-in network-mount discovery through the versioned

@@ -15,7 +15,7 @@ disclosed exceptions, not clean-scan claims.
 
 ## Alpha.5 changes and local evidence
 
-`0.1.2610050101-alpha.5` includes Admin's confirmed/deferred container activation and
+`0.1.2610050129-alpha.5` includes Admin's confirmed/deferred container activation and
 persistent pending-restart banner, plus
 [mount-aware runtime recovery](../assistant-recovery.md#independently-persistent-mounts).
 Portable backup remains the reviewed-content/fresh-install path; its archive
@@ -37,6 +37,9 @@ Linux x64 local verification of this candidate:
   checks passed, including stale publisher rejection and failed upload handling.
 - Real AKM recalls passed through OpenCode, Claude and Codex's native plugins.
   These are synthetic account/trust fixtures, not real vendor account readiness.
+- Recovery smokes configure the calling non-root UID/GID for private bind mounts,
+  matching the managed-install contract instead of assuming UID 1000. All three
+  native AKM recalls also passed under UID 1001 without modifying the image.
 - CLI compilation, Admin bundling and unsigned MCPB packing passed. Admin's
   retained real Electron/Docker E2E covered deferred save without a restart,
   pending-state preservation after closing/reopening, confirmed activation and
