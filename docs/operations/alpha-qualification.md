@@ -45,7 +45,21 @@ Linux x64 local verification of this candidate:
   pending-state preservation after closing/reopening, confirmed activation and
   unchanged window sizing; no provider account was needed for that management path.
 
-Release artifacts and native ARM64 runtime still require their own GitHub gates.
+The [published alpha.5](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050129-alpha.5)
+passed [GitHub release run 37251908317](https://github.com/fwdslsh/fhold/actions/runs/37251908317)
+from `9fdedf7603ebcf2d7081eaa11ba99a795ba5ecbe`: source quality, all three native
+x64/ARM64 image gates, real directory recovery on both architectures, native CLI
+artifacts and packaged x64 Admin startup. ARM64 Admin remains cross-built only.
+
+Independent post-publication checks verified every downloaded checksum/manifest,
+x64 CLI and AppImage startup, anonymous Assistant pull, and all three image
+signatures against the exact GitHub workflow, issuer and source commit. A fresh
+CLI-created instance used the public image by default, served authenticated native
+shell/file requests, retained its container during deferred settings changes and
+cleared pending state after healthy activation. Portable backup restored its
+workspace marker into another fresh installation without copying native databases.
+Only disposable fixtures were used; existing instances were not updated.
+
 Actual SMB/NFS/FUSE behavior, live hosted account reconnect and measured RPO/RTO
 remain external qualification. Discovery is opt-in and known required mounts
 should be explicitly declared. Native dependency compatibility rules are unchanged.

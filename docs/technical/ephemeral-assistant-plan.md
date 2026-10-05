@@ -22,7 +22,8 @@ controller, plugin registry, startup installer or mandatory sidecar.
 
 ## Implemented runtime
 
-1. Validate capability/deadline inputs and load the external recovery selection.
+1. Validate capability/deadline inputs, load the external recovery selection and
+   verify the effective mount policy and required mounts before claiming ownership.
 2. Acquire same-instance ownership and validate the accepted immutable manifest.
 3. Restore empty local state before default seeding or any native writer starts;
    preserve validated surviving local state and refuse unresolved conflicts.
@@ -48,16 +49,20 @@ remap container paths. Additions are supported, but narrowing an accepted catalo
 is refused. Native plugin caches/private state require deliberate coverage.
 
 The external application separates recovery-owned ephemeral state, independently
-persistent drives and external configuration/secrets. Pre-populated selected
-mounts without a valid receipt can block restoration. SQLite cannot use a network
-mount. Arbitrary links, special files and unregistered SQLite are not supported.
+persistent drives and external configuration/secrets. Declare required independent
+roots with the [mount policy](../assistant-recovery.md#independently-persistent-mounts);
+they are not traversed or restored. Ordinary local volumes retain their recovery
+coverage. Pre-populated recovery-owned mounts without a valid receipt can block
+restoration. SQLite cannot use a network mount. Arbitrary links, special files and
+unregistered SQLite are not supported.
 
 Portable user backup and offline native-history transfer remain different formats;
 neither substitutes for sensitive same-instance runtime recovery.
 
 ## Remaining qualification
 
-- Real mounted-directory semantics, non-root permissions and plugin/mount layouts.
+- Deployment-specific network filesystems, permission models and custom plugin/drive
+  layouts. Local bind-mount smokes are not SMB/NFS qualification.
 - Forced-stop/storage-outage recovery and readiness-aware external retry/admission.
 - A deliberate compatibility workflow for native dependency/schema upgrades;
   current recovery requires exact recorded native versions.

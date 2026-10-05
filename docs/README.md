@@ -20,7 +20,7 @@
 - [Current alpha qualification and limits](operations/alpha-qualification.md).
 
 Canonical source and contributions live at [fwdslsh/fhold](https://github.com/fwdslsh/fhold).
-The [Linux alpha release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610041911-alpha.4)
+The [Linux alpha release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050129-alpha.5)
 includes CLI/Admin downloads and matching public Docker Hub images. Native x64
 and ARM64 CI test the runtime images and CLI. ARM64 Admin startup and non-Linux
 packaging remain unqualified; earlier local qualification is historical evidence.
