@@ -121,6 +121,7 @@ export async function showFatalError(error) {
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('install-section').hidden = true;
+	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = true;
 	byId('error-state').hidden = false;
 	setText('error-message', message(error));

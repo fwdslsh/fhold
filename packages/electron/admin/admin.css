@@ -66,6 +66,8 @@ summary {
 .client-panel:focus,
 #error-state:focus,
 #instance-welcome:focus,
+#instance-import-section:focus,
+#instance-restore-review-title:focus,
 #install-section:focus {
 	outline: none;
 }
@@ -1701,7 +1703,7 @@ body[data-busy="true"] #main-content {
 	display: none;
 }
 
-/* Welcome is a choice of two tasks, not a runtime dashboard. */
+/* Welcome is a choice of tasks, not a runtime dashboard. */
 #instance-welcome {
 	width: min(480px, calc(100% - 48px));
 	align-items: center;
@@ -1790,6 +1792,12 @@ body[data-busy="true"] #main-content {
 #instance-welcome .instance-recents:not([hidden]) + .instance-picker {
 	margin-top: 12px;
 }
+#instance-welcome .instance-import-choice {
+	justify-self: center;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--ink-soft);
+}
 @media (max-width: 760px) {
 	#instance-welcome {
 		width: min(480px, calc(100% - 24px));
@@ -1801,7 +1809,8 @@ body[data-busy="true"] #main-content {
 }
 
 /* Setup is one focused task per step; management keeps its ordinary sidebar. */
-#install-section {
+#install-section,
+#instance-import-section {
 	width: min(600px, calc(100% - 48px));
 }
 .wizard-card {
@@ -1821,6 +1830,12 @@ body[data-busy="true"] #main-content {
 	padding-inline: 0;
 	color: var(--ink-soft);
 	font-weight: 500;
+}
+.wizard-navigation.wizard-exit {
+	justify-content: flex-end;
+}
+#instance-restore-back {
+	margin-right: auto;
 }
 .wizard-steps {
 	display: flex;
@@ -1878,13 +1893,25 @@ body[data-busy="true"] #main-content {
 .wizard-actions {
 	margin-top: 20px;
 }
-.wizard-actions #install {
+.wizard-actions > .primary {
 	width: 100%;
 	background: var(--ink);
 	color: var(--canvas);
 }
-.wizard-import {
+#instance-restore-form .wizard-actions {
 	margin-top: 0;
+}
+#instance-import-review h2 {
+	margin: 0 0 16px;
+	font-size: 1.125rem;
+	font-weight: 600;
+}
+#instance-restore-warnings {
+	padding-left: 20px;
+	color: var(--warning);
+}
+#instance-restore-warnings li + li {
+	margin-top: 6px;
 }
 .install-requirements {
 	margin-bottom: 20px;
@@ -1938,6 +1965,7 @@ body[data-phase="setup_incomplete"] #provider-connection {
 }
 @media (max-width: 520px) {
 	#install-section,
+	#instance-import-section,
 	body[data-phase="setup_incomplete"] .workspace {
 		width: calc(100% - 24px);
 	}

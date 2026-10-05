@@ -1,8 +1,8 @@
 import { loadProviders } from './providers.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
-import { prepareInstallTarget } from './instances.js';
-import { all, byId, message, notice, operation, setBadge, setText } from './ui.js';
+import { checkInstallationReadiness, renderInstallationReadiness } from './instances.js';
+import { all, byId, message, notice, operation, setBadge, setBusy, setSkipTarget, setText } from './ui.js';
 
 export function restoreInput(apply) {
 	return {
@@ -79,6 +79,8 @@ export function renderRestorePlan(result, applied) {
 }
 
 export async function chooseDirectory(purpose, inputId) {
+	if (state.operationInFlight) return;
+	setBusy(true);
 	try {
 		const selected = await state.api.chooseDirectory({ purpose });
 		if (!selected) return;
@@ -87,6 +89,8 @@ export async function chooseDirectory(purpose, inputId) {
 		byId(inputId).focus();
 	} catch (error) {
 		notice(message(error), 'error', { persist: true });
+	} finally {
+		setBusy(false);
 	}
 }
 
@@ -100,76 +104,111 @@ export function updateBackupScope() {
 export function invalidateInstanceRestorePreview() {
 	state.instanceRestorePreview = null;
 	byId('apply-instance-restore').disabled = true;
-	renderImportProgress(false);
+	showInstanceImportStep(false);
 }
 
-function renderImportProgress(reviewed) {
-	const importing = byId('instance-restore-panel').open;
-	setText('install-first-step', importing ? 'Import' : 'Install');
-	setText('install-second-step', importing ? 'Review' : 'Connect');
-	setText('install-third-step', importing ? 'Open' : 'Ready');
-	for (const [index, step] of all('#install-progress li').entries()) {
-		const complete = importing && reviewed && index === 0;
+function showInstanceImportStep(reviewing) {
+	byId('instance-import-choices').hidden = reviewing;
+	byId('instance-import-review').hidden = !reviewing;
+	byId('instance-restore-back').hidden = !reviewing;
+	for (const [index, step] of all('#instance-import-progress li').entries()) {
+		const complete = reviewing && index === 0;
 		step.classList.toggle('complete', complete);
-		step.setAttribute('aria-current', index === (importing && reviewed ? 1 : 0) ? 'step' : 'false');
+		step.setAttribute('aria-current', index === (reviewing ? 1 : 0) ? 'step' : 'false');
 		step.querySelector('span').textContent = complete ? '✓' : String(index + 1);
 	}
+	renderInstallationReadiness(state.installationReadiness);
 }
 
 export function renderInstanceRestorePlan(result) {
 	byId('instance-restore-result').value = JSON.stringify(result, null, 2);
-	const summary = byId('instance-restore-summary');
-	const title = document.createElement('strong');
-	title.textContent = `Restore ${result.projectName}: ${result.copyCount} entries, ${result.totalBytes} bytes.`;
-	const detail = document.createElement('span');
-	detail.textContent = `Destination: ${result.destinationHome}. Conversations, sign-ins, permissions and active task settings are included. External drives and checkpoint storage are not restored. Containers stay stopped.`;
-	summary.className = 'inline-status neutral';
-	summary.replaceChildren(title, detail);
+	setText('instance-restore-name', result.projectName);
+	setText('instance-restore-review-source', result.sourceHome);
+	setText('instance-restore-review-home', result.destinationHome);
+	setText('instance-restore-summary', `${result.copyCount.toLocaleString()} files, folders and links, including conversations, files, permissions and plugins.`);
+	const warnings = byId('instance-restore-warnings');
+	warnings.replaceChildren();
+	for (const warning of result.warnings) {
+		const item = document.createElement('li');
+		item.textContent = warning;
+		warnings.append(item);
+	}
+	warnings.hidden = result.warnings.length === 0;
 }
 
 export function bindInstanceRestoreEvents() {
-	byId('instance-restore-panel').addEventListener('toggle', () => {
-		const importing = byId('instance-restore-panel').open;
-		byId('install-form').hidden = importing;
-		// One folder control belongs to the visible workflow, not two independent drafts.
-		if (importing) byId('instance-restore-destination').append(byId('install-folder-field'));
-		else byId('install-advanced').querySelector('summary').after(byId('install-folder-field'));
-		setText('install-home-label', importing ? 'Destination folder' : 'Agent folder');
+	byId('begin-instance-import').addEventListener('click', () => {
+		if (state.operationInFlight) return;
 		invalidateInstanceRestorePreview();
+		byId('instance-welcome').hidden = true;
+		byId('install-section').hidden = true;
+		byId('instance-import-section').hidden = false;
+		byId('instance-restore-home').placeholder = `${state.instancesDirectory}/restored-agent`;
+		document.body.dataset.phase = 'instance_import';
+		setSkipTarget('instance-import-section');
+		notice('');
+		byId('instance-restore-source').focus();
+		if (!state.installationReadiness?.ok) void checkInstallationReadiness();
+	});
+	byId('instance-restore-back').addEventListener('click', () => {
+		if (state.operationInFlight) return;
+		invalidateInstanceRestorePreview();
+		notice('');
+		byId('instance-restore-source').focus();
 	});
 	byId('choose-instance-restore-source').addEventListener('click', () => void chooseDirectory('restore', 'instance-restore-source'));
-	for (const event of ['input', 'change']) byId('instance-restore-source').addEventListener(event, invalidateInstanceRestorePreview);
-	for (const event of ['input', 'change']) byId('install-home').addEventListener(event, invalidateInstanceRestorePreview);
-	byId('install-instance-name').addEventListener('input', invalidateInstanceRestorePreview);
-	byId('instance-restore-form').addEventListener('submit', (event) => event.preventDefault());
-	byId('preview-instance-restore').addEventListener('click', async () => {
+	byId('choose-instance-restore-home').addEventListener('click', () => void chooseDirectory('new-instance', 'instance-restore-home'));
+	for (const id of ['instance-restore-source', 'instance-restore-home'])
+		for (const event of ['input', 'change']) byId(id).addEventListener(event, invalidateInstanceRestorePreview);
+	byId('instance-restore-form').addEventListener('submit', async (event) => {
+		event.preventDefault();
+		if (state.operationInFlight || byId('instance-import-section').hidden) return;
 		invalidateInstanceRestorePreview();
 		if (!byId('instance-restore-form').reportValidity()) return;
 		const sourceHome = byId('instance-restore-source').value.trim();
-		const targetHome = byId('install-home').value.trim();
+		const targetHome = byId('instance-restore-home').value.trim();
 		const result = await operation('Previewing entire instance', async () => {
-			await prepareInstallTarget({ importing: true });
+			await state.api.prepareNewInstance({ kind: 'local', homeDir: targetHome });
 			return state.api.restoreInstance({ sourceHome });
 		}, 'Full-instance preview is ready. Review before importing.');
 		if (!result) return;
+		if (sourceHome !== byId('instance-restore-source').value.trim() || targetHome !== byId('instance-restore-home').value.trim()) {
+			notice('The folder choices changed. Review them again before importing.', 'error', { persist: true });
+			return;
+		}
 		renderInstanceRestorePlan(result);
 		state.instanceRestorePreview = { sourceHome, targetHome, digest: result.digest };
-		byId('apply-instance-restore').disabled = false;
-		renderImportProgress(true);
+		showInstanceImportStep(true);
+		notice('');
+		byId('instance-restore-review-title').focus();
 	});
 	byId('apply-instance-restore').addEventListener('click', async () => {
+		if (state.operationInFlight || byId('instance-import-review').hidden || byId('instance-import-section').hidden) return;
 		const preview = state.instanceRestorePreview;
 		const sourceHome = byId('instance-restore-source').value.trim();
-		if (!preview || preview.sourceHome !== sourceHome || preview.targetHome !== byId('install-home').value.trim()) {
+		if (!preview || preview.sourceHome !== sourceHome || preview.targetHome !== byId('instance-restore-home').value.trim()) {
 			invalidateInstanceRestorePreview();
 			notice('Preview this full-instance export again before importing.', 'error', { persist: true });
 			return;
 		}
-		if (!(await state.api.confirmRestart('instance-import'))) return;
-		const result = await operation('Importing entire instance', () => state.api.restoreInstance({ sourceHome, apply: true, previewDigest: preview.digest, confirmed: true }), 'Entire instance imported. Containers remain stopped; review settings before starting.');
+		let confirmed = false;
+		setBusy(true);
+		try {
+			confirmed = await state.api.confirmRestart('instance-import');
+		} catch (error) {
+			notice(message(error), 'error', { persist: true });
+		} finally {
+			setBusy(false);
+		}
+		if (!confirmed) return;
+		const result = await operation('Importing entire instance', () =>
+			state.api.restoreInstance({ sourceHome, apply: true, previewDigest: preview.digest, confirmed: true }),
+			'Entire instance imported. Containers remain stopped; review settings before starting.');
 		if (!result) return;
 		invalidateInstanceRestorePreview();
 		await refresh();
+		notice('Entire instance imported. Containers remain stopped; review settings before starting.');
+		byId('view-title').focus();
 	});
 }
 

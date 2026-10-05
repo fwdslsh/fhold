@@ -91,9 +91,13 @@ or update. Availability checks are preflight, not a reservation until Compose st
 Welcome starts with setup/open choices, or a compact named recent list, without
 a redundant welcome heading. New setup is an Install → Connect → Ready wizard;
 naming is requested once and optional folder/port settings share collapsed Advanced.
-The setup screen omits a redundant creation heading. Import is a separate visible
-choice above Advanced, with its own export/destination/review workflow, not an
-installation action. Native import protection remains the same. Disclosure controls
+The setup screen omits a redundant creation heading. Import has a separate Welcome
+entry point and a Choose folders → Review & import workflow, not an accordion
+or mode inside installation. Its independent folder draft does not reuse or move
+installation controls. Back appears only on review, preserves both folder choices
+and invalidates the preview; Cancel exits the flow. First steps have one Cancel
+action, not duplicate Back/Cancel navigation. After installation, Finish later
+leaves the agent running. Native import protection remains the same. Disclosure controls
 share the ordinary filled control styling and explicit chevrons. The management
 sidebar combines the slash and named picker on one row without a second wordmark.
 Read-only Docker/Compose checks run independently of instance selection so they

@@ -49,15 +49,19 @@ export function renderInstallationReadiness(readiness) {
 	state.installationReadiness = readiness;
 	const ready = readiness?.ok === true;
 	const failed = readiness?.ok === false;
-	byId('install-requirements').hidden = ready;
-	byId('install-requirements').className = `install-requirements${failed ? ' warning' : ''}`;
-	byId('install-requirements').setAttribute('role', failed ? 'alert' : 'status');
-	byId('install-requirements-title').hidden = !failed;
-	byId('install-requirements-guidance').hidden = !failed;
-	setText('install-prerequisite', ready ? '' : readiness?.message || 'Checking installation requirements…');
+	for (const requirements of all('[data-install-requirements]')) {
+		requirements.hidden = ready;
+		requirements.className = `install-requirements${failed ? ' warning' : ''}`;
+		requirements.setAttribute('role', failed ? 'alert' : 'status');
+		requirements.querySelector('[data-requirement-title]').hidden = !failed;
+		requirements.querySelector('[data-requirement-guidance]').hidden = !failed;
+		requirements.querySelector('[data-requirement-message]').textContent =
+			ready ? '' : readiness?.message || 'Checking installation requirements…';
+		requirements.querySelector('[data-check-prerequisites]').hidden = !readiness || ready;
+	}
 	byId('install').disabled = state.operationInFlight || !ready;
 	byId('preview-instance-restore').disabled = state.operationInFlight || !ready;
-	byId('check-prerequisites').hidden = !readiness || ready;
+	byId('apply-instance-restore').disabled = state.operationInFlight || !ready || !state.instanceRestorePreview;
 }
 
 export async function checkInstallationReadiness() {
@@ -79,23 +83,25 @@ function showNewInstanceSetup() {
 	if (state.operationInFlight) return;
 	suggestInstanceHome();
 	byId('instance-welcome').hidden = true;
+	byId('instance-import-section').hidden = true;
 	byId('install-section').hidden = false;
 	document.body.dataset.phase = 'not_installed';
 	setSkipTarget('install-section');
+	notice('');
 	byId('install-instance-name').focus();
 	if (state.installationReadiness?.ok) renderInstallationReadiness(state.installationReadiness);
 	else void checkInstallationReadiness();
 }
 
-export async function prepareInstallTarget({ importing = false } = {}) {
+export async function prepareInstallTarget() {
 	try {
 		await state.api.prepareNewInstance({
 			kind: 'local',
 			homeDir: byId('install-home').value.trim(),
-			...(importing ? {} : { name: byId('install-instance-name').value.trim() })
+			name: byId('install-instance-name').value.trim()
 		});
 	} catch (error) {
-		if (!byId('instance-restore-panel').open) byId('install-advanced').open = true;
+		byId('install-advanced').open = true;
 		byId('install-home').focus();
 		throw error;
 	}
@@ -107,6 +113,7 @@ export function renderWelcome(welcome) {
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
 	byId('install-section').hidden = true;
+	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = true;
 	byId('instance-welcome').hidden = false;
 	document.body.dataset.phase = 'welcome';
@@ -116,11 +123,12 @@ export function renderWelcome(welcome) {
 		targets.push(welcome.defaultInstance);
 	const existingSection = byId('existing-instance-section');
 	const begin = byId('begin-new-instance');
+	const importChoice = byId('begin-instance-import');
 	const hasAvailable = targets.some((target) => target.available);
 	// DOM and visual order agree: first-time setup first, saved instances first
 	// when there is an actual compatible home to open. No automatic selection.
 	byId('instance-options').append(...(hasAvailable
-		? [existingSection, begin] : [begin, existingSection]));
+		? [existingSection, begin, importChoice] : [begin, existingSection, importChoice]));
 	begin.className = hasAvailable ? 'secondary' : 'primary';
 	byId('instance-options').hidden = false;
 	const recent = byId('recent-instances');

@@ -11,6 +11,7 @@ export function renderPhase(phase) {
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
 	byId('install-section').hidden = phase !== 'not_installed';
+	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = phase === 'not_installed';
 	for (const element of all('.setup-only')) element.hidden = phase !== 'setup_incomplete';
 	for (const element of all('.ready-only')) element.hidden = phase !== 'ready';
@@ -143,7 +144,8 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
-	byId('check-prerequisites').addEventListener('click', () => void checkInstallationReadiness());
+	for (const button of all('[data-check-prerequisites]'))
+		button.addEventListener('click', () => void checkInstallationReadiness());
 	byId('install-automatic-ports').addEventListener('change', () => {
 		const automatic = byId('install-automatic-ports').checked;
 		byId('install-assistant-port').disabled = automatic;
@@ -151,7 +153,7 @@ export function bindRuntimeEvents() {
 	});
 	byId('install-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		if (state.operationInFlight || byId('instance-restore-panel').open) return;
+		if (state.operationInFlight || byId('install-section').hidden) return;
 		const automaticPorts = byId('install-automatic-ports').checked;
 		const assistantPort = Number(byId('install-assistant-port').value);
 		const gatewayPort = Number(byId('install-gateway-port').value);

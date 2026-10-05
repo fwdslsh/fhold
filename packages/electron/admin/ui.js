@@ -24,20 +24,25 @@ export function setBadge(element, text, tone = 'neutral') {
 
 export function notice(value, tone = 'success', options = {}) {
 	const element = byId('notice');
+	const wizardStatus = !byId('install-section').hidden
+		? byId('install-status')
+		: !byId('instance-import-section').hidden ? byId('instance-import-status') : undefined;
 	clearTimeout(state.noticeTimer);
+	byId('install-status').hidden = true;
+	byId('instance-import-status').hidden = true;
 	if (!value) {
 		element.hidden = true;
-		byId('install-status').hidden = true;
 		return;
 	}
 	setText('notice-message', value);
-	const installing = !byId('install-section').hidden;
-	setText('install-status', installing ? value : '');
-	byId('install-status').hidden = !installing;
-	byId('install-status').className = `help-text${tone === 'error' ? ' danger-text' : ''}`;
-	byId('install-status').setAttribute('role', tone === 'error' ? 'alert' : 'status');
+	if (wizardStatus) {
+		wizardStatus.textContent = value;
+		wizardStatus.hidden = false;
+		wizardStatus.className = `help-text${tone === 'error' ? ' danger-text' : ''}`;
+		wizardStatus.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+	}
 	element.className = `notice ${tone}`;
-	element.hidden = installing;
+	element.hidden = !!wizardStatus;
 	if (tone === 'error') {
 		element.setAttribute('role', 'alert');
 		element.setAttribute('aria-live', 'assertive');
@@ -59,7 +64,8 @@ export function setBusy(value) {
 	document.body.dataset.busy = String(value);
 	const busyRegion = !byId('install-section').hidden
 		? byId('install-section')
-		: !state.currentSnapshot ? byId('instance-welcome') : byId('main-content');
+		: !byId('instance-import-section').hidden ? byId('instance-import-section')
+			: !state.currentSnapshot ? byId('instance-welcome') : byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
 	byId('instance-picker').disabled = value;
 	if (value) {
@@ -68,7 +74,7 @@ export function setBusy(value) {
 	} else {
 		for (const { button, disabled } of state.disabledButtons) button.disabled = disabled;
 		state.disabledButtons = [];
-		if (!byId('install-section').hidden)
+		if (!byId('install-section').hidden || !byId('instance-import-section').hidden)
 			renderInstallationReadiness(state.installationReadiness);
 		if (state.currentSnapshot) renderRuntimeControls(state.currentSnapshot);
 	}

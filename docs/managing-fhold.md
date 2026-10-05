@@ -121,7 +121,8 @@ Admin automatically opens the last-used instance on launch. First launch, or a
 previous folder that is missing or incompatible, shows Welcome instead without
 creating or changing anything. Use the instance dropdown → **Open another instance…**
 to open a recent instance, browse for an existing one or start new setup.
-On first launch, choose **Set up a new agent** or **Open existing instance…**.
+On first launch, choose **Set up a new agent**, **Open existing instance…** or
+**Import an instance…** from an entire-instance export.
 Recent compatible instances are listed by saved name, with their folder paths
 to distinguish them; unavailable folders cannot be opened as new installations.
 **Set up a new agent** opens the Install → Connect → Ready wizard. Name the agent
@@ -129,12 +130,14 @@ once; its suggested folder is `~/fhold/instances/<name>`. Docker and Compose
 checks run in the background without blocking typing or selecting a home.
 Successful checks stay out of the way; missing prerequisites show a warning,
 Docker/Compose setup links and **Check again**. The setup screen has no redundant
-creation heading. **Import an existing instance**, above Advanced, switches to
-Import → Review → Open with export and destination fields, not installation controls.
+creation heading. Import is not a mode inside setup: it has its own entry point,
+folder-selection step and separate review screen, without new-agent name or port controls.
 **Advanced**, collapsed by default, contains the folder picker and port settings.
 **Install fhold** follows Advanced and is the explicit installation confirmation.
-**Back** and **Cancel setup** return to the instance choices without installing.
-After installation, **Instances** and **Finish later** leave the agent running;
+The first step has only **Cancel setup**, returning to the instance choices
+without installing. Import likewise has only **Cancel import** on its first
+step; **Back** appears on review and preserves both folder choices.
+After installation, **Finish later** leaves the agent running;
 reopening its home resumes account setup. Ports are chosen automatically:
 3810/3830 when available, otherwise a generated free pair. Saved ports remain
 stable on refresh/update. Each installation
@@ -186,12 +189,12 @@ CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
 Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
-To import that export, choose **Set up a new agent** at Welcome, then **Import an
-existing instance**, **without installing first**. Choose the entire-instance
-export and a new/empty destination folder in the import workflow. The destination
-is visible rather than hidden under Advanced and remains editable;
-changing it invalidates the preview. Preview identifies the saved name and
-destination; the native confirmation
+To import that export, choose **Import an instance…** directly at Welcome,
+**without installing first**. Choose the entire-instance export and a new/empty
+destination, then **Review import**. Review shows the saved name, both paths and
+warnings. **Back** preserves those choices for editing and requires another
+preview; **Cancel import** exits without copying files. Folder choices are
+independent of new-agent setup and never hidden under Advanced. The native confirmation
 explains downtime, credentials, active tasks and external-storage limitations.
 Both full operations leave containers stopped. These exports are not interchangeable
 with the automatic same-instance checkpoint format.

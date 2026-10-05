@@ -33,6 +33,7 @@
             </section>
             <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
           </section>
+          <button id="begin-instance-import" class="text-button instance-import-choice" type="button">Import an instance…</button>
         </div>
       </section>
     </main>
@@ -50,8 +51,7 @@
 
 	    <main id="install-section" class="welcome-shell" tabindex="-1" hidden>
       <section class="welcome-card wizard-card" aria-labelledby="welcome-title">
-        <div class="wizard-navigation">
-          <button class="text-button" type="button" data-instance-switch><span aria-hidden="true">←</span> Back</button>
+        <div class="wizard-navigation wizard-exit">
           <button class="text-button" type="button" data-instance-switch>Cancel setup</button>
         </div>
         <ol id="install-progress" class="wizard-steps" aria-label="Setup progress">
@@ -61,29 +61,18 @@
         </ol>
         <h1 id="welcome-title" class="visually-hidden">Set up fhold</h1>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
-        <div id="install-requirements" class="install-requirements" role="status" aria-live="polite">
-          <strong id="install-requirements-title" hidden>Install requirements need attention</strong>
-          <p id="install-prerequisite">Checking installation requirements…</p>
-          <div id="install-requirements-guidance" hidden>
+        <div id="install-requirements" class="install-requirements" data-install-requirements role="status" aria-live="polite">
+          <strong data-requirement-title hidden>Docker needs attention</strong>
+          <p data-requirement-message>Checking installation requirements…</p>
+          <div data-requirement-guidance hidden>
             <p>Install Docker Desktop, or Docker Engine with the Compose plugin. Start Docker and make sure your account can access it, then check again.</p>
             <div class="button-row compact">
               <a href="https://docs.docker.com/get-started/get-docker/" target="_blank" rel="noreferrer">Docker setup guide</a>
               <a href="https://docs.docker.com/compose/install/" target="_blank" rel="noreferrer">Compose setup guide</a>
-              <button id="check-prerequisites" class="secondary" type="button" hidden>Check again</button>
+              <button class="secondary" type="button" data-check-prerequisites hidden>Check again</button>
             </div>
           </div>
         </div>
-        <details id="instance-restore-panel" class="disclosure wizard-import">
-          <summary>Import an existing instance</summary>
-          <p class="help-text">Restore an entire-instance export into an empty folder. Conversations, sign-ins and saved settings are included. The original instance must be stopped; its name, ports and active schedules are retained. The imported instance stays stopped.</p>
-          <form id="instance-restore-form" class="form-stack">
-            <label class="field" for="instance-restore-source"><span>Instance export folder</span><span class="input-action"><input id="instance-restore-source" autocomplete="off" placeholder="/path/to/private-instance-export" required /><button id="choose-instance-restore-source" class="secondary" type="button">Choose folder</button></span></label>
-            <div id="instance-restore-destination"></div>
-            <div id="instance-restore-summary" class="inline-status neutral" role="status" aria-live="polite"><strong>No import preview yet.</strong><span>Choose the export and destination, then preview before importing. External drives need separate protection.</span></div>
-            <div class="button-row"><button id="preview-instance-restore" class="secondary" type="button" disabled>Preview import</button><button id="apply-instance-restore" class="primary" type="button" disabled>Import instance</button></div>
-          </form>
-          <details class="disclosure technical-disclosure"><summary>Import details</summary><textarea id="instance-restore-result" class="technical-output" readonly spellcheck="false" aria-label="Full-instance import technical details">No full-instance operation has run.</textarea></details>
-        </details>
         <form id="install-form">
           <label id="install-name-field" class="field" for="install-instance-name">
             <span>Agent name</span>
@@ -122,6 +111,72 @@
       </section>
     </main>
 
+    <main id="instance-import-section" class="welcome-shell" tabindex="-1" hidden>
+      <section class="welcome-card wizard-card" aria-labelledby="instance-import-title">
+        <div class="wizard-navigation wizard-exit">
+          <button id="instance-restore-back" class="text-button" type="button" hidden><span aria-hidden="true">←</span> Back</button>
+          <button class="text-button" type="button" data-instance-switch>Cancel import</button>
+        </div>
+        <ol id="instance-import-progress" class="wizard-steps" aria-label="Import progress">
+          <li aria-current="step"><span>1</span> Choose folders</li>
+          <li><span>2</span> Review &amp; import</li>
+        </ol>
+        <h1 id="instance-import-title" class="visually-hidden">Import an instance</h1>
+        <p id="instance-import-status" class="help-text" role="status" aria-live="polite" hidden></p>
+        <div class="install-requirements" data-install-requirements role="status" aria-live="polite">
+          <strong data-requirement-title hidden>Docker needs attention</strong>
+          <p data-requirement-message>Checking installation requirements…</p>
+          <div data-requirement-guidance hidden>
+            <p>Install Docker Desktop, or Docker Engine with the Compose plugin. Start Docker and make sure your account can access it, then check again.</p>
+            <div class="button-row compact">
+              <a href="https://docs.docker.com/get-started/get-docker/" target="_blank" rel="noreferrer">Docker setup guide</a>
+              <a href="https://docs.docker.com/compose/install/" target="_blank" rel="noreferrer">Compose setup guide</a>
+              <button class="secondary" type="button" data-check-prerequisites hidden>Check again</button>
+            </div>
+          </div>
+        </div>
+        <div id="instance-import-choices">
+          <p class="help-text">Continue an exported instance, including its conversations, sign-ins and settings.</p>
+          <form id="instance-restore-form" class="form-stack">
+            <div class="field">
+              <label for="instance-restore-source">Export folder</label>
+              <div class="instance-folder-input">
+                <input id="instance-restore-source" autocomplete="off" spellcheck="false" placeholder="/path/to/instance-export" aria-describedby="instance-restore-source-help" required />
+                <button id="choose-instance-restore-source" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="instance-restore-source-help" class="help-text">Choose a folder created by Entire instance export. The original instance must be stopped.</p>
+            </div>
+            <div class="field">
+              <label for="instance-restore-home">Restore to</label>
+              <div class="instance-folder-input">
+                <input id="instance-restore-home" autocomplete="off" spellcheck="false" placeholder="/path/to/new-instance" aria-describedby="instance-restore-home-help" required />
+                <button id="choose-instance-restore-home" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="instance-restore-home-help" class="help-text">Choose a new or empty folder. Nothing is copied until you confirm.</p>
+            </div>
+            <div class="wizard-actions">
+              <button id="preview-instance-restore" class="primary" type="submit" disabled>Review import</button>
+            </div>
+          </form>
+        </div>
+        <section id="instance-import-review" aria-labelledby="instance-restore-review-title" hidden>
+          <h2 id="instance-restore-review-title" tabindex="-1">Review import</h2>
+          <dl class="detail-list compact">
+            <div><dt>Agent</dt><dd id="instance-restore-name"></dd></div>
+            <div><dt>Export folder</dt><dd id="instance-restore-review-source"></dd></div>
+            <div><dt>Restore to</dt><dd id="instance-restore-review-home"></dd></div>
+          </dl>
+          <p id="instance-restore-summary" class="help-text"></p>
+          <p class="help-text">The saved name, ports, sign-ins and active schedules are retained. Containers stay stopped. Never run the original and restored copies together. External drives and checkpoint storage need separate protection.</p>
+          <ul id="instance-restore-warnings" class="help-text" hidden></ul>
+          <details class="disclosure technical-disclosure"><summary>Technical details</summary><textarea id="instance-restore-result" class="technical-output" readonly spellcheck="false" aria-label="Full-instance import technical details"></textarea></details>
+          <div class="wizard-actions">
+            <button id="apply-instance-restore" class="primary" type="button" disabled>Import instance</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
     <div id="app-shell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-instance">
@@ -155,8 +210,7 @@
       </aside>
 
       <div class="workspace">
-        <div class="setup-only wizard-navigation" hidden>
-          <button class="text-button" type="button" data-instance-switch><span aria-hidden="true">←</span> Instances</button>
+        <div class="setup-only wizard-navigation wizard-exit" hidden>
           <button class="text-button" type="button" data-instance-switch title="Leave setup; your installed agent keeps running.">Finish later</button>
         </div>
         <div class="setup-only wizard-progress" hidden>

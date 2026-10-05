@@ -4,14 +4,16 @@
 
 The current preview removes the Welcome/creation headings and duplicate naming
 screen. The wizard has one editable name, background Docker/Compose checks,
-collapsed Advanced for folder/ports, Install below Advanced, and top-aligned
-Back/Cancel or Instances/Finish later navigation. Successful prerequisite checks
+collapsed Advanced for folder/ports, Install below Advanced, and a single
+Cancel action on the first step. After installation, Finish later leaves the
+agent running. Successful prerequisite checks
 are hidden; failures show guidance, official Docker/Compose links and retry.
 The sidebar combines the slash/picker and disclosures use filled headers and
-chevrons. Import is above Advanced and has separate Import → Review → Open
-progress with export/destination fields instead of install controls. One folder
-control moves between those two visible workflows; it does not create a second
-configuration value. Preparation still goes through
+chevrons. Welcome offers a separate **Import an instance…** choice. Import has
+Choose folders → Review & import steps, independent export/destination controls
+and a separate review screen. Back exists only on review, keeps both choices
+and requires a new preview; Cancel exits. No installation control is moved,
+hidden by an import toggle or reused as import authority. Preparation still goes through
 the existing native empty-folder validation; installation and full-instance
 import use the existing control-plane operations and protections.
 
@@ -30,10 +32,13 @@ Check that the slash/picker stays on one row, disclosure headers are clearly
 interactive, and the requirement guides open normally before selecting a home.
 After installing in a disposable home, Finish later must not stop the agent;
 reopening must resume account setup. Review full import with a disposable export:
-folder edits must invalidate preview, closing import must return the same folder
-control below the Advanced summary, Enter in the target field must not install
-while import is selected, and importing must retain the native confirmation and
-stopped-writer checks. Product navigation must never resize the window.
+the startup Import choice must open the independent form, Review import must
+open a separate review screen, Back must preserve both choices and invalidate
+the preview, and cancelling either the flow or native confirmation must copy
+nothing. Enter in the import form must preview, never install or apply. Import
+must retain digest binding, native confirmation and stopped-writer checks;
+changes made during a pending preview cannot produce a stale actionable review.
+Product navigation must never resize the window.
 
 ## Final automated qualification
 
@@ -48,10 +53,11 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron test:e2e
 ```
 
-The rendered harness verifies the two first-launch choices, progressive new-agent
-naming, Back/draft preservation and optional **Folder location**, at normal/narrow
-sizes and 200% zoom. Real Tab, Shift+Tab and Enter input checks task order and
-focus after setup/Back. It also verifies named recent/folder selection, explicit
+Update the rendered harness to verify separate first-launch setup/open/import
+choices, the single editable new-agent name, collapsed Advanced, and import
+folder/review navigation with draft preservation, at normal/narrow sizes and
+200% zoom. Real Tab, Shift+Tab and Enter input must check task order and
+focus after setup/import Back. Retain checks for named recent/folder selection, explicit
 new-folder setup and cancellation, refusal to open empty folders as existing
 instances, non-empty-folder preservation, duplicate-name rejection
 before installation, and two simultaneously running named agents with distinct
