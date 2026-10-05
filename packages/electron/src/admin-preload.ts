@@ -8,6 +8,7 @@ const api: AdminApi = {
 	openInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.openInstance, target),
 	prepareNewInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.prepareNewInstance, target),
 	closeInstance: () => ipcRenderer.invoke(ADMIN_CHANNELS.closeInstance),
+	installationReadiness: () => ipcRenderer.invoke(ADMIN_CHANNELS.installationReadiness),
 	codexRecall: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.codexRecall, value),
 	remote: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.remote, value),
 	snapshot: () => ipcRenderer.invoke(ADMIN_CHANNELS.snapshot),

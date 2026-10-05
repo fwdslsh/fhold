@@ -58,6 +58,7 @@ export type AdminApi = {
 	openInstance(target: AdminInstance): Promise<void>;
 	prepareNewInstance(target: AdminInstance & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
+	installationReadiness(): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
 	codexRecall(value: {
 		action: 'review' | 'approve' | 'disable';
 		digest?: string;
@@ -146,6 +147,7 @@ export const ADMIN_CHANNELS = {
 	openInstance: 'admin:open-instance',
 	prepareNewInstance: 'admin:prepare-new-instance',
 	closeInstance: 'admin:close-instance',
+	installationReadiness: 'admin:installation-readiness',
 	codexRecall: 'admin:codex-recall',
 	remote: 'admin:remote',
 	snapshot: 'admin:snapshot',

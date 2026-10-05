@@ -1,6 +1,7 @@
 import { loadProviders } from './providers.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
+import { prepareInstallTarget } from './instances.js';
 import { byId, message, notice, operation, setBadge } from './ui.js';
 
 export function restoreInput(apply) {
@@ -115,25 +116,34 @@ export function renderInstanceRestorePlan(result) {
 export function bindInstanceRestoreEvents() {
 	byId('instance-restore-panel').addEventListener('toggle', () => {
 		const importing = byId('instance-restore-panel').open;
-		byId('install-form').hidden = importing;
+		byId('install-actions').hidden = importing;
+		byId('install-name-field').hidden = importing;
+		byId('install-instance-name-help').hidden = importing;
 		if (!importing) invalidateInstanceRestorePreview();
 	});
 	byId('choose-instance-restore-source').addEventListener('click', () => void chooseDirectory('restore', 'instance-restore-source'));
 	for (const event of ['input', 'change']) byId('instance-restore-source').addEventListener(event, invalidateInstanceRestorePreview);
+	for (const event of ['input', 'change']) byId('install-home').addEventListener(event, invalidateInstanceRestorePreview);
+	byId('install-instance-name').addEventListener('input', invalidateInstanceRestorePreview);
 	byId('instance-restore-form').addEventListener('submit', (event) => event.preventDefault());
 	byId('preview-instance-restore').addEventListener('click', async () => {
 		invalidateInstanceRestorePreview();
+		if (!byId('instance-restore-form').reportValidity() || !byId('install-home').reportValidity()) return;
 		const sourceHome = byId('instance-restore-source').value.trim();
-		const result = await operation('Previewing entire instance', () => state.api.restoreInstance({ sourceHome }), 'Full-instance preview is ready. Review before importing.');
+		const targetHome = byId('install-home').value.trim();
+		const result = await operation('Previewing entire instance', async () => {
+			await prepareInstallTarget({ importing: true });
+			return state.api.restoreInstance({ sourceHome });
+		}, 'Full-instance preview is ready. Review before importing.');
 		if (!result) return;
 		renderInstanceRestorePlan(result);
-		state.instanceRestorePreview = { sourceHome, digest: result.digest };
+		state.instanceRestorePreview = { sourceHome, targetHome, digest: result.digest };
 		byId('apply-instance-restore').disabled = false;
 	});
 	byId('apply-instance-restore').addEventListener('click', async () => {
 		const preview = state.instanceRestorePreview;
 		const sourceHome = byId('instance-restore-source').value.trim();
-		if (!preview || preview.sourceHome !== sourceHome) {
+		if (!preview || preview.sourceHome !== sourceHome || preview.targetHome !== byId('install-home').value.trim()) {
 			invalidateInstanceRestorePreview();
 			notice('Preview this full-instance export again before importing.', 'error', { persist: true });
 			return;

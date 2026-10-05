@@ -9,7 +9,7 @@ import {
 import { isHealthy } from './model.js';
 import { loadProviders, renderReadiness } from './providers.js';
 import { renderPhase, renderServices } from './runtime.js';
-import { renderInstancePicker } from './instances.js';
+import { renderInstallationReadiness, renderInstancePicker } from './instances.js';
 import { renderPreferences } from './preferences.js';
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
@@ -36,25 +36,17 @@ export function render(snapshot, options = {}) {
 	state.renderingSnapshot = true;
 	if (snapshot.phase === 'not_installed' && previousPhase !== 'not_installed') {
 		byId('install-instance-name').value = snapshot.config.deployment.projectName;
+		byId('install-home').value = snapshot.homeDir;
+		byId('install-home').dataset.suggestedHome = `${state.instancesDirectory}/${snapshot.config.deployment.projectName}`;
 		byId('install-assistant-port').value = String(snapshot.config.assistant.port);
 		byId('install-gateway-port').value = String(snapshot.config.gateway.port);
 	}
-	setText('install-home', snapshot.homeDir);
 	renderInstancePicker(snapshot);
 	byId('recovery-assistant-port').value = String(snapshot.config.assistant.port);
 	byId('recovery-gateway-port').value = String(snapshot.config.gateway.port);
 	renderPhase(snapshot.phase);
 	if (snapshot.phase === 'not_installed') {
-		const ready = snapshot.installationReadiness?.ok === true;
-		setText(
-			'install-prerequisite',
-			ready
-				? 'This computer is ready. Docker is running.'
-				: snapshot.installationReadiness?.message || 'Install and open Docker, then check again.'
-		);
-		byId('install-prerequisite').className = `prerequisite ${ready ? 'ready' : 'error'}`;
-		byId('install').disabled = state.operationInFlight || !ready;
-		byId('check-prerequisites').hidden = ready;
+		renderInstallationReadiness(snapshot.installationReadiness);
 		state.renderingSnapshot = false;
 		return;
 	}

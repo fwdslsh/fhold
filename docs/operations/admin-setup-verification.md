@@ -1,5 +1,33 @@
 # Admin verification
 
+## Current UI preview iteration
+
+This iteration removes the Welcome heading and duplicate naming/confirmation
+screen. The wizard has one editable name, background Docker/Compose checks,
+collapsed Advanced for folder/ports, Install below Advanced, and top-aligned
+Back/Cancel or Instances/Finish later navigation. Preparation still goes through
+the existing native empty-folder validation; installation and full-instance
+import use the existing control-plane operations and protections.
+
+At the user's request, automated tests, rendered E2E and packaged startup smoke
+are deferred until the final design iteration. Earlier test counts/screenshots
+do not qualify this changed source. The existing startup smoke and renderer
+fixtures still describe the previous two-screen naming flow and must be updated
+to the final wizard before running that qualification. This is an unreleased
+preview AppImage, not a new certified release. TypeScript compilation and the
+standard AppImage build are build checks, not end-to-end verification.
+
+For this preview, manually check first-launch choices, one-click previous-instance
+opening, name-based folder suggestions, custom-folder preservation, navigation,
+default-collapsed Advanced, background check/retry states and installation.
+After installing in a disposable home, Finish later must not stop the agent;
+reopening must resume account setup. Review full import with a disposable export:
+folder edits must invalidate preview, Enter in the target field must not install
+while import is selected, and importing must retain the native confirmation and
+stopped-writer checks. Product navigation must never resize the window.
+
+## Final automated qualification
+
 Use a disposable explicit `FH_ADMIN_E2E_HOME`, separate ports and a fresh desktop
 profile. Never launch the test against a real user home. Required image tags must
 match the frozen candidate. Test retains evidence according to its explicit

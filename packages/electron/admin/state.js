@@ -9,6 +9,8 @@ export function createAdminState() {
 		instancesDirectory: '',
 		recentInstances: [],
 		snapshotPromise: undefined,
+		installationReadiness: undefined,
+		setupCheckPromise: undefined,
 		providerSummaries: [],
 		providersLoaded: false,
 		providerLoadPromise: undefined,

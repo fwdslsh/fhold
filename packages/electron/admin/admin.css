@@ -363,12 +363,6 @@ button.text-button:hover:not(:disabled) {
 	line-height: 1.45;
 }
 
-.setup-progress ol {
-	margin: 12px 0;
-	padding: 0;
-	list-style: none;
-}
-
 .form-note,
 .help-text {
 	max-width: 62ch;
@@ -381,38 +375,6 @@ button.text-button:hover:not(:disabled) {
 .danger-text {
 	color: var(--danger);
 	font-weight: 650;
-}
-
-.setup-progress li {
-	display: flex;
-	align-items: flex-start;
-	gap: 14px;
-}
-
-.setup-progress li > span {
-	display: grid;
-	flex: 0 0 auto;
-	width: 24px;
-	height: 24px;
-	place-content: center;
-	border: 1px solid var(--border);
-	border-radius: 50%;
-	background: var(--surface);
-	color: var(--accent);
-	font-size: 0.8125rem;
-	font-weight: 800;
-}
-
-.setup-progress strong {
-	display: block;
-	margin-bottom: 4px;
-}
-
-.setup-progress small {
-	margin: 0;
-	color: var(--ink-soft);
-	font-size: 0.8125rem;
-	line-height: 1.45;
 }
 
 .app-shell {
@@ -493,44 +455,10 @@ button.text-button:hover:not(:disabled) {
 	box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.setup-progress {
-	margin-top: 8px;
-}
-
-.setup-progress ol {
-	display: grid;
-	gap: 16px;
-}
-
-.setup-progress li:not(:last-child) {
-	position: relative;
-}
-
-.setup-progress li:not(:last-child)::after {
-	position: absolute;
-	top: 28px;
-	left: 11px;
-	width: 2px;
-	height: 20px;
-	background: var(--border-soft);
-	content: "";
-}
-
 .disclosure > summary span {
 	color: var(--ink-soft);
 	font-size: 0.75rem;
 	font-weight: 500;
-}
-
-.setup-progress li.complete > span {
-	border-color: var(--success);
-	background: var(--success-soft);
-	color: var(--success);
-}
-
-.setup-progress li.current > span {
-	border-color: var(--accent);
-	background: var(--accent-soft);
 }
 
 .workspace {
@@ -1482,8 +1410,7 @@ body[data-busy="true"] #main-content {
 		display: none;
 	}
 
-	body[data-phase="setup_incomplete"] .brand-lockup.compact,
-	body[data-phase="setup_incomplete"] .setup-progress {
+	body[data-phase="setup_incomplete"] .brand-lockup.compact {
 		display: none;
 	}
 
@@ -1802,8 +1729,7 @@ body[data-busy="true"] #main-content {
 	display: none;
 }
 
-/* Welcome is a choice of two tasks, not a runtime dashboard. Keep these
-   overrides scoped so the installation confirmation retains its own layout. */
+/* Welcome is a choice of two tasks, not a runtime dashboard. */
 #instance-welcome {
 	width: min(480px, calc(100% - 48px));
 	align-items: center;
@@ -1814,6 +1740,7 @@ body[data-busy="true"] #main-content {
 	border: 0;
 }
 #instance-welcome .instance-wordmark {
+	margin: 0;
 	font-size: 1.375rem;
 	font-weight: 650;
 	letter-spacing: -0.045em;
@@ -1821,11 +1748,6 @@ body[data-busy="true"] #main-content {
 #instance-welcome .instance-wordmark span {
 	padding-inline: 2px;
 	color: var(--accent-hover);
-}
-#instance-welcome h1 {
-	margin: 24px 0 0;
-	font-size: 1.75rem;
-	letter-spacing: -0.035em;
 }
 #instance-welcome .instance-options {
 	display: grid;
@@ -1846,44 +1768,18 @@ body[data-busy="true"] #main-content {
 	font-size: 0.8125rem;
 	line-height: 1.55;
 }
-#instance-welcome #new-instance-section {
-	margin-top: 20px;
-}
-#instance-welcome #cancel-new-instance {
-	margin-bottom: 12px;
-}
-#instance-welcome #new-instance-title {
-	margin-bottom: 24px;
-}
 #instance-welcome .instance-path {
 	font-size: 0.75rem;
 	font-weight: 400;
 	line-height: 1.6;
 }
-#instance-welcome .disclosure {
-	margin: 4px 0 20px;
-	border: 0;
-}
-#instance-welcome .disclosure > summary {
-	min-height: 44px;
-	padding-block: 12px;
-	font-weight: 500;
-}
-#instance-welcome .disclosure .field {
-	margin-top: 8px;
-}
-#instance-welcome #create-instance,
 #instance-welcome #begin-new-instance.primary {
 	width: 100%;
 	background: var(--ink);
 	color: var(--canvas);
 }
-#instance-welcome #create-instance:hover:not(:disabled),
 #instance-welcome #begin-new-instance.primary:hover:not(:disabled) {
 	background: #fff;
-}
-#instance-welcome .instance-confirmation {
-	margin: 10px 0 0;
 }
 #instance-welcome .instance-recents h2 {
 	margin: 0 0 8px;
@@ -1922,15 +1818,145 @@ body[data-busy="true"] #main-content {
 #instance-welcome .instance-recents:not([hidden]) + .instance-picker {
 	margin-top: 12px;
 }
-#instance-welcome #new-instance-form > .field {
-	margin: 0;
-}
 @media (max-width: 760px) {
 	#instance-welcome {
 		width: min(480px, calc(100% - 24px));
 		padding-block: 24px;
 	}
 	#instance-welcome .instance-card {
+		padding: 16px;
+	}
+}
+
+/* Setup is one focused task per step; management keeps its ordinary sidebar. */
+#install-section {
+	width: min(600px, calc(100% - 48px));
+}
+.wizard-card {
+	padding: 24px 32px 32px;
+	border: 0;
+	background: var(--canvas);
+}
+.wizard-navigation {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 24px;
+}
+.wizard-navigation .text-button {
+	min-height: 44px;
+	padding-inline: 0;
+	color: var(--ink-soft);
+	font-weight: 500;
+}
+.wizard-steps {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0 0 32px;
+	padding: 0;
+	list-style: none;
+}
+.wizard-steps li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--ink-faint);
+	font-size: 0.8125rem;
+}
+.wizard-steps li > span {
+	display: grid;
+	width: 24px;
+	height: 24px;
+	flex: 0 0 auto;
+	place-items: center;
+	border: 1px solid var(--border);
+	border-radius: 50%;
+	font-size: 0.75rem;
+}
+.wizard-steps li[aria-current="step"] {
+	color: var(--ink);
+}
+.wizard-steps li[aria-current="step"] > span {
+	background: var(--ink);
+	border-color: var(--ink);
+	color: var(--canvas);
+}
+.wizard-steps li.complete > span {
+	color: var(--success);
+}
+.wizard-card h1 {
+	margin: 0 0 8px;
+}
+#install-form {
+	margin-top: 28px;
+}
+#install-form .field {
+	margin-bottom: 0;
+}
+#install-advanced {
+	margin: 24px 0 0;
+}
+#install-advanced > summary {
+	min-height: 44px;
+	font-weight: 500;
+}
+#install-advanced .field,
+#install-advanced .check-row {
+	margin-top: 16px;
+}
+.wizard-actions {
+	margin-top: 20px;
+}
+.wizard-actions .prerequisite {
+	margin: 0 0 12px;
+	padding: 0;
+	border: 0;
+	font-size: 0.8125rem;
+}
+.wizard-actions .prerequisite.ready {
+	color: var(--ink-soft);
+}
+.wizard-actions #install {
+	width: 100%;
+	background: var(--ink);
+	color: var(--canvas);
+}
+.wizard-import {
+	margin-top: 24px;
+}
+.wizard-import > summary {
+	color: var(--ink-soft);
+	font-size: 0.8125rem;
+	font-weight: 500;
+}
+body[data-phase="setup_incomplete"] .app-shell {
+	grid-template-columns: minmax(0, 1fr);
+}
+body[data-phase="setup_incomplete"] .sidebar {
+	display: none;
+}
+body[data-phase="setup_incomplete"] .workspace {
+	width: min(680px, calc(100% - 48px));
+	margin: 32px auto;
+}
+body[data-phase="setup_incomplete"] .page-header,
+body[data-phase="setup_incomplete"] #main-content {
+	width: 100%;
+}
+body[data-phase="setup_incomplete"] .page-header {
+	padding: 0 0 24px;
+}
+body[data-phase="setup_incomplete"] #provider-connection {
+	padding: 24px;
+}
+@media (max-width: 520px) {
+	#install-section,
+	body[data-phase="setup_incomplete"] .workspace {
+		width: calc(100% - 24px);
+	}
+	.wizard-card {
 		padding: 16px;
 	}
 }

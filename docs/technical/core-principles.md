@@ -88,8 +88,12 @@ service, automatic restart or second configuration store is introduced.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
-Welcome starts with setup/open choices, or a compact named recent list. Naming
-and optional folder selection appear only after choosing new setup; opening an
+Welcome starts with setup/open choices, or a compact named recent list, without
+a redundant welcome heading. New setup is an Install → Connect → Ready wizard;
+naming is requested once and optional folder/port settings share collapsed Advanced.
+Read-only Docker/Compose checks run independently of instance selection so they
+do not block naming or create a home. Each stage has explicit navigation out of
+setup; leaving an installed agent does not stop it. Opening an
 existing instance never silently starts a fresh installation. Compatible-home
 labels are read from current intent, not stored in a second registry. Preparing
 an empty/new folder does not install anything until explicit confirmation. A chosen

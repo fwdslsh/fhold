@@ -3,6 +3,7 @@ import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { renderRestartStatus, requestStackAction } from './restart.js';
 import { updateRecoveryFields } from './recovery.js';
+import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
 export function renderPhase(phase) {
@@ -142,7 +143,7 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
-	byId('check-prerequisites').addEventListener('click', () => void refresh());
+	byId('check-prerequisites').addEventListener('click', () => void checkInstallationReadiness());
 	byId('install-automatic-ports').addEventListener('change', () => {
 		const automatic = byId('install-automatic-ports').checked;
 		byId('install-assistant-port').disabled = automatic;
@@ -150,7 +151,7 @@ export function bindRuntimeEvents() {
 	});
 	byId('install-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		if (!state.currentConfig) return;
+		if (state.operationInFlight || byId('instance-restore-panel').open) return;
 		const automaticPorts = byId('install-automatic-ports').checked;
 		const assistantPort = Number(byId('install-assistant-port').value);
 		const gatewayPort = Number(byId('install-gateway-port').value);
@@ -161,19 +162,26 @@ export function bindRuntimeEvents() {
 			byId('install-gateway-port').focus();
 			return;
 		}
-		const config = structuredClone(state.currentConfig);
-		config.deployment.projectName = byId('install-instance-name').value.trim();
-		if (config.recovery) config.recovery.instanceId = config.deployment.projectName;
-		if (!automaticPorts) {
-			config.assistant.port = assistantPort;
-			config.gateway.port = gatewayPort;
-		}
+		let prepared = false;
 		const result = await operation(
 			'Setting up fhold',
-			() => state.api.install(config, automaticPorts),
+			async () => {
+				await prepareInstallTarget();
+				const snapshot = await state.api.snapshot();
+				prepared = true;
+				state.currentSnapshot = snapshot;
+				state.currentConfig = snapshot.config;
+				const config = snapshot.config;
+				if (!automaticPorts) {
+					config.assistant.port = assistantPort;
+					config.gateway.port = gatewayPort;
+				}
+				return state.api.install(config, automaticPorts);
+			},
 			'fhold is installed. Next, connect your AI provider.'
 		);
-		if (!result) await refresh();
+		if (result) byId('view-title').focus();
+		else if (prepared) await refresh();
 	});
 
 	byId('recovery-form').addEventListener('submit', async (event) => {

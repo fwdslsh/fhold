@@ -124,13 +124,16 @@ to open a recent instance, browse for an existing one or start new setup.
 On first launch, choose **Set up a new agent** or **Open existing instance…**.
 Recent compatible instances are listed by saved name, with their folder paths
 to distinguish them; unavailable folders cannot be opened as new installations.
-**Set up a new agent** reveals the name field and suggests
-`~/fhold/instances/<name>`. Expand **Folder location** to choose a different
-new/empty folder or enter a full path. **Back** preserves the draft without
-selecting a home; **Continue to setup** opens the installation confirmation
-with the chosen editable instance name. Ports are chosen automatically:
-3810/3830 when available, otherwise a generated free pair. **Advanced** offers
-manual overrides. Saved ports remain stable on refresh/update. Each installation
+**Set up a new agent** opens the Install → Connect → Ready wizard. Name the agent
+once; its suggested folder is `~/fhold/instances/<name>`. Docker and Compose
+checks run in the background without blocking typing or selecting a home.
+**Advanced**, collapsed by default, contains the folder picker and port settings.
+**Install fhold** follows Advanced and is the explicit installation confirmation.
+**Back** and **Cancel setup** return to the instance choices without installing.
+After installation, **Instances** and **Finish later** leave the agent running;
+reopening its home resumes account setup. Ports are chosen automatically:
+3810/3830 when available, otherwise a generated free pair. Saved ports remain
+stable on refresh/update. Each installation
 keeps its own knowledge, credentials, workspace and runtime data. Names are the
 persisted Compose project names: `personal-agent` creates
 `personal-agent-assistant-1` with OS hostname `personal-agent`. Setup and lifecycle
@@ -179,9 +182,10 @@ Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
 To import that export, choose **Set up a new agent** at Welcome, select a
-new/empty folder under **Folder location**, continue to setup and choose
-**Import an entire instance instead** on the setup screen, **without installing
-first**. Preview identifies the saved name and destination; the native confirmation
+new/empty folder under **Advanced** and choose **Import an entire instance instead**,
+**without installing first**. The folder remains editable while importing;
+changing it invalidates the preview. Preview identifies the saved name and
+destination; the native confirmation
 explains downtime, credentials, active tasks and external-storage limitations.
 Both full operations leave containers stopped. These exports are not interchangeable
 with the automatic same-instance checkpoint format.

@@ -19,10 +19,9 @@
 	    </div>
 
     <main id="instance-welcome" class="welcome-shell" tabindex="-1" hidden>
-      <section class="welcome-card instance-card" aria-labelledby="instance-welcome-title">
+      <section class="welcome-card instance-card" aria-label="Choose an instance">
         <header class="instance-intro">
-          <div class="instance-wordmark">f<span aria-hidden="true">/</span>hold</div>
-          <h1 id="instance-welcome-title">Welcome to fhold</h1>
+          <h1 class="instance-wordmark">f<span aria-hidden="true">/</span>hold</h1>
         </header>
         <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
         <div id="instance-options" class="instance-options">
@@ -35,29 +34,6 @@
             <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
           </section>
         </div>
-        <section id="new-instance-section" class="instance-new" aria-labelledby="new-instance-title" hidden>
-          <button id="cancel-new-instance" class="text-button" type="button">← Back</button>
-          <h2 id="new-instance-title">Set up a new agent</h2>
-          <form id="new-instance-form">
-            <label class="field" for="new-instance-name">
-              Agent name
-              <input id="new-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" />
-            </label>
-            <details id="new-instance-location-details" class="disclosure">
-              <summary>Folder location</summary>
-            <div class="field">
-              <label for="new-instance-home">Agent folder</label>
-              <div class="instance-folder-input">
-                <input id="new-instance-home" type="text" placeholder="/path/to/new-instance" required autocomplete="off" spellcheck="false" aria-describedby="new-instance-help" />
-                <button id="new-instance-browse" class="secondary" type="button">Choose folder…</button>
-              </div>
-            </div>
-            <p id="new-instance-help" class="help-text">Choose a new or empty folder.</p>
-            </details>
-            <button id="create-instance" class="primary" type="submit">Continue to setup</button>
-            <p class="help-text instance-confirmation">Nothing is installed until you confirm on the next screen.</p>
-          </form>
-        </section>
       </section>
     </main>
 
@@ -73,23 +49,59 @@
 	    </main>
 
 	    <main id="install-section" class="welcome-shell" tabindex="-1" hidden>
-      <section class="welcome-card" aria-labelledby="welcome-title">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">/</span>
-          <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">A simpler path to your personal agent</span></div>
+      <section class="welcome-card wizard-card" aria-labelledby="welcome-title">
+        <div class="wizard-navigation">
+          <button class="text-button" type="button" data-instance-switch><span aria-hidden="true">←</span> Back</button>
+          <button class="text-button" type="button" data-instance-switch>Cancel setup</button>
         </div>
-        <h1 id="welcome-title">Set up fhold</h1>
-        <p class="welcome-copy">
-          Install your personal agent, then connect your AI account.
-        </p>
-        <p class="help-text">Install folder: <span id="install-home" class="instance-path">Loading…</span></p>
-        <button class="text-button" type="button" data-instance-switch>Choose another instance</button>
-        <p id="install-prerequisite" class="prerequisite" role="status">Checking this computer…</p>
+        <ol class="wizard-steps" aria-label="Setup progress">
+          <li aria-current="step"><span>1</span> Install</li>
+          <li><span>2</span> Connect</li>
+          <li><span>3</span> Ready</li>
+        </ol>
+        <h1 id="welcome-title">Create your agent</h1>
+        <p class="welcome-copy">Choose a name. We’ll take care of the setup.</p>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
-
-        <details id="instance-restore-panel" class="disclosure">
+        <form id="install-form">
+          <label id="install-name-field" class="field" for="install-instance-name">
+            <span>Agent name</span>
+            <input id="install-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" aria-describedby="install-instance-name-help" />
+          </label>
+          <p id="install-instance-name-help" class="help-text">Lowercase letters, numbers and hyphens.</p>
+          <details id="install-advanced" class="disclosure">
+            <summary>Advanced</summary>
+            <div class="field">
+              <label for="install-home">Agent folder</label>
+              <div class="instance-folder-input">
+                <input id="install-home" type="text" placeholder="/path/to/new-instance" required autocomplete="off" spellcheck="false" aria-describedby="install-home-help" />
+                <button id="install-browse" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="install-home-help" class="help-text">Choose a new or empty folder. All instance files will live here.</p>
+            </div>
+            <label class="check-row"><input id="install-automatic-ports" type="checkbox" checked /><span>Choose available ports automatically</span></label>
+            <div class="field-grid two-column disclosure-body">
+              <label class="field" for="install-assistant-port">
+                <span>Assistant port</span>
+                <input id="install-assistant-port" type="number" value="3810" min="1" max="65535" required disabled />
+              </label>
+              <label class="field" for="install-gateway-port">
+                <span>Guardian MCP port</span>
+                <input id="install-gateway-port" type="number" value="3830" min="1" max="65535" required disabled />
+              </label>
+            </div>
+            <p class="help-text">
+              Defaults are 3810 for OpenCode and 3830 for optional Guardian MCP access. Setup chooses free ports if needed.
+            </p>
+          </details>
+          <div id="install-actions" class="wizard-actions">
+            <p id="install-prerequisite" class="prerequisite" role="status">Checking Docker and Compose…</p>
+            <button id="check-prerequisites" class="text-button" type="button" hidden>Check again</button>
+            <button id="install" class="primary" type="submit" disabled>Install fhold</button>
+          </div>
+        </form>
+        <details id="instance-restore-panel" class="disclosure wizard-import">
           <summary>Import an entire instance instead</summary>
-          <p class="help-text">Use a full-instance export to restore conversations, sign-ins, access keys and all saved settings. This folder must be empty; do not install first. The original instance must be stopped. Its saved name, ports, plugins and active schedules are retained, and the restored instance stays stopped.</p>
+          <p class="help-text">Use a full-instance export to restore conversations, sign-ins, access keys and all saved settings. Choose an empty destination in Advanced; do not install first. The original instance must be stopped. Its saved name, ports, plugins and active schedules are retained, and the restored instance stays stopped.</p>
           <form id="instance-restore-form" class="form-stack">
             <label class="field" for="instance-restore-source"><span>Full-instance export directory</span><span class="input-action"><input id="instance-restore-source" autocomplete="off" placeholder="/path/to/private-instance-export" required /><button id="choose-instance-restore-source" class="secondary" type="button">Choose folder</button></span></label>
             <div id="instance-restore-summary" class="inline-status neutral" role="status" aria-live="polite"><strong>No full-instance preview yet.</strong><span>Preview the export before importing. External drives need separate protection.</span></div>
@@ -97,33 +109,6 @@
           </form>
           <details class="disclosure technical-disclosure"><summary>Full-instance import details</summary><textarea id="instance-restore-result" class="technical-output" readonly spellcheck="false" aria-label="Full-instance import technical details">No full-instance operation has run.</textarea></details>
         </details>
-        <form id="install-form">
-          <label class="field" for="install-instance-name">
-            <span>Instance name</span>
-            <input id="install-instance-name" type="text" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" aria-describedby="install-instance-name-help" />
-          </label>
-          <p id="install-instance-name-help" class="help-text">Lowercase letters, numbers and hyphens. Sets the container names and your agent’s hostname; use a different name for each instance.</p>
-          <button id="install" class="primary" type="submit" disabled>Install fhold</button>
-          <button id="check-prerequisites" class="text-button" type="button" hidden>Check again</button>
-          <details id="install-advanced" class="disclosure">
-            <summary>Advanced</summary>
-            <label class="check-row"><input id="install-automatic-ports" type="checkbox" checked /><span>Choose available ports automatically</span></label>
-            <div class="field-grid two-column disclosure-body">
-              <label class="field" for="install-assistant-port">
-                <span>Assistant port</span>
-                <input id="install-assistant-port" type="number" min="1" max="65535" required disabled />
-              </label>
-              <label class="field" for="install-gateway-port">
-                <span>Guardian MCP port</span>
-                <input id="install-gateway-port" type="number" min="1" max="65535" required disabled />
-              </label>
-            </div>
-            <p class="help-text">
-              Defaults are 3810 for OpenCode and 3830 for Guardian. If either is in use, setup chooses free ports and saves them. Turn off automatic selection to use your own ports.
-              Guardian is an optional MCP API for clients, not a website.
-            </p>
-          </details>
-        </form>
       </section>
     </main>
 
@@ -137,15 +122,6 @@
         <select id="instance-picker" class="sidebar-instance-picker" aria-label="Choose instance">
           <option value="">Loading…</option>
         </select>
-
-        <div class="setup-only setup-progress" hidden>
-          <p id="setup-step" class="eyebrow">Step 2 of 3</p>
-          <ol>
-            <li class="complete"><span aria-hidden="true">✓</span><div><strong>Installed</strong><small id="setup-runtime">Checking your agent…</small></div></li>
-            <li class="current" aria-current="step"><span>2</span><div><strong>Connect your AI</strong><small>Sign in and verify a real response.</small></div></li>
-            <li><span>3</span><div><strong>Ready to use</strong><small>Choose how you want to connect.</small></div></li>
-          </ol>
-        </div>
 
         <details id="mobile-navigation" class="ready-only" open hidden>
           <summary id="mobile-navigation-label">Navigation</summary>
@@ -171,6 +147,19 @@
       </aside>
 
       <div class="workspace">
+        <div class="setup-only wizard-navigation" hidden>
+          <button class="text-button" type="button" data-instance-switch><span aria-hidden="true">←</span> Instances</button>
+          <button class="text-button" type="button" data-instance-switch title="Leave setup; your installed agent keeps running.">Finish later</button>
+        </div>
+        <div class="setup-only wizard-progress" hidden>
+          <p id="setup-step" class="visually-hidden">Step 2 of 3</p>
+          <ol class="wizard-steps" aria-label="Setup progress">
+            <li class="complete"><span aria-hidden="true">✓</span> Installed</li>
+            <li aria-current="step"><span>2</span> Connect</li>
+            <li><span>3</span> Ready</li>
+          </ol>
+          <p id="setup-runtime" class="visually-hidden">Checking your agent…</p>
+        </div>
         <header class="page-header">
 	              <div>
             <p id="view-kicker" class="eyebrow" hidden>PERSONAL AGENT</p>

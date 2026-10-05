@@ -133,17 +133,21 @@ Admin automatically reopens the last-used compatible instance. First launch or
 an unavailable previous instance shows Welcome: choose **Set up a new agent**
 or **Open existing instance…**. Use the instance dropdown → **Open another instance…**
 to return to these choices and a compact list of recent instances.
-New setup asks for a name and suggests `~/fhold/instances/<name>`.
-Expand **Folder location** to choose a different new/empty folder or enter a
-full path. Then continue to setup and confirm **Install fhold**. Port
-selection is automatic; expand **Advanced** and turn off automatic selection
-only if you need specific ports. New setup refuses non-empty folders and rejects a
+The three-step wizard installs the agent, connects an AI account, then opens
+the ready instance. New setup asks for a name once and suggests
+`~/fhold/instances/<name>`. Docker and Compose checks run in the background
+while you choose. **Advanced**, collapsed by default, contains both the folder
+location and optional manual ports. Confirm **Install fhold** below it.
+New setup refuses non-empty folders and rejects a
 name already used by Docker before writing installation files. Folder selection
 alone does not install or start anything. Only explicit new setup accepts an
 empty folder; opening an existing instance requires a compatible fhold home.
 Provider authentication
 and readiness use the same Assistant as CLI. A startup/port failure offers an
 explicit retry, not reinstall-over-data.
+**Back** or **Cancel setup** returns to the instance choices before installation.
+After installation, **Instances** or **Finish later** leaves the agent running;
+reopen it to continue account setup.
 
 For a verified Linux package, use `bun run --cwd packages/electron build:linux`.
 Actual packaged startup requires the release smoke gate; a bundle alone is not

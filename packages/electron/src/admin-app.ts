@@ -250,6 +250,11 @@ export function registerAdminIpc(): void {
 		requireAdminSender(event);
 		return instances.welcome();
 	});
+	ipcMain.handle(ADMIN_CHANNELS.installationReadiness, (event) => {
+		requireAdminSender(event);
+		// Read-only host checks can run before any installation folder is selected.
+		return ensureDockerReady();
+	});
 	ipcMain.handle(ADMIN_CHANNELS.openInstance, (event, target: unknown) => {
 		requireAdminSender(event);
 		requireSwitchable();

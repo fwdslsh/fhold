@@ -3,6 +3,7 @@ import { renderReadiness } from './providers.js';
 import { renderRuntimeControls } from './runtime.js';
 import { refresh, render } from './snapshot.js';
 import { managedFormIds, state, viewMeta } from './state.js';
+import { renderInstallationReadiness } from './instances.js';
 
 export const byId = (id) => document.getElementById(id);
 
@@ -30,7 +31,7 @@ export function notice(value, tone = 'success', options = {}) {
 		return;
 	}
 	setText('notice-message', value);
-	const installing = state.currentSnapshot?.phase === 'not_installed';
+	const installing = !byId('install-section').hidden;
 	setText('install-status', installing ? value : '');
 	byId('install-status').hidden = !installing;
 	byId('install-status').className = `help-text${tone === 'error' ? ' danger-text' : ''}`;
@@ -56,11 +57,9 @@ export function notice(value, tone = 'success', options = {}) {
 export function setBusy(value) {
 	state.operationInFlight = value;
 	document.body.dataset.busy = String(value);
-	const busyRegion = !state.currentSnapshot
-		? byId('instance-welcome')
-		: state.currentSnapshot?.phase === 'not_installed'
-			? byId('install-section')
-			: byId('main-content');
+	const busyRegion = !byId('install-section').hidden
+		? byId('install-section')
+		: !state.currentSnapshot ? byId('instance-welcome') : byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
 	byId('instance-picker').disabled = value;
 	if (value) {
@@ -69,6 +68,8 @@ export function setBusy(value) {
 	} else {
 		for (const { button, disabled } of state.disabledButtons) button.disabled = disabled;
 		state.disabledButtons = [];
+		if (!byId('install-section').hidden)
+			renderInstallationReadiness(state.installationReadiness);
 		if (state.currentSnapshot) renderRuntimeControls(state.currentSnapshot);
 	}
 }

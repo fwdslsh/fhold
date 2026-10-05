@@ -36,8 +36,8 @@ function confirmInstanceSwitch() {
 }
 
 function suggestInstanceHome() {
-	const name = byId('new-instance-name').value.trim();
-	const field = byId('new-instance-home');
+	const name = byId('install-instance-name').value.trim();
+	const field = byId('install-home');
 	if (state.instancesDirectory && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
 		const suggested = `${state.instancesDirectory}/${name}`;
 		if (!field.value || field.value === field.dataset.suggestedHome) field.value = suggested;
@@ -45,12 +45,56 @@ function suggestInstanceHome() {
 	}
 }
 
-function showNewInstanceSetup(show) {
+export function renderInstallationReadiness(readiness) {
+	state.installationReadiness = readiness;
+	const ready = readiness?.ok === true;
+	setText('install-prerequisite', ready
+		? 'Docker and Compose are ready.'
+		: readiness?.message || 'Checking Docker and Compose…');
+	byId('install-prerequisite').className = `prerequisite${readiness ? ready ? ' ready' : ' error' : ''}`;
+	byId('install').disabled = state.operationInFlight || !ready;
+	byId('check-prerequisites').hidden = !readiness || ready;
+}
+
+export async function checkInstallationReadiness() {
+	if (state.setupCheckPromise) return state.setupCheckPromise;
+	renderInstallationReadiness(undefined);
+	state.setupCheckPromise = (async () => {
+		try {
+			renderInstallationReadiness(await state.api.installationReadiness());
+		} catch (error) {
+			renderInstallationReadiness({ ok: false, message: message(error) });
+		} finally {
+			state.setupCheckPromise = undefined;
+		}
+	})();
+	return state.setupCheckPromise;
+}
+
+function showNewInstanceSetup() {
 	if (state.operationInFlight) return;
-	byId('instance-options').hidden = show;
-	byId('instance-welcome-title').hidden = show;
-	byId('new-instance-section').hidden = !show;
-	byId(show ? 'new-instance-name' : 'begin-new-instance').focus();
+	suggestInstanceHome();
+	byId('instance-welcome').hidden = true;
+	byId('install-section').hidden = false;
+	document.body.dataset.phase = 'not_installed';
+	setSkipTarget('install-section');
+	byId('install-instance-name').focus();
+	if (state.installationReadiness?.ok) renderInstallationReadiness(state.installationReadiness);
+	else void checkInstallationReadiness();
+}
+
+export async function prepareInstallTarget({ importing = false } = {}) {
+	try {
+		await state.api.prepareNewInstance({
+			kind: 'local',
+			homeDir: byId('install-home').value.trim(),
+			...(importing ? {} : { name: byId('install-instance-name').value.trim() })
+		});
+	} catch (error) {
+		byId('install-advanced').open = true;
+		byId('install-home').focus();
+		throw error;
+	}
 }
 
 export function renderWelcome(welcome) {
@@ -75,8 +119,6 @@ export function renderWelcome(welcome) {
 		? [existingSection, begin] : [begin, existingSection]));
 	begin.className = hasAvailable ? 'secondary' : 'primary';
 	byId('instance-options').hidden = false;
-	byId('instance-welcome-title').hidden = false;
-	byId('new-instance-section').hidden = true;
 	const recent = byId('recent-instances');
 	recent.replaceChildren();
 	byId('recent-instances-section').hidden = !targets.length;
@@ -109,22 +151,17 @@ export function renderWelcome(welcome) {
 	byId('instance-preference-warning').hidden = !welcome.preferenceError;
 }
 
-export async function openInstance(target, create = false) {
+export async function openInstance(target) {
 	if (state.operationInFlight || !confirmInstanceSwitch()) return;
 	setBusy(true);
 	try {
 		await state.snapshotPromise;
 		await state.providerLoadPromise?.catch(() => {});
-		if (create) await state.api.prepareNewInstance(target);
-		else await state.api.openInstance(target);
+		await state.api.openInstance(target);
 		// Reload all renderer modules: no forms, keys, OAuth or restore previews
 		// from the previously managed instance survive a switch.
 		window.location.reload();
 	} catch (error) {
-		if (create) {
-			byId('new-instance-location-details').open = true;
-			byId('new-instance-home').focus();
-		}
 		notice(message(error), 'error', { persist: true });
 	} finally {
 		setBusy(false);
@@ -148,8 +185,7 @@ export async function showInstances() {
 }
 
 export function bindInstanceEvents() {
-	byId('begin-new-instance').addEventListener('click', () => showNewInstanceSetup(true));
-	byId('cancel-new-instance').addEventListener('click', () => showNewInstanceSetup(false));
+	byId('begin-new-instance').addEventListener('click', showNewInstanceSetup);
 	byId('instance-picker').addEventListener('change', async () => {
 		const requested = byId('instance-picker').value;
 		byId('instance-picker').value = state.currentSnapshot?.homeDir || '';
@@ -159,11 +195,10 @@ export function bindInstanceEvents() {
 			if (target && target.homeDir !== state.currentSnapshot?.homeDir) await openInstance(target);
 		}
 	});
-	byId('new-instance-name').addEventListener('input', suggestInstanceHome);
-	byId('new-instance-home').addEventListener('input', suggestInstanceHome);
-	byId('new-instance-home').addEventListener('invalid', () => {
-		byId('new-instance-location-details').open = true;
-	});
+	byId('install-instance-name').addEventListener('input', suggestInstanceHome);
+	byId('install-home').addEventListener('input', suggestInstanceHome);
+	for (const field of all('#install-advanced input'))
+		field.addEventListener('invalid', () => { byId('install-advanced').open = true; });
 	byId('choose-instance').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
 		let directory;
@@ -177,13 +212,13 @@ export function bindInstanceEvents() {
 		}
 		if (directory) await openInstance({ kind: 'local', homeDir: directory });
 	});
-	byId('new-instance-browse').addEventListener('click', async () => {
+	byId('install-browse').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
 		setBusy(true);
 		try {
 			const directory = await state.api.chooseDirectory({ purpose: 'new-instance' });
 			if (directory) {
-				byId('new-instance-home').value = directory;
+				byId('install-home').value = directory;
 				suggestInstanceHome();
 			}
 		} catch (error) {
@@ -191,17 +226,6 @@ export function bindInstanceEvents() {
 		} finally {
 			setBusy(false);
 		}
-	});
-	byId('new-instance-form').addEventListener('submit', async (event) => {
-		event.preventDefault();
-		await openInstance(
-			{
-				kind: 'local',
-				homeDir: byId('new-instance-home').value.trim(),
-				name: byId('new-instance-name').value.trim()
-			},
-			true
-		);
 	});
 	for (const button of all('[data-instance-switch]'))
 		button.addEventListener('click', () => void showInstances());
@@ -211,8 +235,12 @@ export async function initializeAdmin() {
 	try {
 		const welcome = await state.api.welcome();
 		state.recentInstances = welcome.recentInstances;
+		state.instancesDirectory = welcome.instancesDirectory || '';
 		if (welcome.selectedInstance) await refresh();
-		else renderWelcome(welcome);
+		else {
+			renderWelcome(welcome);
+			void checkInstallationReadiness();
+		}
 	} catch (error) {
 		byId('loading-state').hidden = true;
 		notice(`Could not load instances: ${message(error)}`, 'error', { persist: true });
