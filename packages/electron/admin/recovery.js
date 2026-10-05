@@ -115,8 +115,8 @@ export function renderRecoveryStatus(status) {
 	const title = document.createElement('strong');
 	const detail = document.createElement('span');
 	if (status.state === 'disabled') {
-		title.textContent = 'Runtime recovery is off.';
-		detail.textContent = 'Local persistence is unchanged. Portable backups remain available below.';
+		title.textContent = 'Ephemeral container support is off.';
+		detail.textContent = 'Local persistence is unchanged. Import / export remains available above.';
 	} else if (status.state === 'ready') {
 		title.textContent = 'Checkpoint accepted.';
 		detail.textContent = `Last publication: ${new Date(status.lastPublishedAt).toLocaleString()}. This is same-instance recovery, not a portable archive.`;
@@ -149,14 +149,14 @@ export function bindRecoveryEvents() {
 		event.preventDefault();
 		const previous = state.currentSnapshot.recovery.settings;
 		const saved = await operation(
-			'Saving recovery settings',
+			'Saving checkpoint settings',
 			async () => {
 				const result = await state.api.recovery(recoveryInput());
 				setFormClean(id('form'));
 				render(result);
 				return result;
 			},
-			'Recovery settings saved. Existing checkpoints and containers were not changed.'
+			'Checkpoint settings saved. Existing checkpoints and containers were not changed.'
 		);
 		if (saved) {
 			const next = saved.config.recovery;

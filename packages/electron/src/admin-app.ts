@@ -518,10 +518,10 @@ export function registerAdminIpc(): void {
 					: purpose === 'instance'
 						? 'Open a fhold folder'
 						: purpose === 'recovery'
-							? 'Choose a private runtime recovery directory'
+							? 'Choose a private checkpoint directory'
 							: purpose === 'backup'
-							? 'Choose an empty backup directory'
-							: 'Choose an fhold backup',
+							? 'Choose an empty export directory'
+							: 'Choose an fhold export',
 			buttonLabel:
 				purpose === 'new-instance'
 					? 'Use this folder'
@@ -530,8 +530,8 @@ export function registerAdminIpc(): void {
 						: purpose === 'recovery'
 							? 'Use for recovery'
 							: purpose === 'backup'
-							? 'Use for backup'
-							: 'Use this backup',
+							? 'Use for export'
+							: 'Use this export',
 			properties: purpose === 'restore' ? ['openDirectory'] : ['openDirectory', 'createDirectory']
 		};
 		const owner = BrowserWindow.fromWebContents(event.sender);

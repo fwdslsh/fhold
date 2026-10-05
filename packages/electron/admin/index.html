@@ -150,7 +150,7 @@
           <button class="nav-item" type="button" data-view="access" aria-controls="view-access">
             <span>People & access</span>
           </button>
-          <button class="nav-item" type="button" data-view="system" aria-controls="view-backup view-diagnostics">
+          <button class="nav-item" type="button" data-view="system" aria-controls="view-system">
             <span>System</span>
           </button>
         </nav>
@@ -302,12 +302,12 @@
             </details>
 
             <details class="setup-only panel restore-panel" hidden>
-              <summary><strong>Restore from an fhold backup</strong><span>Optional · do this before setup is complete</span></summary>
+              <summary><strong>Import from an fhold export</strong><span>Optional · do this before setup is complete</span></summary>
               <div class="disclosure-body">
                 <form id="restore-form" class="form-stack">
 	                <p class="section-intro">Portable files only. Native conversations need separate recovery.</p>
-                  <details class="disclosure"><summary>Before restoring</summary><p class="help-text">Keep a full private recovery backup of your previous instance. The preview identifies detected runtime data and links that will not be restored.</p></details>
-	                  <label class="field" for="restore-source"><span>fhold portable backup</span><span class="input-action"><input id="restore-source" autocomplete="off" placeholder="/path/to/backup" /><button id="choose-restore-source" class="secondary" type="button">Choose folder</button></span></label>
+                  <details class="disclosure"><summary>Before importing</summary><p class="help-text">Keep a full private recovery backup of your previous instance. The preview identifies detected runtime data and links that will not be imported.</p></details>
+	                  <label class="field" for="restore-source"><span>fhold export directory</span><span class="input-action"><input id="restore-source" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-restore-source" class="secondary" type="button">Choose folder</button></span></label>
                   <details class="disclosure"><summary>Include sensitive data (optional)</summary>
                   <fieldset class="option-group">
                     <legend class="visually-hidden">Include sensitive data</legend>
@@ -319,12 +319,12 @@
                   <div id="restore-preservation" class="section-intro" aria-live="polite"></div>
                   <label id="restore-acknowledge-row" class="check-row" hidden><input id="restore-acknowledge" type="checkbox" /> I have reviewed the unrestored data and preserved it separately or chosen to defer its recovery.</label>
                   <div class="button-row">
-                    <button id="preview-restore" class="secondary" type="button">Preview restore</button>
-                    <button id="apply-restore" class="primary" type="button" disabled>Apply reviewed restore</button>
+                    <button id="preview-restore" class="secondary" type="button">Preview import</button>
+                    <button id="apply-restore" class="primary" type="button" disabled>Apply reviewed import</button>
                   </div>
                 </form>
-                <div id="restore-summary" class="inline-status neutral"><strong>No restore preview yet.</strong><span>A supported fhold backup manifest is required. Review portable files before anything changes.</span></div>
-                <details class="disclosure technical-disclosure"><summary>Restore details</summary><textarea id="data-result" class="technical-output" readonly spellcheck="false" aria-label="Restore technical details">No restore operation has run.</textarea></details>
+                <div id="restore-summary" class="inline-status neutral"><strong>No import preview yet.</strong><span>A supported fhold export manifest is required. Review portable files before anything changes.</span></div>
+                <details class="disclosure technical-disclosure"><summary>Import details</summary><textarea id="data-result" class="technical-output" readonly spellcheck="false" aria-label="Import technical details">No import operation has run.</textarea></details>
               </div>
             </details>
           </section>
@@ -545,22 +545,53 @@
             </details>
           </section>
 
-          <section id="view-backup" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="backup-overview-heading">
-            <section class="panel" aria-labelledby="backup-overview-heading">
-              <h2 id="backup-overview-heading">Backups and recovery</h2>
-              <p class="section-intro">Choose what you need to preserve. These two options use different formats and are not interchangeable.</p>
+          <section id="view-system" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="view-title">
+            <details id="installation-details" class="panel panel-disclosure">
+              <summary id="diagnostics-heading">Installation details</summary>
               <dl class="detail-list">
-                <div><dt>Portable backup</dt><dd>A manual copy of knowledge, workspace and reviewed settings for a fresh installation. No native conversations or remote sign-ins.</dd></div>
-                <div><dt>Runtime recovery</dt><dd>Automatic checkpoints of this same Assistant, including sessions, sign-ins and approvals. Restores before startup after local storage is lost; native tool versions must match.</dd></div>
+                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
+                <div><dt>fhold home</dt><dd id="home">Loading…</dd></div>
+                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
+                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
               </dl>
-              <p class="help-text">Neither option is a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
-            </section>
+              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Connections.</p>
+            </details>
+
+            <details id="recent-logs" class="panel panel-disclosure">
+              <summary>Recent logs</summary>
+              <button id="load-logs" class="secondary" type="button">Load logs</button>
+              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
+            </details>
+
+            <details id="import-export" class="panel panel-disclosure">
+              <summary id="backup-heading">Import / export <small>Reviewed content · fresh installations</small></summary>
+              <p class="section-intro">Export knowledge, workspace and reviewed settings to a directory. Import that content into a fresh instance. No native conversations or remote sign-ins.</p>
+              <p class="help-text">To import, create a fresh instance and choose “Import from an fhold export” before completing provider setup. Preview the contents first; imported task definitions remain inactive until reviewed.</p>
+              <p class="help-text">For automatic same-instance continuity after storage is lost, use Ephemeral container support below. These two options use different formats and are not interchangeable.</p>
+              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Knowledge, workspace, allowlisted settings, and task definitions. Native conversations, runtime snapshots, external mounts and symlink targets are not included. Exports are not full-stack backups.</p></details>
+              <form id="backup-form" class="form-stack">
+	                <label class="field" for="backup-destination"><span>Export directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
+                <details class="disclosure"><summary>Include sensitive data (optional)</summary>
+                  <fieldset class="option-group">
+                  <legend class="visually-hidden">Include sensitive data</legend>
+                  <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
+                  <label class="check-row"><input id="backup-env" type="checkbox" /> Private user environment</label>
+                  <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
+                </fieldset>
+                  </details>
+                <button class="primary" type="submit">Export portable content</button>
+              </form>
+              <div id="backup-summary" class="inline-status neutral" hidden></div>
+              <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
+            </details>
+
             <details id="runtime-recovery" class="panel panel-disclosure">
-              <summary>Runtime recovery <small>Automatic · same-instance continuity</small></summary>
-              <p class="section-intro">Optional for ordinary local installs. Useful when the Assistant’s disk can disappear. Keep checkpoints private: they can contain conversations, account credentials and trust decisions.</p>
-              <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Recovery is off.</strong><span>Local data remains in this instance’s home.</span></div>
+              <summary>Ephemeral container support <small>Automatic checkpoints · same-instance continuity</small></summary>
+              <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup; native tool versions must match. Optional for ordinary local installs.</p>
+              <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
+              <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Ephemeral container support is off.</strong><span>Local data remains in this instance’s home.</span></div>
               <form id="runtime-recovery-form" class="form-stack" data-managed-form>
-                <label class="check-row"><input id="runtime-recovery-enabled" type="checkbox" /> Enable automatic runtime recovery</label>
+                <label class="check-row"><input id="runtime-recovery-enabled" type="checkbox" /> Enable automatic checkpoints and restore</label>
                 <div id="runtime-recovery-settings" class="form-stack" hidden>
                   <label class="field" for="runtime-recovery-storage"><span>Backup location</span><select id="runtime-recovery-storage"><option value="directory">Local or mounted directory</option><option value="blob">Azure Blob storage</option></select></label>
                   <label id="runtime-recovery-directory-field" class="field" for="runtime-recovery-directory"><span>Private backup directory</span><span class="input-action"><input id="runtime-recovery-directory" autocomplete="off" placeholder="/path/to/private-checkpoints" /><button id="choose-recovery-directory" class="secondary" type="button">Choose folder</button></span></label>
@@ -571,7 +602,7 @@
                     <p id="runtime-recovery-credential-status" class="help-text">No connection string saved.</p>
                     <label id="runtime-recovery-client-id-field" class="field" for="runtime-recovery-client-id" hidden><span>Optional managed identity client ID</span><input id="runtime-recovery-client-id" autocomplete="off" placeholder="Leave empty for the system identity" /><span class="help-text">The deployment must supply an identity with Blob access. Host CLI sign-in is not used.</span></label>
                   </div>
-                  <details id="runtime-recovery-advanced" class="disclosure"><summary>Advanced recovery settings</summary>
+                  <details id="runtime-recovery-advanced" class="disclosure"><summary>Advanced checkpoint settings</summary>
                     <div class="form-stack">
                       <label class="field" for="runtime-recovery-instance-id"><span>Stable recovery instance ID</span><input id="runtime-recovery-instance-id" autocomplete="off" /><span class="help-text">Keep this ID unchanged when replacing storage. Never share it between running replicas.</span></label>
                       <div class="field-grid three-column">
@@ -593,10 +624,10 @@
                     </div>
                   </details>
                 </div>
-                <button id="save-recovery-settings" class="secondary" type="submit">Save recovery settings</button>
+                <button id="save-recovery-settings" class="secondary" type="submit">Save checkpoint settings</button>
               </form>
               <form id="runtime-recovery-credential-form" class="form-stack" hidden>
-                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. It is not included in a portable backup.</span></label>
+                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. It is not included in an export.</span></label>
                 <button class="secondary" type="submit">Save private storage credential</button>
               </form>
               <div class="button-row">
@@ -608,46 +639,7 @@
                 <div class="button-row"><button id="initialize-recovery" class="secondary" type="button" disabled>Initialize new destination</button><button id="restore-runtime-recovery" class="secondary" type="button" disabled>Validate / restore same instance</button></div>
                 <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
               </details>
-              <details class="disclosure technical-disclosure"><summary>Private recovery details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private recovery status and selected container paths">No recovery operation has run.</textarea></details>
-            </details>
-            <details id="portable-backup" class="panel panel-disclosure">
-              <summary id="backup-heading">Portable backup</summary>
-              <p class="section-intro">Saves knowledge & workspace. No native history or external data; not a full rollback.</p>
-              <p class="help-text">To restore, create a fresh instance and choose “Restore from an fhold backup” before completing provider setup. Preview the contents first; restored task definitions remain inactive until reviewed.</p>
-              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Knowledge, workspace, settings, and task definitions. Native conversations, runtime snapshots, external mounts and symlink targets are not included.</p></details>
-              <form id="backup-form" class="form-stack">
-	                <label class="field" for="backup-destination"><span>Backup directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-backup" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
-                <details class="disclosure"><summary>Include sensitive data (optional)</summary>
-                  <fieldset class="option-group">
-                  <legend class="visually-hidden">Include sensitive data</legend>
-                  <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
-                  <label class="check-row"><input id="backup-env" type="checkbox" /> Private user environment</label>
-                  <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
-                </fieldset>
-                  </details>
-                <button class="primary" type="submit">Create portable backup</button>
-              </form>
-              <div id="backup-summary" class="inline-status neutral" hidden></div>
-              <details class="disclosure technical-disclosure"><summary>Backup details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Backup technical details">No backup operation has run.</textarea></details>
-            </details>
-          </section>
-
-          <section id="view-diagnostics" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="diagnostics-heading">
-            <details class="panel panel-disclosure">
-              <summary id="diagnostics-heading">Installation details</summary>
-              <dl class="detail-list">
-                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
-                <div><dt>fhold home</dt><dd id="home">Loading…</dd></div>
-                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
-                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
-              </dl>
-              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Connections.</p>
-            </details>
-
-            <details id="recent-logs" class="panel panel-disclosure">
-              <summary>Recent logs</summary>
-              <button id="load-logs" class="secondary" type="button">Load logs</button>
-              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
+              <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
             </details>
           </section>
         </main>

@@ -31,7 +31,10 @@ in `config/recovery/include.json`, and Blob credentials in the private file
 
 ### Configure through Admin or CLI
 
-Open **System → Backups and recovery → Runtime recovery**. Enable it and choose
+Open **System → Ephemeral container support**, the last section after installation
+details, recent logs and import/export. This is the Admin name for the same runtime
+recovery feature; environment variables and `fhold recovery` commands are unchanged.
+Enable **automatic checkpoints and restore**, then choose
 a private local/mounted directory outside the instance home or an existing
 `azblob://account/container/prefix`. The stable instance ID defaults from the
 saved instance name. Blob uses a private connection-string file or the deployment's

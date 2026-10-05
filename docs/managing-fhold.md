@@ -136,21 +136,29 @@ SSH management is not implemented.
 
 Agent settings owns provider readiness, memory and timezone. Connections holds
 OpenCode links, Guardian MCP details and optional portals. People & access owns
-named identities. System holds backup, restore, logs and diagnostics. A stale
+named identities. System holds installation details, recent logs, import/export,
+then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
-### Backups and recovery
+### Import/export and ephemeral container support
 
-**System → Backups and recovery** explains two distinct jobs:
+The **System** page starts with **Installation details** and **Recent logs**.
+Below them, two separate sections explain content transfer and runtime continuity:
 
-- **Portable backup** is a manual archive of reviewed knowledge, workspace and
+- **Import / export** is a manual archive of reviewed knowledge, workspace and
   allowlisted settings for a fresh installation. It does not preserve native
   conversations, sign-ins or runtime authority. Sensitive content is opt-in;
   restored task definitions remain inactive.
-- **Assistant runtime recovery** is opt-in automatic checkpointing for replacing
+- **Ephemeral container support**, the last section, is opt-in automatic checkpointing for replacing
   the same Assistant after ephemeral storage disappears. It preserves native
   sessions, account files, approvals and consistent SQLite snapshots. It is not
   a host/Guardian/Portal rollback or an archive to import into a different agent.
+
+Admin's import/export uses the existing portable backup format and the same
+`fhold backup` / `fhold restore` CLI commands. Export from the running instance;
+to import, create a fresh instance and choose **Import from an fhold export**
+before completing provider setup. The new labels do not change coverage or
+make exports interchangeable with same-instance checkpoints.
 
 Choose a private **local/mounted directory** or an existing **Blob destination**.
 Live SQLite remains on local storage. Directory artifacts require exclusive
@@ -253,7 +261,7 @@ Use [MCP](remote-mcp.md), [Discord](portals/discord-setup.md),
 for each normal connection flow. Never expose native Assistant publicly without
 explicit bind intent and appropriate transport security.
 
-## Portable backup and own-backup restore
+## Import/export (portable backup format)
 
 Use this for reviewed user content moving to a fresh installation. For replacing
 an ephemeral container while preserving the same agent's runtime sessions,

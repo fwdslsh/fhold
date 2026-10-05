@@ -719,7 +719,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#restore-summary').textContent.includes('not complete runtime recovery')",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#restore-summary').textContent.includes('does not restore native conversations')",
 			'verified portable restore receipt'
 		);
 		assert(
@@ -1053,16 +1053,27 @@ async function run(): Promise<Record<string, unknown>> {
 			'Optional connections are not collapsed, OpenCode links disagree, or client selection looks like a primary action.'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=system]').click(); document.querySelector('#portable-backup').open=true"
+			"document.querySelector('[data-view=system]').click()"
 		);
-		await assertRenderedFloor(window, 'backup and restore');
-		const backupScreenshot = await capture(window, outputDir, '04d-backup.png');
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#portable-backup').open=false"
+		assert(
+			await window.webContents.executeJavaScript(`(() => {
+				const cards = [...document.querySelectorAll('#view-system > details')];
+				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,import-export,runtime-recovery' &&
+					cards.every(card => !card.open) &&
+					cards[2].querySelector('summary').textContent.startsWith('Import / export') &&
+					cards[3].querySelector('summary').textContent.startsWith('Ephemeral container support');
+			})()`),
+			'System sections are not in the requested order, collapsed by default, or consistently named.'
 		);
+		await assertRenderedFloor(window, 'System section order');
 		const systemScreenshot = await capture(window, outputDir, '04k-system.png');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#portable-backup').open=false; document.querySelector('#view-diagnostics > details').open=true"
+			"document.querySelector('#import-export').open=true; document.querySelector('#import-export').scrollIntoView({block:'start'})"
+		);
+		await assertRenderedFloor(window, 'import and export');
+		const backupScreenshot = await capture(window, outputDir, '04d-backup.png');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#import-export').open=false; document.querySelector('#installation-details').open=true; document.querySelector('#installation-details').scrollIntoView({block:'start'})"
 		);
 		await assertRenderedFloor(window, 'troubleshooting');
 		const troubleshootingScreenshot = await capture(window, outputDir, '04e-troubleshooting.png');
@@ -1734,7 +1745,7 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#runtime-recovery-form').requestSubmit();
 		})()`);
 		await waitForRenderer(window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery settings saved.') && !document.querySelector('#pending-restart').hidden",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Checkpoint settings saved.') && !document.querySelector('#pending-restart').hidden",
 			'saved recovery settings without initializing or restarting');
 		assert(await containerId() === beforeRecoverySave, 'Saving recovery restarted the Assistant.');
 		assert(!existsSync(join(checkpointDirectory, 'descriptor.json')), 'Saving settings initialized the namespace.');

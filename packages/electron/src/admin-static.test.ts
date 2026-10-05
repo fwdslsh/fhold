@@ -158,15 +158,30 @@ afterEach(() => {
 
 describe('Admin static security boundary', () => {
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
-		expect(html).toContain('Backups and recovery');
+		expect(html).toContain('Import / export');
+		expect(html).toContain('Ephemeral container support');
 		expect(html).toContain('different formats and are not interchangeable');
 		expect(html).toContain('No native conversations or remote sign-ins');
 		expect(html).toContain('native tool versions must match');
 		expect(html).toContain('Guardian/portal state');
 		expect(html).toContain('Initialize new destination');
-		expect(html).toContain('To restore, create a fresh instance');
+		expect(html).toContain('To import, create a fresh instance');
 		expect(html).toContain('never overwrites surviving local data');
 		expect(html).toContain('id="runtime-recovery-connection-string" type="password"');
+	});
+	it('puts installation and logs before import/export and keeps ephemeral support last in one System view', () => {
+		const start = html.indexOf('<section id="view-system"');
+		const system = html.slice(start, html.indexOf('</main>', start));
+		const ids = ['installation-details', 'recent-logs', 'import-export', 'runtime-recovery'];
+		const positions = ids.map((id) => system.indexOf(`<details id="${id}"`));
+		expect(positions.every((position) => position >= 0)).toBe(true);
+		expect(positions).toEqual([...positions].sort((a, b) => a - b));
+		expect((html.match(/data-view-panel="system"/g) || []).length).toBe(1);
+		expect(html).toContain('data-view="system" aria-controls="view-system"');
+		expect(html).not.toContain('id="view-diagnostics"');
+		expect(html).not.toContain('id="backup-overview-heading"');
+		expect(html).toContain('Import from an fhold export');
+		expect(html).toContain('Export portable content');
 	});
 	it('never programmatically resizes production windows; size changes exist only in the E2E harness', () => {
 		const sourceDirectory = join(import.meta.dir);
@@ -1194,7 +1209,7 @@ describe('Admin renderer behavior', () => {
 		expect(control('restore-acknowledge-row').hidden).toBe(false);
 		renderRestorePlan(result, true);
 		expect(control('restore-summary').children[1]?.textContent).toContain(
-			'not complete runtime recovery'
+			'does not restore native conversations'
 		);
 		expect(control('restore-acknowledge-row').hidden).toBe(true);
 	});

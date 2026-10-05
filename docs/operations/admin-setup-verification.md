@@ -23,6 +23,14 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
+System has one view with four collapsed sections, in order: **Installation
+details**, **Recent logs**, **Import / export**, **Ephemeral container support**.
+Static and rendered checks verify this order, the names, matching setup import
+labels, keyboard traversal and navigation without duplicate backup/diagnostic
+view containers. Import/export still uses the existing portable format and
+shared backup/restore operations; ephemeral support still uses the native
+same-instance recovery engine. The rename does not expand either feature's scope.
+
 The save/apply journey postpones a settings restart, checks that the actual
 container ID and runtime environment remain unchanged, reopens the instance,
 and checks that the pending banner survives. After confirmation it verifies a
