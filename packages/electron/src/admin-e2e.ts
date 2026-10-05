@@ -2171,12 +2171,61 @@ async function run(): Promise<Record<string, unknown>> {
 	}
 }
 
+async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
+	const outputDir = requiredEnvironment('FH_ADMIN_E2E_OUTPUT');
+	const prior = JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8'));
+	const expectedHome = prior.fullInstanceVerified?.home;
+	assert(typeof expectedHome === 'string' && existsSync(expectedHome), 'The completed walkthrough did not retain its restored instance.');
+	const preferencesPath = join(outputDir, 'electron-profile', 'instances.json');
+	const preferences = readFileSync(preferencesPath, 'utf8');
+	const intent = readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8');
+	app.setName('fhold Admin E2E');
+	app.setPath('userData', join(outputDir, 'electron-profile'));
+	await waitForAppReady();
+	registerAdminIpc();
+	const window = createAdminWindow();
+	const size = window.getSize().join('x');
+	try {
+		await waitForLoad(window);
+		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#app-shell').hidden", 'automatic instance reopening in a new Electron process');
+		assert(await window.webContents.executeJavaScript(`document.querySelector('#instance-picker').value === ${JSON.stringify(expectedHome)} && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`), 'A fresh app launch did not select the last-used instance.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#instance-welcome').hidden && !document.querySelector('.sidebar .brand-subtitle')"), 'Reopened instance showed Welcome or the removed sidebar subtitle.');
+		assert(window.getTitle() === 'fhold Admin', 'Native window title still contains the old subtitle.');
+		assert((await adminSnapshot()).services.length === 0, 'Automatically reopening the instance started a container.');
+		const reopened = await capture(window, outputDir, '09-reopened-instance.png');
+		await window.webContents.executeJavaScript(`(() => {
+			const picker = document.querySelector('#instance-picker');
+			picker.value = 'open-another';
+			picker.dispatchEvent(new Event('change', {bubbles:true}));
+		})()`);
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'manual switch to Welcome after automatic reopening');
+		window.webContents.reload();
+		await waitForLoad(window);
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'Welcome remains open across renderer reloads');
+		assert(await window.webContents.executeJavaScript("(async () => !(await window.fholdAdmin.welcome()).selectedInstance)()"), 'Renderer reload silently reopened the instance after manual switching.');
+		assert(window.getSize().join('x') === size, 'Reopening or switching resized the window.');
+		assert(readFileSync(preferencesPath, 'utf8') === preferences, 'Automatic reopening rewrote recent-instance preferences.');
+		assert(readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8') === intent, 'Automatic reopening changed instance intent.');
+		const welcome = await capture(window, outputDir, '09a-manual-instance-selection.png');
+		progress('new process reopened the previous instance read-only; manual Welcome survived renderer reload without resizing or container startup');
+		return {
+			ok: true,
+			instanceLaunchVerified: { automaticReopen: true, welcomeOnlyOnFirstOrManualLaunch: true, noHomeOrPreferenceWrites: true, noContainerStartup: true, subtitleRemoved: true, windowSizeStable: true },
+			screenshots: [reopened, welcome],
+			visualAudits
+		};
+	} finally {
+		window.destroy();
+	}
+}
+
 async function main(): Promise<void> {
 	const outputDir = process.env.FH_ADMIN_E2E_OUTPUT?.trim();
+	const reopenedLaunch = process.argv.includes('--verify-reopened-launch');
 	try {
-		const report = await run();
+		const report = await (reopenedLaunch ? verifyReopenedLaunch() : run());
 		if (outputDir)
-			writeFileSync(join(outputDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+			writeFileSync(join(outputDir, reopenedLaunch ? 'reopen-report.json' : 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
 		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 		app.exit(0);
 	} catch (error) {

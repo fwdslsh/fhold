@@ -69,6 +69,21 @@ export class AdminInstances {
 			this.preferenceError =
 				'Recent instances could not be loaded. You can still open the default folder or choose another.';
 		}
+		this.reopenPrevious();
+	}
+
+	private reopenPrevious(): void {
+		const previous = this.recent[0];
+		if (!previous) return;
+		try {
+			if (classifyInstall(previous.homeDir) === 'not_installed')
+				throw new Error('Its folder is missing or setup has not started. Choose its location or create a new instance.');
+			// Resume once per app launch, without rewriting preferences or the home.
+			// Closing the selection must leave Welcome open across renderer reloads.
+			this.selected = validateInstance(previous);
+		} catch (error) {
+			this.preferenceError = `The previous instance could not be opened. ${error instanceof Error ? error.message : 'Choose another folder. Nothing was changed.'}`;
+		}
 	}
 
 	welcome(): AdminWelcome {

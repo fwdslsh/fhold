@@ -25,7 +25,7 @@ The candidate also refreshes AKM to CLI `0.9.26` and plugin
 
 Linux x64 verification on October 5, 2026:
 
-- All 602 source tests passed with loopback socket and native-history checks
+- All 605 source tests passed with loopback socket and native-history checks
   enabled, with no failures or skips. Type checks, lint, CLI compilation and
   Admin bundling passed. All Compose profiles validated, including the restored
   home's secret and mount boundaries.
@@ -42,15 +42,21 @@ Linux x64 verification on October 5, 2026:
   database were real. Identity and keys remained unchanged, no containers started
   during import, and the original OpenCode session was retrieved through the
   authenticated API after an explicit start. Window dimensions stayed unchanged.
-- The sidebar now has only a named recent-instance picker and navigation, without
-  a status footer, visible path or Refresh button. Overview owns the path and
-  container status. Real rendered checks covered direct switching, cancellation,
+- The sidebar now has only the wordmark, a named recent-instance picker and
+  navigation, without a subtitle, status footer, visible path or Refresh button.
+  Overview owns the path and container status. Real rendered checks covered direct switching, cancellation,
   the Welcome route, keyboard navigation, long names, automatic status recovery,
   narrow layout, 200% zoom and 44px actions. The complete Electron/Docker journey
-  passed with 44 accessibility/layout audits and no violations or horizontal
+  passed with 46 accessibility/layout audits and no violations or horizontal
   overflow. Background reads preserved drafts, keys and configuration baselines;
   switching waited for in-flight reads. No dependencies or production window
   resizing were added.
+- A second native Electron process reused only the disposable test profile and
+  automatically opened the last-used installed instance. Preferences and stack
+  intent stayed unchanged, and no containers started. Manual switching returned
+  to Welcome and stayed there across another renderer reload, with unchanged
+  window dimensions. Unit tests covered safe fallback for missing, empty, foreign
+  and broken previous homes without choosing an older instance automatically.
 - A fresh Linux x64 Admin AppImage from this source revision passed actual
   packaged startup with normal host Chromium sandboxing and an isolated profile.
   The native release smoke exercised Welcome, the renderer/bridge and named

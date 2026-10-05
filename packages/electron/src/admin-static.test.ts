@@ -241,7 +241,7 @@ describe('Admin static security boundary', () => {
 		expect(main).toContain('height: 780');
 		expect(main).not.toContain('resizable: false');
 	});
-	it('shows previous, default and recent instances without fetching a stack snapshot', async () => {
+	it('shows Welcome when no launch-time selection is available, without fetching a stack snapshot', async () => {
 		state.api = {
 			welcome: async () => ({
 				defaultInstance: { kind: 'local', homeDir: '/default' },
@@ -824,6 +824,23 @@ describe('Admin instance picker and automatic status', () => {
 			installationReadiness: { ok: true }
 		};
 	}
+	it('opens the launch-time selection directly without another folder choice', async () => {
+		const snapshot = emptySnapshot();
+		let snapshots = 0;
+		state.api = {
+			welcome: async () => ({
+				defaultInstance: { kind: 'local', homeDir: '/default' },
+				recentInstances: [{ kind: 'local', homeDir: snapshot.homeDir }],
+				selectedInstance: { kind: 'local', homeDir: snapshot.homeDir }
+			}),
+			snapshot: async () => { snapshots++; return snapshot; },
+			openInstance: async () => { throw new Error('Launch already selected the instance'); }
+		};
+		await initializeAdmin();
+		expect(snapshots).toBe(1);
+		expect(control('instance-welcome').hidden).toBe(true);
+		expect(state.currentSnapshot).toBe(snapshot);
+	});
 	it('shows only a named recent-instance picker in the sidebar, with no footer or path', () => {
 		const snapshot = emptySnapshot();
 		state.recentInstances = [
@@ -840,6 +857,9 @@ describe('Admin instance picker and automatic status', () => {
 		expect(sidebar).toContain('aria-label="Choose instance"');
 		for (const removed of ['sidebar-footer', 'stack-status', 'id="refresh"', 'selected-instance-path', 'sidebar-label'])
 			expect(sidebar).not.toContain(removed);
+		expect(sidebar).not.toContain('brand-subtitle');
+		expect(html).not.toContain('Setup & settings');
+		expect(html).toContain('<title>fhold Admin</title>');
 		expect(html).toContain('id="overview-home" class="instance-path"');
 	});
 	it('switches directly to a recent instance through the existing API and reloads transient state', async () => {

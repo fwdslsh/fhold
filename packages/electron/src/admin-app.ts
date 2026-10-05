@@ -625,7 +625,7 @@ export function createAdminWindow(options: { show?: boolean } = {}): BrowserWind
 		height: 780,
 		minWidth: 640,
 		minHeight: 540,
-		title: 'fhold — Setup & settings',
+		title: 'fhold Admin',
 		backgroundColor: '#0d1117',
 		show: options.show ?? true,
 		webPreferences: {

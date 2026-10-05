@@ -117,8 +117,11 @@ edit release-owned `system/` files or generated `state/stack.env`.
 
 ## Admin
 
-Admin starts at Welcome: previous/default instance, recent paths or a folder
-picker. **Create new instance** suggests `~/fhold/instances/<name>` as you enter a name;
+Admin automatically opens the last-used instance on launch. First launch, or a
+previous folder that is missing or incompatible, shows Welcome instead without
+creating or changing anything. Use the instance dropdown → **Open another instance…**
+for the previous/default instance, recent paths, a folder picker or new setup.
+**Create new instance** suggests `~/fhold/instances/<name>` as you enter a name;
 choose another empty folder or full path to override it. It then opens setup
 with the chosen editable instance name. Ports are chosen automatically:
 3810/3830 when available, otherwise a generated free pair. **Advanced** offers

@@ -131,6 +131,22 @@ try {
 	if (!existsSync(reportPath)) throw new Error('Admin E2E did not write its report.');
 	const report = JSON.parse(readFileSync(reportPath, 'utf8'));
 	if (report.ok !== true) throw new Error('Admin E2E report did not indicate success.');
+	// A renderer reload is not an app launch. Reuse only this disposable desktop
+	// profile in a second native process to exercise the actual startup boundary.
+	report.ok = false;
+	writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+	const reopened = command(electron, [...args, '--verify-reopened-launch'], {
+		cwd: packageDirectory, env: environment
+	});
+	exitCode = reopened.status ?? 1;
+	if (exitCode !== 0) throw new Error(`Admin relaunch E2E exited with code ${exitCode}.`);
+	const reopenReport = JSON.parse(readFileSync(join(outputDirectory, 'reopen-report.json'), 'utf8'));
+	if (reopenReport.ok !== true) throw new Error('Admin relaunch E2E did not indicate success.');
+	report.ok = true;
+	report.instanceLaunchVerified = reopenReport.instanceLaunchVerified;
+	report.screenshots.push(...reopenReport.screenshots);
+	report.visualAudits.push(...reopenReport.visualAudits);
+	writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 	process.stdout.write(`Admin E2E artifacts: ${outputDirectory}\n`);
 	exitCode = 0;
 } finally {

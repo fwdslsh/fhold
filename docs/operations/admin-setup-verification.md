@@ -11,7 +11,7 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron test:e2e
 ```
 
-The rendered harness verifies welcome/recent/folder selection, explicit new-folder
+The rendered harness verifies first-launch Welcome, recent/folder selection, explicit new-folder
 setup and cancellation, non-empty-folder preservation, duplicate-name rejection
 before installation, and two simultaneously running named agents with distinct
 ports and actual container/OS-hostname checks. Fresh setup keeps Advanced collapsed
@@ -23,9 +23,16 @@ configuration, backup/own-backup restore, keyboard/accessibility and user-contro
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
 
+The launcher also starts a second real Electron process with the same disposable
+desktop profile. It must open the last-used installed home directly without
+rewriting preferences/intent or starting containers. **Open another instance…**
+then returns to Welcome and stays there even after another renderer reload.
+Unit tests cover missing, empty, incompatible and corrupt previous homes without
+silently opening an older instance, writing data or starting fresh setup.
+
 Sidebar checks compare the named recent-instance dropdown against the actual
 selected snapshot, verify direct switching and the **Open another instance…**
-Welcome route, and require no footer, visible path or Refresh button. Overview
+Welcome route, and require no subtitle, footer, visible path or Refresh button. Overview
 owns the complete path and container status. The rendered walkthrough covers
 long names, clearly unavailable status, automatic recovery on focus, keyboard
 traversal, expanded narrow navigation and 200% zoom, with 44px action targets and

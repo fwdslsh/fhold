@@ -69,7 +69,10 @@ managed files, seed missing operator files and never synchronize or delete
 whole trees. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
 default is `~/fhold/instances/default`. CLI home selection is an explicit
 `--name`/`-n` directory name under that root or an absolute path, then optional
-`FH_HOME`, then cwd. Admin selects a default, recent or custom folder. `~/fhold`
+`FH_HOME`, then cwd. Admin reopens the last-used compatible instance once per app
+launch, using its existing recent-folder list. First launch or an unavailable/
+incompatible previous home shows Welcome without seeding or adopting a folder.
+Manual switching keeps Welcome open across renderer reloads. `~/fhold`
 may also hold backups/docs; it is not itself an instance or a new configuration layer.
 Home selection is canonical; default changes never relocate existing homes or
 rename their persisted project identity. Each home has stable independent project
