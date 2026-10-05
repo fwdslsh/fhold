@@ -31,16 +31,31 @@ function installed(home: string) {
 }
 
 describe('Admin instance selection', () => {
-	it('opens on welcome without inspecting or seeding the default home', () => {
+	it('opens on welcome without seeding the default home or writing a profile', () => {
 		const { home, profile } = fixture();
 		const instances = new AdminInstances(profile, home);
 		expect(instances.welcome()).toEqual({
-			defaultInstance: { kind: 'local', homeDir: home },
+			defaultInstance: { kind: 'local', homeDir: home, available: false },
 			instancesDirectory: dirname(resolveFholdHome(defaultFholdHome())),
 			recentInstances: []
 		});
 		expect(() => instances.current()).toThrow('welcome screen');
 		expect(existsSync(home)).toBe(false);
+		expect(existsSync(profile)).toBe(false);
+	});
+
+	it('offers a compatible default by its saved name without opening it or storing another registry', () => {
+		const { home, profile } = fixture();
+		installed(home);
+		const config = defaultStackConfig(home);
+		config.deployment.projectName = 'april';
+		writeStackConfig(home, config);
+		const before = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
+		const instances = new AdminInstances(profile, home);
+		expect(instances.welcome().defaultInstance).toEqual({ kind: 'local', homeDir: home, name: 'april', available: true });
+		expect(instances.welcome().recentInstances).toEqual([]);
+		expect(instances.welcome().selectedInstance).toBeUndefined();
+		expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(before);
 		expect(existsSync(profile)).toBe(false);
 	});
 
@@ -109,6 +124,8 @@ describe('Admin instance selection', () => {
 			expect(instances.welcome().selectedInstance).toBeUndefined();
 			expect(instances.welcome().preferenceError).toContain('previous instance could not be opened');
 			expect(instances.welcome().recentInstances.map((item) => item.homeDir)).toEqual([folder, home]);
+			expect(instances.welcome().recentInstances.map((item) => item.available)).toEqual([false, true]);
+			expect(instances.welcome().defaultInstance.available).toBe(false);
 			expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
 		}
 		expect(existsSync(missing)).toBe(false);
@@ -130,12 +147,15 @@ describe('Admin instance selection', () => {
 		const preferences = readFileSync(join(profile, 'instances.json'), 'utf8');
 		const stack = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
 		expect(instances.welcome().recentInstances[0].name).toBe('april');
+		expect(instances.welcome().recentInstances[0].available).toBe(true);
 		expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(stack);
 		expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
 		expect(preferences).not.toContain('april');
+		expect(preferences).not.toContain('available');
 		const missing = join(root, 'missing');
 		instances.prepareNew({ kind: 'local', homeDir: missing });
 		expect(instances.welcome().recentInstances[0].name).toBeUndefined();
+		expect(instances.welcome().recentInstances[0].available).toBe(false);
 		expect(existsSync(missing)).toBe(false);
 	});
 
@@ -182,6 +202,7 @@ describe('Admin instance selection', () => {
 
 	it('recovers from corrupt preferences without overwriting them until an explicit open', () => {
 		const { home, profile } = fixture();
+		installed(home);
 		mkdirSync(profile);
 		const preferences = join(profile, 'instances.json');
 		writeFileSync(preferences, '{');
@@ -196,7 +217,7 @@ describe('Admin instance selection', () => {
 		const { root, home, profile } = fixture();
 		const before = process.env.FH_HOME;
 		const instances = new AdminInstances(profile, home);
-		instances.open({ kind: 'local', homeDir: home });
+		instances.prepareNew({ kind: 'local', homeDir: home });
 		let finish!: () => void;
 		const running = instances.run(
 			() =>
@@ -218,11 +239,27 @@ describe('Admin instance selection', () => {
 				throw new Error('failed');
 			})
 		).rejects.toThrow('failed');
+		installed(join(root, 'other'));
 		instances.open({ kind: 'local', homeDir: join(root, 'other') });
 		expect(createFholdState(instances.current().homeDir).homeDir).toBe(join(root, 'other'));
 		expect(process.env.FH_HOME).toBe(before);
 		instances.close();
 		expect(instances.welcome().selectedInstance).toBeUndefined();
+	});
+
+	it('keeps opening an existing instance separate from preparing a new folder', () => {
+		const { root, home, profile } = fixture();
+		mkdirSync(home);
+		const instances = new AdminInstances(profile, home);
+		for (const homeDir of [home, join(root, 'missing')]) {
+			expect(() => instances.open({ kind: 'local', homeDir })).toThrow('Use Set up a new agent');
+			expect(instances.welcome().selectedInstance).toBeUndefined();
+			expect(existsSync(profile)).toBe(false);
+		}
+		instances.prepareNew({ kind: 'local', homeDir: home, name: 'april' });
+		expect(instances.current().homeDir).toBe(home);
+		expect(instances.setupName).toBe('april');
+		expect(existsSync(join(home, 'state'))).toBe(false);
 	});
 
 	it('prepares an empty or nonexistent new folder without installing or creating it', () => {

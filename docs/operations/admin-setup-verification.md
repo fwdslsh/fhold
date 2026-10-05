@@ -11,8 +11,12 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron test:e2e
 ```
 
-The rendered harness verifies first-launch Welcome, recent/folder selection, explicit new-folder
-setup and cancellation, non-empty-folder preservation, duplicate-name rejection
+The rendered harness verifies the two first-launch choices, progressive new-agent
+naming, Back/draft preservation and optional **Folder location**, at normal/narrow
+sizes and 200% zoom. Real Tab, Shift+Tab and Enter input checks task order and
+focus after setup/Back. It also verifies named recent/folder selection, explicit
+new-folder setup and cancellation, refusal to open empty folders as existing
+instances, non-empty-folder preservation, duplicate-name rejection
 before installation, and two simultaneously running named agents with distinct
 ports and actual container/OS-hostname checks. Fresh setup keeps Advanced collapsed
 and automatic selection enabled. The primary exercises manual overrides; the
@@ -43,6 +47,10 @@ switch coordination, cancelled/failed switching, drafts/key/review preservation
 and unchanged configuration baselines. Runtime status does not claim provider/
 account readiness. Only the harness manually resizes for responsive checks;
 product navigation and status checks never resize windows.
+
+Screenshot checks focus only the owned test window and bound the complete
+render/accessibility/capture wait. A stalled native renderer must fail the test
+instead of hanging indefinitely; test focus and sizing are not production behavior.
 
 System has one view with four collapsed sections, in order: **Installation
 details**, **Recent logs**, **Import / export**, **Ephemeral container support**.

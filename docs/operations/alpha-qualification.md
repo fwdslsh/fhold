@@ -25,7 +25,7 @@ The candidate also refreshes AKM to CLI `0.9.26` and plugin
 
 Linux x64 verification on October 5, 2026:
 
-- All 605 source tests passed with loopback socket and native-history checks
+- All 611 source tests passed with loopback socket and native-history checks
   enabled, with no failures or skips. Type checks, lint, CLI compilation and
   Admin bundling passed. All Compose profiles validated, including the restored
   home's secret and mount boundaries.
@@ -47,10 +47,17 @@ Linux x64 verification on October 5, 2026:
   Overview owns the path and container status. Real rendered checks covered direct switching, cancellation,
   the Welcome route, keyboard navigation, long names, automatic status recovery,
   narrow layout, 200% zoom and 44px actions. The complete Electron/Docker journey
-  passed with 46 accessibility/layout audits and no violations or horizontal
+  passed with 51 accessibility/layout audits and no violations or horizontal
   overflow. Background reads preserved drafts, keys and configuration baselines;
   switching waited for in-flight reads. No dependencies or production window
   resizing were added.
+- An AKM-guided design specialist reviewed actual native startup captures and
+  approved the compact two-choice Welcome, progressive naming/optional folder
+  step and named recent list. Read-only compatibility/name metadata uses the
+  existing recent list, without another settings store. Existing-folder opening
+  refuses empty/unavailable homes; only explicit new setup accepts them. Native
+  tests covered cancellation, Back/focus, preserved drafts, no home seeding,
+  duplicate-free recents and 200% keyboard scrolling to Choose folder/Continue.
 - A second native Electron process reused only the disposable test profile and
   automatically opened the last-used installed instance. Preferences and stack
   intent stayed unchanged, and no containers started. Manual switching returned
@@ -68,6 +75,13 @@ Linux x64 verification on October 5, 2026:
   saved-value and focus details. The cause was not established, so this is not
   evidence that a timing-field defect was fixed. Only the test harness resizes
   windows. The UI tests do not reset timing fields to make an assertion pass.
+- One later repeat stalled while capturing the unchanged Agent settings page.
+  Only its owned Electron test process was stopped, and the launcher cleaned up
+  its disposable stack. The cause was not established. Screenshot tests now
+  bring their own window forward and bound the entire render/audit wait, not
+  only the final capture call. The subsequent complete native walkthrough and
+  second-process reopening gate passed; no production focus, sizing or runtime
+  behavior was changed to compensate.
 - All three Linux x64 images rebuilt and passed standard startup smokes. The new
   AKM pins passed actual OpenCode, Claude and Codex session/prompt recall, both
   default-on and explicitly disabled native workers, preserved customized

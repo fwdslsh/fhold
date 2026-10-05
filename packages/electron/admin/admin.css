@@ -77,35 +77,6 @@ summary {
 	overflow-wrap: anywhere;
 }
 
-.instance-primary {
-	padding: 16px;
-	margin: 24px 0 16px;
-	background: var(--surface-muted);
-	border: 1px solid var(--border-soft);
-	border-radius: 6px;
-}
-
-.instance-primary p {
-	margin: 0 0 12px;
-}
-.instance-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	padding: 14px 0;
-	border-bottom: 1px solid var(--border-soft);
-}
-.instance-row > :first-child {
-	min-width: 0;
-}
-:where(.instance-row) button {
-	flex-shrink: 0;
-}
-.instance-recents h2 {
-	margin: 24px 0 4px;
-	font-size: 1rem;
-}
 .instance-picker {
 	width: 100%;
 	margin-top: 20px;
@@ -119,6 +90,7 @@ summary {
 	flex: 1 1 220px;
 	min-width: 0;
 }
+
 :where(a[href], button, input, select, textarea, summary):focus:not(:focus-visible) {
 	outline: none;
 }
@@ -1828,4 +1800,137 @@ body[data-busy="true"] #main-content {
 }
 :where(body[data-phase="setup_incomplete"] #provider-connection h2) {
 	display: none;
+}
+
+/* Welcome is a choice of two tasks, not a runtime dashboard. Keep these
+   overrides scoped so the installation confirmation retains its own layout. */
+#instance-welcome {
+	width: min(480px, calc(100% - 48px));
+	align-items: center;
+}
+#instance-welcome .instance-card {
+	padding: 24px;
+	background: var(--canvas);
+	border: 0;
+}
+#instance-welcome .instance-wordmark {
+	font-size: 1.375rem;
+	font-weight: 650;
+	letter-spacing: -0.045em;
+}
+#instance-welcome .instance-wordmark span {
+	padding-inline: 2px;
+	color: var(--accent-hover);
+}
+#instance-welcome h1 {
+	margin: 24px 0 0;
+	font-size: 1.75rem;
+	letter-spacing: -0.035em;
+}
+#instance-welcome .instance-options {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 12px;
+	margin-top: 28px;
+}
+#instance-welcome .instance-options > section {
+	min-width: 0;
+}
+#instance-welcome h2 {
+	margin: 0 0 10px;
+	font-size: 1.125rem;
+	line-height: 1.4;
+	letter-spacing: -0.015em;
+}
+#instance-welcome .help-text {
+	font-size: 0.8125rem;
+	line-height: 1.55;
+}
+#instance-welcome #new-instance-section {
+	margin-top: 20px;
+}
+#instance-welcome #cancel-new-instance {
+	margin-bottom: 12px;
+}
+#instance-welcome #new-instance-title {
+	margin-bottom: 24px;
+}
+#instance-welcome .instance-path {
+	font-size: 0.75rem;
+	font-weight: 400;
+	line-height: 1.6;
+}
+#instance-welcome .disclosure {
+	margin: 4px 0 20px;
+	border: 0;
+}
+#instance-welcome .disclosure > summary {
+	min-height: 44px;
+	padding-block: 12px;
+	font-weight: 500;
+}
+#instance-welcome .disclosure .field {
+	margin-top: 8px;
+}
+#instance-welcome #create-instance,
+#instance-welcome #begin-new-instance.primary {
+	width: 100%;
+	background: var(--ink);
+	color: var(--canvas);
+}
+#instance-welcome #create-instance:hover:not(:disabled),
+#instance-welcome #begin-new-instance.primary:hover:not(:disabled) {
+	background: #fff;
+}
+#instance-welcome .instance-confirmation {
+	margin: 10px 0 0;
+}
+#instance-welcome .instance-recents h2 {
+	margin: 0 0 8px;
+	color: var(--ink-faint);
+	font-size: 0.75rem;
+	font-weight: 500;
+}
+#instance-welcome #recent-instances {
+	display: grid;
+	gap: 8px;
+}
+#instance-welcome .instance-choice {
+	display: grid;
+	width: 100%;
+	min-width: 0;
+	gap: 4px;
+	padding: 12px 14px;
+	text-align: start;
+	background: var(--surface-muted);
+	overflow-wrap: anywhere;
+}
+#instance-welcome .instance-name {
+	font-size: 0.9375rem;
+	line-height: 1.4;
+}
+#instance-welcome .instance-meta {
+	color: var(--ink-soft);
+	font-size: 0.75rem;
+	font-weight: 400;
+}
+#instance-welcome .instance-picker {
+	margin-top: 0;
+	font-size: 0.875rem;
+	font-weight: 500;
+}
+#instance-welcome .instance-recents:not([hidden]) + .instance-picker {
+	margin-top: 12px;
+}
+#instance-welcome #new-instance-form > .field {
+	margin: 0;
+}
+@media (max-width: 760px) {
+	#instance-welcome {
+		width: min(480px, calc(100% - 24px));
+		padding-block: 24px;
+	}
+	#instance-welcome .instance-card {
+		padding: 16px;
+	}
 }

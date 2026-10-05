@@ -44,10 +44,11 @@ export type StackAction = 'start' | 'restart' | 'stop';
 export type InterruptingAction = StackAction | 'remote-setup' | 'recovery-init' | 'recovery-restore' | 'instance-export' | 'instance-import';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
+export type AdminWelcomeInstance = AdminInstance & { name?: string; available: boolean };
 export type AdminWelcome = {
-	defaultInstance: AdminInstance;
+	defaultInstance: AdminWelcomeInstance;
 	instancesDirectory: string;
-	recentInstances: Array<AdminInstance & { name?: string }>;
+	recentInstances: AdminWelcomeInstance[];
 	selectedInstance?: AdminInstance;
 	preferenceError?: string;
 };

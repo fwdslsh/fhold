@@ -120,9 +120,14 @@ edit release-owned `system/` files or generated `state/stack.env`.
 Admin automatically opens the last-used instance on launch. First launch, or a
 previous folder that is missing or incompatible, shows Welcome instead without
 creating or changing anything. Use the instance dropdown → **Open another instance…**
-for the previous/default instance, recent paths, a folder picker or new setup.
-**Create new instance** suggests `~/fhold/instances/<name>` as you enter a name;
-choose another empty folder or full path to override it. It then opens setup
+to open a recent instance, browse for an existing one or start new setup.
+On first launch, choose **Set up a new agent** or **Open existing instance…**.
+Recent compatible instances are listed by saved name, with their folder paths
+to distinguish them; unavailable folders cannot be opened as new installations.
+**Set up a new agent** reveals the name field and suggests
+`~/fhold/instances/<name>`. Expand **Folder location** to choose a different
+new/empty folder or enter a full path. **Back** preserves the draft without
+selecting a home; **Continue to setup** opens the installation confirmation
 with the chosen editable instance name. Ports are chosen automatically:
 3810/3830 when available, otherwise a generated free pair. **Advanced** offers
 manual overrides. Saved ports remain stable on refresh/update. Each installation
@@ -173,7 +178,8 @@ CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
 Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
-To import that export, select a new/empty folder at Welcome and choose
+To import that export, choose **Set up a new agent** at Welcome, select a
+new/empty folder under **Folder location**, continue to setup and choose
 **Import an entire instance instead** on the setup screen, **without installing
 first**. Preview identifies the saved name and destination; the native confirmation
 explains downtime, credentials, active tasks and external-storage limitations.

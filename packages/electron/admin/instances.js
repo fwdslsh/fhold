@@ -2,6 +2,10 @@ import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
 
+function instanceName(target) {
+	return target.name || target.homeDir.split(/[\\/]/).filter(Boolean).at(-1) || 'Saved instance';
+}
+
 export function renderInstancePicker(snapshot) {
 	const others = state.recentInstances.filter((target) => target.homeDir !== snapshot.homeDir);
 	setOptions(
@@ -13,7 +17,7 @@ export function renderInstancePicker(snapshot) {
 			},
 			...others.map((target) => ({
 				value: target.homeDir,
-				label: target.name || target.homeDir.split('/').filter(Boolean).at(-1) || 'Saved instance'
+				label: instanceName(target)
 			})),
 			{ value: 'open-another', label: 'Open another instance…' }
 		],
@@ -32,13 +36,21 @@ function confirmInstanceSwitch() {
 }
 
 function suggestInstanceHome() {
-	if (!state.instancesDirectory) return;
 	const name = byId('new-instance-name').value.trim();
-	if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) return;
 	const field = byId('new-instance-home');
-	const suggested = `${state.instancesDirectory}/${name}`;
-	if (!field.value || field.value === field.dataset.suggestedHome) field.value = suggested;
-	field.dataset.suggestedHome = suggested;
+	if (state.instancesDirectory && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
+		const suggested = `${state.instancesDirectory}/${name}`;
+		if (!field.value || field.value === field.dataset.suggestedHome) field.value = suggested;
+		field.dataset.suggestedHome = suggested;
+	}
+}
+
+function showNewInstanceSetup(show) {
+	if (state.operationInFlight) return;
+	byId('instance-options').hidden = show;
+	byId('instance-welcome-title').hidden = show;
+	byId('new-instance-section').hidden = !show;
+	byId(show ? 'new-instance-name' : 'begin-new-instance').focus();
 }
 
 export function renderWelcome(welcome) {
@@ -51,33 +63,46 @@ export function renderWelcome(welcome) {
 	byId('instance-welcome').hidden = false;
 	document.body.dataset.phase = 'welcome';
 	setSkipTarget('instance-welcome');
-	const previous = welcome.recentInstances[0];
-	const primary = previous || welcome.defaultInstance;
-	setText('open-recent-instance', previous ? 'Open previous instance' : 'Open default instance');
-	setText('primary-instance-path', primary.homeDir);
-	byId('open-recent-instance').onclick = () => void openInstance(primary);
-	byId('default-instance-option').hidden = primary.homeDir === welcome.defaultInstance.homeDir;
-	setText('default-instance-path', welcome.defaultInstance.homeDir);
-	byId('open-default-instance').onclick = () => void openInstance(welcome.defaultInstance);
+	const targets = [...welcome.recentInstances];
+	if (welcome.defaultInstance.available && !targets.some((target) => target.homeDir === welcome.defaultInstance.homeDir))
+		targets.push(welcome.defaultInstance);
+	const existingSection = byId('existing-instance-section');
+	const begin = byId('begin-new-instance');
+	const hasAvailable = targets.some((target) => target.available);
+	// DOM and visual order agree: first-time setup first, saved instances first
+	// when there is an actual compatible home to open. No automatic selection.
+	byId('instance-options').append(...(hasAvailable
+		? [existingSection, begin] : [begin, existingSection]));
+	begin.className = hasAvailable ? 'secondary' : 'primary';
+	byId('instance-options').hidden = false;
+	byId('instance-welcome-title').hidden = false;
+	byId('new-instance-section').hidden = true;
 	const recent = byId('recent-instances');
 	recent.replaceChildren();
-	const others = welcome.recentInstances.filter(
-		(item) => item.homeDir !== primary.homeDir && item.homeDir !== welcome.defaultInstance.homeDir
-	);
-	byId('recent-instances-section').hidden = !others.length;
-	for (const target of others) {
-		const row = document.createElement('div');
-		row.className = 'instance-row';
+	byId('recent-instances-section').hidden = !targets.length;
+	setText('recent-instances-title', welcome.recentInstances.length ? 'Recent instances' : 'On this computer');
+	for (const target of targets) {
+		const row = document.createElement('button');
+		row.type = 'button';
+		row.className = 'instance-choice';
+		row.dataset.homeDir = target.homeDir;
+		row.disabled = !target.available;
+		const name = document.createElement('span');
+		name.className = 'instance-name';
+		name.textContent = instanceName(target);
+		row.append(name);
+		if (!target.available || target.homeDir === welcome.recentInstances[0]?.homeDir) {
+			const meta = document.createElement('span');
+			meta.className = 'instance-meta';
+			meta.textContent = target.available ? 'Last used' : 'Unavailable';
+			row.append(meta);
+		}
 		const path = document.createElement('span');
 		path.className = 'instance-path';
 		path.textContent = target.homeDir;
-		const button = document.createElement('button');
-		button.type = 'button';
-		button.className = 'secondary';
-		button.textContent = 'Open';
-		button.setAttribute('aria-label', `Open ${target.homeDir}`);
-		button.addEventListener('click', () => void openInstance(target));
-		row.append(path, button);
+		row.setAttribute('aria-label', `${target.available ? 'Open' : 'Unavailable:'} ${instanceName(target)} at ${target.homeDir}`);
+		row.addEventListener('click', () => { if (target.available) void openInstance(target); });
+		row.append(path);
 		recent.append(row);
 	}
 	setText('instance-preference-warning', welcome.preferenceError || '');
@@ -96,6 +121,10 @@ export async function openInstance(target, create = false) {
 		// from the previously managed instance survive a switch.
 		window.location.reload();
 	} catch (error) {
+		if (create) {
+			byId('new-instance-location-details').open = true;
+			byId('new-instance-home').focus();
+		}
 		notice(message(error), 'error', { persist: true });
 	} finally {
 		setBusy(false);
@@ -119,6 +148,8 @@ export async function showInstances() {
 }
 
 export function bindInstanceEvents() {
+	byId('begin-new-instance').addEventListener('click', () => showNewInstanceSetup(true));
+	byId('cancel-new-instance').addEventListener('click', () => showNewInstanceSetup(false));
 	byId('instance-picker').addEventListener('change', async () => {
 		const requested = byId('instance-picker').value;
 		byId('instance-picker').value = state.currentSnapshot?.homeDir || '';
@@ -129,11 +160,21 @@ export function bindInstanceEvents() {
 		}
 	});
 	byId('new-instance-name').addEventListener('input', suggestInstanceHome);
+	byId('new-instance-home').addEventListener('input', suggestInstanceHome);
+	byId('new-instance-home').addEventListener('invalid', () => {
+		byId('new-instance-location-details').open = true;
+	});
 	byId('choose-instance').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
-		const directory = await state.api.chooseDirectory({ purpose: 'instance' }).catch((error) => {
+		let directory;
+		setBusy(true);
+		try {
+			directory = await state.api.chooseDirectory({ purpose: 'instance' });
+		} catch (error) {
 			notice(message(error), 'error', { persist: true });
-		});
+		} finally {
+			setBusy(false);
+		}
 		if (directory) await openInstance({ kind: 'local', homeDir: directory });
 	});
 	byId('new-instance-browse').addEventListener('click', async () => {
@@ -141,7 +182,10 @@ export function bindInstanceEvents() {
 		setBusy(true);
 		try {
 			const directory = await state.api.chooseDirectory({ purpose: 'new-instance' });
-			if (directory) byId('new-instance-home').value = directory;
+			if (directory) {
+				byId('new-instance-home').value = directory;
+				suggestInstanceHome();
+			}
 		} catch (error) {
 			notice(message(error), 'error', { persist: true });
 		} finally {

@@ -94,7 +94,10 @@ class Control {
 		this.listeners.set(name, listener);
 	}
 	append(...children: Control[]) {
-		this.children.push(...children);
+		for (const child of children) {
+			this.children = this.children.filter((item) => item !== child);
+			this.children.push(child);
+		}
 	}
 	replaceChildren(...children: Control[]) {
 		this.children = children;
@@ -244,10 +247,10 @@ describe('Admin static security boundary', () => {
 	it('shows Welcome when no launch-time selection is available, without fetching a stack snapshot', async () => {
 		state.api = {
 			welcome: async () => ({
-				defaultInstance: { kind: 'local', homeDir: '/default' },
+				defaultInstance: { kind: 'local', homeDir: '/default', available: false },
 				recentInstances: [
-					{ kind: 'local', homeDir: '/previous' },
-					{ kind: 'local', homeDir: '/other' }
+					{ kind: 'local', homeDir: '/previous', name: 'april', available: true },
+					{ kind: 'local', homeDir: '/other', name: 'may', available: true }
 				]
 			}),
 			snapshot: async () => {
@@ -257,17 +260,19 @@ describe('Admin static security boundary', () => {
 		await initializeAdmin();
 		expect(control('instance-welcome').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
-		expect(control('primary-instance-path').textContent).toBe('/previous');
-		expect(control('open-recent-instance').textContent).toBe('Open previous instance');
-		expect(control('default-instance-option').hidden).toBe(false);
-		expect(control('recent-instances').children.length).toBe(1);
+		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual(['april', 'may']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'begin-new-instance']);
+		expect(control('begin-new-instance').className).toBe('secondary');
+		expect(control('new-instance-section').hidden).toBe(true);
 		expect(control('skip-link').getAttribute('href')).toBe('#instance-welcome');
 	});
 
-	it('offers default setup on first launch and cancelling the folder picker does nothing', async () => {
-		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default' }, recentInstances: [] });
-		expect(control('open-recent-instance').textContent).toBe('Open default instance');
-		expect(control('default-instance-option').hidden).toBe(true);
+	it('offers two initial choices, not a folder form, and cancelling the picker does nothing', async () => {
+		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
+		expect(control('begin-new-instance').className).toBe('primary');
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section']);
+		expect(control('new-instance-section').hidden).toBe(true);
+		expect(control('recent-instances-section').hidden).toBe(true);
 		let opened = false;
 		state.api = {
 			chooseDirectory: async () => undefined,
@@ -278,6 +283,66 @@ describe('Admin static security boundary', () => {
 		bindInstanceEvents();
 		await control('choose-instance').listeners.get('click')?.({});
 		expect(opened).toBe(false);
+		expect(state.operationInFlight).toBe(false);
+	});
+
+	it('reveals naming only after setup is chosen and Back preserves the draft without selecting a home', async () => {
+		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
+		state.api = new Proxy({}, { get: () => { throw new Error('Navigation must not call IPC.'); } });
+		bindInstanceEvents();
+		await control('begin-new-instance').listeners.get('click')?.({});
+		expect(control('instance-options').hidden).toBe(true);
+		expect(control('instance-welcome-title').hidden).toBe(true);
+		expect(control('new-instance-section').hidden).toBe(false);
+		expect(control('new-instance-name').focused).toBe(true);
+		control('new-instance-name').value = 'april';
+		control('new-instance-home').value = '/my/agent';
+		await control('cancel-new-instance').listeners.get('click')?.({});
+		expect(control('instance-options').hidden).toBe(false);
+		expect(control('instance-welcome-title').hidden).toBe(false);
+		expect(control('new-instance-section').hidden).toBe(true);
+		expect(control('begin-new-instance').focused).toBe(true);
+		await control('begin-new-instance').listeners.get('click')?.({});
+		expect(control('new-instance-name').value).toBe('april');
+		expect(control('new-instance-home').value).toBe('/my/agent');
+		state.operationInFlight = true;
+		await control('cancel-new-instance').listeners.get('click')?.({});
+		expect(control('new-instance-section').hidden).toBe(false);
+	});
+
+	it('shows the compatible default once and never opens an unavailable recent row', async () => {
+		const target = { kind: 'local', homeDir: '/default', name: 'april', available: true };
+		renderWelcome({ defaultInstance: target, recentInstances: [target, { kind: 'local', homeDir: '/gone', available: false }] });
+		const rows = control('recent-instances').children;
+		expect(rows.length).toBe(2);
+		expect(rows[0].getAttribute('aria-label')).toBe('Open april at /default');
+		expect(rows[1].disabled).toBe(true);
+		expect(rows[1].children[1].textContent).toBe('Unavailable');
+		state.api = { openInstance: async () => { throw new Error('Unavailable folder must not open.'); } };
+		await rows[1].listeners.get('click')?.({});
+		expect(state.operationInFlight).toBe(false);
+		// Reordering on another render must move DOM nodes, not duplicate them.
+		renderWelcome({ defaultInstance: { ...target, available: false }, recentInstances: [] });
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section']);
+	});
+
+	it('locks concurrent existing-folder dialogs and recovers from cancellation or error', async () => {
+		let finish!: (value: undefined) => void;
+		let calls = 0;
+		state.api = { chooseDirectory: () => { calls++; return new Promise<undefined>((resolve) => { finish = resolve; }); } };
+		bindInstanceEvents();
+		const choose = control('choose-instance').listeners.get('click');
+		const pending = choose?.({});
+		expect(state.operationInFlight).toBe(true);
+		await choose?.({});
+		expect(calls).toBe(1);
+		finish(undefined);
+		await pending;
+		expect(state.operationInFlight).toBe(false);
+		state.api.chooseDirectory = async () => { throw new Error('Cannot open folder picker.'); };
+		await choose?.({});
+		expect(state.operationInFlight).toBe(false);
+		expect(control('notice-message').textContent).toBe('Cannot open folder picker.');
 	});
 
 	it('does not switch with unsaved changes unless the user confirms', async () => {
@@ -377,7 +442,7 @@ describe('Admin static security boundary', () => {
 	it('suggests a named default folder and leaves manually chosen folders alone', () => {
 		bindInstanceEvents();
 		renderWelcome({
-			defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default' },
+			defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default', available: false },
 			instancesDirectory: '/user/fhold/instances',
 			recentInstances: []
 		});
@@ -404,9 +469,19 @@ describe('Admin static security boundary', () => {
 		await submit?.({ preventDefault() {} });
 		expect(control('new-instance-home').value).toBe('/already-installed');
 		expect(control('notice-message').textContent).toBe('Choose an empty folder.');
+		expect(control('new-instance-location-details').open).toBe(true);
+		expect(control('new-instance-home').focused).toBe(true);
 		state.operationInFlight = true;
 		await submit?.({ preventDefault() {} });
 		expect(calls).toBe(1);
+	});
+	it('reveals the optional folder location when native form validation requires it', () => {
+		bindInstanceEvents();
+		control('new-instance-home').listeners.get('invalid')?.({});
+		expect(control('new-instance-location-details').open).toBe(true);
+		expect(html).toMatch(/<details id="new-instance-location-details"[^>]*>/);
+		expect(html).not.toContain('id="new-instance-location-preview"');
+		expect(html).not.toContain('id="open-recent-instance"');
 	});
 	it('requires Docker readiness before installing and refreshes quietly without clearing errors', async () => {
 		const snapshot = {

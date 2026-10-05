@@ -88,7 +88,11 @@ service, automatic restart or second configuration store is introduced.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
-Welcome provides explicit new-instance setup in an empty or new folder. A chosen
+Welcome starts with setup/open choices, or a compact named recent list. Naming
+and optional folder selection appear only after choosing new setup; opening an
+existing instance never silently starts a fresh installation. Compatible-home
+labels are read from current intent, not stored in a second registry. Preparing
+an empty/new folder does not install anything until explicit confirmation. A chosen
 DNS-safe name reuses `deployment.projectName` for Compose/container naming and
 the Assistant hostname; the CLI uses that same name to select its default folder,
 not a separate install-name option or second name registry. Fresh setup refuses

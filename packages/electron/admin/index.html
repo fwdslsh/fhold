@@ -20,46 +20,44 @@
 
     <main id="instance-welcome" class="welcome-shell" tabindex="-1" hidden>
       <section class="welcome-card instance-card" aria-labelledby="instance-welcome-title">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">/</span>
-          <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">Personal agent management</span></div>
+        <header class="instance-intro">
+          <div class="instance-wordmark">f<span aria-hidden="true">/</span>hold</div>
+          <h1 id="instance-welcome-title">Welcome to fhold</h1>
+        </header>
+        <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
+        <div id="instance-options" class="instance-options">
+          <button id="begin-new-instance" class="primary" type="button">Set up a new agent</button>
+          <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
+            <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
+              <h2 id="recent-instances-title">Recent instances</h2>
+              <div id="recent-instances"></div>
+            </section>
+            <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
+          </section>
         </div>
-        <h1 id="instance-welcome-title">Welcome to fhold</h1>
-        <p class="welcome-copy">Open an instance to manage its agent and settings, or create a separate one.</p>
-        <div class="instance-primary">
-          <p id="primary-instance-path" class="instance-path">Loading…</p>
-          <button id="open-recent-instance" class="primary large" type="button">Open default instance</button>
-        </div>
-        <div id="default-instance-option" class="instance-row" hidden>
-          <div><strong>Default instance</strong><p id="default-instance-path" class="instance-path">Loading…</p></div>
-          <button id="open-default-instance" class="secondary" type="button">Open default</button>
-        </div>
-        <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
-          <h2 id="recent-instances-title">Recent instances</h2>
-          <div id="recent-instances"></div>
-        </section>
-        <button id="choose-instance" class="secondary instance-picker" type="button">Open another folder…</button>
-        <details id="new-instance-details" class="disclosure">
-          <summary>Create new instance</summary>
-          <p class="help-text">Each instance has its own agent, knowledge and settings. Name your instance; setup chooses available connection ports for you.</p>
+        <section id="new-instance-section" class="instance-new" aria-labelledby="new-instance-title" hidden>
+          <button id="cancel-new-instance" class="text-button" type="button">← Back</button>
+          <h2 id="new-instance-title">Set up a new agent</h2>
           <form id="new-instance-form">
             <label class="field" for="new-instance-name">
-              Instance name
+              Agent name
               <input id="new-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" />
             </label>
+            <details id="new-instance-location-details" class="disclosure">
+              <summary>Folder location</summary>
             <div class="field">
-              <label for="new-instance-home">New instance folder</label>
+              <label for="new-instance-home">Agent folder</label>
               <div class="instance-folder-input">
                 <input id="new-instance-home" type="text" placeholder="/path/to/new-instance" required autocomplete="off" spellcheck="false" aria-describedby="new-instance-help" />
                 <button id="new-instance-browse" class="secondary" type="button">Choose folder…</button>
               </div>
             </div>
-            <p id="new-instance-help" class="help-text">Defaults to ~/fhold/instances/ followed by the instance name. You can choose a different folder. Nothing is installed until you confirm on the next screen.</p>
+            <p id="new-instance-help" class="help-text">Choose a new or empty folder.</p>
+            </details>
             <button id="create-instance" class="primary" type="submit">Continue to setup</button>
+            <p class="help-text instance-confirmation">Nothing is installed until you confirm on the next screen.</p>
           </form>
-        </details>
-        <p class="help-text">Opening or switching instances does not start or stop containers.</p>
-        <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
+        </section>
       </section>
     </main>
 

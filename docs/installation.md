@@ -129,15 +129,19 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron start
 ```
 
-Admin opens at Welcome: choose the default, previous/recent instance or another
-folder, or expand **Create new instance**. Enter a name to get a suggested
-`~/fhold/instances/<name>` folder, or choose a folder/enter a full path to override it.
-Then continue to setup and confirm **Install fhold**. Port
+Admin automatically reopens the last-used compatible instance. First launch or
+an unavailable previous instance shows Welcome: choose **Set up a new agent**
+or **Open existing instance…**. Use the instance dropdown → **Open another instance…**
+to return to these choices and a compact list of recent instances.
+New setup asks for a name and suggests `~/fhold/instances/<name>`.
+Expand **Folder location** to choose a different new/empty folder or enter a
+full path. Then continue to setup and confirm **Install fhold**. Port
 selection is automatic; expand **Advanced** and turn off automatic selection
 only if you need specific ports. New setup refuses non-empty folders and rejects a
 name already used by Docker before writing installation files. Folder selection
-alone does not install or start anything. An empty folder opens setup; a
-compatible fhold home opens management. Provider authentication
+alone does not install or start anything. Only explicit new setup accepts an
+empty folder; opening an existing instance requires a compatible fhold home.
+Provider authentication
 and readiness use the same Assistant as CLI. A startup/port failure offers an
 explicit retry, not reinstall-over-data.
 

@@ -118,6 +118,31 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance picker, Enter, Space, page selection', passed: true });
 }
 
+async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
+	const press = async (keyCode: string, modifiers: Array<'shift'> = []) => {
+		window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+		if (keyCode === 'Return') window.webContents.sendInputEvent({ type: 'char', keyCode, modifiers });
+		window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+		await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
+	};
+	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus(); window.scrollTo(0,0)');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'skip-link'"), 'Welcome skip link was not first in keyboard order.');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'First launch did not prioritize new setup in keyboard order.');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'choose-instance'"), 'Existing instance choice was not reachable after setup.');
+	await press('Tab', ['shift']);
+	await press('Return');
+	assert(await window.webContents.executeJavaScript("!document.querySelector('#new-instance-section').hidden && document.querySelector('#instance-options').hidden && document.activeElement.id === 'new-instance-name'"), 'Setup did not reveal naming and move focus to the field.');
+	await press('Tab', ['shift']);
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'cancel-new-instance'"), 'Back was not reachable from naming.');
+	await press('Return');
+	assert(await window.webContents.executeJavaScript("document.querySelector('#new-instance-section').hidden && !document.querySelector('#instance-options').hidden && document.activeElement.id === 'begin-new-instance'"), 'Back did not restore the initial choices and keyboard focus.');
+	await press('Return');
+	visualAudits.push({ keyboard: 'Welcome choices, Enter, naming focus, Shift+Tab, Back', passed: true });
+}
+
 function requiredEnvironment(name: string): string {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`${name} is required for the Admin E2E test.`);
@@ -210,8 +235,31 @@ async function capture(
 	name: string,
 	preserveFocus = false
 ): Promise<string> {
+	let timeout: NodeJS.Timeout | undefined;
+	try {
+		return await Promise.race([
+			captureScreenshot(window, directory, name, preserveFocus),
+			new Promise<never>((_resolve, reject) => {
+				timeout = setTimeout(() => reject(new Error(`Rendered screenshot/audit timed out: ${name}`)), 45_000);
+			})
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
+
+async function captureScreenshot(
+	window: BrowserWindow,
+	directory: string,
+	name: string,
+	preserveFocus: boolean
+): Promise<string> {
 	const path = join(directory, name);
 	progress(`capturing ${name}`);
+	// Native screenshot tests own this window's focus, just as a manual tester
+	// does. Do not rely on animation frames from an occluded/background window.
+	window.focus();
+	window.webContents.focus();
 	if (!preserveFocus)
 		await window.webContents.executeJavaScript(
 			'document.activeElement?.blur(); window.scrollTo(0, 0)'
@@ -554,6 +602,7 @@ async function run(): Promise<Record<string, unknown>> {
 			!existsSync(join(homeDir, 'state')),
 			'Welcome seeded the default home before selection.'
 		);
+		assert(await window.webContents.executeJavaScript("document.querySelector('#new-instance-section').hidden && !document.querySelector('#instance-options').hidden && document.querySelector('#recent-instances-section').hidden"), 'First launch should show only setup/open choices, not a form or nonexistent home.');
 		await assertRenderedFloor(window, 'instance welcome');
 		const welcomeScreenshot = await capture(window, outputDir, '00-instance-welcome.png');
 		await sizeViewport(window, 640, 640);
@@ -563,20 +612,37 @@ async function run(): Promise<Record<string, unknown>> {
 			outputDir,
 			'00b-instance-welcome-narrow.png'
 		);
+		await sizeViewport(window, 640, 640, 2);
+		await assertRenderedFloor(window, 'instance welcome at 200% zoom');
+		const zoomWelcomeScreenshot = await capture(window, outputDir, '00d-instance-welcome-zoom.png');
+		await welcomeKeyboardNavigation(window);
+		await assertRenderedFloor(window, 'new-agent naming at 200% zoom');
+		const zoomNamingScreenshot = await capture(window, outputDir, '00e-new-instance-name-zoom.png');
+		await window.webContents.executeJavaScript("document.querySelector('#new-instance-location-details > summary').click()");
+		await assertRenderedFloor(window, 'custom agent folder at 200% zoom');
+		const zoomFolderScreenshot = await capture(window, outputDir, '00f-new-instance-folder-zoom.png');
+		await window.webContents.executeJavaScript("document.querySelector('#new-instance-name').focus()");
+		for (const selector of ['#new-instance-location-details > summary', '#new-instance-home', '#new-instance-browse', '#create-instance']) {
+			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+			await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
+			assert(await window.webContents.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(selector)})`), `New setup keyboard traversal did not reach ${selector}.`);
+		}
+		assert(await window.webContents.executeJavaScript("(() => { const r = document.querySelector('#create-instance').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), 'Continue to setup was not reachable with keyboard scrolling at 200% zoom.');
+		const zoomFolderActionsScreenshot = await capture(window, outputDir, '00g-new-instance-folder-zoom-actions.png', true);
 		await sizeViewport(window, 1120, 780);
 		const originalPicker = dialog.showOpenDialog;
 		const incompatibleHome = join(outputDir, 'legacy-instance');
 		mkdirSync(otherHome);
 		mkdirSync(incompatibleHome);
 		writeFileSync(join(incompatibleHome, 'user-data'), 'preserve this');
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#new-instance-details').open = true"
-		);
-		await assertRenderedFloor(window, 'create-instance folder form');
-		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-folder.png');
+		await window.webContents.executeJavaScript("document.querySelector('#new-instance-location-details').open = false");
+		await assertRenderedFloor(window, 'new-agent naming');
+		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-name.png');
 		const suggestedHome = await window.webContents.executeJavaScript("document.querySelector('#new-instance-home').value");
 		try {
 			dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+			await window.webContents.executeJavaScript("document.querySelector('#cancel-new-instance').click()");
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
 			);
@@ -585,6 +651,7 @@ async function run(): Promise<Record<string, unknown>> {
 				await window.webContents.executeJavaScript("document.body.dataset.phase === 'welcome'"),
 				'Cancelled folder selection left welcome.'
 			);
+			await window.webContents.executeJavaScript("document.querySelector('#begin-new-instance').click(); document.querySelector('#new-instance-location-details > summary').click()");
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#new-instance-browse').click()"
 			);
@@ -599,6 +666,7 @@ async function run(): Promise<Record<string, unknown>> {
 				),
 				'Cancelling new-instance folder selection changed the selection.'
 			);
+			await window.webContents.executeJavaScript("document.querySelector('#cancel-new-instance').click()");
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [incompatibleHome] });
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
@@ -611,7 +679,14 @@ async function run(): Promise<Record<string, unknown>> {
 				true
 			);
 			assert(!existsSync(join(incompatibleHome, 'state')), 'Invalid folder was modified.');
+			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [otherHome] });
+			await window.webContents.executeJavaScript("document.querySelector('#choose-instance').click()");
+			await waitForRenderer(window,
+				"document.body.dataset.busy === 'false' && document.querySelector('#notice-message').textContent.includes('No fhold instance was found')",
+				'empty folder rejected as an existing instance', 10_000, true);
+			assert(!existsSync(join(otherHome, 'state')), 'Opening an empty folder began installation.');
 			await window.webContents.executeJavaScript(`(() => {
+				document.querySelector('#begin-new-instance').click();
 				document.querySelector('#new-instance-home').value = ${JSON.stringify(incompatibleHome)};
 				document.querySelector('#new-instance-form').requestSubmit();
 			})()`);
@@ -662,14 +737,19 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			await waitForRenderer(
 				window,
-				"document.body.dataset.phase === 'welcome' && document.querySelector('#open-recent-instance').textContent === 'Open previous instance'",
+				"document.body.dataset.phase === 'welcome' && document.querySelector('#recent-instances .instance-choice')?.disabled",
 				'recent-instance welcome'
 			);
 			const preferences = readFileSync(join(app.getPath('userData'), 'instances.json'), 'utf8');
 			assert(preferences.includes(otherHome), 'Recent instance was not persisted.');
-			await window.webContents.executeJavaScript(
-				"document.querySelector('#open-default-instance').click()"
-			);
+			await window.webContents.executeJavaScript(`(() => {
+				document.querySelector('#begin-new-instance').click();
+				document.querySelector('#new-instance-name').value = ${JSON.stringify(projectName)};
+				document.querySelector('#new-instance-name').dispatchEvent(new Event('input', {bubbles:true}));
+				document.querySelector('#new-instance-location-details > summary').click();
+				document.querySelector('#new-instance-home').value = ${JSON.stringify(homeDir)};
+				document.querySelector('#new-instance-form').requestSubmit();
+			})()`);
 		} finally {
 			dialog.showOpenDialog = originalPicker;
 		}
@@ -1263,7 +1343,7 @@ async function run(): Promise<Record<string, unknown>> {
 		assert((await adminSnapshot()).pendingRestart?.required, 'Pending state was not saved with the instance.');
 		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
 		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'return to Welcome with saved changes');
-		await window.webContents.executeJavaScript("document.querySelector('#open-recent-instance').click()");
+		await window.webContents.executeJavaScript(`[...document.querySelectorAll('#recent-instances .instance-choice')].find(button => button.dataset.homeDir === ${JSON.stringify(homeDir)}).click()`);
 		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden", 'pending restart after reopening the instance');
 		assert(JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave), 'Saving/reopening changed the user window size.');
 		const pendingRestartScreenshot = await capture(window, outputDir, '04o-pending-restart.png');
@@ -1621,7 +1701,8 @@ async function run(): Promise<Record<string, unknown>> {
 		await assertRenderedFloor(window, 'narrow recent-instance list');
 		window.setSize(managedWindowSize[0], managedWindowSize[1]);
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#new-instance-details').open = true;
+			document.querySelector('#begin-new-instance').click();
+			document.querySelector('#new-instance-location-details > summary').click();
 			document.querySelector('#new-instance-home').value = ${JSON.stringify(otherHome)};
 			document.querySelector('#new-instance-form').requestSubmit();
 		})()`);
@@ -2037,6 +2118,7 @@ async function run(): Promise<Record<string, unknown>> {
 			visibleSetupJourneyComplete: Boolean(provider && providerKey),
 			managementUiFixtureUsed: !provider,
 			startupRecoveryVerified: true,
+			welcomeVerified: { twoFirstLaunchChoices: true, progressiveNaming: true, backAndKeyboardFocus: true, optionalFolderLocation: true, emptyExistingFolderRefused: true, narrowAndZoom: true, zoomActionsReachable: true },
 			restorePreservationVerified: true,
 			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
 			sidebarVerified: { recentInstancePicker: true, footerRemoved: true, identityAndRuntimeOnOverview: true, automaticStatusRecovery: true, unavailableStatusFixture: true, longNameFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
@@ -2109,6 +2191,10 @@ async function run(): Promise<Record<string, unknown>> {
 				welcomeScreenshot,
 				narrowWelcomeScreenshot,
 				newInstanceScreenshot,
+				zoomWelcomeScreenshot,
+				zoomNamingScreenshot,
+				zoomFolderScreenshot,
+				zoomFolderActionsScreenshot,
 				secondInstanceScreenshot,
 				recentScreenshot,
 				instancePickerScreenshot,
