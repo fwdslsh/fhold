@@ -26,25 +26,31 @@ Changing the default location does not move an existing installation. A move is
 not a portable restore: preserve the **entire stopped home**, including `state/`
 and `data/`, to retain native history, accounts and the same instance authority.
 
-1. Select the old absolute path and run `fhold --name /old/home stop`. Stop any
-   separately launched writer using its files. Take and verify a full stopped-home
-   filesystem backup outside that home; a portable archive is insufficient.
-2. Choose an unused destination and move the whole directory there. Keep the
-   backup. Do not merge it into another home or change `deployment.projectName`,
-   ports, keys or native account files.
-3. In the moved `state/installation.json`, change **only** `homeDir` from the old
-   verified absolute path to the new absolute path. Preserve its release and
-   managed-image receipt. This is an explicit relocation metadata correction,
-   not permission to adopt an unrelated home.
-4. Reconcile derived paths without restarting by re-saving the existing
-   Assistant port: `fhold --name /new/home config assistant --port <saved-port>
-   --no-apply`. This regenerates `state/stack.env`; do not hand-edit that file.
-   Review any operator-authored absolute bind paths in the custom Compose file
-   separately. An update attempted before reconciliation safely refuses stale
-   paths rather than mounting another home.
-5. Run `fhold --name /new/home update`, then `doctor --readiness` for that same
-   home. Verify history, native sign-ins, hostname, ports and client access.
-   Open the new folder in Admin; an old recent-path entry does not relocate data.
+Use the matching released CLI's full-instance export/import. It reconciles the
+installation receipt and generated paths; no metadata or environment-file edits
+are needed. The destination must be empty. Do not install another instance there
+first or run the original and restored copies together.
+
+```bash
+fhold --name /old/home stop
+fhold --name /old/home backup --full --confirm-stopped --to /backups/instance-move
+fhold --name /new/home restore --full --from /backups/instance-move --dry-run --confirm-stopped
+fhold --name /new/home restore --full --from /backups/instance-move --apply --confirm-stopped
+fhold --name /new/home start
+```
+
+Stop any separately launched writers before export. The export is unencrypted:
+keep it private and outside both homes. External bind mounts, named volumes and
+symlink targets outside the home need separate protection. Review their paths
+and any ephemeral-recovery destination before starting the restored instance.
+The saved instance name, ports, image versions, credentials, conversations,
+plugins and task settings are retained; this is relocation, not an upgrade.
+
+Verify history, native sign-ins, hostname, ports and client access at the new
+location. Open the new folder in Admin; an old recent-path entry does not relocate
+data. Preserve the original stopped home and full export until verification is
+complete. On hosts using `/opt/stacks`, select the full path rather than a short
+name that would resolve under `~/fhold/instances`.
 
 Use the matching released CLI/Admin. A moved default home can then be selected by
 its short name, for example `fhold --name april status` for
