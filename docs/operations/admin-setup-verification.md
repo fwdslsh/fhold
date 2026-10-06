@@ -1,6 +1,6 @@
 # Admin verification
 
-## Current UI preview iteration
+## Current wizard and Apps
 
 The current preview removes the Welcome/creation headings and duplicate naming
 screen. The wizard has one editable name, background Docker/Compose checks,
@@ -17,26 +17,44 @@ hidden by an import toggle or reused as import authority. Preparation still goes
 the existing native empty-folder validation; installation and full-instance
 import use the existing control-plane operations and protections.
 
-At the user's request, whole-wizard automated tests, rendered E2E and packaged
-startup smoke are deferred until the final design iteration. The current AI-account
-overhaul has separate scoped QA requested by the user; see
-[AI-account verification](admin-provider-verification.md). Earlier test counts/screenshots
-do not qualify this changed source. The existing startup smoke and renderer
-fixtures still describe the previous two-screen naming flow and must be updated
-to the final wizard before running that qualification. This is an unreleased
-preview AppImage, not a new certified release. TypeScript compilation and the
-standard AppImage build are build checks, not end-to-end verification.
+Whole-wizard qualification is now required before beta.1 rollout acceptance, no longer
+deferred. The rendered harness and packaged startup smoke follow this single-form
+wizard; provider setup follows the model-first native Test → Use → Continue flow.
+See [AI-account verification](admin-provider-verification.md) for the separate
+scoped provider evidence. Compilation and an AppImage build alone do not qualify
+the installation workflow or client readiness.
 
-Apps is also a current design preview: OpenCode appears first, followed
+On 2026-10-06, the current-source Electron walkthrough against published alpha.6
+completed the fresh install, portable import preservation, stopped-runtime recovery,
+real `opencode-go/gpt-5.6-luna` response Test, explicit native Use, setup Continue,
+managed-hook refusal, sidebar/layout checks and postponed/confirmed CLI-generated
+settings restart. It then stopped on an obsolete Claude instruction wording
+assertion; the matching release link was correct. Earlier attempts found stale
+two-screen wizard selectors, asynchronous Cancel/focus waits and a harness
+top-level `await import` expression. These were test-harness failures, not proven
+product defects, and have been corrected without production behavior changes.
+
+The latest incomplete run retains its private home at
+`/tmp/fhold-admin-e2e-wSNvGP/home` and evidence at
+`/tmp/fhold-admin-e2e-artifacts-fp3ToM`. Its stack was stopped normally. One small
+vendor response succeeded; no automatic response ran when saving sign-in.
+The current full Admin source suites pass **120 tests / 828 assertions**, with
+typecheck and scoped lint passing. The complete frozen beta.1 live walkthrough,
+including Apps, full export/import, switching and separate-process reopening,
+remains **pending** until the exact published candidate is available. The partial
+alpha run is not beta release certification.
+
+Apps presents OpenCode first, followed
 by Claude, Codex, Discord, Slack and MCP, replacing the old client tabs/chat/native
 groups. Claude offers Desktop chat and Claude remote connection. Bot-specific tokens and user
 mappings live with that app. Each app/network form saves only its own settings;
 bot enablement retains the existing shared MCP dependency. Credential handling,
-native consent and restart confirmation still use the existing APIs. The older
-Apps renderer/E2E fixtures must be aligned during final qualification;
-this preview does not claim live token, pairing or per-app-save verification.
+native consent and restart confirmation still use the existing APIs. Renderer
+fixtures and the full E2E harness are aligned to these controls. Live bot-token,
+external pairing and per-app-save qualification must be reported separately;
+they are not implied by source tests or a running container.
 
-App permissions are also an unverified design preview. The rejected People &
+App permissions use inline controls. The rejected People &
 access / Access keys destinations, policy table and per-key cards are removed.
 Apps owns inline Chat only, Read files and Full access choices. Normal
 Discord/Slack setup never exposes a fhold key or offers a saved-access picker.
@@ -46,11 +64,12 @@ of Apps edits existing permissions through visible Manage buttons.
 Permission dialogs have no copy/replace/remove controls. System's collapsed
 Connection keys section provides confirmed rotation and then a copy-new-key
 action. Existing identities, values, bot mappings and policy contracts stay
-unchanged; no app registry or inferred external assignment is introduced. The old
-Access renderer/E2E fixtures need final alignment. Automated tests and rendered
-or live permission/copy/reconnect qualification remain deferred until the user's
-final design iteration. Source review, typechecking and preview AppImage builds
-do not qualify the feature or prove client readiness. Management notifications
+unchanged; no app registry or inferred external assignment is introduced. Tests
+now cover the current Apps and System controls. The full live gate checks explicit
+connection creation, private IPC clipboard copy, cancelled Full access, and app
+draft isolation; completion is recorded only after the walkthrough passes.
+Source review, typechecking and AppImage builds do not prove client readiness.
+Management notifications
 and pending restart appear at the sidebar bottom; setup feedback remains visible
 inside the wizard. Native restart confirmation and postponement remain unchanged.
 
@@ -142,7 +161,7 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron test:e2e
 ```
 
-Update the rendered harness to verify separate first-launch setup/open/import
+The rendered harness verifies separate first-launch setup/open/import
 choices, the single editable new-agent name, collapsed Advanced, and import
 folder/review navigation with draft preservation, at normal/narrow sizes and
 200% zoom. Real Tab, Shift+Tab and Enter input must check task order and
@@ -154,10 +173,20 @@ ports and actual container/OS-hostname checks. Fresh setup keeps Advanced collap
 and automatic selection enabled. The primary exercises manual overrides; the
 second chooses ports automatically while the defaults are deliberately occupied,
 without opening Advanced. It also verifies install and startup
-recovery, provider readiness, clickable OpenCode, MCP details, masked credentials,
+recovery, provider readiness, clickable OpenCode, MCP details, private credential copy,
 configuration, backup/own-backup restore, keyboard/accessibility and user-controlled
 window size. Full provider readiness needs real provider input and normal billing.
 Use private provider-key files rather than command arguments.
+
+For approved real Go qualification, supply `FH_ADMIN_E2E_PROVIDER=opencode-go`,
+`FH_ADMIN_E2E_MODEL=gpt-5.6-luna`, and `FH_ADMIN_E2E_PROVIDER_KEY_FILE` pointing to a
+private file. Do not print its contents. A successful full run requests four small
+responses: primary setup Test, post-restart native readiness, a guarded no-tool
+MCP response, and second-instance setup Test. Saving sign-in and selecting Use do
+not request a response. Obtain current billing approval and account for native
+transport retries before rerunning; a failed harness run does not reset the
+approved response budget. Do not label the management-only fallback as complete
+provider setup. Preserve credential-bearing test homes and evidence privately.
 
 The launcher also starts a second real Electron process with the same disposable
 desktop profile. It must open the last-used installed home directly without
@@ -184,8 +213,9 @@ Screenshot checks focus only the owned test window and bound the complete
 render/accessibility/capture wait. A stalled native renderer must fail the test
 instead of hanging indefinitely; test focus and sizing are not production behavior.
 
-System has one view with four collapsed sections, in order: **Installation
-details**, **Recent logs**, **Import / export**, **Ephemeral container support**.
+System has one view with five collapsed sections, in order: **Installation
+details**, **Recent logs**, **Connection keys**, **Import / export**,
+**Ephemeral container support**.
 Static and rendered checks verify this order, the names, matching setup import
 labels, keyboard traversal and navigation without duplicate backup/diagnostic
 view containers. Import/export distinguishes portable content from the explicit
@@ -196,7 +226,8 @@ The full-instance journey creates a native OpenCode session, refuses export
 while containers are live, verifies default-cancel native dialogs, stops through
 the normal Admin action and exports the entire home. It opens an empty folder
 without installing first, previews without creating the destination, cancels
-without writes, then imports while preserving exact stack intent and account
+without writes, checks that Back retains both choices and invalidates the preview,
+and that Enter previews rather than applying. It then imports while preserving exact stack intent and account
 keys. No containers start during import. After an explicit confirmed Start,
 the original session must be visible through the authenticated native API.
 The restored home has the same project identity; the original is kept and never
