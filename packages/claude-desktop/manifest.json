@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "fhold",
   "display_name": "fhold",
-  "version": "0.1.2610050714-alpha.6",
+  "version": "0.1.2610060715-beta.1",
   "description": "Use your personal fhold agent from Claude Desktop.",
-  "long_description": "Connect Claude Desktop to your local fhold agent. Requests pass through fhold's protected access layer, which applies the access level assigned to this key and screens untrusted input.",
+  "long_description": "Connect Claude Desktop to your local fhold agent. Requests pass through fhold's protected access layer, which applies the permissions you choose for this connection and screens untrusted input.",
   "author": {
     "name": "fhold contributors",
     "url": "https://github.com/fwdslsh/fhold"
@@ -52,14 +52,14 @@
     "guardian_url": {
       "type": "string",
       "title": "Local fhold address",
-      "description": "Keep the default unless fhold shows a different address under Connections.",
+      "description": "Keep the default unless fhold shows a different address under Apps.",
       "default": "http://127.0.0.1:3830/mcp",
       "required": true
     },
     "credential_key": {
       "type": "string",
       "title": "fhold access key",
-      "description": "Paste the key shown in fhold under People & access. Its access level controls available capabilities.",
+      "description": "In fhold Admin, open Apps → Claude → Desktop chat, choose what Claude can do and select Create connection. Then select Copy access key in the connection instructions and paste it here. For an existing connection, edit permissions under Apps → Advanced access → Manage instead of creating another connection.",
       "sensitive": true,
       "required": true
     }

@@ -23,9 +23,12 @@ fhold portal token discord --bot-token-file -
 Avoid putting the token in shell history; an interactive secret editor or
 password-manager command is preferable.
 
-In fhold Admin, **Connections → Discord** presents the same checklist and
-opens the Discord Developer Portal. **Add Discord token** moves directly to the
-private token form; the value remains masked and is never shown again.
+In fhold Admin, **Apps → Discord** presents the same checklist and
+opens the Discord Developer Portal. **Bot tokens → Save Discord token** stores
+the value privately; it remains masked and is never shown again. Default access,
+allowed-user rules and individual user mappings are in the same Discord section.
+**Save Discord settings** does not save another app's drafts. Restart now or
+later when prompted; enabling Discord also enables the MCP service it needs.
 
 ## 2. Configure a default-deny scope
 
@@ -54,9 +57,23 @@ Bot ownership does not automatically grant access. A team-owned bot requires
 an operator choice of permitted users. The adapter refuses all use when every
 allowlist is empty; choose permitted users explicitly.
 
-In Admin, expand **Who can use it**, enter the same IDs, choose the default
-access identity, and select **Save connections**. If a required scope or token
-is missing, Admin opens and focuses the exact field that needs attention.
+In the revised Admin preview, open **Apps → Discord → Who can use the bot**
+and enter the same IDs. Choose Chat only, Read files or Full access under
+**What can Discord do?**, then select **Save Discord settings**. Normal bot setup
+does not ask you to choose or copy a fhold key; the existing credential remains
+private plumbing. Full access requires confirmation. If a required scope or token
+is missing, Admin opens and focuses the field that needs attention. The preview
+has not yet been live-verified; see the [Admin runbook](../operations/admin-setup-verification.md).
+
+**Different permissions for a person** lets you enter an exact Discord user ID
+and choose their permissions with **Save person permissions**, without naming a
+key. The user must still pass the
+allowlist. Existing mappings retain their credential IDs. Editing saved
+permissions affects every use of that identity and requires confirmation;
+ordinary edits preserve the existing conversations and bot assignment. **Use bot
+permissions** removes an override, not access checks. Existing permission editing
+is under **Apps → Advanced access → Manage**. Key rotation, when needed,
+is under **System → Connection keys**; it is not part of bot setup.
 
 ## 3. Enable and verify
 
@@ -125,8 +142,9 @@ If the bot replies but says it cannot save knowledge or perform work from a
 restricted session, check `fhold credential mappings discord`. An allowlisted
 user without a mapping still uses the default `discord` credential, normally
 `chat`. Being the bot owner or being allowed into the portal does not select the
-`owner` identity. In Admin, **People & access** can map the exact Discord user
-to an existing full-access identity; the CLI equivalent is:
+`owner` identity. In Admin, **Apps → Discord → Different permissions for
+a person** can explicitly grant Full access to the exact Discord user;
+the CLI equivalent is:
 
 ```bash
 fhold credential map discord 123456789012345678 owner

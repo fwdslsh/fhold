@@ -21,6 +21,7 @@ import {
 } from './state.js';
 import { installHome } from './install.js';
 import { readStackConfig } from './stack-config.js';
+import { nativePreferencesFile } from './provider-files.js';
 
 const roots: string[] = [];
 const originalHome = process.env.FH_HOME;
@@ -38,6 +39,35 @@ afterEach(() => {
 });
 
 describe('fhold clean install boundary', () => {
+	it('derives the native preferences mount filename with OpenCode precedence', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-native-preferences-'));
+		roots.push(root);
+		const home = join(root, 'home');
+		await installHome({ homeDir: home, automaticPorts: false });
+		const state = createFholdState(home);
+		expect(nativePreferencesFile(home)).toBe('opencode.json');
+		writeFileSync(join(home, 'config/assistant/config.json'), '{}\n');
+		expect(nativePreferencesFile(home)).toBe('opencode.json');
+		writeFileSync(join(home, 'config/assistant/opencode.jsonc'), '// native preferences\n{}\n');
+		ensureRuntime(state);
+		expect(nativePreferencesFile(home)).toBe('opencode.jsonc');
+		expect(readFileSync(join(home, 'state/stack.env'), 'utf8')).toContain('FH_OPENCODE_PREFERENCES_FILE=opencode.jsonc');
+		const original = readFileSync(join(home, 'config/assistant/opencode.json'), 'utf8');
+		expect(original).toContain('https://opencode.ai/config.json');
+	});
+
+	it('rejects a linked native preferences file instead of granting a writable host escape', async () => {
+		if (process.platform === 'win32') return;
+		const root = mkdtempSync(join(tmpdir(), 'fhold-native-preferences-link-'));
+		roots.push(root);
+		const home = join(root, 'home');
+		await installHome({ homeDir: home, automaticPorts: false });
+		const outside = join(root, 'outside.json');
+		writeFileSync(outside, '{}\n');
+		symlinkSync(outside, join(home, 'config/assistant/opencode.jsonc'));
+		expect(() => nativePreferencesFile(home)).toThrow(/unsafe component/);
+		expect(readFileSync(outside, 'utf8')).toBe('{}\n');
+	});
 	it('refuses symlinked runtime directories instead of escaping FH_HOME', () => {
 		if (process.platform === 'win32') return;
 		const root = mkdtempSync(join(tmpdir(), 'fhold-symlink-'));

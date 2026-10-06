@@ -4,7 +4,7 @@ This optional MCP Bundle connects Claude Desktop to an already-running local
 fhold agent through its protected access layer. It does not install, start,
 or control the fhold stack.
 
-1. In fhold Admin, open **Connections → Claude Desktop**.
+1. In fhold Admin, open **Apps → Claude → Desktop chat**.
 2. Enable protected access and create a dedicated identity, preferably with
    **Read files** access.
 3. Download and install the `.mcpb` offered by the guided connection panel.

@@ -50,7 +50,9 @@ managed instances through Admin's **System → Ephemeral container support** or
 `fhold recovery`; external deployments use the same image-native contract.
 Its independent checkpoint timer keeps running when user scheduling is disabled.
 It adds no cloud management tools or mandatory sidecars. **System → Import / export**
-is the separate manual, reviewed-content transfer path for fresh installations.
+offers either reviewed portable content for a fresh agent or an entire stopped
+instance, including sessions and sign-ins. Full import requires an empty folder
+and leaves containers stopped; external drives/checkpoints need separate protection.
 
 ## Develop
 

@@ -1,34 +1,78 @@
-import { clearClientKey, updateClientPolicy } from './access.js';
+import { applyAppPermissions, copyAccessKey, updateAppPermissions } from './access.js';
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { offerRestart } from './restart.js';
-import { csv, endpoint } from './model.js';
+import { csv, endpoint, isHealthy, isRunning } from './model.js';
 import { state } from './state.js';
-import { all, byId, notice, operation, setBadge, setText, showClient } from './ui.js';
+import {
+	all,
+	byId,
+	notice,
+	operation,
+	setBadge,
+	setFormClean,
+	setText,
+	showConnectionApp
+} from './ui.js';
 
 export function secretConfigured(snapshot, portal, name) {
 	return snapshot.portalSecrets[portal]?.[name] === true;
 }
 
 export function renderPortalSecrets(snapshot) {
-	const discordReady = secretConfigured(snapshot, 'discord', 'discord_bot_token');
-	const slackReady =
-		secretConfigured(snapshot, 'slack', 'slack_bot_token') &&
-		secretConfigured(snapshot, 'slack', 'slack_app_token');
-	const configured = [discordReady ? 'Discord' : '', slackReady ? 'Slack' : ''].filter(Boolean);
-	setBadge(
-		byId('token-status'),
-		configured.length ? `${configured.join(' and ')} configured` : 'Not configured',
-		configured.length ? 'success' : 'neutral'
+	for (const portal of ['discord', 'slack']) {
+		const ready = portalTokensReady(snapshot, portal);
+		setBadge(
+			byId(`${portal}-token-status`),
+			ready ? 'Saved' : 'Not configured',
+			ready ? 'success' : 'neutral'
+		);
+	}
+}
+
+function portalTokensReady(snapshot, portal) {
+	return (
+		secretConfigured(snapshot, portal, `${portal}_bot_token`) &&
+		(portal !== 'slack' || secretConfigured(snapshot, 'slack', 'slack_app_token'))
 	);
-	for (const [portal, ready] of [
-		['discord', discordReady],
-		['slack', slackReady]
-	]) {
+}
+
+export function renderConnectionStatus(snapshot) {
+	const unavailable = !!snapshot.dockerError;
+	const assistant = snapshot.services.find((service) => service.name === 'assistant');
+	setBadge(
+		byId('opencode-connection-status'),
+		unavailable
+			? 'Status unavailable'
+			: isHealthy(assistant)
+				? 'Available'
+				: isRunning(assistant)
+					? 'Needs attention'
+					: 'Stopped',
+		!unavailable && isHealthy(assistant) ? 'success' : 'neutral'
+	);
+	setBadge(
+		byId('mcp-connection-status'),
+		snapshot.config.gateway.enabled ? 'Enabled' : 'Disabled',
+		'neutral'
+	);
+	for (const portal of ['discord', 'slack']) {
 		const enabled = snapshot.config.portals[portal].enabled;
+		const service = snapshot.services.find((entry) => entry.name === portal);
+		const healthy = enabled && !unavailable && isHealthy(service);
 		setBadge(
 			byId(`${portal}-connection-status`),
-			enabled ? 'Enabled' : ready ? 'Configured' : 'Not configured',
-			enabled ? 'success' : 'neutral'
+			enabled
+				? unavailable
+					? 'Status unavailable'
+					: healthy
+						? 'Running'
+						: isRunning(service)
+							? 'Needs attention'
+							: 'Not running'
+				: portalTokensReady(snapshot, portal)
+					? 'Configured'
+					: 'Not configured',
+			healthy ? 'success' : 'neutral'
 		);
 	}
 }
@@ -36,69 +80,54 @@ export function renderPortalSecrets(snapshot) {
 export function updateGuardianGuide() {
 	if (!state.currentSnapshot) return;
 	const saved = state.currentSnapshot.config.gateway.enabled;
+	const pending = state.currentSnapshot.pendingRestart?.required === true;
 	const selected = byId('gateway').checked;
-	setText(
-		'claude-guardian-help',
-		saved
-			? 'Protected access is enabled.'
-			: selected
-				? 'Selected · save to enable.'
-				: 'Protected access is currently disabled.'
-	);
-	const status = byId('mcp-guardian-help');
-	status.className = `inline-status ${saved ? 'success' : 'neutral'}`;
-	status.replaceChildren();
-	const title = document.createElement('strong');
-	title.textContent = saved
-		? 'Guardian is enabled.'
-		: selected
-			? 'Guardian is ready to be saved.'
-			: 'Guardian must be enabled.';
-	status.append(title);
-	for (const button of all('[data-enable-gateway]')) button.hidden = selected;
+	const guide =
+		selected !== saved
+			? 'Unsaved change. Save MCP settings to apply.'
+			: saved
+				? pending
+					? 'MCP access is enabled in settings. Saved changes apply at the next restart.'
+					: 'MCP access is enabled in settings. Your instance must be running to connect.'
+				: 'MCP access is disabled.';
+	setText('claude-guardian-help', guide);
+	setText('mcp-guardian-help', guide);
+	for (const button of all('[data-enable-gateway]')) button.hidden = saved;
 }
 
 export function updateConditionalConnections() {
-	const guardian = byId('gateway').checked || byId('discord').checked || byId('slack').checked;
-	byId('guardian-settings').hidden = !guardian;
-	byId('discord-settings').hidden = !byId('discord').checked;
-	byId('slack-settings').hidden = !byId('slack').checked;
 	updateGuardianGuide();
+	for (const app of ['claude', 'mcp', 'discord', 'slack']) updateAppPermissions(app);
 }
 
 export function updatePortalTokenFields() {
-	const slack = byId('token-portal').value === 'slack';
 	const snapshot = state.currentSnapshot;
-	const botConfigured = snapshot
-		? secretConfigured(
-				snapshot,
-				slack ? 'slack' : 'discord',
-				slack ? 'slack_bot_token' : 'discord_bot_token'
-			)
-		: false;
-	const appConfigured = snapshot ? secretConfigured(snapshot, 'slack', 'slack_app_token') : false;
-	setText(
-		'bot-token-label',
-		`${slack ? 'Slack' : 'Discord'} bot token${botConfigured ? ' (leave blank to keep current)' : ''}`
-	);
-	byId('app-token-field').hidden = !slack;
-	byId('app-token-field').querySelector('span').textContent =
-		`Slack app token${appConfigured ? ' (leave blank to keep current)' : ''}`;
-	setText(
-		'token-help',
-		slack && botConfigured && appConfigured
-			? 'Enter either token to replace only that value. Existing blank fields are kept.'
-			: 'Tokens are stored in private files and are never shown again.'
-	);
+	for (const portal of ['discord', 'slack']) {
+		const botConfigured = snapshot && secretConfigured(snapshot, portal, `${portal}_bot_token`);
+		const title = portal === 'discord' ? 'Discord' : 'Slack';
+		setText(
+			`${portal}-bot-token-label`,
+			`${title} bot token${botConfigured ? ' (saved; leave blank to keep)' : ''}`
+		);
+		if (portal === 'slack') {
+			const appConfigured = snapshot && secretConfigured(snapshot, portal, 'slack_app_token');
+			setText(
+				'slack-app-token-label',
+				`Slack app token${appConfigured ? ' (saved; leave blank to keep)' : ''}`
+			);
+		}
+		setText(
+			`${portal}-token-help`,
+			'Tokens are stored privately and never shown again. Blank fields keep saved tokens.'
+		);
+	}
 }
 
-export function showPortalTokenForm(portal, field = 'bot-token') {
-	byId('chat-apps').open = true;
-	byId(`${portal}-connection`).open = true;
-	byId('portal-tokens').open = true;
-	byId('token-portal').value = portal;
+export function showPortalTokenForm(portal, field = `${portal}-bot-token`) {
+	showConnectionApp(portal);
+	byId(`${portal}-tokens`).open = true;
 	updatePortalTokenFields();
-	byId('portal-token-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+	byId(`${portal}-token-form`).scrollIntoView({ block: 'nearest' });
 	queueMicrotask(() => byId(field).focus());
 }
 
@@ -119,7 +148,6 @@ export function renderConnectionDetails(snapshot) {
 	byId('direct-password').value = '';
 	byId('direct-password').type = 'password';
 	byId('show-direct-password').checked = false;
-	showClient(state.currentClient);
 	updateGuardianGuide();
 }
 
@@ -127,11 +155,6 @@ export function renderNetworkDetails(snapshot) {
 	const assistantUrl = endpoint(
 		snapshot.config.assistant.bindAddress,
 		snapshot.config.assistant.port
-	);
-	const guardianUrl = endpoint(
-		snapshot.config.gateway.bindAddress,
-		snapshot.config.gateway.port,
-		'/mcp'
 	);
 	const healthUrl = endpoint(
 		snapshot.config.gateway.bindAddress,
@@ -144,14 +167,12 @@ export function renderNetworkDetails(snapshot) {
 		link.setAttribute('href', assistantUrl);
 		link.hidden = false;
 	}
-	setText('guardian-url', guardianUrl);
-	setText('guardian-mcp-url-detail', guardianUrl);
 	setText('guardian-health-url-detail', healthUrl);
 	setText(
 		'guardian-api-status',
 		snapshot.config.gateway.enabled
-			? 'Guardian MCP is enabled.'
-			: 'Guardian MCP is disabled. Enable it in Connections to use these endpoints.'
+			? 'MCP access is enabled in settings.'
+			: 'Enable MCP access above to use these endpoints.'
 	);
 }
 
@@ -175,127 +196,116 @@ export async function loadDirectPassword(copyOnly) {
 	if (result && !copyOnly) byId('direct-password').value = result.password;
 }
 
-export async function loadClientKey(client, copyOnly) {
-	const username = byId(`${client}-credential`).value;
-	if (!username) return;
-	if (
-		!window.confirm(
-			`${copyOnly ? 'Copy' : 'Load'} the key for ${username}? Its policy controls what this client can do.`
-		)
-	)
-		return;
-	const result = await operation(
-		`${copyOnly ? 'Copying' : 'Loading'} access key`,
-		async () => {
-			const value = await state.api.credentialKey(username);
-			if (copyOnly) await state.api.copyText(value.key);
-			return value;
-		},
-		copyOnly ? `Key for ${username} copied.` : `Key for ${username} loaded and kept masked.`
-	);
-	if (result && !copyOnly) byId(`${client}-key`).value = result.key;
-}
-
 export function bindConnectionsEvents() {
-	for (const id of ['gateway', 'discord', 'slack']) {
-		byId(id).addEventListener('change', () => {
-			state.dirtyForms.add('connections-form');
-			updateConditionalConnections();
-		});
-	}
+	for (const id of ['gateway', 'discord', 'slack'])
+		byId(id).addEventListener('change', updateConditionalConnections);
 
 	for (const button of all('[data-enable-gateway]')) {
-		button.addEventListener('click', () => {
+		button.addEventListener('click', async () => {
+			if (state.operationInFlight || !state.currentConfig) return;
+			const config = structuredClone(state.currentConfig);
+			config.gateway.enabled = true;
 			byId('gateway').checked = true;
-			state.dirtyForms.add('connections-form');
+			state.dirtyForms.add('mcp-connections-form');
 			updateConditionalConnections();
-			byId('gateway-connection').open = true;
-			byId('save-client-connections').focus();
-			notice('Protected access selected. Review and save Connections to apply it.', 'progress', {
-				persist: true
-			});
+			await saveConfigAndOfferRestart(
+				config,
+				'mcp-connections-form',
+				'Enabling Claude Desktop access',
+				'Claude Desktop access saved.'
+			);
 		});
 	}
 
-	byId('connections-form').addEventListener('submit', async (event) => {
+	byId('mcp-connections-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		if (!state.currentConfig || !state.currentSnapshot) return;
-		const discord = byId('discord').checked;
-		const slack = byId('slack').checked;
-		const discordAccess = {
-			guilds: csv(byId('discord-guilds').value),
-			roles: csv(byId('discord-roles').value),
-			users: csv(byId('discord-users').value),
-			blockedUsers: csv(byId('discord-blocked-users').value)
-		};
-		const slackAccess = {
-			channels: csv(byId('slack-channels').value),
-			users: csv(byId('slack-users').value),
-			blockedUsers: csv(byId('slack-blocked-users').value)
-		};
+		if (state.operationInFlight || !state.currentConfig) return;
+		const enabled = byId('gateway').checked;
 		if (
-			discord &&
-			discordAccess.guilds.length + discordAccess.roles.length + discordAccess.users.length === 0
+			!enabled &&
+			['discord', 'slack'].some((portal) => state.currentConfig.portals[portal].enabled)
 		) {
-			byId('chat-apps').open = true;
-			byId('discord-connection').open = true;
 			notice(
-				'Add at least one allowed Discord server, role, or user before enabling Discord.',
+				'Disable Discord and Slack before turning off MCP access; their bots need this service.',
 				'error',
 				{ persist: true }
-			);
-			byId('discord-access-disclosure').open = true;
-			queueMicrotask(() => byId('discord-users').focus());
-			return;
-		}
-		if (slack && slackAccess.channels.length + slackAccess.users.length === 0) {
-			byId('chat-apps').open = true;
-			byId('slack-connection').open = true;
-			notice('Add at least one allowed Slack channel or user before enabling Slack.', 'error', {
-				persist: true
-			});
-			byId('slack-access-disclosure').open = true;
-			queueMicrotask(() => byId('slack-users').focus());
-			return;
-		}
-		if (discord && !secretConfigured(state.currentSnapshot, 'discord', 'discord_bot_token')) {
-			notice('Store a Discord bot token before enabling Discord.', 'error', { persist: true });
-			showPortalTokenForm('discord');
-			return;
-		}
-		if (
-			slack &&
-			(!secretConfigured(state.currentSnapshot, 'slack', 'slack_bot_token') ||
-				!secretConfigured(state.currentSnapshot, 'slack', 'slack_app_token'))
-		) {
-			notice('Store both Slack tokens before enabling Slack.', 'error', { persist: true });
-			showPortalTokenForm(
-				'slack',
-				secretConfigured(state.currentSnapshot, 'slack', 'slack_bot_token')
-					? 'app-token'
-					: 'bot-token'
 			);
 			return;
 		}
 		const config = structuredClone(state.currentConfig);
-		config.gateway.enabled = byId('gateway').checked || discord || slack;
-		config.portals.discord = {
-			enabled: discord,
-			credential: byId('discord-credential').value,
-			access: discordAccess
-		};
-		config.portals.slack = {
-			enabled: slack,
-			credential: byId('slack-credential').value,
-			access: slackAccess
-		};
+		config.gateway.enabled = enabled;
 		await saveConfigAndOfferRestart(
 			config,
-			'connections-form',
-			'Saving connections',
-			'Connections saved.'
+			'mcp-connections-form',
+			'Saving MCP access',
+			'MCP settings saved.'
 		);
 	});
+
+	for (const portal of ['discord', 'slack']) {
+		byId(`${portal}-connections-form`).addEventListener('submit', async (event) => {
+			event.preventDefault();
+			if (state.operationInFlight || !state.currentConfig || !state.currentSnapshot) return;
+			const enabled = byId(portal).checked;
+			const access =
+				portal === 'discord'
+					? {
+							guilds: csv(byId('discord-guilds').value),
+							roles: csv(byId('discord-roles').value),
+							users: csv(byId('discord-users').value),
+							blockedUsers: csv(byId('discord-blocked-users').value)
+						}
+					: {
+							channels: csv(byId('slack-channels').value),
+							users: csv(byId('slack-users').value),
+							blockedUsers: csv(byId('slack-blocked-users').value)
+						};
+			const allowed =
+				portal === 'discord'
+					? [...access.guilds, ...access.roles, ...access.users]
+					: [...access.channels, ...access.users];
+			const title = portal === 'discord' ? 'Discord' : 'Slack';
+			if (enabled && allowed.length === 0) {
+				showConnectionApp(portal);
+				byId(`${portal}-access-disclosure`).open = true;
+				notice(
+					`Add at least one allowed ${portal === 'discord' ? 'server, role or user' : 'channel or user'} before enabling ${title}.`,
+					'error',
+					{ persist: true }
+				);
+				byId(`${portal}-users`).focus();
+				return;
+			}
+			if (enabled && !portalTokensReady(state.currentSnapshot, portal)) {
+				showPortalTokenForm(
+					portal,
+					portal === 'slack' && secretConfigured(state.currentSnapshot, portal, 'slack_bot_token')
+						? 'slack-app-token'
+						: `${portal}-bot-token`
+				);
+				notice(
+					`Save ${title === 'Slack' ? 'both Slack tokens' : 'a Discord bot token'} before enabling ${title}.`,
+					'error',
+					{ persist: true }
+				);
+				return;
+			}
+			const config = structuredClone(state.currentConfig);
+			if (!applyAppPermissions(config, portal)) return;
+			config.portals[portal] = {
+				...config.portals[portal],
+				enabled,
+				access
+			};
+			if (enabled) config.gateway.enabled = true;
+			await saveConfigAndOfferRestart(
+				config,
+				`${portal}-connections-form`,
+				`Saving ${title} settings`,
+				`${title} settings saved.`
+			);
+		});
+	}
 
 	for (const button of all('[data-copy-field]')) {
 		button.addEventListener('click', async () => {
@@ -312,20 +322,18 @@ export function bindConnectionsEvents() {
 		byId('direct-password').type = byId('show-direct-password').checked ? 'text' : 'password';
 	});
 
-	for (const client of ['claude', 'mcp']) {
-		byId(`${client}-credential`).addEventListener('change', () => clearClientKey(client));
-		byId(`${client}-credential`).addEventListener('change', () => updateClientPolicy(client));
-		byId(`show-${client}-key`).addEventListener('change', () => {
-			byId(`${client}-key`).type = byId(`show-${client}-key`).checked ? 'text' : 'password';
-		});
-	}
-
-	for (const button of all('[data-load-client-key]')) {
-		button.addEventListener('click', () => void loadClientKey(button.dataset.loadClientKey, false));
-	}
-
 	for (const button of all('[data-copy-client-key]')) {
-		button.addEventListener('click', () => void loadClientKey(button.dataset.copyClientKey, true));
+		button.addEventListener('click', () => {
+			const client = button.dataset.copyClientKey;
+			const username = byId(`${client}-credential`).value;
+			const policy = byId(`${client}-permissions`).querySelector('input:checked')?.value;
+			if (!username || state.currentConfig?.credentials[username]?.policy !== policy) {
+				notice('Save permissions before connecting this app.', 'error');
+				byId(`save-${client}-permissions`).focus();
+				return;
+			}
+			if (username) void copyAccessKey(username);
+		});
 	}
 
 	for (const button of all('[data-external-url]')) {
@@ -340,50 +348,42 @@ export function bindConnectionsEvents() {
 		);
 	}
 
-	for (const button of all('[data-token-target]')) {
-		button.addEventListener('click', () => showPortalTokenForm(button.dataset.tokenTarget));
+	for (const portal of ['discord', 'slack']) {
+		byId(`${portal}-token-form`).addEventListener('submit', async (event) => {
+			event.preventDefault();
+			if (state.operationInFlight || !state.currentSnapshot) return;
+			const botToken = byId(`${portal}-bot-token`).value;
+			const appToken = portal === 'slack' ? byId('slack-app-token').value : undefined;
+			const botConfigured = secretConfigured(state.currentSnapshot, portal, `${portal}_bot_token`);
+			const appConfigured =
+				portal === 'slack' && secretConfigured(state.currentSnapshot, portal, 'slack_app_token');
+			const title = portal === 'discord' ? 'Discord' : 'Slack';
+			if ((!botConfigured && !botToken) || (portal === 'slack' && !appConfigured && !appToken)) {
+				notice(
+					`Enter ${portal === 'slack' ? 'both Slack tokens' : 'the Discord bot token'} the first time.`,
+					'error',
+					{ persist: true }
+				);
+				return;
+			}
+			if (!botToken && !appToken) {
+				notice(`Enter a ${title} token to replace, or leave the saved tokens unchanged.`, 'error', {
+					persist: true
+				});
+				return;
+			}
+			const result = await operation(
+				`Saving ${title} tokens`,
+				async () => {
+					const saved = await state.api.portalToken({ portal, botToken, appToken });
+					byId(`${portal}-bot-token`).value = '';
+					if (portal === 'slack') byId('slack-app-token').value = '';
+					setFormClean(`${portal}-token-form`);
+					return saved;
+				},
+				`${title} tokens saved privately.`
+			);
+			if (result) await offerRestart(result);
+		});
 	}
-
-	byId('token-portal').addEventListener('change', updatePortalTokenFields);
-
-	byId('portal-token-form').addEventListener('submit', async (event) => {
-		event.preventDefault();
-		const portal = byId('token-portal').value;
-		const botToken = byId('bot-token').value;
-		const appToken = byId('app-token').value;
-		const botConfigured = secretConfigured(
-			state.currentSnapshot,
-			portal,
-			portal === 'slack' ? 'slack_bot_token' : 'discord_bot_token'
-		);
-		const appConfigured =
-			portal === 'slack' && secretConfigured(state.currentSnapshot, 'slack', 'slack_app_token');
-		if (portal === 'discord' && !botToken) {
-			notice('Enter the Discord bot token.', 'error', { persist: true });
-			return;
-		}
-		if (portal === 'slack' && ((!botConfigured && !botToken) || (!appConfigured && !appToken))) {
-			notice('Enter both Slack tokens the first time.', 'error', { persist: true });
-			return;
-		}
-		if (portal === 'slack' && !botToken && !appToken) {
-			notice('Enter at least one Slack token to replace.', 'error', { persist: true });
-			return;
-		}
-		const result = await operation(
-			`Storing ${portal === 'slack' ? 'Slack' : 'Discord'} tokens`,
-			() =>
-				state.api.portalToken({
-					portal,
-					botToken,
-					appToken: portal === 'slack' ? appToken : undefined
-				}),
-			`${portal === 'slack' ? 'Slack' : 'Discord'} tokens stored privately.`
-		);
-		if (result) {
-			byId('bot-token').value = '';
-			byId('app-token').value = '';
-			await offerRestart(result);
-		}
-	});
 }

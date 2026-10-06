@@ -4,6 +4,13 @@ Reviewed 2026-10-01. This is a dated source review and focused disposable-fixtur
 
 ## TL;DR
 
+Current extension: CLI/Admin also support a separately selected **full-instance**
+scope. It requires stopped writers and restores the entire home into an empty
+folder, including native history, sign-ins and runtime authority. This dated
+review describes **portable content only**, not that stopped snapshot.
+See [entire stopped instance](../managing-fhold.md#entire-stopped-instance) for
+the full format, confirmations, omissions and same-instance constraints.
+
 Follow-up design review, 2026-10-04: keep portable backup and same-instance
 [runtime recovery](../assistant-recovery.md#choose-the-right-operation) separate.
 Their different credential/authority, task-review, path namespace and native
@@ -40,7 +47,7 @@ The manifest contains the source stack intent as `stackConfig` and the schema nu
 
 ## Provider and access portability
 
-[provider-files.ts](../../packages/lib/src/control-plane/provider-files.ts) permits only `$schema`, `model`, `small_model` and `provider` top-level native settings. Any additional setting omits the entire native config, including otherwise useful model preferences; any nested provider `npm` SDK selector is also nonportable. Thus MCP/plugin/code activation is not transferred implicitly. Review omitted configuration separately from a private full-home preservation copy.
+[provider-files.ts](../../packages/lib/src/control-plane/provider-files.ts) permits only `$schema`, `model`, `small_model`, `provider` and `disabled_providers` top-level native preferences. Endpoint disable choices remain portable without activating code. Any additional setting omits the entire native config, including otherwise useful model preferences; any nested provider `npm` SDK selector is also nonportable. Thus MCP/plugin/code activation is not transferred implicitly. Review omitted configuration separately from a private full-home preservation copy.
 
 Recognized literal credential fields in provider values require provider-auth opt-in. Safe native file references must be exact `{file:/stash/secrets/<contained-relative-file>}` values; no traversal, symlink or external path is accepted. At most 128 referenced files are allowed, with 1 MiB bounded provider config/secret reads. Invalid references omit native config without opt-in and fail when opting in. Unused references from an omitted native configuration are not followed. Exact user `{env:VARIABLE}` references are allowed only outside reserved runtime/authority namespaces; restoring the declaration does not supply the variable. The separate user-env opt-in or new configuration/sign-in is still needed.
 

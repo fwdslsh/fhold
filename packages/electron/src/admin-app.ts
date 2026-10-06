@@ -24,7 +24,11 @@ import {
 	isCodexSandbox,
 	isCredentialUsername,
 	isPortalName,
-	listProviders,
+	listProviderSettings,
+	saveProviderEndpoint,
+	discoverProviderModels,
+	useProviderModel,
+	removeProviderSetup,
 	markInstalled,
 	mutateStack,
 	restartStatus,
@@ -39,7 +43,13 @@ import {
 	testAssistantReadiness,
 	savePortalTokens
 } from '@fhold/lib';
-import { recoverySnapshot, recoveryStatus, runRecoveryOperation, saveRecoverySettings, saveRecoveryCredential } from '@fhold/lib';
+import {
+	recoverySnapshot,
+	recoveryStatus,
+	runRecoveryOperation,
+	saveRecoverySettings,
+	saveRecoveryCredential
+} from '@fhold/lib';
 import {
 	reviewCodexRecall,
 	changeCodexRecall,
@@ -57,6 +67,7 @@ import {
 	adminPortalMappings,
 	adminPortalTokens,
 	backupFromAdmin,
+	instanceRestoreFromAdmin,
 	createAdminCredential,
 	externalAdminUrl,
 	restoreFromAdmin,
@@ -75,6 +86,9 @@ let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
 let remoteStarting = false;
 let instances: AdminInstances;
 let pendingOAuth: { homeDir: string; provider: string; method: number } | undefined;
+let verifiedModel:
+	| { homeDir: string; readiness: Extract<AssistantReadiness, { ok: true }> }
+	| undefined;
 
 function managedState() {
 	return createFholdState(instances.current().homeDir);
@@ -193,8 +207,12 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 		: [];
 	let recovery: ReturnType<typeof recoverySnapshot> | undefined;
 	let recoveryError: string | undefined;
-	try { recovery = recoverySnapshot(current.homeDir); }
-	catch { recoveryError = 'Recovery selection could not be read. Review config/recovery/include.json; no recovery settings were changed.'; }
+	try {
+		recovery = recoverySnapshot(current.homeDir);
+	} catch {
+		recoveryError =
+			'Recovery selection could not be read. Review config/recovery/include.json; no recovery settings were changed.';
+	}
 	return {
 		phase: installState === 'installed' ? 'ready' : 'setup_incomplete',
 		homeDir: current.homeDir,
@@ -248,6 +266,11 @@ export function registerAdminIpc(): void {
 	ipcMain.handle(ADMIN_CHANNELS.welcome, (event) => {
 		requireAdminSender(event);
 		return instances.welcome();
+	});
+	ipcMain.handle(ADMIN_CHANNELS.installationReadiness, (event) => {
+		requireAdminSender(event);
+		// Read-only host checks can run before any installation folder is selected.
+		return ensureDockerReady();
 	});
 	ipcMain.handle(ADMIN_CHANNELS.openInstance, (event, target: unknown) => {
 		requireAdminSender(event);
@@ -397,8 +420,12 @@ export function registerAdminIpc(): void {
 			cancelId: 0,
 			noLink: true
 		};
+		if (action === 'instance-export' || action === 'instance-import')
+			options.detail += `\n\nSelected instance folder: ${instances.current().homeDir}`;
 		const owner = BrowserWindow.fromWebContents(event.sender);
-		const result = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+		const result = owner
+			? await dialog.showMessageBox(owner, options)
+			: await dialog.showMessageBox(options);
 		return result.response === 1;
 	});
 	handleAdmin(ADMIN_CHANNELS.action, (_event, input: unknown) => {
@@ -412,7 +439,7 @@ export function registerAdminIpc(): void {
 	});
 	handleAdmin(ADMIN_CHANNELS.providers, (_event) => {
 		const current = state();
-		return listProviders(current.homeDir);
+		return listProviderSettings(current.homeDir);
 	});
 	handleAdmin(ADMIN_CHANNELS.providerKey, async (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid provider settings');
@@ -421,12 +448,78 @@ export function registerAdminIpc(): void {
 			throw new Error('Provider and key are required.');
 		}
 		const current = state();
+		verifiedModel = undefined;
 		await setProviderApiKey(current.homeDir, input.provider, input.key);
-		const readiness = await testAssistantReadiness(current.homeDir, {
-			provider: input.provider
+	});
+	handleAdmin(ADMIN_CHANNELS.providerEndpoint, (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid AI service settings.');
+		const input = value as {
+			provider?: unknown;
+			name?: unknown;
+			url?: unknown;
+			model?: unknown;
+			key?: unknown;
+		};
+		if (
+			typeof input.provider !== 'string' ||
+			typeof input.name !== 'string' ||
+			typeof input.url !== 'string' ||
+			typeof input.model !== 'string' ||
+			(input.key !== undefined && typeof input.key !== 'string')
+		)
+			throw new Error('Service, URL and model are required.');
+		verifiedModel = undefined;
+		return saveProviderEndpoint(state().homeDir, {
+			provider: input.provider,
+			name: input.name,
+			url: input.url,
+			model: input.model,
+			...(typeof input.key === 'string' ? { key: input.key } : {})
 		});
-		await completeAdminReadiness(current.homeDir, readiness);
-		return readiness;
+	});
+	handleAdmin(ADMIN_CHANNELS.providerModels, (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid server settings.');
+		const input = value as { url?: unknown; key?: unknown };
+		if (typeof input.url !== 'string' || (input.key !== undefined && typeof input.key !== 'string'))
+			throw new Error('Server URL is required.');
+		return discoverProviderModels(state().homeDir, {
+			url: input.url,
+			...(typeof input.key === 'string' ? { key: input.key } : {})
+		});
+	});
+	handleAdmin(ADMIN_CHANNELS.providerUse, async (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid model selection.');
+		const input = value as { provider?: unknown; model?: unknown };
+		if (typeof input.provider !== 'string' || typeof input.model !== 'string')
+			throw new Error('Service and model are required.');
+		const current = state();
+		if (
+			!verifiedModel ||
+			verifiedModel.homeDir !== current.homeDir ||
+			verifiedModel.readiness.provider !== input.provider ||
+			verifiedModel.readiness.model !== input.model
+		)
+			throw new Error('Test this model before using it for your agent.');
+		const settings = await useProviderModel(current.homeDir, input.provider, input.model);
+		await completeAdminReadiness(current.homeDir, verifiedModel.readiness);
+		return settings;
+	});
+	handleAdmin(ADMIN_CHANNELS.providerRemove, (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid saved setup.');
+		const input = value as { provider?: unknown; endpoint?: unknown };
+		if (
+			typeof input.provider !== 'string' ||
+			(input.endpoint !== undefined && typeof input.endpoint !== 'boolean')
+		)
+			throw new Error('Service is required.');
+		verifiedModel = undefined;
+		return removeProviderSetup(state().homeDir, input.provider, {
+			endpoint: input.endpoint === true
+		});
 	});
 	handleAdmin(ADMIN_CHANNELS.providerOAuthStart, async (_event, value: unknown) => {
 		const input = oauthInput(value);
@@ -457,25 +550,36 @@ export function registerAdminIpc(): void {
 			throw new Error('Start provider sign-in for this instance first.');
 		await completeProviderOAuth(current.homeDir, input.provider, input.method, rawCode);
 		pendingOAuth = undefined;
-		const readiness = await testAssistantReadiness(current.homeDir, {
-			provider: input.provider
-		});
-		await completeAdminReadiness(current.homeDir, readiness);
-		return readiness;
+		verifiedModel = undefined;
 	});
 	handleAdmin(ADMIN_CHANNELS.readiness, (_event, value: unknown) => {
 		if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
 			throw new Error('Invalid provider readiness request.');
 		}
 		const rawProvider = (value as { provider?: unknown } | undefined)?.provider;
+		const rawModel = (value as { model?: unknown } | undefined)?.model;
 		if (rawProvider !== undefined && typeof rawProvider !== 'string') {
 			throw new Error('Invalid readiness provider.');
 		}
+		if (rawModel !== undefined && (typeof rawModel !== 'string' || !rawProvider))
+			throw new Error('Choose a service for this model test.');
 		const current = state();
 		return testAssistantReadiness(current.homeDir, {
-			...(rawProvider ? { provider: rawProvider } : {})
+			...(rawProvider ? { provider: rawProvider } : {}),
+			...(typeof rawModel === 'string' ? { model: rawModel } : {})
 		}).then(async (readiness) => {
-			await completeAdminReadiness(current.homeDir, readiness);
+			verifiedModel = readiness.ok ? { homeDir: current.homeDir, readiness } : undefined;
+			// A successful candidate test is not a default-model choice. Complete
+			// new setup after explicit Use; checking the existing default is enough.
+			const settings = readiness.ok ? await listProviderSettings(current.homeDir) : undefined;
+			if (
+				!rawProvider ||
+				(readiness.ok &&
+					settings?.currentModel?.provider === readiness.provider &&
+					settings?.currentModel?.model === readiness.model)
+			) {
+				await completeAdminReadiness(current.homeDir, readiness);
+			}
 			return readiness;
 		});
 	});
@@ -509,7 +613,9 @@ export function registerAdminIpc(): void {
 			purpose !== 'recovery' &&
 			purpose !== 'new-instance'
 		) {
-			throw new Error('Directory purpose must be instance, new-instance, backup, recovery or restore.');
+			throw new Error(
+				'Directory purpose must be instance, new-instance, backup, recovery or restore.'
+			);
 		}
 		const options: OpenDialogOptions = {
 			title:
@@ -520,8 +626,8 @@ export function registerAdminIpc(): void {
 						: purpose === 'recovery'
 							? 'Choose a private checkpoint directory'
 							: purpose === 'backup'
-							? 'Choose an empty export directory'
-							: 'Choose an fhold export',
+								? 'Choose an empty export directory'
+								: 'Choose an fhold export',
 			buttonLabel:
 				purpose === 'new-instance'
 					? 'Use this folder'
@@ -530,8 +636,8 @@ export function registerAdminIpc(): void {
 						: purpose === 'recovery'
 							? 'Use for recovery'
 							: purpose === 'backup'
-							? 'Use for export'
-							: 'Use this export',
+								? 'Use for export'
+								: 'Use this export',
 			properties: purpose === 'restore' ? ['openDirectory'] : ['openDirectory', 'createDirectory']
 		};
 		const owner = BrowserWindow.fromWebContents(event.sender);
@@ -588,12 +694,18 @@ export function registerAdminIpc(): void {
 		return backupFromAdmin(current.homeDir, value as never);
 	});
 	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid recovery request.');
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid recovery request.');
 		const input = value as Record<string, unknown>;
 		const home = state().homeDir;
 		if (input.action === 'save') {
-			if (typeof input.baselineDigest !== 'string') throw new Error('Refresh recovery settings before saving.');
-			saveRecoverySettings(home, { settings: input.settings, selection: input.selection, baselineDigest: input.baselineDigest });
+			if (typeof input.baselineDigest !== 'string')
+				throw new Error('Refresh recovery settings before saving.');
+			saveRecoverySettings(home, {
+				settings: input.settings,
+				selection: input.selection,
+				baselineDigest: input.baselineDigest
+			});
 			return adminSnapshot();
 		}
 		if (input.action === 'credential') {
@@ -601,13 +713,19 @@ export function registerAdminIpc(): void {
 			return adminSnapshot();
 		}
 		if (input.action === 'status') return recoveryStatus(home);
-		if (input.action === 'inspect' || input.action === 'init' || input.action === 'restore') return runRecoveryOperation(home, input.action, input.confirmed === true);
+		if (input.action === 'inspect' || input.action === 'init' || input.action === 'restore')
+			return runRecoveryOperation(home, input.action, input.confirmed === true);
 		throw new Error('Invalid recovery action.');
 	});
 	handleAdmin(ADMIN_CHANNELS.restoreData, (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid restore request');
 		const current = state();
 		return restoreFromAdmin(current.homeDir, value as never);
+	});
+	handleAdmin(ADMIN_CHANNELS.restoreInstance, (_event, value: unknown) => {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Invalid full-instance import request.');
+		return instanceRestoreFromAdmin(managedState().homeDir, value as never);
 	});
 }
 
@@ -618,7 +736,7 @@ export function createAdminWindow(options: { show?: boolean } = {}): BrowserWind
 		height: 780,
 		minWidth: 640,
 		minHeight: 540,
-		title: 'fhold — Setup & settings',
+		title: 'fhold Admin',
 		backgroundColor: '#0d1117',
 		show: options.show ?? true,
 		webPreferences: {

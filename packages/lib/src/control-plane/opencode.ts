@@ -44,6 +44,10 @@ export type ProviderSummary = {
 	name: string;
 	source: string;
 	modelCount: number;
+	models?: Array<{ id: string; name: string }>;
+	configured?: boolean;
+	disabled?: boolean;
+	endpoint?: { url: string; name: string; models: string[]; editable: boolean };
 	defaultModel?: string;
 	connected: boolean;
 	authenticated: boolean;
@@ -114,7 +118,11 @@ function parsePrompt(value: unknown): ProviderAuthPrompt | undefined {
 }
 
 function providerIdValue(value: string): string {
-	if (!/^[A-Za-z0-9._-]{1,128}$/.test(value)) throw new Error('Invalid provider id');
+	if (
+		!/^[A-Za-z0-9._-]{1,128}$/.test(value) ||
+		['__proto__', 'constructor', 'prototype'].includes(value)
+	)
+		throw new Error('Invalid provider id');
 	return value;
 }
 
@@ -219,10 +227,68 @@ function authenticatedProviderIds(homeDir: string): Set<string> {
 	if (!existsSync(path)) return new Set();
 	try {
 		const value = asRecord(JSON.parse(readFileSync(path, 'utf8')) as unknown);
-		return new Set(Object.keys(value ?? {}));
+		return new Set(
+			Object.entries(value ?? {})
+				.filter(([, item]) => {
+					const auth = asRecord(item);
+					return auth?.type === 'api'
+						? typeof auth.key === 'string' && auth.key.trim().length > 0
+						: auth?.type === 'oauth' &&
+								[auth.access, auth.refresh].some(
+									(token) => typeof token === 'string' && token.trim().length > 0
+								);
+				})
+				.map(([id]) => id)
+		);
 	} catch {
 		return new Set();
 	}
+}
+
+/** Use native model capabilities, never model-name guesses or a second catalog. */
+function agentModels(provider: Record<string, unknown>): string[] {
+	return Object.entries(asRecord(provider.models) ?? {}).flatMap(([id, value]) => {
+		const model = asRecord(value);
+		const capabilities = asRecord(model?.capabilities);
+		const input = asRecord(capabilities?.input);
+		const output = asRecord(capabilities?.output);
+		return modelIdValue(id) &&
+			model?.status !== 'deprecated' &&
+			capabilities?.toolcall === true &&
+			input?.text === true &&
+			output?.text === true
+			? [id]
+			: [];
+	});
+}
+
+function readinessModel(
+	providerValue: unknown,
+	providerID: string,
+	explicitModel: string | undefined,
+	configuredModel: unknown
+): { providerID: string; modelID: string } {
+	const catalog = asRecord(providerValue);
+	const provider = (Array.isArray(catalog?.all) ? catalog.all : [])
+		.map(asRecord)
+		.find((item) => item?.id === providerID);
+	if (!provider) throw new Error(`OpenCode did not report provider ${providerID}.`);
+	const eligible = agentModels(provider);
+	if (explicitModel && !eligible.includes(explicitModel))
+		throw new Error('The selected model does not support text conversations and agent tools.');
+	const configured =
+		typeof configuredModel === 'string' && configuredModel.startsWith(`${providerID}/`)
+			? configuredModel.slice(providerID.length + 1)
+			: undefined;
+	const suggested = modelIdValue(asRecord(catalog?.default)?.[providerID]);
+	const modelID =
+		explicitModel ||
+		(configured && eligible.includes(configured) ? configured : undefined) ||
+		(suggested && eligible.includes(suggested) ? suggested : undefined) ||
+		eligible[0];
+	if (!modelID)
+		throw new Error('This provider has no available model for text conversations and agent tools.');
+	return { providerID, modelID };
 }
 
 export async function listProviders(
@@ -279,15 +345,35 @@ export async function listProviders(
 			authMethods.push({ index: 0, type: 'api', label: 'API key' });
 		}
 		const defaultModel = modelIdValue(defaultModels[provider.id]);
+		const models = asRecord(provider.models) ?? {};
 		summaries.push({
 			id: provider.id,
 			name: typeof provider.name === 'string' ? provider.name : provider.id,
 			source: typeof provider.source === 'string' ? provider.source : 'unknown',
 			modelCount: Object.keys(asRecord(provider.models) ?? {}).length,
+			models: agentModels(provider).map((id) => ({
+				id,
+				name: boundedString(asRecord(models[id])?.name, 500) || id
+			})),
 			...(defaultModel ? { defaultModel } : {}),
 			connected: connected.has(provider.id),
 			authenticated: authenticated.has(provider.id),
 			authMethods
+		});
+	}
+	// Restored credentials can outlive native catalog entries. Keep them reviewable,
+	// without inventing models or claiming the old sign-in still works.
+	for (const id of authenticated) {
+		if (summaries.some((item) => item.id === id) || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) continue;
+		summaries.push({
+			id,
+			name: id,
+			source: 'saved',
+			modelCount: 0,
+			models: [],
+			connected: connected.has(id),
+			authenticated: true,
+			authMethods: []
 		});
 	}
 	return summaries.sort((left, right) => left.name.localeCompare(right.name));
@@ -315,6 +401,35 @@ export async function refreshAssistantInstance(
 	options: { fetch?: FetchLike } = {}
 ): Promise<void> {
 	await request(homeDir, '/instance/dispose', { method: 'POST' }, options);
+}
+
+/** Resolved native configuration, including managed-policy precedence. */
+export async function readAssistantConfig(
+	homeDir: string,
+	options: { fetch?: FetchLike } = {}
+): Promise<Record<string, unknown>> {
+	const value = asRecord(await request(homeDir, '/config', {}, options));
+	if (!value) throw new Error('OpenCode returned invalid configuration.');
+	return value;
+}
+
+/** Native global preferences, not the higher-precedence managed policy. */
+export async function readAssistantGlobalConfig(
+	homeDir: string,
+	options: { fetch?: FetchLike } = {}
+): Promise<Record<string, unknown>> {
+	const value = asRecord(await request(homeDir, '/global/config', {}, options));
+	if (!value) throw new Error('OpenCode returned invalid global configuration.');
+	return value;
+}
+
+/** OpenCode owns persistence, JSONC edits, cache invalidation and native reload. */
+export async function updateAssistantGlobalConfig(
+	homeDir: string,
+	patch: Record<string, unknown>,
+	options: { fetch?: FetchLike } = {}
+): Promise<void> {
+	await request(homeDir, '/global/config', { method: 'PATCH', body: JSON.stringify(patch) }, options);
 }
 
 export async function beginProviderOAuth(
@@ -462,26 +577,22 @@ export async function testAssistantReadiness(
 		let selectedModel: { providerID: string; modelID: string } | undefined;
 		if (options.provider) {
 			const providerID = providerIdValue(options.provider);
-			let modelID = modelIdValue(options.model);
-			if (!modelID) {
-				const providers = asRecord(
-					await request(
-						homeDir,
-						'/provider',
-						{},
-						{
-							fetch: options.fetch,
-							timeoutMs: 10_000,
-							maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES
-						}
-					)
-				);
-				modelID = modelIdValue(asRecord(providers?.default)?.[providerID]);
-			}
-			if (!modelID) {
-				throw new Error(`OpenCode did not report a default model for ${providerID}`);
-			}
-			selectedModel = { providerID, modelID };
+			if (options.model !== undefined && !modelIdValue(options.model))
+				throw new Error('Invalid readiness model.');
+			const [providers, config] = await Promise.all([
+				request(
+					homeDir,
+					'/provider',
+					{},
+					{
+						fetch: options.fetch,
+						timeoutMs: 10_000,
+						maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES
+					}
+				),
+				request(homeDir, '/config', {}, { fetch: options.fetch, timeoutMs: 10_000 })
+			]);
+			selectedModel = readinessModel(providers, providerID, options.model, asRecord(config)?.model);
 		} else if (options.model !== undefined) {
 			throw new Error('A readiness model requires a provider.');
 		}

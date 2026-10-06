@@ -13,6 +13,91 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
+## Unreleased source verification
+
+The source adds an explicit stopped, same-instance scope alongside portable
+content. It does not change the published alpha.6 artifacts or automatic
+Assistant checkpoint format. See [the user guide](../managing-fhold.md#entire-stopped-instance)
+for coverage, confirmation, empty-target and external-storage requirements.
+The candidate also refreshes AKM to CLI `0.9.26` and plugin
+`0.9.26202610051302` in all three Assistant harnesses; see
+[the harness guide](../harness-plugins.md) for the pin and installation contract.
+
+Linux x64 verification on October 5, 2026:
+
+- All 611 source tests passed with loopback socket and native-history checks
+  enabled, with no failures or skips. Type checks, lint, CLI compilation and
+  Admin bundling passed. All Compose profiles validated, including the restored
+  home's secret and mount boundaries.
+- Full-scope fixtures preserved all instance trees, extra root files, native
+  SQLite/WAL conversations, private keys, image pins, dependency links and
+  ordinary permission metadata. Changed/incomplete inventories, unsafe paths,
+  occupied destinations and running/paused/restarting writers were refused.
+  Interrupted imports remained blocked from startup; portable defaults were
+  unchanged.
+- The actual Electron/Docker walkthrough refused a live export, preserved
+  cancellation and a read-only preview, exported after a normal confirmed stop,
+  and imported into an empty folder without installing first. Native confirmation
+  responses were simulated; renderer, IPC, shared library, Docker and the native
+  database were real. Identity and keys remained unchanged, no containers started
+  during import, and the original OpenCode session was retrieved through the
+  authenticated API after an explicit start. Window dimensions stayed unchanged.
+- The sidebar now has only the wordmark, a named recent-instance picker and
+  navigation, without a subtitle, status footer, visible path or Refresh button.
+  Overview owns the path and container status. Real rendered checks covered direct switching, cancellation,
+  the Welcome route, keyboard navigation, long names, automatic status recovery,
+  narrow layout, 200% zoom and 44px actions. The complete Electron/Docker journey
+  passed with 51 accessibility/layout audits and no violations or horizontal
+  overflow. Background reads preserved drafts, keys and configuration baselines;
+  switching waited for in-flight reads. No dependencies or production window
+  resizing were added.
+- An AKM-guided design specialist reviewed actual native startup captures and
+  approved the compact two-choice Welcome, progressive naming/optional folder
+  step and named recent list. Read-only compatibility/name metadata uses the
+  existing recent list, without another settings store. Existing-folder opening
+  refuses empty/unavailable homes; only explicit new setup accepts them. Native
+  tests covered cancellation, Back/focus, preserved drafts, no home seeding,
+  duplicate-free recents and 200% keyboard scrolling to Choose folder/Continue.
+- A second native Electron process reused only the disposable test profile and
+  automatically opened the last-used installed instance. Preferences and stack
+  intent stayed unchanged, and no containers started. Manual switching returned
+  to Welcome and stayed there across another renderer reload, with unchanged
+  window dimensions. Unit tests covered safe fallback for missing, empty, foreign
+  and broken previous homes without choosing an older instance automatically.
+- A fresh Linux x64 Admin AppImage from this source revision passed actual
+  packaged startup with normal host Chromium sandboxing and an isolated profile.
+  The native release smoke exercised Welcome, the renderer/bridge and named
+  instance preparation. The preview retained the alpha.6 version label; it did
+  not replace the installed Admin or change an existing instance.
+- During development, one native-window narrow/zoom traversal failed the existing
+  recovery timing-field assertion once. The repeated complete journey passed the
+  unchanged assertion; its failure diagnostics now include non-secret field,
+  saved-value and focus details. The cause was not established, so this is not
+  evidence that a timing-field defect was fixed. Only the test harness resizes
+  windows. The UI tests do not reset timing fields to make an assertion pass.
+- One later repeat stalled while capturing the unchanged Agent settings page.
+  Only its owned Electron test process was stopped, and the launcher cleaned up
+  its disposable stack. The cause was not established. Screenshot tests now
+  bring their own window forward and bound the entire render/audit wait, not
+  only the final capture call. The subsequent complete native walkthrough and
+  second-process reopening gate passed; no production focus, sizing or runtime
+  behavior was changed to compensate.
+- All three Linux x64 images rebuilt and passed standard startup smokes. The new
+  AKM pins passed actual OpenCode, Claude and Codex session/prompt recall, both
+  default-on and explicitly disabled native workers, preserved customized
+  settings, native managed policy, real conditional keep-alive ticks and cold
+  directory recovery. Recall passed again after recovery. The duplicate older
+  OpenCode-plugin CLI dependency is gone; no runtime updater or vendor patch was
+  added. The existing dependency audit policy passed with its unchanged reviewed
+  build-only exception. These are isolated, account-free runtime checks, not
+  vendor sign-in or remote-client reconnection evidence.
+- Isolated homes/projects were used; existing user instances were not stopped or
+  changed. A management fixture bypassed provider readiness for this UI journey:
+  the free provider rejected the setup probe. These checks do not qualify a fresh
+  provider sign-in, vendor remote reconnect, external storage or ARM64 execution.
+
+This is source/build evidence, not a new published release qualification.
+
 ## Alpha.6 changes and local evidence
 
 `0.1.2610050714-alpha.6` adds managed recovery configuration and stopped-writer

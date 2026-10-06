@@ -48,6 +48,10 @@ accessibility decisions and unchanged window size. The rendered E2E checks real
 Chromium/OpenCode links, MCP details, keyboard focus and setup/backup journey,
 including Welcome's explicit new-instance path, duplicate-name refusal and two
 healthy named agents at once with matching OS hostnames and separate ports.
+It also checks the sidebar's named recent-instance picker, its Welcome route,
+Overview's home/status details, and automatic status recovery without a footer
+or manual Refresh button. Background checks must preserve unsaved forms and
+transient keys and pause while the window is hidden or an operation is active.
 A passing bundle/static suite does not prove rendered or packaged startup.
 See [Admin verification](../operations/admin-setup-verification.md).
 

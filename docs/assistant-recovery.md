@@ -13,6 +13,7 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 | Need | Use | What it preserves |
 | --- | --- | --- |
 | Move reviewed content into a fresh installation | CLI/Admin portable backup and restore | Knowledge, workspace and allowlisted settings; sensitive content is opt-in and tasks need review. |
+| Preserve or relocate an entire stopped instance | CLI/Admin full-instance export/import (`--full`) | Entire home, including native history, sign-ins, keys, active tasks and same-instance identity; external sources need separate protection. |
 | Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
 | Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history with explicit authority handling, not an entire runtime. |
 
@@ -392,6 +393,13 @@ Local CLI/Admin **portable backup** is a different archive: it selects knowledge
 workspace and a small operator-configuration allowlist, with explicit sensitive
 data opt-ins. It does not back up the native runtime home. Use same-instance
 recovery for ephemeral hosting, not a portable archive as full runtime recovery.
+
+CLI/Admin also offer **entire-instance** export/import with containers stopped.
+It includes all home-owned native state and recovery configuration/receipts, but
+does not roll back an external checkpoint namespace, lease or independently
+persistent mount. Import stays stopped and preserves the saved identity; review
+the recovery destination and stopped-writer ownership before starting. This
+manual directory snapshot is separate from automatic ephemeral checkpoints.
 
 ### Independently persistent mounts
 

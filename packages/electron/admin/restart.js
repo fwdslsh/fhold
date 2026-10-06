@@ -12,8 +12,8 @@ export function renderRestartStatus(snapshot) {
 		'pending-restart-detail',
 		pending?.error ||
 			(running
-				? 'Settings are saved. Restart when you are ready to apply them to the containers. Active work may be interrupted.'
-				: 'Your saved settings will be applied the next time you start this instance.')
+				? 'Saved changes will apply after a restart.'
+				: 'Saved changes will apply when the instance starts.')
 	);
 	setText('apply-pending-restart', running ? 'Restart to apply' : 'Start to apply');
 	byId('apply-pending-restart').disabled = state.operationInFlight || Boolean(snapshot.dockerError);
@@ -42,7 +42,7 @@ export async function requestStackAction(action) {
 		() => state.api.action(action, true),
 		labels[action][1]
 	);
-	if (!result) await refresh(false);
+	if (!result) await refresh();
 	return result;
 }
 

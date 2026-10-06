@@ -62,14 +62,18 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 							if (document.body.dataset.phase === 'welcome' &&
 								!document.querySelector('#instance-welcome')?.hidden &&
 									document.querySelector('#app-shell')?.hidden &&
-									document.querySelector('#open-recent-instance')) return resolve();
+									document.querySelector('#begin-new-instance')) return resolve();
 							if (Date.now() - started > 10000) return reject(new Error('Packaged Admin did not render its welcome screen.'));
 							setTimeout(check, 50);
 						};
 						check();
 					});
-					const name = document.querySelector('#new-instance-name');
-					const folder = document.querySelector('#new-instance-home');
+					const name = document.querySelector('#install-instance-name');
+					const folder = document.querySelector('#install-home');
+					if (!document.querySelector('#install-section').hidden) throw new Error('Setup form was shown before choosing setup.');
+					document.querySelector('#begin-new-instance').click();
+					if (document.querySelector('#install-section').hidden || document.activeElement !== name) throw new Error('Setup did not reveal and focus naming.');
+					if (document.querySelector('#install-advanced').open) throw new Error('Advanced settings were not collapsed initially.');
 					name.value = 'smoke-agent';
 					name.dispatchEvent(new Event('input', {bubbles:true}));
 					if (folder.value !== welcome.instancesDirectory + '/smoke-agent') throw new Error('Named instance folder was not suggested.');
@@ -77,7 +81,9 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					name.value = 'custom-agent';
 					name.dispatchEvent(new Event('input', {bubbles:true}));
 					if (folder.value !== welcome.defaultInstance.homeDir) throw new Error('Custom folder was overwritten.');
-					await window.fholdAdmin.prepareNewInstance({...welcome.defaultInstance, name:'custom-agent'});
+					// Validate the native selection bridge without installing a stack.
+					// Setup now chooses this target as part of Install, not a second form.
+					await window.fholdAdmin.prepareNewInstance({kind:'local',homeDir:folder.value,name:name.value});
 					const snapshot = await window.fholdAdmin.snapshot();
 					if (snapshot.phase !== 'not_installed') throw new Error('Smoke home is not fresh.');
 					if (snapshot.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');

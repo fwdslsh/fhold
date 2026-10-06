@@ -7,7 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>fhold — Setup & settings</title>
+    <title>fhold Admin</title>
     <link rel="stylesheet" href="admin.css" />
   </head>
   <body>
@@ -19,47 +19,22 @@
 	    </div>
 
     <main id="instance-welcome" class="welcome-shell" tabindex="-1" hidden>
-      <section class="welcome-card instance-card" aria-labelledby="instance-welcome-title">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">/</span>
-          <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">Personal agent management</span></div>
-        </div>
-        <h1 id="instance-welcome-title">Welcome to fhold</h1>
-        <p class="welcome-copy">Open an instance to manage its agent and settings, or create a separate one.</p>
-        <div class="instance-primary">
-          <p id="primary-instance-path" class="instance-path">Loading…</p>
-          <button id="open-recent-instance" class="primary large" type="button">Open default instance</button>
-        </div>
-        <div id="default-instance-option" class="instance-row" hidden>
-          <div><strong>Default instance</strong><p id="default-instance-path" class="instance-path">Loading…</p></div>
-          <button id="open-default-instance" class="secondary" type="button">Open default</button>
-        </div>
-        <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
-          <h2 id="recent-instances-title">Recent instances</h2>
-          <div id="recent-instances"></div>
-        </section>
-        <button id="choose-instance" class="secondary instance-picker" type="button">Open another folder…</button>
-        <details id="new-instance-details" class="disclosure">
-          <summary>Create new instance</summary>
-          <p class="help-text">Each instance has its own agent, knowledge and settings. Name your instance; setup chooses available connection ports for you.</p>
-          <form id="new-instance-form">
-            <label class="field" for="new-instance-name">
-              Instance name
-              <input id="new-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" />
-            </label>
-            <div class="field">
-              <label for="new-instance-home">New instance folder</label>
-              <div class="instance-folder-input">
-                <input id="new-instance-home" type="text" placeholder="/path/to/new-instance" required autocomplete="off" spellcheck="false" aria-describedby="new-instance-help" />
-                <button id="new-instance-browse" class="secondary" type="button">Choose folder…</button>
-              </div>
-            </div>
-            <p id="new-instance-help" class="help-text">Defaults to ~/fhold/instances/ followed by the instance name. You can choose a different folder. Nothing is installed until you confirm on the next screen.</p>
-            <button id="create-instance" class="primary" type="submit">Continue to setup</button>
-          </form>
-        </details>
-        <p class="help-text">Opening or switching instances does not start or stop containers.</p>
+      <section class="welcome-card instance-card" aria-label="Choose an instance">
+        <header class="instance-intro">
+          <h1 class="instance-wordmark">f<span aria-hidden="true">/</span>hold</h1>
+        </header>
         <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
+        <div id="instance-options" class="instance-options">
+          <button id="begin-new-instance" class="primary" type="button">Set up a new agent</button>
+          <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
+            <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
+              <h2 id="recent-instances-title">Recent instances</h2>
+              <div id="recent-instances"></div>
+            </section>
+            <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
+          </section>
+          <button id="begin-instance-import" class="text-button instance-import-choice" type="button">Import an instance…</button>
+        </div>
       </section>
     </main>
 
@@ -75,64 +50,140 @@
 	    </main>
 
 	    <main id="install-section" class="welcome-shell" tabindex="-1" hidden>
-      <section class="welcome-card" aria-labelledby="welcome-title">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">/</span>
-          <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">A simpler path to your personal agent</span></div>
+      <section class="welcome-card wizard-card" aria-labelledby="welcome-title">
+        <div class="wizard-navigation wizard-exit">
+          <button class="text-button" type="button" data-instance-switch>Cancel setup</button>
         </div>
-        <h1 id="welcome-title">Set up fhold</h1>
-        <p class="welcome-copy">
-          Install your personal agent, then connect your AI account.
-        </p>
-        <p class="help-text">Install folder: <span id="install-home" class="instance-path">Loading…</span></p>
-        <button class="text-button" type="button" data-instance-switch>Choose another instance</button>
-        <p id="install-prerequisite" class="prerequisite" role="status">Checking this computer…</p>
+        <ol id="install-progress" class="wizard-steps" aria-label="Setup progress">
+          <li aria-current="step"><span>1</span><bdi id="install-first-step">Install</bdi></li>
+          <li><span>2</span><bdi id="install-second-step">Connect</bdi></li>
+          <li><span>3</span><bdi id="install-third-step">Ready</bdi></li>
+        </ol>
+        <h1 id="welcome-title" class="visually-hidden">Set up fhold</h1>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
-
+        <div id="install-requirements" class="install-requirements" data-install-requirements role="status" aria-live="polite">
+          <strong data-requirement-title hidden>Docker needs attention</strong>
+          <p data-requirement-message>Checking installation requirements…</p>
+          <div data-requirement-guidance hidden>
+            <p>Install Docker Desktop, or Docker Engine with the Compose plugin. Start Docker and make sure your account can access it, then check again.</p>
+            <div class="button-row compact">
+              <a href="https://docs.docker.com/get-started/get-docker/" target="_blank" rel="noreferrer">Docker setup guide</a>
+              <a href="https://docs.docker.com/compose/install/" target="_blank" rel="noreferrer">Compose setup guide</a>
+              <button class="secondary" type="button" data-check-prerequisites hidden>Check again</button>
+            </div>
+          </div>
+        </div>
         <form id="install-form">
-          <label class="field" for="install-instance-name">
-            <span>Instance name</span>
-            <input id="install-instance-name" type="text" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" aria-describedby="install-instance-name-help" />
+          <label id="install-name-field" class="field" for="install-instance-name">
+            <span>Agent name</span>
+            <input id="install-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" aria-describedby="install-instance-name-help" />
           </label>
-          <p id="install-instance-name-help" class="help-text">Lowercase letters, numbers and hyphens. Sets the container names and your agent’s hostname; use a different name for each instance.</p>
-          <button id="install" class="primary" type="submit" disabled>Install fhold</button>
-          <button id="check-prerequisites" class="text-button" type="button" hidden>Check again</button>
+          <p id="install-instance-name-help" class="help-text">Lowercase letters, numbers and hyphens.</p>
           <details id="install-advanced" class="disclosure">
             <summary>Advanced</summary>
+            <div id="install-folder-field" class="field">
+              <label id="install-home-label" for="install-home">Agent folder</label>
+              <div class="instance-folder-input">
+                <input id="install-home" type="text" placeholder="/path/to/new-instance" required autocomplete="off" spellcheck="false" aria-describedby="install-home-help" />
+                <button id="install-browse" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="install-home-help" class="help-text">Choose a new or empty folder. All instance files will live here.</p>
+            </div>
             <label class="check-row"><input id="install-automatic-ports" type="checkbox" checked /><span>Choose available ports automatically</span></label>
             <div class="field-grid two-column disclosure-body">
               <label class="field" for="install-assistant-port">
                 <span>Assistant port</span>
-                <input id="install-assistant-port" type="number" min="1" max="65535" required disabled />
+                <input id="install-assistant-port" type="number" value="3810" min="1" max="65535" required disabled />
               </label>
               <label class="field" for="install-gateway-port">
                 <span>Guardian MCP port</span>
-                <input id="install-gateway-port" type="number" min="1" max="65535" required disabled />
+                <input id="install-gateway-port" type="number" value="3830" min="1" max="65535" required disabled />
               </label>
             </div>
             <p class="help-text">
-              Defaults are 3810 for OpenCode and 3830 for Guardian. If either is in use, setup chooses free ports and saves them. Turn off automatic selection to use your own ports.
-              Guardian is an optional MCP API for clients, not a website.
+              Defaults are 3810 for OpenCode and 3830 for optional Guardian MCP access. Setup chooses free ports if needed.
             </p>
           </details>
+          <div id="install-actions" class="wizard-actions">
+            <button id="install" class="primary" type="submit" disabled>Install fhold</button>
+          </div>
         </form>
+      </section>
+    </main>
+
+    <main id="instance-import-section" class="welcome-shell" tabindex="-1" hidden>
+      <section class="welcome-card wizard-card" aria-labelledby="instance-import-title">
+        <div class="wizard-navigation wizard-exit">
+          <button id="instance-restore-back" class="text-button" type="button" hidden><span aria-hidden="true">←</span> Back</button>
+          <button class="text-button" type="button" data-instance-switch>Cancel import</button>
+        </div>
+        <ol id="instance-import-progress" class="wizard-steps" aria-label="Import progress">
+          <li aria-current="step"><span>1</span> Choose folders</li>
+          <li><span>2</span> Review &amp; import</li>
+        </ol>
+        <h1 id="instance-import-title" class="visually-hidden">Import an instance</h1>
+        <p id="instance-import-status" class="help-text" role="status" aria-live="polite" hidden></p>
+        <div class="install-requirements" data-install-requirements role="status" aria-live="polite">
+          <strong data-requirement-title hidden>Docker needs attention</strong>
+          <p data-requirement-message>Checking installation requirements…</p>
+          <div data-requirement-guidance hidden>
+            <p>Install Docker Desktop, or Docker Engine with the Compose plugin. Start Docker and make sure your account can access it, then check again.</p>
+            <div class="button-row compact">
+              <a href="https://docs.docker.com/get-started/get-docker/" target="_blank" rel="noreferrer">Docker setup guide</a>
+              <a href="https://docs.docker.com/compose/install/" target="_blank" rel="noreferrer">Compose setup guide</a>
+              <button class="secondary" type="button" data-check-prerequisites hidden>Check again</button>
+            </div>
+          </div>
+        </div>
+        <div id="instance-import-choices">
+          <p class="help-text">Continue an exported instance, including its conversations, sign-ins and settings.</p>
+          <form id="instance-restore-form" class="form-stack">
+            <div class="field">
+              <label for="instance-restore-source">Export folder</label>
+              <div class="instance-folder-input">
+                <input id="instance-restore-source" autocomplete="off" spellcheck="false" placeholder="/path/to/instance-export" aria-describedby="instance-restore-source-help" required />
+                <button id="choose-instance-restore-source" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="instance-restore-source-help" class="help-text">Choose a folder created by Entire instance export. The original instance must be stopped.</p>
+            </div>
+            <div class="field">
+              <label for="instance-restore-home">Restore to</label>
+              <div class="instance-folder-input">
+                <input id="instance-restore-home" autocomplete="off" spellcheck="false" placeholder="/path/to/new-instance" aria-describedby="instance-restore-home-help" required />
+                <button id="choose-instance-restore-home" class="secondary" type="button">Choose folder…</button>
+              </div>
+              <p id="instance-restore-home-help" class="help-text">Choose a new or empty folder. Nothing is copied until you confirm.</p>
+            </div>
+            <div class="wizard-actions">
+              <button id="preview-instance-restore" class="primary" type="submit" disabled>Review import</button>
+            </div>
+          </form>
+        </div>
+        <section id="instance-import-review" aria-labelledby="instance-restore-review-title" hidden>
+          <h2 id="instance-restore-review-title" tabindex="-1">Review import</h2>
+          <dl class="detail-list compact">
+            <div><dt>Agent</dt><dd id="instance-restore-name"></dd></div>
+            <div><dt>Export folder</dt><dd id="instance-restore-review-source"></dd></div>
+            <div><dt>Restore to</dt><dd id="instance-restore-review-home"></dd></div>
+          </dl>
+          <p id="instance-restore-summary" class="help-text"></p>
+          <p class="help-text">The saved name, ports, sign-ins and active schedules are retained. Containers stay stopped. Never run the original and restored copies together. External drives and checkpoint storage need separate protection.</p>
+          <ul id="instance-restore-warnings" class="help-text" hidden></ul>
+          <details class="disclosure technical-disclosure"><summary>Technical details</summary><textarea id="instance-restore-result" class="technical-output" readonly spellcheck="false" aria-label="Full-instance import technical details"></textarea></details>
+          <div class="wizard-actions">
+            <button id="apply-instance-restore" class="primary" type="button" disabled>Import instance</button>
+          </div>
+        </section>
       </section>
     </main>
 
     <div id="app-shell" class="app-shell" hidden>
       <aside class="sidebar">
-        <div class="brand-lockup compact">
+        <div class="sidebar-instance">
           <span class="brand-mark" aria-hidden="true">/</span>
-          <div class="brand-copy"><strong>f/hold</strong><span class="brand-subtitle">Setup & settings</span></div>
-        </div>
-
-        <div class="setup-only setup-progress" hidden>
-          <p id="setup-step" class="eyebrow">Step 2 of 3</p>
-          <ol>
-            <li class="complete"><span aria-hidden="true">✓</span><div><strong>Installed</strong><small id="setup-runtime">Checking your agent…</small></div></li>
-            <li class="current" aria-current="step"><span>2</span><div><strong>Connect your AI</strong><small>Sign in and verify a real response.</small></div></li>
-            <li><span>3</span><div><strong>Ready to use</strong><small>Choose how you want to connect.</small></div></li>
-          </ol>
+          <select id="instance-picker" class="sidebar-instance-picker" aria-label="Choose instance">
+            <option value="">Loading…</option>
+          </select>
         </div>
 
         <details id="mobile-navigation" class="ready-only" open hidden>
@@ -145,48 +196,55 @@
             <span>Agent settings</span>
           </button>
           <button class="nav-item" type="button" data-view="connections" aria-controls="view-connections">
-            <span>Connections</span>
-          </button>
-          <button class="nav-item" type="button" data-view="access" aria-controls="view-access">
-            <span>People & access</span>
+            <span>Apps</span>
           </button>
           <button class="nav-item" type="button" data-view="system" aria-controls="view-system">
             <span>System</span>
           </button>
         </nav>
         </details>
-
-        <div class="sidebar-footer">
-          <span id="selected-instance-path" class="instance-path selected-instance">Loading…</span>
-          <button class="text-button" type="button" data-instance-switch>Switch instance</button>
-          <span id="stack-status" class="status-badge neutral"><span class="status-dot" aria-hidden="true"></span>Checking status</span>
-          <button id="refresh" class="text-button" type="button">Refresh status</button>
+        <div id="sidebar-alerts" class="sidebar-alerts">
+          <section id="notification-area" aria-label="Notifications">
+            <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
+              <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
+              <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
+            </aside>
+            <div id="notice" class="notice" role="status" aria-live="polite" hidden>
+              <span id="notice-icon" class="notice-icon" aria-hidden="true">●</span>
+              <span id="notice-message"></span>
+              <button id="dismiss-notice" type="button" aria-label="Dismiss message">×</button>
+            </div>
+          </section>
         </div>
       </aside>
 
       <div class="workspace">
+        <div class="setup-only wizard-navigation wizard-exit" hidden>
+          <button class="text-button" type="button" data-instance-switch title="Leave setup; your installed agent keeps running.">Finish later</button>
+        </div>
+        <div class="setup-only wizard-progress" hidden>
+          <p id="setup-step" class="visually-hidden">Step 2 of 3</p>
+          <ol class="wizard-steps" aria-label="Setup progress">
+            <li class="complete"><span aria-hidden="true">✓</span> Installed</li>
+            <li aria-current="step"><span>2</span> Connect</li>
+            <li><span>3</span> Ready</li>
+          </ol>
+          <p id="setup-runtime" class="visually-hidden">Checking your agent…</p>
+        </div>
         <header class="page-header">
 	              <div>
             <p id="view-kicker" class="eyebrow" hidden>PERSONAL AGENT</p>
             <h1 id="view-title" tabindex="-1">Connect your AI</h1>
             <p id="view-description" class="page-description">Choose a provider and verify that your agent can respond.</p>
           </div>
-          <div id="notice" class="notice" role="status" aria-live="polite" hidden>
-            <span id="notice-icon" class="notice-icon" aria-hidden="true">●</span>
-            <span id="notice-message"></span>
-            <button id="dismiss-notice" type="button" aria-label="Dismiss message">×</button>
-          </div>
         </header>
-
+        <div id="setup-alerts"></div>
         <main id="main-content" tabindex="-1">
-          <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
-            <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
-            <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
-          </aside>
           <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-heading">
             <div class="hero-card ready-hero">
               <div>
                 <h2 id="overview-heading" class="visually-hidden">Your personal agent</h2>
+                <p id="overview-home" class="instance-path"></p>
                 <a id="overview-opencode-link" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode</a>
                 <button class="secondary" type="button" data-view-target="connections">Connect an app</button>
               </div>
@@ -217,6 +275,7 @@
                   <button id="stop-stack" data-action="stop" class="danger subtle" type="button">Stop</button>
                 </div>
               </div>
+              <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
               <div id="services" class="services" aria-live="polite"></div>
             </section>
 
@@ -241,65 +300,103 @@
 	            </section>
 
             <section id="provider-connection" class="panel" aria-labelledby="provider-heading">
-              <div class="section-heading">
-                <div><h2 id="provider-heading">Connect an AI account</h2></div>
-                <span id="provider-badge" class="status-badge neutral">Not checked</span>
-              </div>
-              <div id="provider-status" class="inline-status neutral" role="status" aria-live="polite">
-                <strong>Checking available providers…</strong>
-                <span>One moment.</span>
-              </div>
+              <section id="provider-current-model" class="provider-current-model" aria-labelledby="provider-heading">
+                <h2 id="provider-heading">Your agent’s AI model</h2>
+                <div class="provider-default">
+                  <span id="provider-default-service" class="card-label">No service selected</span>
+                  <strong id="provider-default-model" class="provider-default-model">Choose an AI model</strong>
+                  <p id="provider-default-status" class="help-text" role="status" aria-live="polite">A saved setup does not mean the model can respond.</p>
+                </div>
+                <div class="button-row">
+                  <button id="test-current-model" class="secondary" type="button" disabled>Test response</button>
+                  <button id="change-provider-model" class="secondary" type="button" disabled>Change model</button>
+                  <button id="add-provider-service" class="primary" type="button">Add AI service</button>
+                </div>
+                <div class="wizard-actions"><button id="finish-provider-setup" class="primary" type="button" hidden>Continue to your agent</button></div>
+              </section>
 
-	              <form id="provider-form" class="form-stack">
-	                <label class="field" for="provider">
-	                  <span>AI provider</span>
-	                  <select id="provider" aria-describedby="provider-help"><option value="">Find providers first</option></select>
-	                </label>
-                <button id="test-provider" class="secondary" type="button" hidden>Verify connection</button>
-                <details id="provider-catalog" class="disclosure"><summary>Find another provider</summary>
-	                <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name" /></label>
-	                <div class="button-row compact provider-catalog-actions"><button id="show-all-providers" class="text-button" type="button">Show all providers</button><button id="load-providers" class="text-button" type="button">Refresh accounts</button></div>
-	                <p id="provider-help" class="visually-hidden">Connected and common providers appear first.</p>
-                </details>
-	                <label id="provider-method-field" class="field" for="provider-method" hidden>
-	                  <span>Sign-in method</span>
-	                  <select id="provider-method"></select>
-	                </label>
-                <details id="api-key-fields" class="disclosure" open hidden><summary>API key</summary>
-                  <label class="field" for="provider-key">
-                    <span>API key</span>
-                    <input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" />
-                  </label>
-                  <p id="provider-key-help" class="help-text">The key is sent directly to your local Assistant and is never displayed again.</p>
-                  <button class="primary" type="submit">Save key and verify</button>
-                </details>
-	                <div id="oauth-provider-note" class="callout form-stack" hidden>
-                  <p>Sign-in opens in your browser. Your password never passes through fhold.</p>
-	                  <div id="oauth-prompt-fields" class="form-stack"></div>
-	                  <button id="start-provider-oauth" class="primary" type="button">Open provider sign-in</button>
-	                  <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here when the provider says you are connected.</span></div>
-	                  <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
-	                  <button id="finish-provider-oauth" class="secondary" type="button" hidden>Finish sign-in and verify</button>
-	                </div>
-              </form>
-              <details class="disclosure technical-disclosure">
-                <summary>Technical details</summary>
-                <textarea id="provider-result" class="technical-output" readonly spellcheck="false" aria-label="Provider technical details">Provider status has not been checked.</textarea>
+              <section id="provider-editor" class="provider-editor" aria-labelledby="provider-editor-title" hidden>
+                <div class="section-heading">
+                  <div><h2 id="provider-editor-title" tabindex="-1">Add AI service</h2><p id="provider-editor-message" class="help-text" role="status" aria-live="polite">Choose where your agent’s model will run.</p></div>
+                  <button id="cancel-provider-editor" class="text-button" type="button">Cancel</button>
+                </div>
+                <button id="provider-editor-back" class="text-button" type="button" hidden><span aria-hidden="true">←</span> Back</button>
+                <form id="provider-form" class="form-stack">
+                  <section id="provider-service-step" aria-labelledby="provider-service-heading">
+                    <h3 id="provider-service-heading">Choose a service</h3>
+                    <fieldset class="provider-shortcuts" aria-label="AI services">
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="opencode"><strong>OpenCode Zen</strong><small>Use your Zen API key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="opencode-go"><strong>OpenCode Go</strong><small>Use your Go subscription key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="openai"><strong>OpenAI</strong><small>Use an OpenAI account or API key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="ollama"><strong>Ollama</strong><small>Use a model on your own server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="lmstudio"><strong>LM Studio</strong><small>Use LM Studio’s API server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="llama.cpp"><strong>llama.cpp</strong><small>Use a running llama-server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="custom"><strong>Custom endpoint</strong><small>Use an OpenAI-compatible API.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="other"><strong>Another provider</strong><small>Choose from OpenCode’s providers.</small></button>
+                    </fieldset>
+                    <div id="provider-catalog" class="provider-picker" hidden>
+                      <p id="provider-help" class="help-text">Find the service you want to set up.</p>
+                      <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name" aria-describedby="provider-search-help" /></label>
+                      <p id="provider-search-help" class="help-text" role="status" aria-live="polite">Loading provider choices…</p>
+                      <label class="field" for="provider"><span>Provider</span><select id="provider" aria-describedby="provider-help provider-search-help"><option value="">Choose a provider</option></select></label>
+                      <button id="show-all-providers" class="text-button" type="button">Show all providers</button>
+                    </div>
+                  </section>
+
+                  <section id="provider-account-actions" class="provider-details form-stack" aria-labelledby="provider-account-heading" hidden>
+                    <div class="provider-selection-heading"><h3 id="provider-account-heading" tabindex="-1">Service details</h3><p id="provider-account-help" class="help-text"></p></div>
+                    <label id="provider-method-field" class="field" for="provider-method" hidden><span>Sign-in method</span><select id="provider-method"></select></label>
+                    <div id="api-key-fields" class="form-stack" hidden>
+                      <label class="field" for="provider-key"><span id="provider-key-heading">API key</span><input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" /></label>
+                      <p id="provider-key-help" class="help-text">Stored privately in your agent. Existing keys are never shown here.</p>
+                      <button id="provider-key-submit" class="primary" type="submit">Save key &amp; choose model</button>
+                    </div>
+                    <div id="oauth-provider-note" class="form-stack" hidden>
+                      <p class="help-text">Sign-in opens in your browser. Your password never passes through fhold.</p>
+                      <div id="oauth-prompt-fields" class="form-stack"></div>
+                      <button id="start-provider-oauth" class="primary" type="button">Sign in with your account</button>
+                      <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here after completing sign-in.</span></div>
+                      <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
+                      <div class="button-row compact"><button id="finish-provider-oauth" class="primary" type="button" hidden>Finish sign-in &amp; choose model</button><button id="cancel-provider-oauth" class="secondary" type="button" hidden>Cancel sign-in</button></div>
+                    </div>
+                    <div id="provider-endpoint-fields" class="form-stack" hidden>
+                      <label class="field" for="provider-endpoint-name"><span>Service name</span><input id="provider-endpoint-name" autocomplete="off" placeholder="My AI server" /></label>
+                      <label class="field" for="provider-base-url"><span>API server address</span><input id="provider-base-url" type="url" autocomplete="off" spellcheck="false" placeholder="http://server-address:1234/v1" aria-describedby="provider-endpoint-help provider-local-url-help" /></label>
+                      <p id="provider-endpoint-help" class="help-text">Use the API address shown by your server, usually ending in /v1.</p>
+                      <p id="provider-local-url-help" class="warning-callout">Your agent runs in a container. Here, localhost points to the agent—not this computer. Enter an address the agent can reach, and make sure your model server is running.</p>
+                      <label class="field" for="provider-endpoint-key"><span>API key <span class="field-optional">(optional)</span></span><input id="provider-endpoint-key" type="password" autocomplete="off" aria-describedby="provider-endpoint-key-help" /></label>
+                      <p id="provider-endpoint-key-help" class="help-text">Only needed if your server requires authentication. Existing keys are never shown.</p>
+                      <details id="provider-endpoint-advanced" class="disclosure"><summary>Advanced</summary><label id="provider-endpoint-id-field" class="field" for="provider-endpoint-id"><span>Service ID</span><input id="provider-endpoint-id" autocomplete="off" spellcheck="false" aria-describedby="provider-endpoint-id-help" /></label><p id="provider-endpoint-id-help" class="help-text">Identifies this saved setup in OpenCode. It cannot be changed after creation.</p></details>
+                    </div>
+                    <button id="provider-details-next" class="primary" type="button" hidden>Save details &amp; choose model</button>
+                  </section>
+
+                  <section id="provider-model-step" class="form-stack" aria-labelledby="provider-model-heading" hidden>
+                    <h3 id="provider-model-heading">Choose a model</h3>
+                    <div id="provider-model-fields" class="form-stack">
+                      <label class="field" for="provider-model"><span>Model</span><select id="provider-model" aria-describedby="provider-model-help"><option value="">Load models first</option></select></label>
+                      <p id="provider-model-help" class="help-text">Choose the model you want your agent to use.</p>
+                      <button id="load-provider-models" class="text-button" type="button">Refresh models</button>
+                      <label class="check-row"><input id="provider-model-manual" type="checkbox" /> Enter a model ID instead</label>
+                      <label id="provider-model-id-field" class="field" for="provider-model-id" hidden><span>Model ID</span><input id="provider-model-id" autocomplete="off" spellcheck="false" placeholder="Exact model ID from your server" /></label>
+                    </div>
+                    <p id="provider-test-cost" class="help-text">Testing sends a short message to this service. Its usual usage charges may apply.</p>
+                    <button id="test-provider" class="secondary" type="button">Test response</button>
+                    <div id="provider-status" class="inline-status neutral" role="status" aria-live="polite" hidden><strong>No response test yet.</strong><span>Testing does not change your agent’s current model.</span></div>
+                    <span id="provider-badge" class="visually-hidden status-badge neutral">Not tested</span>
+                    <div class="provider-use-actions"><p id="provider-use-help" class="help-text">Use this model for your agent’s future work.</p><button id="use-provider-model" class="primary" type="button" hidden>Use this model</button></div>
+                  </section>
+                </form>
+              </section>
+
+              <details id="provider-saved-accounts" class="disclosure provider-saved-setups" aria-labelledby="provider-saved-heading">
+                <summary id="provider-saved-heading">Saved AI setups</summary>
+                <p class="help-text">Saved details are not proof a service works. Edit a setup to choose and test a model.</p>
+                <p id="provider-saved-empty" class="help-text">No saved AI setups.</p>
+                <ul id="provider-saved-list" class="provider-account-list" aria-label="Saved AI setups"></ul>
+                <button id="load-providers" class="text-button" type="button">Refresh saved setups</button>
               </details>
             </section>
-
-            <details id="agent-preferences" class="ready-only panel panel-disclosure" hidden>
-              <summary id="preferences-heading">Memory & recurring work</summary>
-              <form id="preferences-form" class="form-stack" data-managed-form>
-                <label class="check-row"><input id="automatic-memory" type="checkbox" checked /> Automatically remember useful context</label>
-                <p class="help-text">Captures useful facts from trusted local conversations only.</p>
-                <details class="disclosure"><summary>What is remembered?</summary><p class="help-text">Uses your connected provider and AKM, not full transcripts. MCP, chat-app, and scheduled conversations are not captured automatically. Turning this off does not erase existing knowledge.</p></details>
-                <label class="field" for="agent-timezone"><span>Timezone for recurring work</span><input id="agent-timezone" autocomplete="off" required placeholder="America/Chicago" aria-describedby="timezone-help" /></label>
-                <p id="timezone-help" class="help-text">Uses this computer’s timezone by default.</p>
-                <details class="disclosure"><summary>Timezone & missed runs</summary><p class="help-text">Use a timezone such as America/Chicago or Europe/London. After downtime, tasks resume at their next scheduled time; missed runs are not replayed.</p></details>
-                <button class="secondary" type="submit">Save preferences</button>
-              </form>
-            </details>
 
             <details class="setup-only panel restore-panel" hidden>
               <summary><strong>Import from an fhold export</strong><span>Optional · do this before setup is complete</span></summary>
@@ -329,219 +426,239 @@
             </details>
           </section>
 
-	          <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="connections-heading">
-	            <section id="client-setup" class="panel" aria-labelledby="client-setup-heading">
-	              <div class="section-heading"><div><h2 id="client-setup-heading">Choose an app</h2></div></div>
-	              <fieldset class="segmented-control">
-	                <legend class="visually-hidden">Client setup</legend>
-	                <button class="secondary" type="button" data-client-setup="opencode">OpenCode</button>
-	                <button class="secondary" type="button" data-client-setup="claude">Claude Desktop</button>
-	                <button class="secondary" type="button" data-client-setup="mcp">Another MCP app</button>
-	              </fieldset>
-
-	              <article id="client-opencode" class="client-panel" data-client-panel="opencode">
-	                <div class="connection-heading"><div><h3>OpenCode</h3><p>Full access. Use only on this computer or a trusted private network.</p></div></div>
-	                <dl class="connection-values">
-	                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
-	                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
-	                </dl>
-	                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                <div class="button-row compact">
-	                  <button id="load-direct-password" class="secondary" type="button">Load password</button>
-	                  <button id="copy-direct-password" class="secondary" type="button">Copy password</button>
-	                  <label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label>
-	                </div>
-	              </article>
-
-	              <article id="client-claude" class="client-panel" data-client-panel="claude" hidden>
-	                <div class="connection-heading"><div><h3>Claude Desktop</h3><p>Connect through the fhold desktop extension.</p></div></div>
-	                <ol class="numbered-steps">
-	                  <li><div><strong>Enable Guardian</strong><p id="claude-guardian-help">Protected access is currently disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable protected access</button></div></li>
-	                  <li><div><strong>Install the desktop extension</strong><p id="claude-extension-help" class="help-text">Download the matching extension, then install it in Claude Desktop.</p><a id="claude-extension-download" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Download desktop extension</a><button class="text-button" type="button" data-copy-field="claude-extension-help">Copy instructions</button></div></li>
-	                  <li><div><strong>Enter these settings</strong>
-	                    <label class="field" for="claude-credential"><span>Access identity</span><select id="claude-credential"></select></label>
-	                    <p id="claude-policy-help" class="help-text">Choose the least access this client needs.</p>
-	                    <dl class="connection-values"><div><dt>Local fhold address</dt><dd><code id="claude-url">Loading…</code><button class="text-button" type="button" data-copy-field="claude-url">Copy</button></dd></div></dl>
-	                    <label class="field" for="claude-key"><span>Access key</span><input id="claude-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                    <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="claude">Load key</button><button class="secondary" type="button" data-copy-client-key="claude">Copy key</button><label class="check-row compact"><input id="show-claude-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create a dedicated identity</button></div>
-	                  </div></li>
-	                </ol>
-	              </article>
-
-	              <article id="client-mcp" class="client-panel" data-client-panel="mcp" hidden>
-	                <div class="connection-heading"><div><h3>MCP client</h3><p>Streamable HTTP with an access key.</p></div></div>
-	                <div id="mcp-guardian-help" class="inline-status neutral"><strong>Guardian must be enabled.</strong><span>It applies the policy associated with the selected identity.</span></div>
-	                <button class="secondary" type="button" data-enable-gateway>Enable protected access</button>
-	                <label class="field" for="mcp-credential"><span>Access identity</span><select id="mcp-credential"></select></label>
-	                <p id="mcp-policy-help" class="help-text">Choose the least access this client needs.</p>
-	                <dl class="connection-values"><div><dt>Streamable HTTP address</dt><dd><code id="mcp-url">Loading…</code><button class="text-button" type="button" data-copy-field="mcp-url">Copy</button></dd></div><div><dt>Authentication</dt><dd><code>Authorization: Bearer &lt;access key&gt;</code></dd></div></dl>
-	                <label class="field" for="mcp-key"><span>Access key</span><input id="mcp-key" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-	                <div class="button-row compact"><button class="secondary" type="button" data-load-client-key="mcp">Load key</button><button class="secondary" type="button" data-copy-client-key="mcp">Copy key</button><label class="check-row compact"><input id="show-mcp-key" type="checkbox" /> Show key</label><button class="text-button" type="button" data-view-target="access">Create another identity</button></div>
-	              </article>
-                <details id="gateway-connection" class="disclosure">
-                  <summary>Guardian MCP settings</summary>
-                  <div class="connection-heading">
-                    <div><h3>Guardian MCP</h3><p>Applies the selected access key’s policy.</p></div>
-                    <label class="switch"><input id="gateway" type="checkbox" form="connections-form" /><span>Enable</span></label>
-                  </div>
-                  <div id="guardian-settings" class="connection-body" hidden>
-                    <div class="endpoint-row"><div><span>Guardian MCP URL</span><code id="guardian-url">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-url">Copy</button></div><span class="status-badge protected">Policy protected</span></div>
-                  </div>
-                  <button id="save-client-connections" class="secondary" type="submit" form="connections-form">Save MCP access</button>
+          <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="view-title">
+            <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
+              <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <div class="app-connection-body">
+                <p class="help-text">Open the server address and sign in with the username and password below. This gives full native access: use it only on this computer or a trusted private network.</p>
+                <dl class="connection-values">
+                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
+                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
+                </dl>
+                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
+                <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
+                <details class="disclosure">
+                  <summary>Advanced · network access</summary>
+                  <form id="opencode-network-form" class="form-stack" data-managed-form>
+                    <div class="field-grid two-column">
+                      <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
+                      <label class="field" for="assistant-port"><span>Port</span><input id="assistant-port" type="number" min="1" max="65535" required /></label>
+                    </div>
+                    <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>
+                    <button class="secondary" type="submit">Save OpenCode network settings</button>
+                  </form>
                 </details>
-            </section>
-
-            <details id="chat-apps" class="panel panel-disclosure">
-              <summary id="connections-heading">Chat apps <small>Discord & Slack</small></summary>
-	              <form id="connections-form" class="form-stack" data-managed-form>
-                <details id="discord-connection" class="connection-card">
-                  <summary><span>Discord</span><span id="discord-connection-status" class="status-badge neutral">Not enabled</span></summary>
-                  <div class="connection-heading">
-                    <div><p>Access for approved members.</p></div>
-                    <label class="switch"><input id="discord" type="checkbox" /><span>Enable</span></label>
-                  </div>
-	                  <div id="discord-settings" class="connection-body" hidden>
-	                    <details class="disclosure setup-help"><summary>Discord setup instructions</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with permission to view channels, read message history, and send messages.</li><li>Store its bot token below.</li><li>Add at least one allowed server, role, or user ID.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord Developer Portal</button></details>
-                    <button class="secondary" type="button" data-token-target="discord">Configure Discord token</button>
-                    <button class="text-button" type="button" data-mapping-target="discord">Individual user policies</button>
-                    <label class="field" for="discord-credential"><span>Default access</span><select id="discord-credential"></select></label>
-                    <details id="discord-access-disclosure" class="disclosure">
-                      <summary>Who can use it</summary>
-                      <div class="field-grid two-column disclosure-body">
-                        <label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label>
-                        <label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label>
-                        <label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label>
-                        <label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label>
-                      </div>
-	                      <p class="help-text">Leave a list empty to ignore it. If you fill more than one allowed list, every filled list must match. Blocked users are always denied. Separate IDs with commas.</p>
-                    </details>
-                  </div>
+              </div>
+            </details>
+            <details id="claude-connection" class="panel panel-disclosure connection-app" data-connection-app="claude" name="connected-app">
+              <summary><span>Claude<small>Chat on this computer or work remotely from any device.</small></span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure connection-method" name="claude-method">
+                  <summary><span>Desktop chat<small>Use the Claude Desktop app on this computer.</small></span></summary>
+                  <form id="claude-permissions-form" class="form-stack" data-managed-form>
+                    <input id="claude-credential" type="hidden" />
+                    <fieldset id="claude-permissions" class="permission-options"><legend>What can Claude Desktop do?</legend>
+                      <label class="permission-option"><input id="claude-policy-chat" name="claude-policy" type="radio" value="chat" required /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                      <label class="permission-option"><input id="claude-policy-read" name="claude-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                      <label class="permission-option"><input id="claude-policy-full" name="claude-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                    </fieldset>
+                    <p id="claude-policy-help" class="help-text" role="status"></p>
+                    <button id="save-claude-permissions" class="primary" type="submit">Create connection</button>
+                  </form>
+                  <ol class="numbered-steps">
+                    <li><div><strong>Enable access</strong><p id="claude-guardian-help">MCP access is disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable access for Claude Desktop</button></div></li>
+                    <li><div><strong>Install the desktop extension</strong><p id="claude-extension-help" class="help-text">Download the matching extension, then install it in Claude Desktop.</p><a id="claude-extension-download" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Download desktop extension</a><button class="text-button" type="button" data-copy-field="claude-extension-help">Copy instructions</button></div></li>
+                    <li id="claude-connect-details" hidden><div><strong>Connect to this instance</strong>
+                      <dl class="connection-values"><div><dt>Local address</dt><dd><code id="claude-url">Loading…</code><button class="text-button" type="button" data-copy-field="claude-url">Copy</button></dd></div></dl>
+                      <button class="secondary" type="button" data-copy-client-key="claude">Copy access key</button>
+                      <p class="help-text">Paste it into the desktop extension’s fhold access key field. Keep it private.</p>
+                    </div></li>
+                  </ol>
                 </details>
-
-                <details id="slack-connection" class="connection-card">
-                  <summary><span>Slack</span><span id="slack-connection-status" class="status-badge neutral">Not enabled</span></summary>
-                  <div class="connection-heading">
-                    <div><p>Access for approved members.</p></div>
-                    <label class="switch"><input id="slack" type="checkbox" /><span>Enable</span></label>
-                  </div>
-	                  <div id="slack-settings" class="connection-body" hidden>
-	                    <details class="disclosure setup-help"><summary>Slack setup instructions</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need, then install the app.</li><li>Store the bot and app-level tokens below.</li><li>Add at least one allowed channel or user ID.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
-                    <button class="secondary" type="button" data-token-target="slack">Configure Slack tokens</button>
-                    <button class="text-button" type="button" data-mapping-target="slack">Individual user policies</button>
-                    <label class="field" for="slack-credential"><span>Default access</span><select id="slack-credential"></select></label>
-                    <details id="slack-access-disclosure" class="disclosure">
-                      <summary>Who can use it</summary>
-                      <div class="field-grid two-column disclosure-body">
-                        <label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label>
-                        <label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label>
-                        <label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label>
-                      </div>
-	                      <p class="help-text">Leave a list empty to ignore it. If you fill both allowed lists, both the user and channel must match. Blocked users are always denied. Separate IDs with commas.</p>
-                    </details>
-                  </div>
+                <details class="disclosure connection-method" name="claude-method">
+                  <summary><span>Claude remote connection<small>Work with this instance from the Claude app on any device.</small></span><span class="card-label">Experimental</span></summary>
+                  <p class="help-text">Sign in with your Claude account and approve access to this instance. Then open the connection link in Claude.</p>
+                  <p><span id="claude-remote-status" class="status-badge neutral">Startup not checked</span></p>
+                  <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up remote connection</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open in Claude</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
+                  <p class="help-text">Requires an eligible Claude subscription. Remote sessions can work with this instance’s files using Claude’s own permissions. The desktop chat permissions above do not apply. Disabling startup keeps your sign-in; manage paired devices in Claude.</p>
                 </details>
-                <button class="primary" type="submit">Save connections</button>
-              </form>
-
-            <details id="portal-tokens" class="disclosure">
-              <summary id="tokens-heading"><span>Discord and Slack tokens<small id="token-status" class="status-badge neutral">Not configured</small></span></summary>
-              <form id="portal-token-form" class="form-stack">
-	                <label class="field" for="token-portal"><span>Chat app</span><select id="token-portal"><option value="discord">Discord</option><option value="slack">Slack</option></select></label>
-	                <label class="field" for="bot-token"><span id="bot-token-label">Discord bot token</span><input id="bot-token" type="password" autocomplete="off" /></label>
-	                <label id="app-token-field" class="field" for="app-token" hidden><span>Slack app token</span><input id="app-token" type="password" autocomplete="off" /></label>
-	                <p id="token-help" class="help-text">Tokens are stored in private files and are never shown again.</p>
-                <button class="secondary" type="submit">Store tokens privately</button>
-              </form>
-            </details>
-            </details>
-
-            <details id="native-connections" class="panel panel-disclosure">
-              <summary id="native-connections-heading"><span>Remote coding agents<small>Experimental · Claude Code and Codex</small></span></summary>
-              <p class="section-intro">Separate agents using their own accounts. Experimental; bypasses Guardian policies.</p>
-              <div class="remote-connection-row">
-                <div><h3>Claude Code <span class="card-label">Experimental</span></h3><p>Remote Control with an eligible Claude subscription.</p><span id="claude-remote-status" class="status-badge neutral">Startup off</span></div>
-                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open session</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
               </div>
-              <div class="remote-connection-row">
-                <div><h3>Codex <span class="card-label">Experimental</span></h3><p>ChatGPT account sign-in. Client and host support are required.</p><span id="codex-remote-status" class="status-badge neutral">Startup off</span><p class="help-text">Automatic knowledge recall: <span id="codex-recall-status" class="status-badge neutral">Not checked</span></p><p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p></div>
-                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up</button><button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
+            </details>
+
+            <details id="codex-connection" class="panel panel-disclosure connection-app" data-connection-app="codex" name="connected-app">
+              <summary><span>Codex<small>Remote sessions with your ChatGPT account.</small></span><span class="card-label">Experimental</span></summary>
+              <div class="app-connection-body">
+                <p class="help-text">Set up guides sign-in, workspace access and execution settings. Then get a pairing code to connect your Codex client.</p>
+                <p><span id="codex-remote-status" class="status-badge neutral">Startup not checked</span></p>
+                <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up Codex</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
+                <details class="disclosure">
+                  <summary>Knowledge recall</summary>
+                  <p class="help-text">Automatic recall: <span id="codex-recall-status" class="status-badge neutral">Not checked</span></p>
+                  <p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p>
+                  <button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button>
+                </details>
+                <p class="help-text">Codex runs its own agent. This uses native access; the MCP permissions do not apply. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
               </div>
-              <details class="disclosure"><summary>Startup & account access</summary><p class="help-text">Setup enables startup automatically. Disabling startup keeps your account sign-in; revoke paired devices through the account provider. Host and account support vary.</p></details>
             </details>
 
-            <details id="network-settings" class="panel panel-disclosure">
-              <summary>Advanced network settings</summary>
-              <div class="warning-callout"><strong>Direct OpenCode access bypasses Guardian.</strong><p>Keep it on this computer or a trusted private network.</p></div>
-	              <form id="network-form" class="form-stack" data-managed-form>
-	                <div class="field-grid two-column">
-	                  <label class="field" for="assistant-bind"><span>Assistant bind address</span><input id="assistant-bind" autocomplete="off" /></label>
-	                  <label class="field" for="assistant-port"><span>Assistant port</span><input id="assistant-port" type="number" min="1" max="65535" /></label>
-	                  <label class="field" for="gateway-bind"><span>Guardian MCP bind address</span><input id="gateway-bind" autocomplete="off" /></label>
-	                  <label class="field" for="gateway-port"><span>Guardian MCP port</span><input id="gateway-port" type="number" min="1" max="65535" /></label>
-	                </div>
-	                <button class="secondary" type="submit">Save network settings</button>
-	              </form>
-	              <p id="guardian-api-status" class="help-text">Checking Guardian MCP…</p>
-              <details class="disclosure"><summary>API endpoints & bind addresses</summary>
-	              <dl class="connection-values">
-	                <div><dt>Guardian MCP URL</dt><dd><code id="guardian-mcp-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-mcp-url-detail">Copy</button></dd></div>
-	                <div><dt>Health-check URL</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div>
-	              </dl>
-              <p class="help-text">Guardian is an API, not a website. Use the full /mcp URL and an access key. The /health check returns JSON; the base address returns “not_found”. A bind address of 127.0.0.1 accepts connections only from this computer. LAN or public access needs explicit network and TLS configuration.</p>
-              </details>
-            </details>
-          </section>
+            <details id="discord-connection" class="panel panel-disclosure connection-app" data-connection-app="discord" name="connected-app">
+              <summary><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure setup-help"><summary>Set up your Discord bot</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with permission to view channels, read message history, and send messages.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></details>
+                <details id="discord-tokens" class="disclosure">
+                  <summary><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></summary>
+                  <form id="discord-token-form" class="form-stack" data-managed-form>
+                    <label class="field" for="discord-bot-token"><span id="discord-bot-token-label">Discord bot token</span><input id="discord-bot-token" type="password" autocomplete="off" /></label>
+                    <p id="discord-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
+                    <button class="secondary" type="submit">Save Discord token</button>
+                  </form>
+                </details>
+                <form id="discord-connections-form" class="form-stack" data-managed-form>
+                  <input id="discord-credential" type="hidden" />
+                  <label class="switch"><input id="discord" type="checkbox" /><span>Enable Discord</span></label>
+                  <details id="discord-access-disclosure" class="disclosure">
+                    <summary>Who can use the bot</summary>
+                    <p class="help-text">Add at least one allowed server, role or user ID. Nobody is allowed by default.</p>
+                    <div class="field-grid two-column disclosure-body"><label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label><label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label><label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label><label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label></div>
+                    <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
+                  </details>
+                  <fieldset id="discord-permissions" class="permission-options"><legend>What can Discord do?</legend>
+                    <label class="permission-option"><input id="discord-policy-chat" name="discord-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                    <label class="permission-option"><input id="discord-policy-read" name="discord-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                    <label class="permission-option"><input id="discord-policy-full" name="discord-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                  </fieldset>
+                  <p id="discord-policy-help" class="help-text" role="status"></p>
+                  <button class="secondary" type="submit">Save Discord settings</button>
+                </form>
+                <details id="discord-user-access" class="disclosure">
+                  <summary>Different permissions for a person</summary>
+                  <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
+                  <button class="secondary" type="button" data-add-person-permissions="discord">Add person</button>
+                  <div id="discord-mappings" class="mapping-list" aria-live="polite"></div>
 
-          <section id="view-access" class="view-panel ready-only" data-view-panel="access" hidden aria-labelledby="access-heading">
-            <section class="panel">
-              <div class="section-heading"><div><h2 id="access-heading">Access keys</h2></div></div>
-	              <form id="access-form" class="form-stack" data-managed-form>
-	                <details class="disclosure"><summary>What each access level allows</summary><div class="policy-explainer">
-	                  <div><strong>Conversation only</strong><span>Can chat, but cannot use tools.</span></div>
-	                  <div><strong>Read files</strong><span>Can also read non-sensitive knowledge and workspace files.</span></div>
-	                  <div><strong>Full control</strong><span>Inherits the Assistant’s permissions. Use only for trusted clients.</span></div>
-	                </div></details>
-	                <div class="credential-columns" aria-hidden="true"><span>Name</span><span>Used by</span><span>Access</span><span>Actions</span></div>
-	                <div id="credential-policies" class="credential-list"></div>
-	                <button class="secondary" type="submit">Save access levels</button>
-	              </form>
-            </section>
-
-            <details id="create-credential" class="panel panel-disclosure">
-              <summary id="create-access-heading">Create an access key</summary>
-              <form id="credential-form" class="field-grid two-column">
-                <label class="field" for="credential-username"><span>Who or what is this for?</span><input id="credential-username" autocomplete="off" placeholder="claude-desktop" /></label>
-                <label class="field" for="credential-policy"><span>Access level</span><select id="credential-policy"><option value="chat">Conversation only</option><option value="read" selected>Read files</option><option value="full">Full control</option></select></label>
-                <button class="primary span-two" type="submit">Create access key</button>
-              </form>
-            </details>
-              <details id="key-manager-details" class="disclosure">
-                <summary>Manage an existing access key</summary>
-              <div class="key-manager">
-                <label class="field" for="credential-action-name"><span>Identity to manage</span><select id="credential-action-name"></select></label>
-                <div class="button-row">
-                  <button id="rotate-credential" class="secondary" type="button">Rotate key</button>
-                  <button id="remove-credential" class="danger subtle" type="button">Remove access</button>
-                </div>
-                <label class="field" for="credential-key"><span>Access key</span><input id="credential-key" type="password" readonly autocomplete="off" /></label>
-                <div class="button-row">
-                  <button id="reveal-credential" class="secondary" type="button">Load key</button>
-                  <label class="check-row compact"><input id="show-credential-key" type="checkbox" /> Show key</label>
-                </div>
+                </details>
               </div>
-              </details>
+            </details>
 
-            <details id="chat-user-access" class="panel panel-disclosure">
-              <summary id="mapping-heading"><span>Individual chat app access<small>Optional overrides for Discord and Slack users</small></span></summary>
+            <details id="slack-connection" class="panel panel-disclosure connection-app" data-connection-app="slack" name="connected-app">
+              <summary><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></summary>
+              <div class="app-connection-body">
+                <details class="disclosure setup-help"><summary>Set up your Slack bot</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need, then install the app.</li><li>Save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
+                <details id="slack-tokens" class="disclosure">
+                  <summary><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></summary>
+                  <form id="slack-token-form" class="form-stack" data-managed-form>
+                    <label class="field" for="slack-bot-token"><span id="slack-bot-token-label">Slack bot token</span><input id="slack-bot-token" type="password" autocomplete="off" /></label>
+                    <label class="field" for="slack-app-token"><span id="slack-app-token-label">Slack app token</span><input id="slack-app-token" type="password" autocomplete="off" /></label>
+                    <p id="slack-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
+                    <button class="secondary" type="submit">Save Slack tokens</button>
+                  </form>
+                </details>
+                <form id="slack-connections-form" class="form-stack" data-managed-form>
+                  <input id="slack-credential" type="hidden" />
+                  <label class="switch"><input id="slack" type="checkbox" /><span>Enable Slack</span></label>
+                  <details id="slack-access-disclosure" class="disclosure">
+                    <summary>Who can use the bot</summary>
+                    <p class="help-text">Add at least one allowed channel or user ID. Nobody is allowed by default.</p>
+                    <div class="field-grid two-column disclosure-body"><label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label><label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label><label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label></div>
+                    <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
+                  </details>
+                  <fieldset id="slack-permissions" class="permission-options"><legend>What can Slack do?</legend>
+                    <label class="permission-option"><input id="slack-policy-chat" name="slack-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
+                    <label class="permission-option"><input id="slack-policy-read" name="slack-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
+                    <label class="permission-option"><input id="slack-policy-full" name="slack-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
+                  </fieldset>
+                  <p id="slack-policy-help" class="help-text" role="status"></p>
+                  <button class="secondary" type="submit">Save Slack settings</button>
+                </form>
+                <details id="slack-user-access" class="disclosure">
+                  <summary>Different permissions for a person</summary>
+                  <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
+                  <button class="secondary" type="button" data-add-person-permissions="slack">Add person</button>
+                  <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
 
-	              <p class="section-intro">Overrides the app’s default policy. Does not bypass its allowlist.</p>
-              <form id="mapping-form" class="field-grid three-column">
-                <label class="field" for="mapping-portal"><span>Chat app</span><select id="mapping-portal"><option value="discord">Discord</option><option value="slack">Slack</option></select></label>
-                <label class="field" for="mapping-user"><span>Platform user ID</span><input id="mapping-user" autocomplete="off" /></label>
-                <label class="field" for="mapping-credential"><span>Access identity</span><select id="mapping-credential"></select></label>
-                <button class="secondary span-three" type="submit">Save user access</button>
-              </form>
-              <div id="mappings" class="mapping-list" aria-live="polite"></div>
+                </details>
+              </div>
+            </details>
+
+            <details id="mcp-connection" class="panel panel-disclosure connection-app" data-connection-app="mcp" name="connected-app">
+              <summary><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <div class="app-connection-body">
+                <form id="mcp-connections-form" class="form-stack" data-managed-form>
+                  <label class="switch"><input id="gateway" type="checkbox" /><span>Enable MCP access</span></label>
+                  <button class="secondary" type="submit">Save MCP settings</button>
+                </form>
+                <p id="mcp-guardian-help" class="help-text">MCP access is disabled.</p>
+                <form id="mcp-permissions-form" class="form-stack" data-managed-form>
+                  <input id="mcp-credential" type="hidden" />
+                  <fieldset id="mcp-permissions" class="permission-options">
+                    <legend>What can this app do?</legend>
+                    <label class="permission-option">
+                      <input id="mcp-policy-chat" name="mcp-policy" type="radio" value="chat" />
+                      <span>
+                        <strong>Chat only</strong>
+                        <small>Chat without tools or file access.</small>
+                      </span>
+                    </label>
+                    <label class="permission-option">
+                      <input id="mcp-policy-read" name="mcp-policy" type="radio" value="read" checked />
+                      <span>
+                        <strong>Read files</strong>
+                        <small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small>
+                      </span>
+                    </label>
+                    <label class="permission-option">
+                      <input id="mcp-policy-full" name="mcp-policy" type="radio" value="full" />
+                      <span>
+                        <strong>Full access</strong>
+                        <small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small>
+                      </span>
+                    </label>
+                  </fieldset>
+                  <p id="mcp-policy-help" class="help-text" role="status">
+                  </p>
+                  <button id="save-mcp-permissions" class="primary" type="submit">Create connection</button>
+                </form>
+                <section id="mcp-connect-details" hidden aria-labelledby="mcp-connect-heading">
+                  <h3 id="mcp-connect-heading">Add the server to your app</h3>
+                  <p class="help-text">Save and apply MCP access first, restarting now or later when prompted. Choose Streamable HTTP in your app.</p>
+                  <dl class="connection-values">
+                    <div>
+                      <dt>Server address</dt>
+                      <dd>
+                        <code id="mcp-url">Loading…</code>
+                        <button class="text-button" type="button" data-copy-field="mcp-url">Copy</button>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Authentication</dt>
+                      <dd>
+                        <code>Authorization: Bearer &lt;access key&gt;</code>
+                      </dd>
+                    </div>
+                  </dl>
+                  <button class="secondary" type="button" data-copy-client-key="mcp">Copy access key</button>
+                  <p class="help-text">Paste it into your app’s access-token or bearer-token field. Keep it private.</p>
+                </section>
+                <details class="disclosure">
+                  <summary>Advanced · network & troubleshooting</summary>
+                  <form id="mcp-network-form" class="form-stack" data-managed-form>
+                    <div class="field-grid two-column">
+                      <label class="field" for="gateway-bind"><span>Bind address</span><input id="gateway-bind" autocomplete="off" required /></label>
+                      <label class="field" for="gateway-port"><span>Port</span><input id="gateway-port" type="number" min="1" max="65535" required /></label>
+                    </div>
+                    <button class="secondary" type="submit">Save MCP network settings</button>
+                  </form>
+                  <p id="guardian-api-status" class="help-text"></p>
+                  <dl class="connection-values"><div><dt>Health check</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div></dl>
+                  <p class="help-text">MCP is an API, not a website. Use the full /mcp address, not the base port. The health check returns JSON. 127.0.0.1 accepts connections only from this computer; LAN or public access needs explicit network and TLS configuration.</p>
+                </details>
+              </div>
+            </details>
+            <details id="advanced-access" class="disclosure">
+              <summary>Advanced access</summary>
+              <p class="help-text">Change permissions for existing connections. Changes apply to every app using that connection; external apps may not be listed. OpenCode, Claude remote connection and Codex use their own permissions.</p>
+              <div id="saved-access" class="saved-access-list"></div>
+              <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
             </details>
           </section>
 
@@ -554,7 +671,7 @@
                 <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
                 <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
               </dl>
-              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Connections.</p>
+              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
             </details>
 
             <details id="recent-logs" class="panel panel-disclosure">
@@ -563,15 +680,30 @@
               <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
             </details>
 
+            <details id="connection-keys" class="panel panel-disclosure">
+              <summary>Connection keys <small>Advanced security maintenance</small></summary>
+              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
+              <form id="key-rotation-form" class="form-stack">
+                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
+                <button class="secondary" type="submit">Rotate key</button>
+              </form>
+              <div id="rotated-key-details" hidden>
+                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
+                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
+              </div>
+            </details>
+
             <details id="import-export" class="panel panel-disclosure">
-              <summary id="backup-heading">Import / export <small>Reviewed content · fresh installations</small></summary>
-              <p class="section-intro">Export knowledge, workspace and reviewed settings to a directory. Import that content into a fresh instance. No native conversations or remote sign-ins.</p>
-              <p class="help-text">To import, create a fresh instance and choose “Import from an fhold export” before completing provider setup. Preview the contents first; imported task definitions remain inactive until reviewed.</p>
+              <summary id="backup-heading">Import / export <small>Entire instance or reviewed content</small></summary>
+              <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
+              <p class="help-text">For a full import, select an empty folder at Welcome and choose “Import an entire instance instead” before installing. To import portable content, create a fresh instance and choose “Import from an fhold export” before completing provider setup; imported task definitions remain inactive until reviewed.</p>
               <p class="help-text">For automatic same-instance continuity after storage is lost, use Ephemeral container support below. These two options use different formats and are not interchangeable.</p>
-              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Knowledge, workspace, allowlisted settings, and task definitions. Native conversations, runtime snapshots, external mounts and symlink targets are not included. Exports are not full-stack backups.</p></details>
+              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></details>
               <form id="backup-form" class="form-stack">
+	                <label class="field" for="backup-scope"><span>Export scope</span><select id="backup-scope"><option value="portable">Portable content</option><option value="instance">Entire instance (must be stopped)</option></select></label>
+	                <p id="backup-full-help" class="help-text" hidden>Stop the instance in Overview first. All containers and other writers must stay stopped until export finishes. The unencrypted export includes private sign-ins and access keys. Import it into an empty folder, and never run both copies together. Export does not automatically stop or restart containers.</p>
 	                <label class="field" for="backup-destination"><span>Export directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
-                <details class="disclosure"><summary>Include sensitive data (optional)</summary>
+                <details id="backup-sensitive-options" class="disclosure"><summary>Include sensitive data (optional)</summary>
                   <fieldset class="option-group">
                   <legend class="visually-hidden">Include sensitive data</legend>
                   <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
@@ -579,7 +711,7 @@
                   <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
                 </fieldset>
                   </details>
-                <button class="primary" type="submit">Export portable content</button>
+                <button id="export-backup" class="primary" type="submit">Export portable content</button>
               </form>
               <div id="backup-summary" class="inline-status neutral" hidden></div>
               <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
@@ -627,7 +759,7 @@
                 <button id="save-recovery-settings" class="secondary" type="submit">Save checkpoint settings</button>
               </form>
               <form id="runtime-recovery-credential-form" class="form-stack" hidden>
-                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. It is not included in an export.</span></label>
+                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. Portable content omits it; an entire-instance export includes it.</span></label>
                 <button class="secondary" type="submit">Save private storage credential</button>
               </form>
               <div class="button-row">
@@ -646,6 +778,56 @@
       </div>
     </div>
 
+    <dialog id="permissions-dialog" aria-labelledby="permissions-heading" aria-describedby="permissions-guidance">
+      <form id="permissions-form" class="form-stack" data-managed-form>
+        <header class="permissions-editor-heading">
+          <h2 id="permissions-heading">Permissions</h2>
+          <p id="permissions-guidance" class="help-text">
+          </p>
+        </header>
+        <label id="person-id-field" class="field" for="person-id" hidden>
+          <span id="person-id-label">Person ID</span>
+          <input id="person-id" autocomplete="off" />
+        </label>
+        <label id="saved-access-name-field" class="field" for="saved-access-name" hidden>
+          <span>Access label</span>
+          <input id="saved-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" />
+          <span class="help-text">Start with a lowercase letter; use lowercase letters, numbers, dots, underscores or hyphens.</span>
+        </label>
+        <fieldset id="dialog-permissions" class="permission-options" tabindex="-1">
+          <legend>What can they do?</legend>
+          <label class="permission-option">
+            <input id="dialog-policy-chat" name="dialog-policy" type="radio" value="chat" />
+            <span>
+              <strong>Chat only</strong>
+              <small>Chat without tools or file access.</small>
+            </span>
+          </label>
+          <label class="permission-option">
+            <input id="dialog-policy-read" name="dialog-policy" type="radio" value="read" checked />
+            <span>
+              <strong>Read files</strong>
+              <small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small>
+            </span>
+          </label>
+          <label class="permission-option">
+            <input id="dialog-policy-full" name="dialog-policy" type="radio" value="full" />
+            <span>
+              <strong>Full access</strong>
+              <small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small>
+            </span>
+          </label>
+        </fieldset>
+        <p id="permissions-impact" class="help-text" hidden>
+        </p>
+        <p id="permissions-error" class="help-text danger-text" role="alert" hidden>
+        </p>
+        <div class="button-row">
+          <button id="save-permissions" class="primary" type="submit">Save permissions</button>
+          <button id="cancel-permissions" class="secondary" type="button">Cancel</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="remote-dialog" aria-labelledby="remote-heading">
       <form id="remote-form" class="form-stack">
         <h2 id="remote-heading">Set up remote access</h2>

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.2610060715-beta.1 — simpler setup, Apps and native AI settings
+
+Admin now has a focused install/import wizard, a compact instance picker and
+an app-oriented Apps page. App permissions are configured where they are used;
+access-key rotation stays under System. Pending-restart alerts live in the
+sidebar and saved settings do not unexpectedly restart active containers.
+
+Agent settings distinguish saved sign-ins from verified working providers.
+Common hosted and local endpoints have guided setup, searchable models and an
+explicit Test → Use model flow. Provider/model changes use OpenCode's native
+configuration API and take effect without restarting the container. Custom
+endpoint disabling and account removal are separate actions.
+
+Import/export adds an entire stopped-instance archive, including native sessions,
+account state and configuration. Full export and import require all instance
+containers to be stopped and explicit confirmation. Portable reviewed-content
+transfer and automatic same-instance ephemeral recovery remain distinct options.
+
+The Assistant includes AKM 0.9.26 and matching 0.9.26202610051302 plugins for all
+three harnesses, installed through their native mechanisms. Real-image release
+gates cover hooks, recovery, history and managed policy on amd64 and arm64.
+Claude and Codex remote connections remain experimental. Native ARM64 Admin
+startup is not yet qualified; existing scoped dependency exceptions remain
+disclosed in the release runbook.
+
 ## 0.1.2610050714-alpha.6 — simpler Admin and managed ephemeral support
 
 Admin's System view now presents four compact, collapsed sections in order:

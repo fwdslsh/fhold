@@ -55,17 +55,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:364e42cbdce9bda435758fd7df7861ce360aa15286ac18a83a871595de39f8cc \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/26a281d923060f40af52c636fd7abc8cb5f64390 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:9615bde6ad83dc5d28f72730b76d0f75f46f36adbadf7c9d4e0f6e3c35d5217e \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/6897afb645e9530ac15cafa6aab49e547836bdbb /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/claude \
+    && plugin_root=akm-plugins-6897afb645e9530ac15cafa6aab49e547836bdbb/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.agents/plugins/marketplace.json \
-      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/.claude-plugin/marketplace.json \
-      akm-plugins-26a281d923060f40af52c636fd7abc8cb5f64390/LICENSE
+      akm-plugins-6897afb645e9530ac15cafa6aab49e547836bdbb/.agents/plugins/marketplace.json \
+      akm-plugins-6897afb645e9530ac15cafa6aab49e547836bdbb/.claude-plugin/marketplace.json \
+      akm-plugins-6897afb645e9530ac15cafa6aab49e547836bdbb/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node

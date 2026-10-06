@@ -1,10 +1,13 @@
 import type {
 	AssistantReadiness,
 	BackupManifest,
+	InstanceBackupManifest,
+	InstanceRestorePlan,
 	ConnectionDetails,
 	RestorePlan,
 	ProviderOAuthAuthorization,
-	ProviderSummary,
+	ProviderSettings,
+	ProviderEndpointInput,
 	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
@@ -39,13 +42,20 @@ export type AdminSnapshot = {
 };
 
 export type StackAction = 'start' | 'restart' | 'stop';
-export type InterruptingAction = StackAction | 'remote-setup' | 'recovery-init' | 'recovery-restore';
+export type InterruptingAction =
+	| StackAction
+	| 'remote-setup'
+	| 'recovery-init'
+	| 'recovery-restore'
+	| 'instance-export'
+	| 'instance-import';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
+export type AdminWelcomeInstance = AdminInstance & { name?: string; available: boolean };
 export type AdminWelcome = {
-	defaultInstance: AdminInstance;
+	defaultInstance: AdminWelcomeInstance;
 	instancesDirectory: string;
-	recentInstances: AdminInstance[];
+	recentInstances: AdminWelcomeInstance[];
 	selectedInstance?: AdminInstance;
 	preferenceError?: string;
 };
@@ -55,6 +65,7 @@ export type AdminApi = {
 	openInstance(target: AdminInstance): Promise<void>;
 	prepareNewInstance(target: AdminInstance & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
+	installationReadiness(): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
 	codexRecall(value: {
 		action: 'review' | 'approve' | 'disable';
 		digest?: string;
@@ -75,19 +86,19 @@ export type AdminApi = {
 	confirmRestart(action: InterruptingAction): Promise<boolean>;
 	action(action: StackAction, confirmed?: boolean): Promise<AdminSnapshot>;
 	logs(): Promise<string>;
-	providers(): Promise<ProviderSummary[]>;
-	providerKey(value: { provider: string; key: string }): Promise<AssistantReadiness>;
+	providers(): Promise<ProviderSettings>;
+	providerKey(value: { provider: string; key: string }): Promise<void>;
+	providerEndpoint(value: ProviderEndpointInput): Promise<ProviderSettings>;
+	providerModels(value: { url: string; key?: string }): Promise<string[]>;
+	providerUse(value: { provider: string; model: string }): Promise<ProviderSettings>;
+	providerRemove(value: { provider: string; endpoint?: boolean }): Promise<ProviderSettings>;
 	providerOAuthStart(value: {
 		provider: string;
 		method: number;
 		inputs?: Record<string, string>;
 	}): Promise<ProviderOAuthAuthorization>;
-	providerOAuthFinish(value: {
-		provider: string;
-		method: number;
-		code?: string;
-	}): Promise<AssistantReadiness>;
-	readiness(value?: { provider?: string }): Promise<AssistantReadiness>;
+	providerOAuthFinish(value: { provider: string; method: number; code?: string }): Promise<void>;
+	readiness(value?: { provider?: string; model?: string }): Promise<AssistantReadiness>;
 	assistantPassword(): Promise<{ password: string }>;
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
@@ -112,12 +123,25 @@ export type AdminApi = {
 	}): Promise<AdminSnapshot>;
 	backup(value: {
 		destination: string;
+		full?: boolean;
+		confirmed?: boolean;
 		includeProviderAuth?: boolean;
 		includeUserEnv?: boolean;
 		includePortalMaps?: boolean;
 		includeOAuth?: boolean;
-	}): Promise<BackupManifest>;
-	recovery(value: { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string } | { action: 'credential'; connectionString: string } | { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }): Promise<AdminSnapshot | Record<string, unknown> | string>;
+	}): Promise<BackupManifest | InstanceBackupManifest>;
+	restoreInstance(value: {
+		sourceHome: string;
+		apply?: boolean;
+		previewDigest?: string;
+		confirmed?: boolean;
+	}): Promise<InstanceRestorePlan>;
+	recovery(
+		value:
+			| { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string }
+			| { action: 'credential'; connectionString: string }
+			| { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }
+	): Promise<AdminSnapshot | Record<string, unknown> | string>;
 	restoreData(value: {
 		sourceHome: string;
 		apply?: boolean;
@@ -135,6 +159,7 @@ export const ADMIN_CHANNELS = {
 	openInstance: 'admin:open-instance',
 	prepareNewInstance: 'admin:prepare-new-instance',
 	closeInstance: 'admin:close-instance',
+	installationReadiness: 'admin:installation-readiness',
 	codexRecall: 'admin:codex-recall',
 	remote: 'admin:remote',
 	snapshot: 'admin:snapshot',
@@ -146,6 +171,10 @@ export const ADMIN_CHANNELS = {
 	logs: 'admin:logs',
 	providers: 'admin:providers',
 	providerKey: 'admin:provider-key',
+	providerEndpoint: 'admin:provider-endpoint',
+	providerModels: 'admin:provider-models',
+	providerUse: 'admin:provider-use',
+	providerRemove: 'admin:provider-remove',
 	providerOAuthStart: 'admin:provider-oauth-start',
 	providerOAuthFinish: 'admin:provider-oauth-finish',
 	readiness: 'admin:readiness',
@@ -158,6 +187,7 @@ export const ADMIN_CHANNELS = {
 	mapPortalUser: 'admin:map-portal-user',
 	portalToken: 'admin:portal-token',
 	backup: 'admin:backup',
+	restoreInstance: 'admin:restore-instance',
 	recovery: 'admin:recovery',
 	restoreData: 'admin:restore'
 } as const;

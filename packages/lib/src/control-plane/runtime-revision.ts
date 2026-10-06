@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readEnvFile, writeFileAtomic } from './foundation.js';
-import { assertSafePortablePath } from './provider-files.js';
+import { assertSafePortablePath, nativePreferencesFile } from './provider-files.js';
 import { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 import { readStackConfig } from './stack-config.js';
 
@@ -25,6 +25,11 @@ export function runtimeRevision(homeDir: string): string {
 	const hash = createHash('sha256');
 	hash.update(JSON.stringify(managedRecovery || recovery.enabled ? intent : previousIntent));
 	hash.update(JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b))));
+	// Native API edits reload in place: content is not a container startup input.
+	// A different filename/inode does replace the bind mount and needs activation.
+	const preferences = `config/assistant/${nativePreferencesFile(homeDir)}`;
+	const preferenceStat = lstatSync(join(homeDir, preferences), { throwIfNoEntry: false });
+	hash.update(JSON.stringify([preferences, preferenceStat?.dev ?? null, preferenceStat?.ino ?? null]));
 	const files: string[] = [...MANAGED_FILES, ...SEEDED_FILES].filter(
 		(path) =>
 			!path.endsWith('/.gitignore') &&
@@ -33,6 +38,7 @@ export function runtimeRevision(homeDir: string): string {
 				(!path.startsWith('config/guardian/') && !path.startsWith('system/guardian/'))) &&
 			// These authorization maps are read on each request, without a restart.
 			!path.startsWith('config/portal/') &&
+			path !== 'config/assistant/opencode.json' &&
 			path !== 'config/guardian/oauth-identities.json'
 	);
 	files.push('state/secrets/fhold_opencode_password', 'state/secrets/fhold_guardian_handle_key');

@@ -2,13 +2,19 @@ import {
  applyRestore, classifyInstall, createBackup,
  installHome, createCredential, rotateCredential, removeCredential, mapPortalUser,
  isPortalName, readPortalCredentialMap, readStackConfig, planRestore, saveStackIntent,
+ exportInstance, planInstanceRestore, restoreInstance, INSTANCE_BACKUP_NOTICE,
  type PortalName, type StackConfig
 } from '@fhold/lib';
 import type { StackAction } from './admin-types.js';
 
 export function interruptionPrompt(action: unknown) {
-	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup', 'recovery-init', 'recovery-restore'].includes(action))
+	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup', 'recovery-init', 'recovery-restore', 'instance-export', 'instance-import'].includes(action))
 		throw new Error('Invalid restart confirmation request.');
+	if (action === 'instance-export' || action === 'instance-import') return {
+		message: action === 'instance-export' ? 'Export this entire stopped instance?' : 'Import this entire instance into the empty folder?',
+		detail: INSTANCE_BACKUP_NOTICE,
+		buttons: ['Cancel', action === 'instance-export' ? 'Export entire instance' : 'Import entire instance']
+	};
 	if (action === 'recovery-init') return {
 		message: 'Initialize a new recovery destination?',
 		detail: 'The instance must be stopped. This is a one-time operation for a genuinely unused destination and instance ID. It does not restore data, start containers or overwrite an existing recovery namespace. Keep the destination private.',
@@ -141,13 +147,28 @@ export async function backupFromAdmin(
 	homeDir: string,
 	value: {
 		destination: string;
+		full?: boolean;
+		confirmed?: boolean;
 		includeProviderAuth?: boolean;
 		includeUserEnv?: boolean;
 		includePortalMaps?: boolean;
 		includeOAuth?: boolean;
 	}
 ) {
-	return createBackup({ sourceHome: homeDir, ...value });
+	if (value.full !== undefined && typeof value.full !== 'boolean') throw new Error('Invalid export scope.');
+	if (value.full) return exportInstance({ sourceHome: homeDir, destination: value.destination, confirmedStopped: value.confirmed === true });
+	const { full: _full, confirmed: _confirmed, ...options } = value;
+	return createBackup({ sourceHome: homeDir, ...options });
+}
+
+export async function instanceRestoreFromAdmin(
+	homeDir: string,
+	value: { sourceHome: string; apply?: boolean; previewDigest?: string; confirmed?: boolean }
+) {
+	const options = { sourceHome: value.sourceHome, destinationHome: homeDir, confirmedStopped: value.confirmed === true };
+	if (!value.apply) return planInstanceRestore(options);
+	if (!value.previewDigest || !/^[a-f0-9]{64}$/.test(value.previewDigest)) throw new Error('Preview this full-instance import before applying it.');
+	return restoreInstance(options, value.previewDigest);
 }
 
 export function restoreFromAdmin(

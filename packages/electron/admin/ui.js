@@ -3,6 +3,7 @@ import { renderReadiness } from './providers.js';
 import { renderRuntimeControls } from './runtime.js';
 import { refresh, render } from './snapshot.js';
 import { managedFormIds, state, viewMeta } from './state.js';
+import { renderInstallationReadiness } from './instances.js';
 
 export const byId = (id) => document.getElementById(id);
 
@@ -23,20 +24,25 @@ export function setBadge(element, text, tone = 'neutral') {
 
 export function notice(value, tone = 'success', options = {}) {
 	const element = byId('notice');
+	const wizardStatus = !byId('install-section').hidden
+		? byId('install-status')
+		: !byId('instance-import-section').hidden ? byId('instance-import-status') : undefined;
 	clearTimeout(state.noticeTimer);
+	byId('install-status').hidden = true;
+	byId('instance-import-status').hidden = true;
 	if (!value) {
 		element.hidden = true;
-		byId('install-status').hidden = true;
 		return;
 	}
 	setText('notice-message', value);
-	const installing = state.currentSnapshot?.phase === 'not_installed';
-	setText('install-status', installing ? value : '');
-	byId('install-status').hidden = !installing;
-	byId('install-status').className = `help-text${tone === 'error' ? ' danger-text' : ''}`;
-	byId('install-status').setAttribute('role', tone === 'error' ? 'alert' : 'status');
+	if (wizardStatus) {
+		wizardStatus.textContent = value;
+		wizardStatus.hidden = false;
+		wizardStatus.className = `help-text${tone === 'error' ? ' danger-text' : ''}`;
+		wizardStatus.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+	}
 	element.className = `notice ${tone}`;
-	element.hidden = installing;
+	element.hidden = !!wizardStatus;
 	if (tone === 'error') {
 		element.setAttribute('role', 'alert');
 		element.setAttribute('aria-live', 'assertive');
@@ -56,18 +62,20 @@ export function notice(value, tone = 'success', options = {}) {
 export function setBusy(value) {
 	state.operationInFlight = value;
 	document.body.dataset.busy = String(value);
-	const busyRegion = !state.currentSnapshot
-		? byId('instance-welcome')
-		: state.currentSnapshot?.phase === 'not_installed'
-			? byId('install-section')
-			: byId('main-content');
+	const busyRegion = !byId('install-section').hidden
+		? byId('install-section')
+		: !byId('instance-import-section').hidden ? byId('instance-import-section')
+			: !state.currentSnapshot ? byId('instance-welcome') : byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
+	byId('instance-picker').disabled = value;
 	if (value) {
 		state.disabledButtons = all('button').map((button) => ({ button, disabled: button.disabled }));
 		for (const { button } of state.disabledButtons) button.disabled = true;
 	} else {
 		for (const { button, disabled } of state.disabledButtons) button.disabled = disabled;
 		state.disabledButtons = [];
+		if (!byId('install-section').hidden || !byId('instance-import-section').hidden)
+			renderInstallationReadiness(state.installationReadiness);
 		if (state.currentSnapshot) renderRuntimeControls(state.currentSnapshot);
 	}
 }
@@ -179,21 +187,10 @@ export function showView(name, options = {}) {
 	if (options.focus === true) byId('view-title').focus();
 }
 
-export function showClient(name, options = {}) {
-	if (!['opencode', 'claude', 'mcp'].includes(name)) return;
-	if (state.currentClient !== name && !byId('notice').className.includes('error')) notice('');
-	state.currentClient = name;
-	byId('gateway-connection').hidden = name === 'opencode';
-	byId('save-client-connections').hidden = name === 'opencode';
-	for (const panel of all('[data-client-panel]')) panel.hidden = panel.dataset.clientPanel !== name;
-	for (const button of all('[data-client-setup]')) {
-		button.setAttribute('aria-pressed', String(button.dataset.clientSetup === name));
-	}
-	if (options.focus === true) {
-		const panel = byId(`client-${name}`);
-		panel.setAttribute('tabindex', '-1');
-		panel.focus();
-	}
+export function showConnectionApp(name) {
+	if (!['opencode', 'claude', 'codex', 'discord', 'slack', 'mcp'].includes(name)) return;
+	showView('connections');
+	byId(`${name}-connection`).open = true;
 }
 
 export function bindUiEvents() {
@@ -207,12 +204,10 @@ export function bindUiEvents() {
 	}
 	byId('dismiss-notice').addEventListener('click', () => notice(''));
 
-	byId('refresh').addEventListener('click', () => void refresh(true));
-
 	byId('retry-snapshot').addEventListener('click', () => {
 		byId('error-state').hidden = true;
 		byId('loading-state').hidden = false;
-		void refresh(false);
+		void refresh();
 	});
 
 	byId('skip-link').addEventListener('click', () => {
@@ -234,25 +229,6 @@ export function bindUiEvents() {
 
 	for (const button of all('[data-view-target]')) {
 		button.addEventListener('click', () => showView(button.dataset.viewTarget, { focus: true }));
-	}
-	for (const button of all('[data-mapping-target]')) {
-		button.addEventListener('click', () => {
-			showView('access');
-			byId('chat-user-access').open = true;
-			byId('mapping-portal').value = button.dataset.mappingTarget;
-			byId('mapping-user').focus();
-		});
-	}
-
-	for (const button of all('[data-client-target]')) {
-		button.addEventListener('click', () => {
-			showView('connections', { focus: true });
-			showClient(button.dataset.clientTarget, { focus: true });
-		});
-	}
-
-	for (const button of all('[data-client-setup]')) {
-		button.addEventListener('click', () => showClient(button.dataset.clientSetup, { focus: true }));
 	}
 
 	byId('load-logs').addEventListener('click', async () => {

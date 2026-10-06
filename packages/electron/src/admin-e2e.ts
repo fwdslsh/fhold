@@ -1,7 +1,9 @@
-import { app, dialog, shell, type BrowserWindow } from 'electron';
+import { app, clipboard, dialog, shell, type BrowserWindow } from 'electron';
 import axe from 'axe-core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:net';
 
 import {
@@ -22,6 +24,19 @@ import { adminSnapshot, createAdminWindow, registerAdminIpc, runAdminAction } fr
 type RendererWaitState = { ready: boolean; error: string };
 
 const visualAudits: Array<Record<string, unknown>> = [];
+
+async function configureFixtureAssistant(homeDir: string, args: string[]): Promise<void> {
+	const cli = join(requiredEnvironment('FH_REPO_ROOT'), 'packages', 'cli', 'dist', 'fhold-cli');
+	assert(existsSync(cli), 'Build the standalone CLI before qualifying external settings changes.');
+	await promisify(execFile)(
+		cli,
+		['--name', homeDir, 'config', 'assistant', ...args, '--no-apply'],
+		{
+			cwd: homeDir,
+			maxBuffer: 1024 * 1024
+		}
+	);
+}
 
 async function sizeViewport(
 	window: BrowserWindow,
@@ -64,6 +79,11 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Tab');
 	await press('Tab');
 	assert(
+		await window.webContents.executeJavaScript("document.activeElement?.id === 'instance-picker'"),
+		'Keyboard did not reach the instance picker after the skip link.'
+	);
+	await press('Tab');
+	assert(
 		await window.webContents.executeJavaScript(
 			"document.activeElement?.id === 'mobile-navigation-label'"
 		),
@@ -83,9 +103,15 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	);
 	await press('Tab', ['shift']);
 	assert(
+		await window.webContents.executeJavaScript("document.activeElement?.id === 'instance-picker'"),
+		'Reverse traversal did not reach the instance picker.'
+	);
+	await press('Tab', ['shift']);
+	assert(
 		await window.webContents.executeJavaScript("document.activeElement?.id === 'skip-link'"),
 		'Reverse traversal did not reach the skip link.'
 	);
+	await press('Tab');
 	await press('Tab');
 	await press('Return');
 	await press('Tab');
@@ -104,7 +130,36 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 		),
 		'Selecting a page did not close navigation and focus its heading.'
 	);
-	visualAudits.push({ keyboard: 'Tab, Shift+Tab, Enter, Space, page selection', passed: true });
+	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance picker, Enter, Space, page selection', passed: true });
+}
+
+async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
+	const press = async (keyCode: string, modifiers: Array<'shift'> = [], waitFrame = true) => {
+		window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+		if (keyCode === 'Return') window.webContents.sendInputEvent({ type: 'char', keyCode, modifiers });
+		window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+		if (waitFrame) await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
+	};
+	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus(); window.scrollTo(0,0)');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'skip-link'"), 'Welcome skip link was not first in keyboard order.');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'First launch did not prioritize new setup in keyboard order.');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'choose-instance'"), 'Existing instance choice was not reachable after setup.');
+	await press('Tab', ['shift']);
+	await press('Return');
+	assert(await window.webContents.executeJavaScript("!document.querySelector('#install-section').hidden && document.activeElement.id === 'install-instance-name'"), 'Setup did not reveal the one install form and move focus to its name.');
+	await press('Tab', ['shift']);
+	assert(await window.webContents.executeJavaScript("document.activeElement.matches('#install-section [data-instance-switch]')"), 'Cancel was not reachable from naming.');
+	await press('Return', [], false);
+	await waitForRenderer(window, "document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.body.dataset.phase==='welcome'", 'Cancel returns to Welcome through the normal renderer reload', 10_000);
+	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus()');
+	await press('Tab');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'Setup was not keyboard reachable after cancelling.');
+	await press('Return');
+	visualAudits.push({ keyboard: 'Welcome choices, Enter, install-name focus, Shift+Tab, Cancel', passed: true });
 }
 
 function requiredEnvironment(name: string): string {
@@ -199,8 +254,31 @@ async function capture(
 	name: string,
 	preserveFocus = false
 ): Promise<string> {
+	let timeout: NodeJS.Timeout | undefined;
+	try {
+		return await Promise.race([
+			captureScreenshot(window, directory, name, preserveFocus),
+			new Promise<never>((_resolve, reject) => {
+				timeout = setTimeout(() => reject(new Error(`Rendered screenshot/audit timed out: ${name}`)), 45_000);
+			})
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
+
+async function captureScreenshot(
+	window: BrowserWindow,
+	directory: string,
+	name: string,
+	preserveFocus: boolean
+): Promise<string> {
 	const path = join(directory, name);
 	progress(`capturing ${name}`);
+	// Native screenshot tests own this window's focus, just as a manual tester
+	// does. Do not rely on animation frames from an occluded/background window.
+	window.focus();
+	window.webContents.focus();
 	if (!preserveFocus)
 		await window.webContents.executeJavaScript(
 			'document.activeElement?.blur(); window.scrollTo(0, 0)'
@@ -294,6 +372,86 @@ async function assertRenderedFloor(window: BrowserWindow, label: string): Promis
 	);
 }
 
+async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<string[]> {
+	const originalSize = window.getSize().join('x');
+	const viewport = await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');
+	const screenshots: string[] = [];
+	try {
+		assert(await window.webContents.executeJavaScript(`(async () => {
+			const snapshot = await window.fholdAdmin.snapshot();
+			const picker = document.querySelector('#instance-picker');
+			return picker.tagName === 'SELECT' && picker.value === snapshot.homeDir &&
+				picker.selectedOptions[0].textContent === snapshot.config.deployment.projectName &&
+				picker.options[picker.options.length-1].textContent === 'Open another instance…' &&
+				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 44 &&
+				!document.querySelector('.sidebar-footer') && !document.querySelector('#refresh') &&
+				!document.querySelector('#selected-instance-path') &&
+				document.querySelector('#overview-home').textContent === snapshot.homeDir &&
+				document.querySelector('#assistant-summary').textContent === 'Running normally';
+		})()`), 'Sidebar did not expose a simple named picker with identity/runtime details on Overview.');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		screenshots.push(await capture(window, outputDir, '04d-sidebar-system.png'));
+
+		// Presentation-only extremes use the ordinary renderer. They never alter
+		// the selected home, Docker, account policy or persisted configuration.
+		await window.webContents.executeJavaScript(`(async () => {
+			const {render} = await import('./snapshot.js');
+			const snapshot = await window.fholdAdmin.snapshot();
+			render({...snapshot, homeDir:'/home/person/fhold/instances/' + 'long-folder-'.repeat(14),
+				config:{...snapshot.config,deployment:{...snapshot.config.deployment,projectName:'personal-agent-' + 'a'.repeat(48)}}});
+		})()`);
+		assert(await window.webContents.executeJavaScript(`(() => {
+			const picker = document.querySelector('#instance-picker');
+			return picker.selectedOptions[0].textContent.length > 50 && picker.getBoundingClientRect().height < 60 &&
+				document.querySelector('.sidebar').scrollWidth <= document.querySelector('.sidebar').clientWidth + 1;
+		})()`), 'Long identity spilled out of the instance picker.');
+		screenshots.push(await capture(window, outputDir, '04e-picker-long-name.png'));
+		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); })()");
+		assert(await window.webContents.executeJavaScript(`(async () => {
+			const {state} = await import('./state.js');
+			const {refresh} = await import('./snapshot.js');
+			const original = state.api;
+			try {
+				state.api = {...original,snapshot:async () => {throw new Error('Isolated renderer transport-failure fixture');}};
+				await refresh({statusOnly:true});
+				return document.querySelector('#assistant-summary').textContent === 'Status unavailable' &&
+					!document.querySelector('#runtime-status-detail').hidden &&
+					!document.querySelector('#services .status-badge.success');
+			} finally {state.api = original;}
+		})()`), 'Failed status read kept a misleading healthy Overview.');
+		screenshots.push(await capture(window, outputDir, '04f-overview-unavailable.png'));
+		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
+		await waitForRenderer(window, "document.querySelector('#assistant-summary').textContent === 'Running normally' && document.querySelector('#runtime-status-detail').hidden", 'automatic status recovers on focus');
+		for (const zoom of [1, 2]) {
+			await sizeViewport(window, 640, 640, zoom);
+			await window.webContents.executeJavaScript("document.querySelector('#mobile-navigation').open=true; window.scrollTo(0,0)");
+			assert(await window.webContents.executeJavaScript(`(() => {
+				const visible = (element) => {
+					const box = element.getBoundingClientRect();
+					return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+				};
+				return visible(document.querySelector('#instance-picker')) &&
+					[...document.querySelectorAll('.sidebar button,.sidebar select')].filter(visible).every(control => control.getBoundingClientRect().height >= 44);
+			})()`), `Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`);
+			await assertRenderedFloor(window, `expanded sidebar at ${zoom * 100}% zoom`);
+			// Keyboard focus can scroll the long System view. Show the actual sidebar
+			// header in responsive screenshots without clearing its tested focus state.
+			await window.webContents.executeJavaScript('window.scrollTo(0, 0)');
+			screenshots.push(await capture(window, outputDir, zoom === 1 ? '04g-sidebar-narrow.png' : '04h-sidebar-zoom.png', true));
+		}
+	} finally {
+		await sizeViewport(window, viewport.width, viewport.height);
+		await window.webContents.executeJavaScript(`(async () => {
+			const {refresh} = await import('./snapshot.js');
+			await refresh();
+			document.querySelector('[data-view=overview]').click();
+		})()`);
+	}
+	assert(window.getSize().join('x') === originalSize, 'Sidebar interaction changed the user window size.');
+	progress('sidebar: named picker without footer, Overview identity/runtime, automatic recovery, keyboard, narrow/200% zoom and stable size passed');
+	return screenshots;
+}
+
 function rpcPayload(text: string): Record<string, unknown> | null {
 	try {
 		const value = JSON.parse(text) as unknown;
@@ -364,6 +522,8 @@ async function connectProviderUi(
 		240_000
 	);
 	await window.webContents.executeJavaScript(`(() => {
+		document.querySelector('#add-provider-service').click();
+		document.querySelector('[data-provider-shortcut="other"]').click();
 		document.querySelector('#provider-search').value = ${JSON.stringify(provider)};
 		document.querySelector('#provider-search').dispatchEvent(new Event('input', { bubbles: true }));
 	})()`);
@@ -386,14 +546,42 @@ async function connectProviderUi(
 	})()`);
 	await waitForRenderer(
 		window,
-		"document.querySelector('#notice-message')?.textContent === 'Provider verified. Your personal agent is ready.' && document.querySelector('#view-overview')?.hidden === false",
-		'provider readiness',
+		"document.body.dataset.busy !== 'true' && !document.querySelector('#provider-model-step').hidden && [...document.querySelector('#provider-model').options].some(option => option.value)",
+		'native model choices after saving sign-in',
 		180_000
 	);
+	assert(await window.webContents.executeJavaScript("(async () => !(await import('./state.js')).state.lastReadiness?.ok)()"), 'Saving sign-in unexpectedly tested a paid response.');
+	const model = process.env.FH_ADMIN_E2E_MODEL || 'gpt-5.6-luna';
+	await window.webContents.executeJavaScript(`(() => {
+		const select = document.querySelector('#provider-model');
+		if (![...select.options].some(option => option.value === ${JSON.stringify(model)})) throw new Error('Requested native eligible model was not available.');
+		select.value = ${JSON.stringify(model)};
+		select.dispatchEvent(new Event('change', {bubbles:true}));
+		document.querySelector('#test-provider').click();
+	})()`);
+	await waitForRenderer(window, "(await import('./state.js')).state.lastReadiness?.ok === true && !document.querySelector('#use-provider-model').hidden && document.body.dataset.busy !== 'true'", 'explicit exact-model response test', 180_000);
 	const readiness = (await window.webContents.executeJavaScript(
-		"JSON.parse(document.querySelector('#provider-result').value)"
+		"(async () => (await import('./state.js')).state.lastReadiness)()"
 	)) as Record<string, unknown>;
 	assert(readiness.ok === true, `Provider readiness failed: ${JSON.stringify(readiness)}`);
+	assert(readiness.provider === provider && readiness.model === model, 'Native readiness did not confirm the exact chosen provider/model.');
+	assert(await window.webContents.executeJavaScript("!document.querySelector('#view-provider').hidden"), 'Response test unexpectedly navigated away.');
+	await window.webContents.executeJavaScript("document.querySelector('#use-provider-model').click()");
+	await waitForRenderer(window, `(await import('./state.js')).state.providerCurrentModel?.provider === ${JSON.stringify(provider)} && (await import('./state.js')).state.providerCurrentModel?.model === ${JSON.stringify(model)} && document.querySelector('#provider-editor').hidden && document.body.dataset.busy !== 'true'`, 'explicit native default model selection');
+	if (
+		await window.webContents.executeJavaScript(
+			"!document.querySelector('#finish-provider-setup').hidden"
+		)
+	) {
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#finish-provider-setup').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.querySelector('#view-overview')?.hidden === false",
+			'explicit setup continuation'
+		);
+	}
 	return readiness;
 }
 
@@ -427,9 +615,13 @@ async function run(): Promise<Record<string, unknown>> {
 	progress('opening the real Admin renderer');
 	registerAdminIpc();
 	const window = createAdminWindow({ show: true });
+	window.webContents.on('console-message', (event) => {
+		if (event.level === 'error') process.stderr.write(`[admin-e2e renderer] ${providerKey ? event.message.replaceAll(providerKey, '[redacted]') : event.message}\n`);
+	});
 	window.setTitle('fhold Admin — automated UI test');
 	window.on('page-title-updated', (event) => event.preventDefault());
 	const otherHome = join(outputDir, 'other-empty-instance');
+	const fullRestoredHome = join(outputDir, 'full-restored-instance');
 	const originalMessageBox = dialog.showMessageBox;
 	const confirmations: number[] = [];
 	const prompts: string[] = [];
@@ -462,6 +654,7 @@ async function run(): Promise<Record<string, unknown>> {
 			!existsSync(join(homeDir, 'state')),
 			'Welcome seeded the default home before selection.'
 		);
+		assert(await window.webContents.executeJavaScript("document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.querySelector('#recent-instances-section').hidden"), 'First launch should show only setup/open choices, not a form or nonexistent home.');
 		await assertRenderedFloor(window, 'instance welcome');
 		const welcomeScreenshot = await capture(window, outputDir, '00-instance-welcome.png');
 		await sizeViewport(window, 640, 640);
@@ -471,20 +664,39 @@ async function run(): Promise<Record<string, unknown>> {
 			outputDir,
 			'00b-instance-welcome-narrow.png'
 		);
+		await sizeViewport(window, 640, 640, 2);
+		await assertRenderedFloor(window, 'instance welcome at 200% zoom');
+		const zoomWelcomeScreenshot = await capture(window, outputDir, '00d-instance-welcome-zoom.png');
+		await welcomeKeyboardNavigation(window);
+		await assertRenderedFloor(window, 'new-agent naming at 200% zoom');
+		const zoomNamingScreenshot = await capture(window, outputDir, '00e-new-instance-name-zoom.png');
+		await window.webContents.executeJavaScript("document.querySelector('#install-advanced > summary').click()");
+		await assertRenderedFloor(window, 'custom agent folder at 200% zoom');
+		const zoomFolderScreenshot = await capture(window, outputDir, '00f-new-instance-folder-zoom.png');
+		await window.webContents.executeJavaScript("document.querySelector('#install-instance-name').focus()");
+		await waitForRenderer(window, "!document.querySelector('#install').disabled", 'installation prerequisites');
+		for (const selector of ['#install-advanced > summary', '#install-home', '#install-browse', '#install-automatic-ports', '#install']) {
+			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+			await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
+			assert(await window.webContents.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(selector)})`), `New setup keyboard traversal did not reach ${selector}.`);
+		}
+		assert(await window.webContents.executeJavaScript("(() => { const r = document.querySelector('#install').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), 'Continue to setup was not reachable with keyboard scrolling at 200% zoom.');
+		const zoomFolderActionsScreenshot = await capture(window, outputDir, '00g-new-instance-folder-zoom-actions.png', true);
 		await sizeViewport(window, 1120, 780);
 		const originalPicker = dialog.showOpenDialog;
 		const incompatibleHome = join(outputDir, 'legacy-instance');
 		mkdirSync(otherHome);
 		mkdirSync(incompatibleHome);
 		writeFileSync(join(incompatibleHome, 'user-data'), 'preserve this');
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#new-instance-details').open = true"
-		);
-		await assertRenderedFloor(window, 'create-instance folder form');
-		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-folder.png');
-		const suggestedHome = await window.webContents.executeJavaScript("document.querySelector('#new-instance-home').value");
+		await window.webContents.executeJavaScript("document.querySelector('#install-advanced').open = false");
+		await assertRenderedFloor(window, 'new-agent naming');
+		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-name.png');
+		const suggestedHome = await window.webContents.executeJavaScript("document.querySelector('#install-home').value");
 		try {
 			dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
+			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
 			);
@@ -493,8 +705,9 @@ async function run(): Promise<Record<string, unknown>> {
 				await window.webContents.executeJavaScript("document.body.dataset.phase === 'welcome'"),
 				'Cancelled folder selection left welcome.'
 			);
+			await window.webContents.executeJavaScript("document.querySelector('#begin-new-instance').click(); document.querySelector('#install-advanced > summary').click()");
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#new-instance-browse').click()"
+				"document.querySelector('#install-browse').click()"
 			);
 			await waitForRenderer(
 				window,
@@ -503,10 +716,12 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			assert(
 				await window.webContents.executeJavaScript(
-					`document.querySelector('#new-instance-home').value === ${JSON.stringify(suggestedHome)} && document.body.dataset.phase === 'welcome'`
+					`document.querySelector('#install-home').value === ${JSON.stringify(suggestedHome)} && !document.querySelector('#install-section').hidden`
 				),
 				'Cancelling new-instance folder selection changed the selection.'
 			);
+			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
+			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [incompatibleHome] });
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
@@ -519,9 +734,16 @@ async function run(): Promise<Record<string, unknown>> {
 				true
 			);
 			assert(!existsSync(join(incompatibleHome, 'state')), 'Invalid folder was modified.');
+			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [otherHome] });
+			await window.webContents.executeJavaScript("document.querySelector('#choose-instance').click()");
+			await waitForRenderer(window,
+				"document.body.dataset.busy === 'false' && document.querySelector('#notice-message').textContent.includes('No fhold instance was found')",
+				'empty folder rejected as an existing instance', 10_000, true);
+			assert(!existsSync(join(otherHome, 'state')), 'Opening an empty folder began installation.');
 			await window.webContents.executeJavaScript(`(() => {
-				document.querySelector('#new-instance-home').value = ${JSON.stringify(incompatibleHome)};
-				document.querySelector('#new-instance-form').requestSubmit();
+				document.querySelector('#begin-new-instance').click();
+				document.querySelector('#install-home').value = ${JSON.stringify(incompatibleHome)};
+				document.querySelector('#install-form').requestSubmit();
 			})()`);
 			await waitForRenderer(
 				window,
@@ -546,11 +768,11 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [otherHome] });
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#new-instance-browse').click()"
+				"document.querySelector('#install-browse').click()"
 			);
 			await waitForRenderer(
 				window,
-				`document.body.dataset.busy === 'false' && document.querySelector('#new-instance-home').value === ${JSON.stringify(otherHome)}`,
+				`document.body.dataset.busy === 'false' && document.querySelector('#install-home').value === ${JSON.stringify(otherHome)}`,
 				'the chosen new-instance folder'
 			);
 			assert(
@@ -558,26 +780,22 @@ async function run(): Promise<Record<string, unknown>> {
 				'Browsing installed the new instance before confirmation.'
 			);
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#new-instance-form').requestSubmit()"
-			);
-			await waitForRenderer(
-				window,
-				`document.body.dataset.phase === 'not_installed' && document.querySelector('#install-home').textContent === ${JSON.stringify(otherHome)}`,
-				'the selected empty folder'
-			);
-			await window.webContents.executeJavaScript(
 				"document.querySelector('#install-section [data-instance-switch]').click()"
 			);
 			await waitForRenderer(
 				window,
-				"document.body.dataset.phase === 'welcome' && document.querySelector('#open-recent-instance').textContent === 'Open previous instance'",
-				'recent-instance welcome'
+				"document.body.dataset.phase === 'welcome'",
+				'cancelled install draft'
 			);
-			const preferences = readFileSync(join(app.getPath('userData'), 'instances.json'), 'utf8');
-			assert(preferences.includes(otherHome), 'Recent instance was not persisted.');
-			await window.webContents.executeJavaScript(
-				"document.querySelector('#open-default-instance').click()"
-			);
+			assert(!existsSync(join(otherHome, 'state')), 'Cancelling installed the chosen empty folder.');
+			await window.webContents.executeJavaScript(`(() => {
+				document.querySelector('#begin-new-instance').click();
+				document.querySelector('#install-instance-name').value = ${JSON.stringify(projectName)};
+				document.querySelector('#install-instance-name').dispatchEvent(new Event('input', {bubbles:true}));
+				document.querySelector('#install-advanced > summary').click();
+				document.querySelector('#install-home').value = ${JSON.stringify(homeDir)};
+				document.querySelector('#install-advanced').open = false;
+			})()`);
 		} finally {
 			dialog.showOpenDialog = originalPicker;
 		}
@@ -742,7 +960,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 
 		await runAdminAction('stop');
-		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
 		await waitForRenderer(
 			window,
 			`document.querySelector('#setup-recovery')?.hidden === false &&
@@ -785,23 +1003,24 @@ async function run(): Promise<Record<string, unknown>> {
 		window.setSize(1120, 780);
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		await window.webContents.executeJavaScript("document.querySelector('#load-providers').click()");
+		progress('refreshing native provider inventory');
+		await window.webContents.executeJavaScript("document.querySelector('#provider-saved-accounts').open=true; document.querySelector('#load-providers').click(); undefined");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#provider-result')?.value.trim().startsWith('[')",
+			"(await import('./state.js')).state.providersLoaded && !(await import('./state.js')).state.providerLoadPromise",
 			'OpenCode provider discovery',
 			60_000
 		);
 		const providerCatalog = (await window.webContents.executeJavaScript(
-			"JSON.parse(document.querySelector('#provider-result').value)"
+			"(async () => (await import('./state.js')).state.providerSummaries)()"
 		)) as Array<Record<string, unknown>>;
 		progress(`OpenCode discovered ${providerCatalog.length} providers`);
-		// Discovery can launch an automatic existing-sign-in check. Wait for it before
-		// submitting another operation through the deliberately locked setup form.
+		// Account discovery never performs a paid/native verification on its own.
+		// Wait for discovery to finish before the explicit account operation below.
 		await waitForRenderer(
 			window,
 			"document.body.dataset.busy !== 'true'",
-			'the existing-sign-in check to finish',
+			'account discovery to finish',
 			180_000,
 			true
 		);
@@ -814,40 +1033,27 @@ async function run(): Promise<Record<string, unknown>> {
 			progress('provider readiness passed');
 			readyScreenshot = await capture(window, outputDir, '04-agent-ready.png');
 		} else {
-			await window.webContents.executeJavaScript(`(() => {
+			await window.webContents.executeJavaScript(`(async () => {
+				document.querySelector('#add-provider-service').click();
+				document.querySelector('[data-provider-shortcut="other"]').click();
 				const provider = document.querySelector('#provider');
-				if (!provider.value) {
-					if (!document.querySelector('#test-provider').hidden) throw new Error('Verification appears before choosing a provider.');
-					provider.value = [...provider.options].find(option => option.value === 'anthropic')?.value || [...provider.options].find(option => option.value)?.value;
-					provider.dispatchEvent(new Event('change', { bubbles: true }));
-				}
-				if (document.querySelector('#test-provider').hidden) throw new Error('Verification is unavailable after provider selection.');
-				if (!document.querySelector('#test-provider').disabled) document.querySelector('#test-provider').click();
+				provider.value = [...provider.options].find(option => option.value === 'anthropic')?.value || [...provider.options].find(option => option.value)?.value;
+				provider.dispatchEvent(new Event('change', { bubbles: true }));
+				if (!document.querySelector('#provider-model-step').hidden || (await import('./state.js')).state.lastReadiness?.ok) throw new Error('Sign-in choice claimed a tested model without saving or testing.');
+				document.querySelector('#cancel-provider-editor').click();
 			})()`);
-			await waitForRenderer(
-				window,
-				`document.querySelector('#notice')?.hidden === true &&
-						document.querySelector('#provider-status')?.classList.contains('error') &&
-						document.querySelector('#view-provider')?.hidden === false`,
-				'a truthful provider-required error',
-				60_000,
-				true
-			);
-			readiness = (await window.webContents.executeJavaScript(
-				"JSON.parse(document.querySelector('#provider-result').value)"
-			)) as Record<string, unknown>;
-			assert(
-				readiness.ok === false,
-				`Expected provider readiness to fail: ${JSON.stringify(readiness)}`
-			);
-			progress('provider failure remained an incomplete setup error');
+			readiness = {
+				attempted: false,
+				reason: 'No provider account was supplied to this isolated management fixture.'
+			};
+			progress('provider sign-in remained incomplete without claiming a verification attempt');
 			markInstalled(homeDir);
-			await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
 				window,
 				`document.querySelector('#view-overview')?.hidden === false &&
 						document.querySelector('#primary-nav')?.hidden === false &&
-						document.querySelector('#refresh')?.textContent === 'Status up to date'`,
+						!(await import('./state.js')).state.snapshotPromise`,
 				'the isolated management UI fixture',
 				60_000,
 				true
@@ -858,7 +1064,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#dismiss-notice').click();
 			document.querySelector('[data-view=connections]').click();
-			document.querySelector('#native-connections > summary').click();
+			document.querySelector('#codex-connection').open=true;
 			document.querySelector('[data-remote-enable=codex]').focus();
 			document.querySelector('[data-remote-enable=codex]').click();
 			if (!document.querySelector('#remote-dialog').open) throw new Error('Remote setup dialog did not open.');
@@ -990,10 +1196,10 @@ async function run(): Promise<Record<string, unknown>> {
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		await runAdminAction('restart');
-		await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && document.querySelector('#refresh').textContent === 'Status up to date'",
+			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && !(await import('./state.js')).state.snapshotPromise",
 			'read-only refresh clears the prior explicit recall review',
 			60_000,
 			!provider
@@ -1019,12 +1225,13 @@ async function run(): Promise<Record<string, unknown>> {
 			'managed AKM recall stayed ready across recreation without personal approval, remote startup or vendor login'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#native-connections').open = false"
+			"document.querySelector('#codex-connection').open = false"
 		);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-view=overview]').click()"
 		);
 		const overviewScreenshot = await capture(window, outputDir, '04b-overview.png');
+		const sidebarScreenshots = await verifySidebar(window, outputDir);
 		assert(
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#stop-stack').getBoundingClientRect().bottom < innerHeight && !document.querySelector('#starter-heading') && !document.querySelector('.choice-grid')"
@@ -1045,10 +1252,10 @@ async function run(): Promise<Record<string, unknown>> {
 		await assertRenderedFloor(window, 'connections');
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
-			return !document.querySelector('#native-connections').open && !document.querySelector('#portal-tokens').open &&
+			return [...document.querySelectorAll('[data-connection-app]')].map(app => app.dataset.connectionApp).join(',') === 'opencode,claude,codex,discord,slack,mcp' &&
 				document.querySelector('#direct-url').tagName === 'A' &&
 				document.querySelector('#direct-url').href === document.querySelector('#overview-opencode-link').href &&
-				getComputedStyle(document.querySelector('[data-client-setup][aria-pressed="true"]')).backgroundColor !== getComputedStyle(document.querySelector('.primary-link')).backgroundColor;
+				!document.querySelector('[data-view="access"], #native-connections, #portal-tokens');
 		})()`),
 			'Optional connections are not collapsed, OpenCode links disagree, or client selection looks like a primary action.'
 		);
@@ -1058,10 +1265,10 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
 				const cards = [...document.querySelectorAll('#view-system > details')];
-				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,import-export,runtime-recovery' &&
+				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,connection-keys,import-export,runtime-recovery' &&
 					cards.every(card => !card.open) &&
-					cards[2].querySelector('summary').textContent.startsWith('Import / export') &&
-					cards[3].querySelector('summary').textContent.startsWith('Ephemeral container support');
+					cards[3].querySelector('summary').textContent.startsWith('Import / export') &&
+					cards[4].querySelector('summary').textContent.startsWith('Ephemeral container support');
 			})()`),
 			'System sections are not in the requested order, collapsed by default, or consistently named.'
 		);
@@ -1082,8 +1289,8 @@ async function run(): Promise<Record<string, unknown>> {
 				const link = document.querySelector('#assistant-url-detail');
 				return link?.tagName === 'A' && link.href === 'http://127.0.0.1:${assistantPort}/' &&
 					link.tabIndex === 0 &&
-					document.querySelector('label[for="gateway-bind"]')?.textContent.includes('Guardian MCP') &&
-					document.querySelector('#guardian-mcp-url-detail')?.textContent === 'http://127.0.0.1:${guardianPort}/mcp' &&
+					document.querySelector('label[for="gateway-bind"]')?.textContent.includes('Bind address') &&
+					document.querySelector('#mcp-url')?.textContent === 'http://127.0.0.1:${guardianPort}/mcp' &&
 					document.querySelector('#guardian-health-url-detail')?.textContent === 'http://127.0.0.1:${guardianPort}/health';
 			})()`),
 			'Network details omitted clear MCP endpoints or a keyboard-accessible OpenCode link.'
@@ -1149,51 +1356,92 @@ async function run(): Promise<Record<string, unknown>> {
 		};
 		const beforeDeferredSave = { id: await containerId(), settings: await runtimeSettings() };
 		const sizeBeforeSave = window.getSize();
-		confirmations.push(0);
-		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#agent-preferences > summary').click();
-			document.querySelector('#agent-timezone').value = 'Europe/London';
-			document.querySelector('#automatic-memory').checked = false;
-			document.querySelector('#agent-timezone').dispatchEvent(new Event('input', { bubbles: true }));
-			document.querySelector('#preferences-form').requestSubmit();
-		})()`);
+		// Advanced native settings are CLI-owned, not controls in the AI-account UI.
+		// The normal CLI creates pending intent; Admin owns the explicit apply action.
+		await configureFixtureAssistant(homeDir, ['--timezone', 'Europe/London', '--memory', 'off']);
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+		);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Agent preferences saved.' &&
-				document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
-				document.querySelector('#agent-timezone')?.value === 'Europe/London' &&
-				document.querySelector('#automatic-memory')?.checked === false`,
-			'agent preferences saved without restarting'
+			`document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
+				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false`,
+			'CLI-generated pending intent visible in Admin without restarting'
 		);
-		assert(await containerId() === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
-		assert(await runtimeSettings() === beforeDeferredSave.settings, 'Postponed save applied runtime settings.');
-		assert((await adminSnapshot()).pendingRestart?.required, 'Pending state was not saved with the instance.');
-		await window.webContents.executeJavaScript("document.querySelector('.sidebar [data-instance-switch]').click()");
-		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'return to Welcome with saved changes');
-		await window.webContents.executeJavaScript("document.querySelector('#open-recent-instance').click()");
-		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden", 'pending restart after reopening the instance');
-		assert(JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave), 'Saving/reopening changed the user window size.');
+		assert((await containerId()) === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
+		assert(
+			(await runtimeSettings()) === beforeDeferredSave.settings,
+			'Postponed save applied runtime settings.'
+		);
+		assert(
+			(await adminSnapshot()).pendingRestart?.required,
+			'Pending state was not saved with the instance.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'welcome'",
+			'return to Welcome with saved changes'
+		);
+		await window.webContents.executeJavaScript(
+			`[...document.querySelectorAll('#recent-instances .instance-choice')].find(button => button.dataset.homeDir === ${JSON.stringify(homeDir)}).click()`
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden",
+			'pending restart after reopening the instance'
+		);
+		assert(
+			JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave),
+			'Saving/reopening changed the user window size.'
+		);
 		const pendingRestartScreenshot = await capture(window, outputDir, '04o-pending-restart.png');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#apply-pending-restart').click()");
-		await waitForRenderer(window,
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#apply-pending-restart').click()"
+		);
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#pending-restart').hidden && document.querySelector('#notice-message').textContent === 'fhold restarted. Saved settings applied.'",
-			'confirmed restart applies saved settings');
-		assert(await containerId() !== beforeDeferredSave.id, 'Confirmed apply did not recreate Assistant.');
-		assert(await runtimeSettings() === 'Europe/London\n0', 'Recreated Assistant did not load saved settings.');
-		assert(!(await adminSnapshot()).pendingRestart?.required, 'Successful apply left a pending alert.');
-		progress('defer, reopen, persistent alert and confirmed apply verified against real container ID and settings');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=provider]').click(); document.querySelector('#agent-preferences').open = true");
+			'confirmed restart applies saved settings'
+		);
+		assert(
+			(await containerId()) !== beforeDeferredSave.id,
+			'Confirmed apply did not recreate Assistant.'
+		);
+		assert(
+			(await runtimeSettings()) === 'Europe/London\n0',
+			'Recreated Assistant did not load saved settings.'
+		);
+		assert(
+			!(await adminSnapshot()).pendingRestart?.required,
+			'Successful apply left a pending alert.'
+		);
+		progress(
+			'CLI deferred settings, Admin reopen, persistent alert and confirmed apply verified against real container ID and settings'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=provider]').click()"
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"!document.querySelector('#agent-preferences, #automatic-memory, #agent-timezone')"
+			),
+			'AI account view still exposes retired memory/timezone controls.'
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click()");
 		const agentSettingsScreenshot = await capture(window, outputDir, '04i-agent-settings.png');
 
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=connections]').click(); document.querySelector('[data-client-setup=opencode]').click()"
+			"document.querySelector('[data-view=connections]').click(); document.querySelector('#opencode-connection > summary').click()"
 		);
 		await waitForRenderer(
 			window,
 			`document.querySelector('#view-connections')?.hidden === false &&
-					document.querySelector('#client-opencode')?.hidden === false &&
+					document.querySelector('#opencode-connection')?.open === true &&
 					document.querySelector('#direct-url')?.textContent.startsWith('http://') &&
 					document.querySelector('#direct-username')?.textContent === 'user'`,
 			'the complete OpenCode connection recipe'
@@ -1208,8 +1456,9 @@ async function run(): Promise<Record<string, unknown>> {
 			'the explicit OpenCode password reveal'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-client-setup=claude]').click()"
+			"document.querySelector('#claude-connection').open=true; document.querySelector('#claude-permissions-form').requestSubmit()"
 		);
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#claude-credential').value && !document.querySelector('#claude-connect-details').hidden", 'explicit Claude Desktop connection creation');
 		const claudeRecipe = (await window.webContents.executeJavaScript(`(() => ({
 			url: document.querySelector('#claude-url')?.textContent,
 			credential: document.querySelector('#claude-credential')?.value,
@@ -1224,7 +1473,7 @@ async function run(): Promise<Record<string, unknown>> {
 			downloadHidden?: boolean;
 		};
 		assert(claudeRecipe.url?.endsWith('/mcp'), 'Claude recipe omitted the MCP endpoint.');
-		assert(claudeRecipe.credential === 'owner', 'Claude recipe omitted its access identity.');
+		assert(claudeRecipe.credential?.startsWith('claude-desktop'), 'Claude recipe omitted its explicitly created access identity.');
 		assert(
 			claudeRecipe.extension?.includes('matching GitHub release') &&
 				claudeRecipe.download?.startsWith('https://github.com/fwdslsh/fhold/releases/download/') &&
@@ -1235,11 +1484,22 @@ async function run(): Promise<Record<string, unknown>> {
 		await assertRenderedFloor(window, 'Claude Desktop recipe');
 		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-client-setup=mcp]').click()"
+			"document.querySelector('#mcp-connection').open=true; document.querySelector('#mcp-permissions-form').requestSubmit()"
 		);
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#mcp-credential').value && !document.querySelector('#mcp-connect-details').hidden", 'explicit MCP connection creation');
+		const previousClipboard = await clipboard.readText();
+		try {
+			await window.webContents.executeJavaScript("document.querySelector('[data-copy-client-key=\"mcp\"]').click()");
+			await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('Connection key copied.')", 'explicit IPC connection-key copy');
+			const username = await window.webContents.executeJavaScript("document.querySelector('#mcp-credential').value") as string;
+			assert(await clipboard.readText() === readFileSync(join(homeDir, 'state/credentials', username, 'key'), 'utf8').trim(), 'Copy did not place the exact selected connection key on the clipboard.');
+			assert(await window.webContents.executeJavaScript("!document.querySelector('#credential-key, #mcp-key')"), 'Copy revealed a private key in the renderer.');
+		} finally {
+			await clipboard.writeText(previousClipboard);
+		}
 		assert(
 			(await window.webContents.executeJavaScript(
-				"document.querySelector('#mcp-url')?.textContent.endsWith('/mcp') && document.querySelector('#mcp-credential')?.value === 'owner'"
+				"document.querySelector('#mcp-url')?.textContent.endsWith('/mcp') && document.querySelector('#mcp-credential')?.value.startsWith('mcp-app')"
 			)) as boolean,
 			'The generic MCP recipe was incomplete.'
 		);
@@ -1253,9 +1513,10 @@ async function run(): Promise<Record<string, unknown>> {
 		await sizeViewport(window, 1120, 780);
 
 		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('#discord-connection').open=true;
 			document.querySelector('#discord').checked = true;
 			document.querySelector('#discord').dispatchEvent(new Event('change', { bubbles: true }));
-			document.querySelector('#connections-form').requestSubmit();
+			document.querySelector('#discord-connections-form').requestSubmit();
 		})()`);
 		await waitForRenderer(
 			window,
@@ -1269,21 +1530,20 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#discord-users').value = '123456789012345678';
 			document.querySelector('#discord-users').dispatchEvent(new Event('input', { bubbles: true }));
-			document.querySelector('#connections-form').requestSubmit();
+			document.querySelector('#discord-connections-form').requestSubmit();
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Store a Discord bot token before enabling Discord.' &&
-					document.querySelector('#token-portal')?.value === 'discord' &&
-					document.querySelector('#portal-tokens')?.open === true &&
-					document.activeElement?.id === 'bot-token'`,
+			`document.querySelector('#notice-message')?.textContent === 'Save a Discord bot token before enabling Discord.' &&
+					document.querySelector('#discord-tokens')?.open === true &&
+					document.activeElement?.id === 'discord-bot-token'`,
 			'the Discord private-token guidance',
 			10_000,
 			true
 		);
 		progress('portal setup errors opened and focused the required controls');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#dismiss-notice').click(); document.querySelector('#chat-apps').scrollIntoView({block:'start'})"
+			"document.querySelector('#dismiss-notice').click(); document.querySelector('#discord-connection').scrollIntoView({block:'start'})"
 		);
 		const chatAppsScreenshot = await capture(window, outputDir, '04l-chat-apps.png', true);
 		await window.webContents.executeJavaScript(`(() => {
@@ -1292,12 +1552,22 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#discord').dispatchEvent(new Event('change', { bubbles: true }));
 		})()`);
 
-		confirmations.push(1);
+		const beforeAppSave = await containerId();
+		confirmations.push(0);
 		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('#slack-channels').value='C012TEST';
+			document.querySelector('#slack-channels').dispatchEvent(new Event('input',{bubbles:true}));
 			document.querySelector('#gateway').checked = true;
 			document.querySelector('#gateway').dispatchEvent(new Event('change', { bubbles: true }));
-			document.querySelector('#connections-form').requestSubmit();
+			document.querySelector('#mcp-connection').open=true;
+			document.querySelector('#mcp-connections-form').requestSubmit();
 		})()`);
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#pending-restart').hidden", 'MCP app save with restart postponed');
+		assert(await containerId() === beforeAppSave, 'Postponing an app settings restart recreated the Assistant.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#slack-channels').value==='C012TEST'"), 'Saving MCP settings discarded another app draft.');
+		assert((await adminSnapshot()).config.portals.slack.access.channels.length === 0, 'Saving MCP settings silently persisted the Slack draft.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#apply-pending-restart').click()");
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
@@ -1308,31 +1578,42 @@ async function run(): Promise<Record<string, unknown>> {
 		progress('Guardian is healthy');
 
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('[data-view=access]').click();
-			document.querySelector('#create-credential').open=true;
-			document.querySelector('#credential-username').value = 'e2e-reader';
-			document.querySelector('#credential-policy').value = 'read';
-			document.querySelector('#credential-form').requestSubmit();
+			document.querySelector('[data-view=connections]').click();
+			document.querySelector('#advanced-access').open=true;
+			document.querySelector('[data-new-saved-access]').click();
+			document.querySelector('#saved-access-name').value = 'e2e-reader';
+			document.querySelector('#dialog-policy-read').checked = true;
+			document.querySelector('#permissions-form').requestSubmit();
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent.includes('Access for e2e-reader created.') &&
-					[...document.querySelectorAll('#credential-action-name option')].some((option) => option.value === 'e2e-reader')`,
+			`document.querySelector('#notice-message')?.textContent.includes('Permissions saved.') &&
+					[...document.querySelectorAll('[data-manage-saved-access]')].some(button => button.dataset.manageSavedAccess === 'e2e-reader')`,
 			'the read credential to be created'
 		);
 		progress('read credential created');
+		await window.webContents.executeJavaScript(`(() => {
+			window.confirm = () => false;
+			document.querySelector('[data-manage-saved-access="e2e-reader"]').click();
+			document.querySelector('#dialog-policy-full').checked=true;
+			document.querySelector('#permissions-form').requestSubmit();
+		})()`);
+		await waitForRenderer(window, "document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'cancelled Full access escalation');
+		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'read', 'Cancelling Full access escalated the saved identity.');
+		await window.webContents.executeJavaScript("document.querySelector('#cancel-permissions').click(); window.confirm=()=>true");
 
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#chat-user-access > summary').click();
-			document.querySelector('#mapping-portal').value = 'discord';
-			document.querySelector('#mapping-user').value = '123456789012345678';
-			document.querySelector('#mapping-credential').value = 'e2e-reader';
-			document.querySelector('#mapping-form').requestSubmit();
+			document.querySelector('#discord-connection').open=true;
+			document.querySelector('#discord-user-access').open=true;
+			document.querySelector('[data-add-person-permissions="discord"]').click();
+			document.querySelector('#person-id').value = '123456789012345678';
+			document.querySelector('#dialog-policy-read').checked = true;
+			document.querySelector('#permissions-form').requestSubmit();
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Individual user access saved.' &&
-					document.querySelector('#mappings').textContent.includes('e2e-reader')`,
+			`document.querySelector('#notice-message')?.textContent === 'Permissions saved.' &&
+					document.querySelector('#discord-mappings').textContent.includes('123456789012345678')`,
 			'the Discord identity mapping to persist'
 		);
 		progress('Discord identity mapping persisted');
@@ -1371,9 +1652,9 @@ async function run(): Promise<Record<string, unknown>> {
 					document.querySelector('#app-shell')?.hidden === false &&
 					document.querySelector('#assistant-port')?.value === ${JSON.stringify(String(assistantPort))} &&
 				document.querySelector('#gateway-port')?.value === ${JSON.stringify(String(guardianPort))} &&
-				document.querySelector('#agent-timezone')?.value === 'Europe/London' &&
-				document.querySelector('#automatic-memory')?.checked === false &&
-				document.querySelector('#mappings')?.textContent.includes('e2e-reader')`,
+				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false &&
+				document.querySelector('#discord-mappings')?.textContent.includes('123456789012345678')`,
 			'persistent configuration after renderer reload'
 		);
 		progress('renderer reload preserved configuration');
@@ -1484,25 +1765,25 @@ async function run(): Promise<Record<string, unknown>> {
 			'Agent preferences were not persisted after restart and renderer reload.'
 		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('[data-view=overview]').click();
-			document.querySelector('#automatic-memory').checked = true;
-			document.querySelector('#automatic-memory').dispatchEvent(new Event('change', { bubbles: true }));
-			document.querySelector('#preferences-form').requestSubmit();
-		})()`);
+		await configureFixtureAssistant(homeDir, ['--memory', 'on']);
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); document.querySelector('#apply-pending-restart').click(); })()"
+		);
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
-				document.querySelector('#automatic-memory')?.checked === true &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === true &&
 				[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
 			'automatic memory to be restored for runtime acceptance'
 		);
-		progress('automatic memory re-enabled after verifying the persisted opt-out');
+		progress(
+			'CLI automatic memory re-enabled through explicit Admin apply after verifying the persisted opt-out'
+		);
 		const finalSnapshot = await adminSnapshot();
 		assert(finalSnapshot.config.gateway.enabled, 'Guardian configuration was not persisted.');
 		assert(finalSnapshot.config.assistant.automaticMemory, 'Automatic memory was not restored.');
 		assert(
-			finalSnapshot.portalMappings.discord?.users['123456789012345678'] === 'e2e-reader',
+			finalSnapshot.portalMappings.discord?.users['123456789012345678']?.startsWith('discord-user-'),
 			'Discord credential mapping was not persisted.'
 		);
 		const originalConfig = readFileSync(join(homeDir, 'state', 'stack.json'), 'utf8');
@@ -1510,8 +1791,9 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			window.confirm = () => true;
 			document.querySelector('#provider-key').value = 'transient-key-must-not-survive';
-			document.querySelector('#credential-key').value = 'transient-credential-must-not-survive';
-			document.querySelector('.sidebar [data-instance-switch]').click();
+			document.querySelector('#provider-endpoint-key').value = 'transient-credential-must-not-survive';
+			document.querySelector('#instance-picker').value = 'open-another';
+			document.querySelector('#instance-picker').dispatchEvent(new Event('change'));
 		})()`);
 		await waitForRenderer(
 			window,
@@ -1527,13 +1809,13 @@ async function run(): Promise<Record<string, unknown>> {
 		await assertRenderedFloor(window, 'narrow recent-instance list');
 		window.setSize(managedWindowSize[0], managedWindowSize[1]);
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#new-instance-details').open = true;
-			document.querySelector('#new-instance-home').value = ${JSON.stringify(otherHome)};
-			document.querySelector('#new-instance-form').requestSubmit();
+			document.querySelector('#begin-new-instance').click();
+			document.querySelector('#install-advanced > summary').click();
+			document.querySelector('#install-home').value = ${JSON.stringify(otherHome)};
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.body.dataset.phase === 'not_installed' && document.querySelector('#install-home').textContent === ${JSON.stringify(otherHome)}`,
+			`document.body.dataset.phase === 'not_installed' && document.querySelector('#install-home').value === ${JSON.stringify(otherHome)}`,
 			'separate instance setup'
 		);
 		assert(
@@ -1542,7 +1824,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
-			return !document.querySelector('#provider-key').value && !document.querySelector('#credential-key').value;
+			return !document.querySelector('#provider-key').value && !document.querySelector('#provider-endpoint-key').value;
 		})()`),
 			'Transient keys survived the instance switch.'
 		);
@@ -1602,6 +1884,9 @@ async function run(): Promise<Record<string, unknown>> {
 			}
 			await window.webContents.executeJavaScript(`(() => {
 				document.querySelector('#install-instance-name').value = ${JSON.stringify(secondProject)};
+				document.querySelector('#install-instance-name').dispatchEvent(new Event('input', {bubbles:true}));
+				document.querySelector('#install-home').value = ${JSON.stringify(otherHome)};
+				document.querySelector('#install-advanced').open=false;
 				document.querySelector('#install-form').requestSubmit();
 			})()`);
 			await waitForRenderer(
@@ -1638,7 +1923,7 @@ async function run(): Promise<Record<string, unknown>> {
 		if (provider && providerKey) await connectProviderUi(window, provider, providerKey);
 		else {
 			markInstalled(otherHome);
-			await window.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
 				window,
 				"document.body.dataset.phase === 'ready'",
@@ -1695,17 +1980,25 @@ async function run(): Promise<Record<string, unknown>> {
 			),
 			'A stale sign-in step was accepted after switching.'
 		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('.sidebar [data-instance-switch]').click()"
-		);
-		await waitForRenderer(
-			window,
-			"document.body.dataset.phase === 'welcome'",
-			'returning to the instance list'
-		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#open-default-instance').click()"
-		);
+		assert(await window.webContents.executeJavaScript(`(() => {
+			const picker = document.querySelector('#instance-picker');
+			window.confirm = () => false;
+			document.querySelector('#assistant-bind').value = '192.0.2.77';
+			document.querySelector('#assistant-bind').dispatchEvent(new Event('input', {bubbles:true}));
+			picker.value = ${JSON.stringify(homeDir)};
+			picker.dispatchEvent(new Event('change'));
+			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#assistant-bind').value === '192.0.2.77';
+		})()`), 'Cancelling a recent-instance switch lost the selection or draft.');
+		assert((await adminSnapshot()).homeDir === otherHome, 'Cancelled picker switch changed the actual managed home.');
+		const instancePickerScreenshot = await capture(window, outputDir, '06c-recent-instance-picker.png');
+		await window.webContents.executeJavaScript(`(() => {
+			window.confirm = () => true;
+			const picker = document.querySelector('#instance-picker');
+			if (!Array.from(picker.options).some(option => option.value === ${JSON.stringify(homeDir)} && option.textContent === ${JSON.stringify(projectName)}))
+				throw new Error('Recent instance picker lost the saved name.');
+			picker.value = ${JSON.stringify(homeDir)};
+			picker.dispatchEvent(new Event('change'));
+		})()`);
 		await waitForRenderer(
 			window,
 			`document.body.dataset.phase === 'ready' && document.querySelector('#home').textContent === ${JSON.stringify(homeDir)}`,
@@ -1808,7 +2101,18 @@ async function run(): Promise<Record<string, unknown>> {
 		const runtimeRecoveryAdvancedScreenshot = await capture(window, outputDir, '07c-runtime-recovery-advanced.png', true);
 		await sizeViewport(window, 640, 640, 2);
 		await assertRenderedFloor(window, 'runtime recovery at minimum size and 200% zoom');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"), 'Recovery timing fields changed during narrow keyboard traversal.');
+		const narrowRecoveryFields = await window.webContents.executeJavaScript(`(async () => {
+			const {state} = await import('./state.js');
+			return {
+			interval: document.querySelector('#runtime-recovery-interval').value,
+			maxUnsaved: document.querySelector('#runtime-recovery-max-unsaved').value,
+			focus: document.activeElement?.id,
+			savedInterval: state.currentSnapshot.config.recovery.intervalSeconds,
+			savedMaxUnsaved: state.currentSnapshot.config.recovery.maxUnsavedSeconds,
+			dirty: [...state.dirtyForms]
+			};
+		})()`);
+		assert(narrowRecoveryFields.interval === '2' && narrowRecoveryFields.maxUnsaved === '120', `Recovery timing fields changed during narrow keyboard traversal: ${JSON.stringify(narrowRecoveryFields)}.`);
 		const runtimeRecoveryNarrowScreenshot = await capture(window, outputDir, '07d-runtime-recovery-reflow.png', true);
 		await sizeViewport(window, recoveryViewport.width, recoveryViewport.height);
 		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open = false");
@@ -1834,6 +2138,89 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(restoredCustomState.ok && restoredCustomState.stdout.includes('custom state restored'), 'Custom files/SQLite did not survive fresh containers.');
 		assert(window.getSize().join('x') === recoveryWindowSize, 'Recovery controls resized the Admin window.');
 		progress('real managed recovery: deferred save, stop/cancel/init/inspect/start/checkpoint/offline restore and cold custom-file/SQLite resume passed');
+
+		// Exercise full import/export through the real renderer and IPC. Only
+		// human dialog choices are simulated, never Docker or native databases.
+		const instanceAuth = Buffer.from(`user:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`).toString('base64');
+		const nativeSession = await fetch(`http://127.0.0.1:${assistantPort}/session`, {
+			method: 'POST', headers: { authorization: `Basic ${instanceAuth}`, 'content-type': 'application/json' },
+			body: JSON.stringify({ title: 'Full-instance preservation check' }), signal: AbortSignal.timeout(10_000)
+		});
+		assert(nativeSession.ok, 'Could not create the native preservation session.');
+		const savedSession = await nativeSession.json() as { id: string; title: string };
+		const fullExport = join(outputDir, 'full-instance-export');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('[data-view=system]').click();
+			document.querySelector('#import-export').open=true;
+			document.querySelector('#backup-scope').value='instance';
+			document.querySelector('#backup-scope').dispatchEvent(new Event('change'));
+			document.querySelector('#backup-destination').value=${JSON.stringify(fullExport)};
+		})()`);
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('all containers stopped')", 'full export rejects live writers', 30_000, true);
+		assert(!existsSync(fullExport), 'Live export wrote a destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#stop-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelectorAll('#services .service').length===0", 'stopped source before full export');
+		const sourceIntent = readFileSync(join(homeDir, 'state/stack.json'));
+		const sourceKey = readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'));
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click(); document.querySelector('#import-export').open=true");
+		confirmations.push(0);
+		const cancelledExportPrompt = prompts.length + 1;
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForPrompt(cancelledExportPrompt);
+		assert(!existsSync(fullExport), 'Cancelled full export wrote a destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#backup-summary').textContent.includes('full-instance items exported')", 'full stopped export');
+		assert(JSON.parse(readFileSync(join(fullExport, 'fhold-backup.json'), 'utf8')).scope === 'instance', 'Full export did not publish its manifest.');
+		await window.webContents.executeJavaScript("document.querySelector('#backup-form').scrollIntoView({block:'start'})");
+		const fullExportScreenshot = await capture(window, outputDir, '08-full-instance-export.png', true);
+		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
+		await waitForRenderer(window, "document.body.dataset.phase==='welcome'", 'return to Welcome before full import');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('#begin-instance-import').click();
+			document.querySelector('#instance-restore-source').value=${JSON.stringify(fullExport)};
+			document.querySelector('#instance-restore-home').value=${JSON.stringify(fullRestoredHome)};
+			document.querySelector('#instance-restore-source').dispatchEvent(new Event('input'));
+			document.querySelector('#instance-restore-form').requestSubmit();
+		})()`);
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#apply-instance-restore').disabled", 'full import preview');
+		assert(!existsSync(fullRestoredHome), 'Full import preview seeded the target.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#install-section').hidden && !document.querySelector('#instance-import-section').hidden"), 'Fresh installation remained available while full import was selected.');
+		await window.webContents.executeJavaScript("document.querySelector('#instance-restore-back').focus()");
+		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+		await waitForRenderer(window, `document.activeElement?.id === 'instance-restore-source' &&
+			document.querySelector('#instance-import-review').hidden && document.querySelector('#apply-instance-restore').disabled &&
+			document.querySelector('#instance-restore-source').value === ${JSON.stringify(fullExport)} &&
+			document.querySelector('#instance-restore-home').value === ${JSON.stringify(fullRestoredHome)}`, 'import Back preserves choices and invalidates the preview');
+		assert(!existsSync(fullRestoredHome), 'Import Back wrote the destination.');
+		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled", 'Enter previews import without applying it');
+		assert(!existsSync(fullRestoredHome), 'Enter applied import instead of previewing it.');
+		await window.webContents.executeJavaScript("document.querySelector('#instance-import-review').scrollIntoView({block:'start'})");
+		const fullImportScreenshot = await capture(window, outputDir, '08a-full-instance-import.png', true);
+		confirmations.push(0);
+		const cancelledImportPrompt = prompts.length + 1;
+		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
+		await waitForPrompt(cancelledImportPrompt);
+		assert(!existsSync(fullRestoredHome), 'Cancelled full import changed its destination.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
+		await waitForRenderer(window, "document.body.dataset.phase==='ready' && document.body.dataset.busy!=='true'", 'full import preserves the completed instance, without setup or startup');
+		assert(readFileSync(join(fullRestoredHome, 'state/stack.json')).equals(sourceIntent), 'Full import changed instance intent.');
+		assert(readFileSync(join(fullRestoredHome, 'state/secrets/fhold_opencode_password')).equals(sourceKey), 'Full import replaced the native account key.');
+		assert((await adminSnapshot()).services.length === 0, 'Full import started a service.');
+		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#start-stack').click()");
+		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'explicit start of the restored instance');
+		const restoredSession = await fetch(`http://127.0.0.1:${assistantPort}/session/${savedSession.id}`, { headers: { authorization: `Basic ${instanceAuth}` }, signal: AbortSignal.timeout(10_000) });
+		assert(restoredSession.ok && (await restoredSession.json() as { title: string }).title === savedSession.title, 'Native session was not visible after full import/start.');
+		assert(window.getSize().join('x') === recoveryWindowSize, 'Full import/export resized the Admin window.');
+		progress('full stopped instance: live-writer refusal, cancel/confirm, export, empty-folder preview/import, unchanged keys/intent and native session after explicit startup passed');
 		assert(confirmations.length === 0, 'An expected interruption prompt was not shown.');
 		succeeded = true;
 		return {
@@ -1850,7 +2237,10 @@ async function run(): Promise<Record<string, unknown>> {
 			visibleSetupJourneyComplete: Boolean(provider && providerKey),
 			managementUiFixtureUsed: !provider,
 			startupRecoveryVerified: true,
+			welcomeVerified: { separateSetupOpenImportChoices: true, singleEditableName: true, cancelAndKeyboardFocus: true, optionalFolderLocation: true, emptyExistingFolderRefused: true, narrowAndZoom: true, zoomActionsReachable: true },
 			restorePreservationVerified: true,
+			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, backPreservesChoicesAndInvalidatesPreview: true, enterPreviewsOnly: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
+			sidebarVerified: { recentInstancePicker: true, footerRemoved: true, identityAndRuntimeOnOverview: true, automaticStatusRecovery: true, unavailableStatusFixture: true, longNameFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
 			instanceWelcomeVerified: {
 				defaultOneClick: true,
 				folderSelectionAndCancellation: true,
@@ -1896,6 +2286,7 @@ async function run(): Promise<Record<string, unknown>> {
 				automaticMemoryRestored: true
 			},
 			connectionRecipesVerified: ['opencode', 'claude', 'mcp'],
+			appSettingsVerified: { explicitConnectionCreation: true, privateKeyCopyViaIpc: true, anotherAppDraftPreservedWithoutSaving: true, restartPostponedWithoutContainerChange: true, cancelledFullAccessPreserved: true },
 			networkDetailsVerified: {
 				mcpApiLabels: true,
 				fullMcpAndHealthUrls: true,
@@ -1914,11 +2305,19 @@ async function run(): Promise<Record<string, unknown>> {
 				toolCount: tools.length
 			},
 			screenshots: [
+				...sidebarScreenshots,
+				fullExportScreenshot,
+				fullImportScreenshot,
 				welcomeScreenshot,
 				narrowWelcomeScreenshot,
 				newInstanceScreenshot,
+				zoomWelcomeScreenshot,
+				zoomNamingScreenshot,
+				zoomFolderScreenshot,
+				zoomFolderActionsScreenshot,
 				secondInstanceScreenshot,
 				recentScreenshot,
+				instancePickerScreenshot,
 				initialScreenshot,
 				advancedPortsScreenshot,
 				assistantScreenshot,
@@ -1964,6 +2363,9 @@ async function run(): Promise<Record<string, unknown>> {
 		if (existsSync(join(otherHome, 'system', 'stack', 'stack.compose.yml'))) {
 			await deactivateComposeCommand(createFholdState(otherHome));
 		}
+		if (existsSync(join(fullRestoredHome, 'system/stack/stack.compose.yml'))) {
+			await deactivateComposeCommand(createFholdState(fullRestoredHome));
+		}
 		if (!keepRunning || !succeeded) {
 			try {
 				await deactivateComposeCommand(createFholdState(homeDir));
@@ -1975,12 +2377,61 @@ async function run(): Promise<Record<string, unknown>> {
 	}
 }
 
+async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
+	const outputDir = requiredEnvironment('FH_ADMIN_E2E_OUTPUT');
+	const prior = JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8'));
+	const expectedHome = prior.fullInstanceVerified?.home;
+	assert(typeof expectedHome === 'string' && existsSync(expectedHome), 'The completed walkthrough did not retain its restored instance.');
+	const preferencesPath = join(outputDir, 'electron-profile', 'instances.json');
+	const preferences = readFileSync(preferencesPath, 'utf8');
+	const intent = readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8');
+	app.setName('fhold Admin E2E');
+	app.setPath('userData', join(outputDir, 'electron-profile'));
+	await waitForAppReady();
+	registerAdminIpc();
+	const window = createAdminWindow();
+	const size = window.getSize().join('x');
+	try {
+		await waitForLoad(window);
+		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#app-shell').hidden", 'automatic instance reopening in a new Electron process');
+		assert(await window.webContents.executeJavaScript(`document.querySelector('#instance-picker').value === ${JSON.stringify(expectedHome)} && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`), 'A fresh app launch did not select the last-used instance.');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#instance-welcome').hidden && !document.querySelector('.sidebar .brand-subtitle')"), 'Reopened instance showed Welcome or the removed sidebar subtitle.');
+		assert(window.getTitle() === 'fhold Admin', 'Native window title still contains the old subtitle.');
+		assert((await adminSnapshot()).services.length === 0, 'Automatically reopening the instance started a container.');
+		const reopened = await capture(window, outputDir, '09-reopened-instance.png');
+		await window.webContents.executeJavaScript(`(() => {
+			const picker = document.querySelector('#instance-picker');
+			picker.value = 'open-another';
+			picker.dispatchEvent(new Event('change', {bubbles:true}));
+		})()`);
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'manual switch to Welcome after automatic reopening');
+		window.webContents.reload();
+		await waitForLoad(window);
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'Welcome remains open across renderer reloads');
+		assert(await window.webContents.executeJavaScript("(async () => !(await window.fholdAdmin.welcome()).selectedInstance)()"), 'Renderer reload silently reopened the instance after manual switching.');
+		assert(window.getSize().join('x') === size, 'Reopening or switching resized the window.');
+		assert(readFileSync(preferencesPath, 'utf8') === preferences, 'Automatic reopening rewrote recent-instance preferences.');
+		assert(readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8') === intent, 'Automatic reopening changed instance intent.');
+		const welcome = await capture(window, outputDir, '09a-manual-instance-selection.png');
+		progress('new process reopened the previous instance read-only; manual Welcome survived renderer reload without resizing or container startup');
+		return {
+			ok: true,
+			instanceLaunchVerified: { automaticReopen: true, welcomeOnlyOnFirstOrManualLaunch: true, noHomeOrPreferenceWrites: true, noContainerStartup: true, subtitleRemoved: true, windowSizeStable: true },
+			screenshots: [reopened, welcome],
+			visualAudits
+		};
+	} finally {
+		window.destroy();
+	}
+}
+
 async function main(): Promise<void> {
 	const outputDir = process.env.FH_ADMIN_E2E_OUTPUT?.trim();
+	const reopenedLaunch = process.argv.includes('--verify-reopened-launch');
 	try {
-		const report = await run();
+		const report = await (reopenedLaunch ? verifyReopenedLaunch() : run());
 		if (outputDir)
-			writeFileSync(join(outputDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+			writeFileSync(join(outputDir, reopenedLaunch ? 'reopen-report.json' : 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
 		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 		app.exit(0);
 	} catch (error) {

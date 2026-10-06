@@ -24,19 +24,38 @@ fhold connect claude --credential claude-desktop
 
 Download `fhold-claude-desktop-<version>.mcpb` from the matching
 [GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
-Admin's **Connections → Claude Desktop** panel provides the direct download;
+Admin's **Apps → Claude → Desktop chat** section provides the direct download;
 `fhold connect claude` prints the same versioned URL. No source build is required.
 In Claude Desktop:
 
 1. Open **Settings → Extensions → Advanced settings**.
 2. In **Extension Developer**, choose **Install Extension…**.
 3. Select the `.mcpb` file.
-4. In fhold Admin, open **Connections → Claude Desktop**. Enable protected
-   access and save Connections if prompted.
-5. Copy the displayed **Local fhold address** and the key for the selected
-   access identity into the extension. Create a dedicated identity under
-   **People & access** first when you do not want to reuse an existing one.
-6. Restart Claude Desktop if the tools do not appear.
+4. In fhold Admin, open **Apps → Claude → Desktop chat** and choose
+   **Enable access for Claude Desktop** if needed. Confirm whether to restart
+   now or apply the saved change later.
+5. Under **What can Claude Desktop do?**, choose Chat only, Read files or Full
+   access and select **Create connection**. Use Full access only for a trusted app
+   needing agent tools and file changes; granting it requires confirmation.
+   For an already configured extension, change its existing permissions with
+   **Apps → Advanced access → Manage**; do not create another connection
+   just to change permissions. fhold does not detect the extension's saved assignment.
+6. In the connection instructions, copy **Local address** and select **Copy
+   access key**, then paste them into the extension's address and **fhold access
+   key** fields. Keys appear here because the extension needs a pasted credential,
+   not as a separate Admin management destination.
+7. Restart Claude Desktop if the tools do not appear.
+
+The revised Admin workflow is a design preview, not live-verified client setup.
+Changing saved permissions affects all apps using that identity and requires
+confirmation; its key and conversations stay attached to the same identity.
+Creating a separate connection requires updating the extension and starts
+separate conversations; it does not replace or remove the old connection.
+**Apps → Advanced access → Manage** edits existing permissions.
+**System → Connection keys → Rotate key** replaces an exposed key, preserving
+permissions and conversations; update the extension with the new key afterward.
+The **Claude remote connection** uses native sign-in and permissions independently
+of this Desktop MCP connection.
 
 These are Anthropic's documented steps for
 [installing a custom desktop extension](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop#h_6df82aa934).

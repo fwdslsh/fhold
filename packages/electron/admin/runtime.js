@@ -3,39 +3,53 @@ import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { renderRestartStatus, requestStackAction } from './restart.js';
 import { updateRecoveryFields } from './recovery.js';
+import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
+import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
 export function renderPhase(phase) {
+	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
 	byId('install-section').hidden = phase !== 'not_installed';
+	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = phase === 'not_installed';
-	for (const element of all('.setup-only')) element.hidden = phase !== 'setup_incomplete';
-	for (const element of all('.ready-only')) element.hidden = phase !== 'ready';
-	document.body.dataset.phase = phase;
+	for (const element of all('.setup-only')) element.hidden = !setup;
+	for (const element of all('.ready-only')) element.hidden = phase !== 'ready' || setup;
+	document.body.dataset.phase = setup ? 'setup_incomplete' : phase;
+	const notifications = byId('notification-area');
+	const alertLocation = byId(phase === 'ready' && !setup ? 'sidebar-alerts' : 'setup-alerts');
+	if (notifications.parentElement !== alertLocation) alertLocation.append(notifications);
 	setSkipTarget(phase === 'not_installed' ? 'install-section' : 'main-content');
-	if (phase === 'setup_incomplete') {
-		setBadge(byId('stack-status'), 'Setup in progress', 'neutral');
+	if (setup) {
 		showView('provider');
 	} else if (phase === 'ready') {
-		showView(
-			state.currentView === 'provider' && state.lastReadiness?.ok ? 'overview' : state.currentView
-		);
+		showView(state.currentView);
 	}
 }
 
 export function renderRuntimeControls(snapshot) {
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
-	byId('start-stack').disabled = state.operationInFlight || running;
-	byId('restart-stack').disabled = state.operationInFlight || !running;
-	byId('stop-stack').disabled = state.operationInFlight || snapshot.services.length === 0;
+	const unavailable = !!snapshot.dockerError;
+	byId('start-stack').disabled = state.operationInFlight || unavailable || running;
+	byId('restart-stack').disabled = state.operationInFlight || unavailable || !running;
+	byId('stop-stack').disabled =
+		state.operationInFlight || unavailable || snapshot.services.length === 0;
 	renderRestartStatus(snapshot);
 	updateRecoveryFields();
 }
 
 export function renderServices(snapshot) {
+	renderConnectionStatus(snapshot);
+	updateGuardianGuide();
+	const unavailable = !!snapshot.dockerError;
+	setText(
+		'runtime-status-detail',
+		unavailable ? 'Container status is unavailable. fhold will retry automatically.' : ''
+	);
+	byId('runtime-status-detail').hidden = !unavailable;
 	const services = byId('services');
 	services.replaceChildren();
 	if (snapshot.services.length === 0) {
@@ -69,22 +83,32 @@ export function renderServices(snapshot) {
 	const guardian = snapshot.services.find((service) => service.name === 'guardian');
 	setText(
 		'overview-heading',
-		isHealthy(assistant)
-			? 'Your personal agent is ready.'
-			: assistant
-				? 'Your agent needs attention.'
-				: 'Your agent is stopped.'
+		unavailable
+			? 'Container status is unavailable.'
+			: isHealthy(assistant)
+				? 'Your personal agent is ready.'
+				: assistant
+					? 'Your agent needs attention.'
+					: 'Your agent is stopped.'
 	);
 	setText(
 		'assistant-summary',
-		isHealthy(assistant) ? 'Running normally' : assistant ? 'Needs attention' : 'Stopped'
+		unavailable
+			? 'Status unavailable'
+			: isHealthy(assistant)
+				? 'Running normally'
+				: assistant
+					? 'Needs attention'
+					: 'Stopped'
 	);
 	setText(
 		'guardian-summary',
 		snapshot.config.gateway.enabled
-			? isHealthy(guardian)
-				? 'Enabled and healthy'
-				: 'Enabled · needs attention'
+			? unavailable
+				? 'Status unavailable'
+				: isHealthy(guardian)
+					? 'Enabled and healthy'
+					: 'Enabled · needs attention'
 			: 'Not enabled'
 	);
 	const enabledPortals = ['discord', 'slack'].filter(
@@ -95,11 +119,6 @@ export function renderServices(snapshot) {
 		enabledPortals.length
 			? enabledPortals.map((portal) => portal[0].toUpperCase() + portal.slice(1)).join(' and ')
 			: 'None enabled'
-	);
-	setBadge(
-		byId('stack-status'),
-		isHealthy(assistant) ? 'Agent running' : assistant ? 'Needs attention' : 'Agent stopped',
-		isHealthy(assistant) ? 'success' : 'neutral'
 	);
 	renderRuntimeControls(snapshot);
 	const needsRecovery = snapshot.phase === 'setup_incomplete' && !isHealthy(assistant);
@@ -130,7 +149,8 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
-	byId('check-prerequisites').addEventListener('click', () => void refresh(false));
+	for (const button of all('[data-check-prerequisites]'))
+		button.addEventListener('click', () => void checkInstallationReadiness());
 	byId('install-automatic-ports').addEventListener('change', () => {
 		const automatic = byId('install-automatic-ports').checked;
 		byId('install-assistant-port').disabled = automatic;
@@ -138,7 +158,7 @@ export function bindRuntimeEvents() {
 	});
 	byId('install-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		if (!state.currentConfig) return;
+		if (state.operationInFlight || byId('install-section').hidden) return;
 		const automaticPorts = byId('install-automatic-ports').checked;
 		const assistantPort = Number(byId('install-assistant-port').value);
 		const gatewayPort = Number(byId('install-gateway-port').value);
@@ -149,19 +169,26 @@ export function bindRuntimeEvents() {
 			byId('install-gateway-port').focus();
 			return;
 		}
-		const config = structuredClone(state.currentConfig);
-		config.deployment.projectName = byId('install-instance-name').value.trim();
-		if (config.recovery) config.recovery.instanceId = config.deployment.projectName;
-		if (!automaticPorts) {
-			config.assistant.port = assistantPort;
-			config.gateway.port = gatewayPort;
-		}
+		let prepared = false;
 		const result = await operation(
 			'Setting up fhold',
-			() => state.api.install(config, automaticPorts),
+			async () => {
+				await prepareInstallTarget();
+				const snapshot = await state.api.snapshot();
+				prepared = true;
+				state.currentSnapshot = snapshot;
+				state.currentConfig = snapshot.config;
+				const config = snapshot.config;
+				if (!automaticPorts) {
+					config.assistant.port = assistantPort;
+					config.gateway.port = gatewayPort;
+				}
+				return state.api.install(config, automaticPorts);
+			},
 			'fhold is installed. Next, connect your AI provider.'
 		);
-		if (!result) await refresh(false);
+		if (result) byId('view-title').focus();
+		else if (prepared) await refresh();
 	});
 
 	byId('recovery-form').addEventListener('submit', async (event) => {

@@ -1,7 +1,7 @@
 import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { classifyInstall, defaultFholdHome, isInstanceName, readStackConfig, resolveFholdHome, writeFileAtomic } from '@fhold/lib';
-import type { AdminInstance, AdminWelcome } from './admin-types.js';
+import type { AdminInstance, AdminWelcome, AdminWelcomeInstance } from './admin-types.js';
 
 // Targets are kept separate from local control-plane operations. An SSH target
 // can extend this type and dispatch boundary when remote management is built.
@@ -36,6 +36,20 @@ export function validateInstance(value: unknown): AdminInstance {
 	return target;
 }
 
+function describeInstance(target: AdminInstance): AdminWelcomeInstance {
+	try {
+		const phase = classifyInstall(target.homeDir);
+		const config = readStackConfig(target.homeDir);
+		return {
+			...target,
+			available: phase === 'installed' || phase === 'setup_incomplete',
+			...(config.ok ? { name: config.config.deployment.projectName } : {})
+		};
+	} catch {
+		return { ...target, available: false };
+	}
+}
+
 export class AdminInstances {
 	private selected?: AdminInstance;
 	private newName?: string;
@@ -67,15 +81,30 @@ export class AdminInstances {
 		} catch {
 			this.recent = [];
 			this.preferenceError =
-				'Recent instances could not be loaded. You can still open the default folder or choose another.';
+				'Recent instances could not be loaded. You can still open an existing instance or set up a new agent.';
+		}
+		this.reopenPrevious();
+	}
+
+	private reopenPrevious(): void {
+		const previous = this.recent[0];
+		if (!previous) return;
+		try {
+			if (classifyInstall(previous.homeDir) === 'not_installed')
+				throw new Error('Its folder is missing or setup has not started. Choose its location or create a new instance.');
+			// Resume once per app launch, without rewriting preferences or the home.
+			// Closing the selection must leave Welcome open across renderer reloads.
+			this.selected = validateInstance(previous);
+		} catch (error) {
+			this.preferenceError = `The previous instance could not be opened. ${error instanceof Error ? error.message : 'Choose another folder. Nothing was changed.'}`;
 		}
 	}
 
 	welcome(): AdminWelcome {
 		return {
-			defaultInstance: this.defaultInstance,
+			defaultInstance: describeInstance(this.defaultInstance),
 			instancesDirectory: dirname(resolveFholdHome(defaultFholdHome())),
-			recentInstances: this.recent,
+			recentInstances: this.recent.map(describeInstance),
 			...(this.selected ? { selectedInstance: this.selected } : {}),
 			...(this.preferenceError ? { preferenceError: this.preferenceError } : {})
 		};
@@ -107,6 +136,8 @@ export class AdminInstances {
 				'This recent instance folder is no longer available. Choose its new location instead.'
 			);
 		const target = validateInstance(value);
+		if (classifyInstall(target.homeDir) === 'not_installed')
+			throw new Error('No fhold instance was found in this folder. Use Set up a new agent to create one. Nothing was changed.');
 		this.select(target);
 	}
 
@@ -121,7 +152,7 @@ export class AdminInstances {
 			(!statSync(target.homeDir).isDirectory() || readdirSync(target.homeDir).length > 0)
 		)
 			throw new Error(
-				'Choose an empty or new folder for this instance. To manage an existing instance, use Open another folder. Nothing was changed.'
+				'Choose an empty or new folder for this instance. To manage an existing instance, use Open existing instance. Nothing was changed.'
 			);
 		this.select(target);
 		this.newName = name;

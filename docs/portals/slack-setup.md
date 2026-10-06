@@ -25,10 +25,13 @@ fhold portal token slack \
 Both files must be mode 0600. Do not store the values in Compose environment
 variables.
 
-In fhold Admin, **Connections → Slack** presents the same scopes and event
-checklist and opens Slack's app console. **Add Slack tokens** moves directly to
-the private token form. Both tokens are required initially; afterward either
-one can be rotated without re-entering the other.
+In fhold Admin, **Apps → Slack** presents the same scopes and event
+checklist and opens Slack's app console. **Bot tokens → Save Slack tokens** stores
+them privately. Both tokens are required initially; afterward either one can be
+rotated without re-entering the other. Default access, allowed-user rules and
+individual user mappings are in the same Slack section. **Save Slack settings**
+does not save another app's drafts. Restart now or later when prompted; enabling
+Slack also enables the MCP service it needs.
 
 ## 2. Configure a default-deny scope
 
@@ -43,9 +46,23 @@ blocked user always loses access. Configure users alone to allow direct
 messages; a DM cannot satisfy a channel constraint. The adapter refuses all use
 when both allowlists are empty.
 
-In Admin, expand **Who can use it**, enter the same IDs, choose the default
-access identity, and select **Save connections**. If a required scope or token
-is missing, Admin opens and focuses the exact field that needs attention.
+In the revised Admin preview, open **Apps → Slack → Who can use the bot**
+and enter the same IDs. Choose Chat only, Read files or Full access under
+**What can Slack do?**, then select **Save Slack settings**. Normal bot setup does
+not ask you to choose or copy a fhold key; the existing credential remains private
+plumbing. Full access requires confirmation. If a required scope or token is
+missing, Admin opens and focuses the field that needs attention. The preview has
+not yet been live-verified; see the [Admin runbook](../operations/admin-setup-verification.md).
+
+**Different permissions for a person** lets you enter an exact Slack user ID and
+choose their permissions with **Save person permissions**, without naming a key.
+The user must still pass the
+allowlist. Existing mappings retain their credential IDs. Editing saved
+permissions affects every use of that identity and requires confirmation;
+ordinary edits preserve the existing conversations and bot assignment. **Use bot
+permissions** removes an override, not access checks. Existing permission editing
+is under **Apps → Advanced access → Manage**. Key rotation, when needed,
+is under **System → Connection keys**; it is not part of bot setup.
 
 ## 3. Enable and verify
 

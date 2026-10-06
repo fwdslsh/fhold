@@ -129,17 +129,35 @@ bun run --cwd packages/electron bundle
 bun run --cwd packages/electron start
 ```
 
-Admin opens at Welcome: choose the default, previous/recent instance or another
-folder, or expand **Create new instance**. Enter a name to get a suggested
-`~/fhold/instances/<name>` folder, or choose a folder/enter a full path to override it.
-Then continue to setup and confirm **Install fhold**. Port
-selection is automatic; expand **Advanced** and turn off automatic selection
-only if you need specific ports. New setup refuses non-empty folders and rejects a
+Admin automatically reopens the last-used compatible instance. First launch or
+an unavailable previous instance shows Welcome: choose **Set up a new agent**
+or **Open existing instance…**. **Import an instance…** is a separate choice for
+an entire-instance export. Use the instance dropdown → **Open another instance…**
+to return to these choices and a compact list of recent instances.
+The three-step wizard installs the agent, connects an AI account, then opens
+the ready instance. New setup asks for a name once and suggests
+`~/fhold/instances/<name>`. Docker and Compose checks run in the background
+while you choose. **Advanced**, collapsed by default, contains both the folder
+location and optional manual ports. Confirm **Install fhold** below it.
+Successful prerequisite checks show no extra status message. If Docker or Compose
+is unavailable, setup shows the problem, official setup guides and **Check again**.
+**Import an instance…** opens its own Choose folders → Review & import workflow.
+Select an entire-instance export and a new/empty destination, then choose
+**Review import**. The next screen shows the saved identity, both paths and any
+warnings before the native import confirmation. **Back** edits the folder
+choices without losing them; **Cancel import** leaves the flow. Import never
+runs installation first and leaves containers stopped.
+New setup refuses non-empty folders and rejects a
 name already used by Docker before writing installation files. Folder selection
-alone does not install or start anything. An empty folder opens setup; a
-compatible fhold home opens management. Provider authentication
+alone does not install or start anything. Only explicit new setup accepts an
+empty folder; opening an existing instance requires a compatible fhold home.
+Provider authentication
 and readiness use the same Assistant as CLI. A startup/port failure offers an
 explicit retry, not reinstall-over-data.
+The first setup/import step has only **Cancel**, not a duplicate Back action.
+**Cancel setup** returns to the instance choices before installation.
+After installation, **Finish later** leaves the agent running;
+reopen it to continue account setup.
 
 For a verified Linux package, use `bun run --cwd packages/electron build:linux`.
 Actual packaged startup requires the release smoke gate; a bundle alone is not

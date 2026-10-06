@@ -5,20 +5,34 @@ export function createAdminState() {
 		currentConfig: null,
 		currentSnapshot: null,
 		currentView: 'overview',
-		currentClient: 'opencode',
 		instancesDirectory: '',
+		recentInstances: [],
+		snapshotPromise: undefined,
+		installationReadiness: undefined,
+		setupCheckPromise: undefined,
 		providerSummaries: [],
 		providersLoaded: false,
 		providerLoadPromise: undefined,
 		providerCatalogExpanded: false,
-		automaticReadinessAttempted: false,
+		providerHome: undefined,
+		providerEpoch: 0,
+		providerCatalogEpoch: 0,
+		providerEditor: null,
+		providerCurrentModel: undefined,
+		providerConfigurationIssue: undefined,
+		providerTestTarget: null,
 		activeOAuth: null,
 		operationInFlight: false,
 		disabledButtons: [],
 		noticeTimer: undefined,
 		restorePreviewSignature: null,
 		restorePreviewDigest: null,
+		instanceRestorePreview: null,
 		lastReadiness: null,
+		lastReadinessProvider: null,
+		lastReadinessModel: null,
+		lastReadinessAuthSaved: false,
+		awaitingSetupFinish: false,
 		renderingSnapshot: false,
 		dirtyForms: new Set()
 	};
@@ -27,11 +41,17 @@ export function createAdminState() {
 export const state = createAdminState();
 
 export const managedFormIds = [
-	'connections-form',
-	'access-form',
-	'network-form',
-	'runtime-recovery-form',
-	'preferences-form'
+	'mcp-connections-form',
+	'discord-connections-form',
+	'slack-connections-form',
+	'discord-token-form',
+	'slack-token-form',
+	'claude-permissions-form',
+	'mcp-permissions-form',
+	'permissions-form',
+	'opencode-network-form',
+	'mcp-network-form',
+	'runtime-recovery-form'
 ];
 
 export const commonProviders = new Set([
@@ -45,9 +65,9 @@ export const commonProviders = new Set([
 ]);
 
 export const policyLabels = {
-	chat: 'Conversation only',
+	chat: 'Chat only',
 	read: 'Read files',
-	full: 'Full control'
+	full: 'Full access'
 };
 
 export const viewMeta = {
@@ -59,17 +79,12 @@ export const viewMeta = {
 	provider: {
 		kicker: 'AI CONNECTION',
 		title: 'Agent settings',
-		description: 'AI account, memory, and recurring work.'
+		description: 'Choose the AI service and model your agent uses.'
 	},
 	connections: {
-		kicker: 'CLIENTS & CHAT APPS',
-		title: 'Connections',
-		description: 'Connect an app or manage access from chat.'
-	},
-	access: {
-		kicker: 'PEOPLE & PERMISSIONS',
-		title: 'People & access',
-		description: 'Give each person or app its own key and access level.'
+		kicker: 'YOUR APPS',
+		title: 'Apps',
+		description: 'Choose the app you want to use with your agent.'
 	},
 	system: {
 		kicker: 'SYSTEM',

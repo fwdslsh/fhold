@@ -153,6 +153,10 @@ export {
 	type ConnectionDetails
 } from './control-plane/connection.js';
 export {
+	listProviderSettings, saveProviderEndpoint, useProviderModel, removeProviderSetup, discoverProviderModels,
+	type ProviderSettings, type ProviderEndpointInput
+} from './control-plane/provider-settings.js';
+export {
 	applyRestore,
 	planRestore,
 	type RestoreAction,
@@ -165,6 +169,12 @@ export {
 	type BackupManifest,
 	type BackupOptions
 } from './control-plane/backup.js';
+export {
+	exportInstance, planInstanceRestore, restoreInstance,
+	INSTANCE_BACKUP_NOTICE, INSTANCE_BACKUP_EXCLUSIONS,
+	type InstanceBackupManifest, type InstanceBackupEntry,
+	type InstanceBackupOptions, type InstanceRestoreOptions, type InstanceRestorePlan
+} from './control-plane/instance-backup.js';
 export {
 	exportHistory,
 	restoreHistory,
