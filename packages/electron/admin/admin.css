@@ -1710,6 +1710,141 @@ body[data-busy="true"] #main-content {
 	margin-top: 0;
 	gap: 14px;
 }
+
+/* Account evidence, provider choice and sign-in are separate user tasks. */
+#provider-connection > .section-heading .help-text {
+	margin: 8px 0 0;
+}
+#provider-connection > .section-heading > .status-badge {
+	flex: 0 0 auto;
+}
+#provider-connection h3 {
+	margin: 0;
+	font-size: 0.9375rem;
+	line-height: 1.4;
+}
+#provider-status {
+	overflow-wrap: anywhere;
+}
+.provider-accounts {
+	margin-top: 24px;
+}
+.provider-accounts > .section-heading {
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+.provider-accounts > .section-heading .text-button {
+	flex: 0 0 auto;
+}
+.provider-empty {
+	margin: 0;
+	padding: 14px 16px;
+	border: 1px dashed var(--border-soft);
+	border-radius: 6px;
+	background: var(--surface-muted);
+}
+.provider-account-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.provider-account-list:empty {
+	display: none;
+}
+.provider-account-list > li {
+	min-width: 0;
+}
+.provider-account {
+	display: grid;
+	align-content: start;
+	gap: 5px;
+	width: 100%;
+	height: 100%;
+	min-height: 76px;
+	padding: 14px 16px;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+.provider-account[aria-pressed="true"] {
+	border-color: var(--accent-hover);
+	background: var(--surface-raised);
+	box-shadow: inset 3px 0 0 var(--accent-hover);
+}
+.provider-account small,
+.provider-account-state {
+	color: var(--ink-soft);
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1.5;
+}
+#provider-form {
+	gap: 24px;
+	margin-top: 24px;
+}
+.provider-picker {
+	display: grid;
+	gap: 12px;
+	padding-top: 24px;
+	border-top: 1px solid var(--border-soft);
+}
+.provider-picker > .help-text,
+.provider-selection-heading > .help-text {
+	margin: 0;
+}
+.provider-picker > #provider-search-help {
+	margin-top: -6px;
+}
+.provider-catalog-actions {
+	margin-top: -4px;
+}
+.provider-account-actions {
+	gap: 16px;
+	margin-top: 0;
+	padding: 20px;
+	border: 1px solid var(--border-soft);
+	border-radius: 6px;
+	background: var(--surface-muted);
+}
+.provider-selection-heading {
+	display: grid;
+	gap: 5px;
+}
+.provider-account-actions > .disclosure,
+.provider-account-actions > .callout {
+	margin-top: 0;
+}
+.provider-account-actions .disclosure > .field {
+	margin-top: 16px;
+}
+.provider-account-actions .disclosure > .primary {
+	margin-top: 8px;
+}
+.provider-account-actions .callout > .form-stack {
+	margin-top: 0;
+}
+.provider-account-actions .callout > .button-row:not(:has(> button:not([hidden]))) {
+	display: none;
+}
+#provider-connection > .wizard-actions:has(#finish-provider-setup[hidden]) {
+	display: none;
+}
+@media (max-width: 520px) {
+	#provider-connection > .section-heading {
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	.provider-accounts > .section-heading {
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+	.provider-account-actions {
+		padding: 16px;
+	}
+}
 :where(body[data-phase="setup_incomplete"] #provider-connection) .section-heading {
 	margin-bottom: 8px;
 }

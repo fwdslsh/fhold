@@ -168,7 +168,7 @@ restart appear at the bottom of the sidebar, not above page content. Setup keeps
 its feedback visible in the wizard. Opening/switching instances
 and automatic status checks never restart containers or resize the window.
 
-Agent settings owns provider readiness, memory and timezone. **Connections** is
+Agent settings connects and verifies AI accounts. **Apps** is
 organized by app: **OpenCode** first, then **Claude**, **Codex**, **Discord**, **Slack** and
 **MCP**. Open an app to see its instructions, status, actions and settings.
 Claude offers **Desktop chat** for this computer and an experimental **Claude
@@ -189,7 +189,7 @@ settings snapshot is rejected so concurrent changes are not silently lost.
 
 ### App permissions
 
-Choose what an app can do inside **Connections**, alongside its setup.
+Choose what an app can do inside **Apps**, alongside its setup.
 Claude Desktop, MCP, Discord and Slack offer three choices:
 
 - **Chat only:** conversation without agent tools, file changes or tasks.
@@ -228,7 +228,7 @@ setting up separate access starts separate
 credential-scoped conversations. Old conversations stay with the old identity;
 external apps must be reconfigured when their connection key changes.
 
-**Advanced access**, collapsed at the bottom of Connections, offers compact
+**Advanced access**, collapsed at the bottom of Apps, offers compact
 permission editing through **Manage** buttons, not a policy matrix or key-card
 destination. Permission dialogs do not include copy, replacement or removal.
 Only saved bot assignments are known, not external usage. Missing selected
@@ -321,7 +321,8 @@ for permission before its sign-in workflow can restart containers.
 Live credential keys, policies and portal-user mappings still take effect
 without a restart; deferring settings does not defer credential revocation.
 Provider sign-in alone does not restart containers. If provider readiness also
-changes Guardian's moderator configuration, Admin offers a restart to apply it.
+changes Guardian's moderator configuration, the pending-restart alert lets you
+choose when to apply it; verification does not open a restart prompt.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider
@@ -332,6 +333,26 @@ editing those files. Status inspection itself never writes tracking state.
 
 ## Provider and knowledge
 
+In **Agent settings**, select a saved AI account to verify or update its sign-in.
+Search the full native provider catalog to add another account; a no-match search
+never keeps an unrelated provider selected. API-key accounts offer **Add API key**
+or **Replace API key**; existing keys are never displayed. Browser sign-in follows
+the provider's native prompts, with an explicit **Cancel sign-in** action.
+
+**Sign-in saved** means credentials are present, not that they work. **Available
+in agent** can also mean a provider supplied through environment/configuration
+or a public service. Only **Verified** means a real response succeeded in this
+check. Loading accounts makes no model request and does not verify them.
+Verification stays on this page; first-time setup advances only through
+**Continue to your agent**. It does not change the agent's default model.
+
+The check uses the selected provider and a native model supporting both text
+conversations and agent tools. It prefers a compatible configured model, then
+the native suggested model, then a compatible model in native catalog order.
+Audio-only, embedding-only, non-tool and deprecated models cannot be used for
+this check. A failed response after saving credentials is reported separately
+from a failed sign-in, so you know whether the key was saved.
+
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
 Auth persists under `knowledge/secrets/auth.json`. Advanced native settings
@@ -340,8 +361,11 @@ are documented in [OpenCode configuration](technical/opencode-configuration.md).
 Ask the trusted agent to remember facts or schedule work in ordinary language:
 “Every weekday at 8 AM, check my project news and save the result to my inbox.”
 Every run retains durable AKM history; scheduled reports are restricted to
-`knowledge/inbox/`. Automatic memory is configurable and limited to trusted
-native build/plan conversations. Never paste credentials into conversations.
+`knowledge/inbox/`. AKM and automatic memory are enabled for fresh installations;
+the scheduler uses the host OS timezone by default. Existing explicit choices
+remain unchanged. Advanced operators can configure these through the CLI/config,
+not Agent settings. Automatic memory is limited to trusted native build/plan
+conversations. Never paste credentials into conversations.
 
 ```bash
 fhold task list

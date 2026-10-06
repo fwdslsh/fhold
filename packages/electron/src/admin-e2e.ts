@@ -2,6 +2,8 @@ import { app, dialog, shell, type BrowserWindow } from 'electron';
 import axe from 'axe-core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:net';
 
 import {
@@ -22,6 +24,19 @@ import { adminSnapshot, createAdminWindow, registerAdminIpc, runAdminAction } fr
 type RendererWaitState = { ready: boolean; error: string };
 
 const visualAudits: Array<Record<string, unknown>> = [];
+
+async function configureFixtureAssistant(homeDir: string, args: string[]): Promise<void> {
+	const cli = join(requiredEnvironment('FH_REPO_ROOT'), 'packages', 'cli', 'dist', 'fhold-cli');
+	assert(existsSync(cli), 'Build the standalone CLI before qualifying external settings changes.');
+	await promisify(execFile)(
+		cli,
+		['--name', homeDir, 'config', 'assistant', ...args, '--no-apply'],
+		{
+			cwd: homeDir,
+			maxBuffer: 1024 * 1024
+		}
+	);
+}
 
 async function sizeViewport(
 	window: BrowserWindow,
@@ -525,14 +540,28 @@ async function connectProviderUi(
 	})()`);
 	await waitForRenderer(
 		window,
-		"document.querySelector('#notice-message')?.textContent === 'Provider verified. Your personal agent is ready.' && document.querySelector('#view-overview')?.hidden === false",
+		"(await import('./state.js')).state.lastReadiness?.ok === true && document.body.dataset.busy !== 'true' && document.querySelector('#view-provider')?.hidden === false",
 		'provider readiness',
 		180_000
 	);
 	const readiness = (await window.webContents.executeJavaScript(
-		"JSON.parse(document.querySelector('#provider-result').value)"
+		"(await import('./state.js')).state.lastReadiness"
 	)) as Record<string, unknown>;
 	assert(readiness.ok === true, `Provider readiness failed: ${JSON.stringify(readiness)}`);
+	if (
+		await window.webContents.executeJavaScript(
+			"!document.querySelector('#finish-provider-setup').hidden"
+		)
+	) {
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#finish-provider-setup').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.querySelector('#view-overview')?.hidden === false",
+			'explicit setup continuation'
+		);
+	}
 	return readiness;
 }
 
@@ -960,20 +989,20 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#load-providers').click()");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#provider-result')?.value.trim().startsWith('[')",
+			"(await import('./state.js')).state.providersLoaded && !(await import('./state.js')).state.providerLoadPromise",
 			'OpenCode provider discovery',
 			60_000
 		);
 		const providerCatalog = (await window.webContents.executeJavaScript(
-			"JSON.parse(document.querySelector('#provider-result').value)"
+			"(await import('./state.js')).state.providerSummaries"
 		)) as Array<Record<string, unknown>>;
 		progress(`OpenCode discovered ${providerCatalog.length} providers`);
-		// Discovery can launch an automatic existing-sign-in check. Wait for it before
-		// submitting another operation through the deliberately locked setup form.
+		// Account discovery never performs a paid/native verification on its own.
+		// Wait for discovery to finish before the explicit account operation below.
 		await waitForRenderer(
 			window,
 			"document.body.dataset.busy !== 'true'",
-			'the existing-sign-in check to finish',
+			'account discovery to finish',
 			180_000,
 			true
 		);
@@ -986,33 +1015,21 @@ async function run(): Promise<Record<string, unknown>> {
 			progress('provider readiness passed');
 			readyScreenshot = await capture(window, outputDir, '04-agent-ready.png');
 		} else {
-			await window.webContents.executeJavaScript(`(() => {
+			await window.webContents.executeJavaScript(`(async () => {
 				const provider = document.querySelector('#provider');
 				if (!provider.value) {
 					if (!document.querySelector('#test-provider').hidden) throw new Error('Verification appears before choosing a provider.');
 					provider.value = [...provider.options].find(option => option.value === 'anthropic')?.value || [...provider.options].find(option => option.value)?.value;
 					provider.dispatchEvent(new Event('change', { bubbles: true }));
 				}
-				if (document.querySelector('#test-provider').hidden) throw new Error('Verification is unavailable after provider selection.');
-				if (!document.querySelector('#test-provider').disabled) document.querySelector('#test-provider').click();
+				const selected = (await import('./state.js')).state.providerSummaries.find(item => item.id === provider.value);
+				if (!selected?.authenticated && !selected?.connected && !document.querySelector('#test-provider').hidden) throw new Error('Verification appears before account sign-in.');
 			})()`);
-			await waitForRenderer(
-				window,
-				`document.querySelector('#notice')?.hidden === true &&
-						document.querySelector('#provider-status')?.classList.contains('error') &&
-						document.querySelector('#view-provider')?.hidden === false`,
-				'a truthful provider-required error',
-				60_000,
-				true
-			);
-			readiness = (await window.webContents.executeJavaScript(
-				"JSON.parse(document.querySelector('#provider-result').value)"
-			)) as Record<string, unknown>;
-			assert(
-				readiness.ok === false,
-				`Expected provider readiness to fail: ${JSON.stringify(readiness)}`
-			);
-			progress('provider failure remained an incomplete setup error');
+			readiness = {
+				attempted: false,
+				reason: 'No provider account was supplied to this isolated management fixture.'
+			};
+			progress('provider sign-in remained incomplete without claiming a verification attempt');
 			markInstalled(homeDir);
 			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
@@ -1322,41 +1339,82 @@ async function run(): Promise<Record<string, unknown>> {
 		};
 		const beforeDeferredSave = { id: await containerId(), settings: await runtimeSettings() };
 		const sizeBeforeSave = window.getSize();
-		confirmations.push(0);
-		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#agent-preferences > summary').click();
-			document.querySelector('#agent-timezone').value = 'Europe/London';
-			document.querySelector('#automatic-memory').checked = false;
-			document.querySelector('#agent-timezone').dispatchEvent(new Event('input', { bubbles: true }));
-			document.querySelector('#preferences-form').requestSubmit();
-		})()`);
+		// Advanced native settings are CLI-owned, not controls in the AI-account UI.
+		// The normal CLI creates pending intent; Admin owns the explicit apply action.
+		await configureFixtureAssistant(homeDir, ['--timezone', 'Europe/London', '--memory', 'off']);
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+		);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'Agent preferences saved.' &&
-				document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
-				document.querySelector('#agent-timezone')?.value === 'Europe/London' &&
-				document.querySelector('#automatic-memory')?.checked === false`,
-			'agent preferences saved without restarting'
+			`document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
+				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false`,
+			'CLI-generated pending intent visible in Admin without restarting'
 		);
-		assert(await containerId() === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
-		assert(await runtimeSettings() === beforeDeferredSave.settings, 'Postponed save applied runtime settings.');
-		assert((await adminSnapshot()).pendingRestart?.required, 'Pending state was not saved with the instance.');
-		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
-		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'return to Welcome with saved changes');
-		await window.webContents.executeJavaScript(`[...document.querySelectorAll('#recent-instances .instance-choice')].find(button => button.dataset.homeDir === ${JSON.stringify(homeDir)}).click()`);
-		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden", 'pending restart after reopening the instance');
-		assert(JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave), 'Saving/reopening changed the user window size.');
+		assert((await containerId()) === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
+		assert(
+			(await runtimeSettings()) === beforeDeferredSave.settings,
+			'Postponed save applied runtime settings.'
+		);
+		assert(
+			(await adminSnapshot()).pendingRestart?.required,
+			'Pending state was not saved with the instance.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'welcome'",
+			'return to Welcome with saved changes'
+		);
+		await window.webContents.executeJavaScript(
+			`[...document.querySelectorAll('#recent-instances .instance-choice')].find(button => button.dataset.homeDir === ${JSON.stringify(homeDir)}).click()`
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden",
+			'pending restart after reopening the instance'
+		);
+		assert(
+			JSON.stringify(window.getSize()) === JSON.stringify(sizeBeforeSave),
+			'Saving/reopening changed the user window size.'
+		);
 		const pendingRestartScreenshot = await capture(window, outputDir, '04o-pending-restart.png');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#apply-pending-restart').click()");
-		await waitForRenderer(window,
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#apply-pending-restart').click()"
+		);
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#pending-restart').hidden && document.querySelector('#notice-message').textContent === 'fhold restarted. Saved settings applied.'",
-			'confirmed restart applies saved settings');
-		assert(await containerId() !== beforeDeferredSave.id, 'Confirmed apply did not recreate Assistant.');
-		assert(await runtimeSettings() === 'Europe/London\n0', 'Recreated Assistant did not load saved settings.');
-		assert(!(await adminSnapshot()).pendingRestart?.required, 'Successful apply left a pending alert.');
-		progress('defer, reopen, persistent alert and confirmed apply verified against real container ID and settings');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=provider]').click(); document.querySelector('#agent-preferences').open = true");
+			'confirmed restart applies saved settings'
+		);
+		assert(
+			(await containerId()) !== beforeDeferredSave.id,
+			'Confirmed apply did not recreate Assistant.'
+		);
+		assert(
+			(await runtimeSettings()) === 'Europe/London\n0',
+			'Recreated Assistant did not load saved settings.'
+		);
+		assert(
+			!(await adminSnapshot()).pendingRestart?.required,
+			'Successful apply left a pending alert.'
+		);
+		progress(
+			'CLI deferred settings, Admin reopen, persistent alert and confirmed apply verified against real container ID and settings'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=provider]').click()"
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"!document.querySelector('#agent-preferences, #automatic-memory, #agent-timezone')"
+			),
+			'AI account view still exposes retired memory/timezone controls.'
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click()");
 		const agentSettingsScreenshot = await capture(window, outputDir, '04i-agent-settings.png');
 
@@ -1544,8 +1602,8 @@ async function run(): Promise<Record<string, unknown>> {
 					document.querySelector('#app-shell')?.hidden === false &&
 					document.querySelector('#assistant-port')?.value === ${JSON.stringify(String(assistantPort))} &&
 				document.querySelector('#gateway-port')?.value === ${JSON.stringify(String(guardianPort))} &&
-				document.querySelector('#agent-timezone')?.value === 'Europe/London' &&
-				document.querySelector('#automatic-memory')?.checked === false &&
+				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false &&
 				document.querySelector('#mappings')?.textContent.includes('e2e-reader')`,
 			'persistent configuration after renderer reload'
 		);
@@ -1657,20 +1715,20 @@ async function run(): Promise<Record<string, unknown>> {
 			'Agent preferences were not persisted after restart and renderer reload.'
 		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('[data-view=overview]').click();
-			document.querySelector('#automatic-memory').checked = true;
-			document.querySelector('#automatic-memory').dispatchEvent(new Event('change', { bubbles: true }));
-			document.querySelector('#preferences-form').requestSubmit();
-		})()`);
+		await configureFixtureAssistant(homeDir, ['--memory', 'on']);
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); document.querySelector('#apply-pending-restart').click(); })()"
+		);
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
-				document.querySelector('#automatic-memory')?.checked === true &&
+				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === true &&
 				[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
 			'automatic memory to be restored for runtime acceptance'
 		);
-		progress('automatic memory re-enabled after verifying the persisted opt-out');
+		progress(
+			'CLI automatic memory re-enabled through explicit Admin apply after verifying the persisted opt-out'
+		);
 		const finalSnapshot = await adminSnapshot();
 		assert(finalSnapshot.config.gateway.enabled, 'Guardian configuration was not persisted.');
 		assert(finalSnapshot.config.assistant.automaticMemory, 'Automatic memory was not restored.');
@@ -1873,11 +1931,11 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
 			window.confirm = () => false;
-			document.querySelector('#agent-timezone').value = 'Unsubmitted draft';
-			document.querySelector('#agent-timezone').dispatchEvent(new Event('input', {bubbles:true}));
+			document.querySelector('#assistant-bind').value = '192.0.2.77';
+			document.querySelector('#assistant-bind').dispatchEvent(new Event('input', {bubbles:true}));
 			picker.value = ${JSON.stringify(homeDir)};
 			picker.dispatchEvent(new Event('change'));
-			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#agent-timezone').value === 'Unsubmitted draft';
+			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#assistant-bind').value === '192.0.2.77';
 		})()`), 'Cancelling a recent-instance switch lost the selection or draft.');
 		assert((await adminSnapshot()).homeDir === otherHome, 'Cancelled picker switch changed the actual managed home.');
 		const instancePickerScreenshot = await capture(window, outputDir, '06c-recent-instance-picker.png');

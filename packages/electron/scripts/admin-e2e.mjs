@@ -92,6 +92,12 @@ try {
 	let guardianPort = configuredPort('FH_ADMIN_E2E_GUARDIAN_PORT') || (await freePort());
 	while (guardianPort === assistantPort) guardianPort = await freePort();
 
+	const cliBuild = command('bun', ['run', 'build'], {
+		cwd: join(repositoryRoot, 'packages', 'cli')
+	});
+	if (cliBuild.status !== 0)
+		throw new Error(`Admin E2E CLI build failed with exit code ${cliBuild.status}.`);
+
 	const build = command('bun', ['run', 'bundle:e2e'], { cwd: packageDirectory });
 	if (build.status !== 0)
 		throw new Error(`Admin E2E bundle failed with exit code ${build.status}.`);

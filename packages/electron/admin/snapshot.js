@@ -11,7 +11,6 @@ import { isHealthy } from './model.js';
 import { loadProviders, renderReadiness } from './providers.js';
 import { renderPhase, renderServices } from './runtime.js';
 import { renderInstallationReadiness, renderInstancePicker } from './instances.js';
-import { renderPreferences } from './preferences.js';
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
 import { state } from './state.js';
@@ -21,7 +20,6 @@ import {
 	message,
 	notice,
 	restoreDirtyForms,
-	setBadge,
 	setSkipTarget,
 	setText,
 	showView
@@ -77,7 +75,6 @@ export function render(snapshot, options = {}) {
 	byId('slack-blocked-users').value = slackAccess.blockedUsers.join(',');
 
 	renderServices(snapshot);
-	renderPreferences(snapshot);
 	renderRemoteStatus(snapshot);
 	renderRecovery(snapshot);
 	renderCredentials(snapshot);
@@ -91,27 +88,11 @@ export function render(snapshot, options = {}) {
 	updatePortalTokenFields();
 	state.renderingSnapshot = false;
 
-	if (!state.lastReadiness) {
-		if (snapshot.phase === 'ready') {
-			byId('provider-status').className = 'inline-status success';
-			byId('provider-status').replaceChildren();
-			const title = document.createElement('strong');
-			title.textContent = 'Provider setup is complete.';
-			const detail = document.createElement('span');
-			detail.textContent =
-				'Run a readiness check whenever you want to verify the connection again.';
-			byId('provider-status').append(title, detail);
-			setBadge(byId('provider-badge'), 'Connected', 'success');
-		} else {
-			setBadge(byId('provider-badge'), 'Sign-in needed', 'neutral');
-		}
-	} else {
+	if (state.lastReadiness && state.lastReadinessProvider === byId('provider').value) {
 		renderReadiness(state.lastReadiness);
 	}
 
-	if (snapshot.phase === 'ready' && previousPhase === 'setup_incomplete') {
-		showView('overview');
-	} else if (snapshot.phase === 'ready') {
+	if (snapshot.phase === 'ready') {
 		showView(state.currentView);
 	}
 

@@ -17,30 +17,32 @@ hidden by an import toggle or reused as import authority. Preparation still goes
 the existing native empty-folder validation; installation and full-instance
 import use the existing control-plane operations and protections.
 
-At the user's request, automated tests, rendered E2E and packaged startup smoke
-are deferred until the final design iteration. Earlier test counts/screenshots
+At the user's request, whole-wizard automated tests, rendered E2E and packaged
+startup smoke are deferred until the final design iteration. The current AI-account
+overhaul has separate scoped QA requested by the user; see
+[AI-account verification](admin-provider-verification.md). Earlier test counts/screenshots
 do not qualify this changed source. The existing startup smoke and renderer
 fixtures still describe the previous two-screen naming flow and must be updated
 to the final wizard before running that qualification. This is an unreleased
 preview AppImage, not a new certified release. TypeScript compilation and the
 standard AppImage build are build checks, not end-to-end verification.
 
-Connections is also a current design preview: OpenCode appears first, followed
+Apps is also a current design preview: OpenCode appears first, followed
 by Claude, Codex, Discord, Slack and MCP, replacing the old client tabs/chat/native
 groups. Claude offers Desktop chat and Claude remote connection. Bot-specific tokens and user
 mappings live with that app. Each app/network form saves only its own settings;
 bot enablement retains the existing shared MCP dependency. Credential handling,
 native consent and restart confirmation still use the existing APIs. The older
-Connections renderer/E2E fixtures must be aligned during final qualification;
+Apps renderer/E2E fixtures must be aligned during final qualification;
 this preview does not claim live token, pairing or per-app-save verification.
 
 App permissions are also an unverified design preview. The rejected People &
 access / Access keys destinations, policy table and per-key cards are removed.
-Connections owns inline Chat only, Read files and Full access choices. Normal
+Apps owns inline Chat only, Read files and Full access choices. Normal
 Discord/Slack setup never exposes a fhold key or offers a saved-access picker.
 Claude Desktop/MCP explicitly create a connection before showing the copy step
 required by the external app. A collapsed Advanced access section at the bottom
-of Connections edits existing permissions through visible Manage buttons.
+of Apps edits existing permissions through visible Manage buttons.
 Permission dialogs have no copy/replace/remove controls. System's collapsed
 Connection keys section provides confirmed rotation and then a copy-new-key
 action. Existing identities, values, bot mappings and policy contracts stay
@@ -67,7 +69,7 @@ must retain digest binding, native confirmation and stopped-writer checks;
 changes made during a pending preview cannot produce a stale actionable review.
 Product navigation must never resize the window.
 
-For Connections, open each app with keyboard and pointer at normal/narrow sizes
+For Apps, open each app with keyboard and pointer at normal/narrow sizes
 and 200% zoom. Check that OpenCode is first, only the chosen app's controls appear,
 Claude offers Desktop chat / Claude remote connection, and no saved-access picker,
 shared token selector or separate remote

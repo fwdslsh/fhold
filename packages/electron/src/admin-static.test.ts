@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { clearClientKey, renderCredentials } from '../admin/access.js';
+import { defaultStackConfig } from '@fhold/lib';
+import { copyAccessKey, renderCredentials } from '../admin/access.js';
 import {
 	restoreInput,
 	restoreSignature,
@@ -11,7 +12,6 @@ import {
 import { bindBackupEvents, bindInstanceRestoreEvents, updateBackupScope } from '../admin/backup.js';
 import {
 	bindConnectionsEvents,
-	loadClientKey,
 	renderConnectionDetails,
 	renderNetworkDetails,
 	showPortalTokenForm
@@ -19,7 +19,6 @@ import {
 import { bindConfigurationEvents } from '../admin/configuration.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import { endpoint, isHealthy, promptVisible } from '../admin/model.js';
-import { bindPreferencesEvents, renderPreferences } from '../admin/preferences.js';
 import { bindRecoveryEvents, recoveryInput, renderRecovery, renderRecoveryStatus, updateRecoveryFields } from '../admin/recovery.js';
 import {
 	bindRemoteEvents,
@@ -43,7 +42,7 @@ import {
 	operation,
 	restoreDirtyForms,
 	setFormClean,
-	showClient,
+	showConnectionApp,
 	showView
 } from '../admin/ui.js';
 
@@ -105,7 +104,7 @@ class Control {
 	querySelectorAll() {
 		return this.children;
 	}
-	querySelector() {
+	querySelector(_selector?: string) {
 		return this.children[0] ?? new Control();
 	}
 	contains(control: Control) {
@@ -144,13 +143,14 @@ beforeEach(() => {
 	);
 	selectors = new Map();
 	control('install-automatic-ports').checked = true;
-	control('new-instance-name').value = 'personal-agent';
+	control('install-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
 	control('install-gateway-port').disabled = true;
 	globalThis.document = {
 		body: new Control(),
-		getElementById: (id: string) => control(id),
+		getElementById: (id: string) => controls.get(id) ?? null,
 		querySelectorAll: (name: string) => selectors.get(name) ?? [],
+		querySelector: (name: string) => selectors.get(name)?.[0] ?? null,
 		createElement: () => new Control()
 	} as unknown as Document;
 	globalThis.HTMLInputElement = Control as unknown as typeof HTMLInputElement;
@@ -484,6 +484,19 @@ describe('Admin static security boundary', () => {
 		expect(html).not.toContain('id="open-recent-instance"');
 	});
 	it('requires Docker readiness before installing and refreshes quietly without clearing errors', async () => {
+		const requirements = control('install-requirements');
+		const title = new Control();
+		const guidance = new Control();
+		const message = new Control();
+		const retry = new Control();
+		const fields: Record<string, Control> = {
+			'[data-requirement-title]': title,
+			'[data-requirement-guidance]': guidance,
+			'[data-requirement-message]': message,
+			'[data-check-prerequisites]': retry
+		};
+		requirements.querySelector = (name = '') => fields[name];
+		selector('[data-install-requirements]', requirements);
 		const snapshot = {
 			phase: 'not_installed',
 			config: {
@@ -495,14 +508,15 @@ describe('Admin static security boundary', () => {
 		};
 		render(snapshot);
 		expect(control('install').disabled).toBe(true);
-		expect(control('install-prerequisite').textContent).toBe('Docker is stopped.');
-		expect(control('check-prerequisites').hidden).toBe(false);
+		expect(message.textContent).toBe('Docker is stopped.');
+		expect(retry.hidden).toBe(false);
 		state.api = { snapshot: async () => ({ ...snapshot, installationReadiness: { ok: true } }) };
 		control('notice').className = 'notice error';
 		control('notice').hidden = false;
 		await refresh();
 		expect(control('install').disabled).toBe(false);
-		expect(control('check-prerequisites').hidden).toBe(true);
+		expect(requirements.hidden).toBe(true);
+		expect(retry.hidden).toBe(true);
 		expect(control('notice').hidden).toBe(false);
 	});
 	it('retains a chosen instance name and ports while rechecking prerequisites', () => {
@@ -582,7 +596,8 @@ describe('Admin static security boundary', () => {
 		expect(control('view-title').textContent).toBe('Start your agent');
 	});
 
-	it('selects an existing native account and hides a redundant single sign-in method', () => {
+	it('keeps account selection explicit and hides a redundant single sign-in method', () => {
+		control('provider').value = 'example';
 		renderProviders([
 			{
 				id: 'example',
@@ -594,7 +609,7 @@ describe('Admin static security boundary', () => {
 		expect(control('provider').value).toBe('example');
 		expect(control('provider-method').value).toBe('0');
 		expect(control('provider-method-field').hidden).toBe(true);
-		expect(control('provider-status').children[1].textContent).toContain('Verify connection');
+		expect(control('provider-status').children[1].textContent).toContain('Verify a real response');
 		expect(control('test-provider').hidden).toBe(false);
 	});
 
@@ -608,19 +623,19 @@ describe('Admin static security boundary', () => {
 		expect(html.indexOf('id="test-provider"')).toBeGreaterThan(html.indexOf('id="provider-form"'));
 	});
 
-	it('keeps provider transport failures in technical details and offers a recovery action', async () => {
+	it('reports provider transport failures as actionable guidance without raw JSON', async () => {
 		state.api = {
 			providers: async () => {
 				throw new Error('Error invoking remote method admin:providers: fetch failed');
 			}
 		};
 		await loadProviders(false);
-		expect(control('provider-status').children[0].textContent).toBe('Cannot reach your agent.');
+		expect(control('provider-status').children[0].textContent).toBe('Cannot load AI accounts.');
 		expect(control('provider-status').children[1].textContent).toContain('Refresh accounts');
 		expect(control('provider-status').children[1].textContent).not.toContain(
 			'invoking remote method'
 		);
-		expect(control('provider-result').value).toContain('fetch failed');
+		expect(html).not.toContain('id="provider-result"');
 		expect(state.providerLoadPromise).toBeUndefined();
 		await loadProviders(true);
 		expect(control('notice-message').textContent).toBe(
@@ -636,7 +651,7 @@ describe('Admin static security boundary', () => {
 		expect(control('bot-token').focused).toBe(true);
 	});
 
-	it('offers per-identity management without revealing or retaining a previous key', () => {
+	it('offers compact per-identity permission management without key reveal or rotation actions', () => {
 		const snapshot = {
 			config: {
 				credentials: { owner: { policy: 'full' }, guest: { policy: 'chat' } },
@@ -645,18 +660,14 @@ describe('Admin static security boundary', () => {
 		};
 		state.currentSnapshot = snapshot;
 		renderCredentials(snapshot);
-		const row = control('credential-policies').children[0];
-		expect(row.children).toHaveLength(4);
-		expect(row.children[0].textContent).toBe('guest');
-		control('credential-key').value = 'previous-private-key';
-		control('credential-key').type = 'text';
-		control('show-credential-key').checked = true;
-		row.children[3].listeners.get('click')?.({});
-		expect(control('key-manager-details').open).toBe(true);
-		expect(control('credential-action-name').value).toBe('guest');
-		expect(control('credential-key').value).toBe('');
-		expect(control('credential-key').type).toBe('password');
-		expect(control('credential-action-name').focused).toBe(true);
+		const row = control('saved-access').children[0];
+		expect(row.children).toHaveLength(2);
+		expect(row.children[0].textContent).toBe('guest — Chat only');
+		expect(row.children[1].textContent).toBe('Manage');
+		expect(row.children[1].dataset.manageSavedAccess).toBe('guest');
+		const dialog = html.slice(html.indexOf('<dialog id="permissions-dialog"'), html.indexOf('<dialog id="remote-dialog"'));
+		expect(dialog).not.toMatch(/Copy (?:access )?key|Rotate|Remove access|id="credential-key"/);
+		expect(html).toContain('id="key-rotation-credential"');
 	});
 
 	it('uses human-readable remote stages and never equates startup with connection readiness', () => {
@@ -999,7 +1010,7 @@ describe('Admin instance picker and automatic status', () => {
 	function runtimeSnapshot() {
 		return {
 			phase: 'ready', homeDir: '/personal-agent', services: [],
-			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
+			config: defaultStackConfig(), portalSecrets: {}, portalMappings: { discord: { users: {} }, slack: { users: {} } }, credentials: []
 		};
 	}
 	it('reports actual runtime state on Overview without equating a container with account readiness', () => {
@@ -1049,18 +1060,18 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-status-detail').hidden).toBe(true);
 		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
 	});
-	it('updates status without overwriting drafts, configuration baseline, transient keys or explicit hook review', async () => {
+	it('updates status without overwriting app drafts, configuration baseline, transient passwords or explicit hook review', async () => {
 		const snapshot = runtimeSnapshot();
 		state.currentSnapshot = snapshot;
 		state.currentConfig = snapshot.config;
-		state.dirtyForms.add('preferences-form');
-		control('agent-timezone').value = 'my draft';
-		control('credential-key').value = 'transient-key';
+		state.dirtyForms.add('opencode-network-form');
+		control('assistant-port').value = '3910';
+		control('direct-password').value = 'transient-password';
 		control('codex-recall-status').textContent = 'Managed · ready';
 		state.api = { snapshot: async () => ({ ...snapshot, config: { ...snapshot.config, assistant: { timezone: 'other writer' } }, pendingRestart: { required: true } }) };
 		await refreshVisibleStatus();
-		expect(control('agent-timezone').value).toBe('my draft');
-		expect(control('credential-key').value).toBe('transient-key');
+		expect(control('assistant-port').value).toBe('3910');
+		expect(control('direct-password').value).toBe('transient-password');
 		expect(control('codex-recall-status').textContent).toBe('Managed · ready');
 		expect(state.currentConfig).toBe(snapshot.config);
 		expect(control('pending-restart').hidden).toBe(false);
@@ -1273,24 +1284,23 @@ describe('Admin renderer behavior', () => {
 	it('groups settings by task and removes the duplicate overview catalog', () => {
 		expect(html).not.toContain('Things to try');
 		expect(html).not.toContain('choice-grid');
-		expect([...html.matchAll(/data-view="/g)].length).toBe(5);
+		expect([...html.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1])).toEqual(['overview', 'provider', 'connections', 'system']);
 		expect(html).toContain('data-view="system"');
-		expect(html.indexOf('id="agent-preferences"')).toBeGreaterThan(
-			html.indexOf('id="view-provider"')
-		);
-		expect(html.indexOf('id="network-settings"')).toBeLessThan(html.indexOf('id="view-access"'));
+		expect(html).not.toContain('id="agent-preferences"');
+		expect(html).not.toContain('id="view-access"');
+		expect(html.indexOf('id="opencode-network-form"')).toBeGreaterThan(html.indexOf('id="view-connections"'));
 	});
 
 	it('captures and restores externally associated MCP configuration controls', () => {
-		const form = control('connections-form');
+		const form = control('mcp-connections-form');
 		const gateway = control('gateway');
 		form.elements = [gateway];
 		gateway.form = form;
 		gateway.type = 'checkbox';
 		gateway.checked = true;
-		state.dirtyForms.add('connections-form');
+		state.dirtyForms.add('mcp-connections-form');
 		const drafts = captureDirtyForms();
-		expect(drafts['connections-form'].gateway).toEqual({ checked: true });
+		expect(drafts['mcp-connections-form'].gateway).toEqual({ checked: true });
 		gateway.checked = false;
 		restoreDirtyForms(drafts);
 		expect(gateway.checked).toBe(true);
@@ -1462,81 +1472,72 @@ describe('Admin renderer behavior', () => {
 		expect(setup.hidden).toBe(false);
 		expect(ready.hidden).toBe(true);
 		expect(state.currentView).toBe('provider');
-		showView('access');
+		showView('connections');
 		expect(state.currentView).toBe('provider');
 		state.currentSnapshot = { phase: 'ready' };
 		renderPhase('ready');
 		expect(setup.hidden).toBe(true);
 		expect(ready.hidden).toBe(false);
-		showView('access', { focus: true });
-		expect(state.currentView).toBe('access');
+		showView('connections', { focus: true });
+		expect(state.currentView).toBe('connections');
 		expect(control('view-title').focused).toBe(true);
 	});
 
-	it('switches client recipes with keyboard focus and correct pressed state', () => {
-		const openCode = new Control();
-		openCode.dataset.clientSetup = 'opencode';
-		const claude = new Control();
-		claude.dataset.clientSetup = 'claude';
-		selector('[data-client-setup]', openCode, claude);
-		selector('[data-client-panel]', control('client-opencode'), control('client-claude'));
-		control('client-opencode').dataset.clientPanel = 'opencode';
-		control('client-claude').dataset.clientPanel = 'claude';
-		showClient('claude', { focus: true });
-		expect(control('client-opencode').hidden).toBe(true);
-		expect(control('client-claude').hidden).toBe(false);
-		expect(control('client-claude').focused).toBe(true);
-		expect(claude.getAttribute('aria-pressed')).toBe('true');
-		expect(openCode.getAttribute('aria-pressed')).toBe('false');
+	it('opens the requested app disclosure in Connections without separate client tabs', () => {
+		state.currentSnapshot = { phase: 'ready' };
+		showConnectionApp('claude');
+		expect(state.currentView).toBe('connections');
+		expect(control('claude-connection').open).toBe(true);
+		expect(control('opencode-connection').open).toBe(false);
+		expect(html).not.toContain('data-client-panel');
+		showConnectionApp('not-an-app');
+		expect(state.currentView).toBe('connections');
 	});
 
-	it('preserves only dirty form drafts, including unchecked preferences', () => {
-		control('preferences-form').children = [control('agent-timezone'), control('automatic-memory')];
-		control('agent-timezone').value = 'Europe/London';
-		control('automatic-memory').type = 'checkbox';
-		control('automatic-memory').checked = false;
-		state.dirtyForms.add('preferences-form');
+	it('preserves only dirty app form drafts, including unchecked bot enablement', () => {
+		control('discord-connections-form').children = [control('discord-users'), control('discord')];
+		control('discord-users').value = 'reviewed-user';
+		control('discord').type = 'checkbox';
+		control('discord').checked = false;
+		state.dirtyForms.add('discord-connections-form');
 		const drafts = captureDirtyForms();
 		expect(drafts).toEqual({
-			'preferences-form': {
-				'agent-timezone': { value: 'Europe/London' },
-				'automatic-memory': { checked: false }
+			'discord-connections-form': {
+				'discord-users': { value: 'reviewed-user' },
+				'discord': { checked: false }
 			}
 		});
-		control('agent-timezone').value = 'UTC';
-		control('automatic-memory').checked = true;
+		control('discord-users').value = '';
+		control('discord').checked = true;
 		restoreDirtyForms(drafts);
-		expect(control('agent-timezone').value).toBe('Europe/London');
-		expect(control('automatic-memory').checked).toBe(false);
-		restoreDirtyForms({ 'preferences-form': { 'assistant-port': { value: '9999' } } });
+		expect(control('discord-users').value).toBe('reviewed-user');
+		expect(control('discord').checked).toBe(false);
+		restoreDirtyForms({ 'discord-connections-form': { 'assistant-port': { value: '9999' } } });
 		expect(control('assistant-port').value).toBe('');
-		setFormClean('preferences-form');
+		setFormClean('discord-connections-form');
 		expect(captureDirtyForms()).toEqual({});
 	});
 
-	it('requires explicit confirmation before loading a client key and clears revealed values', async () => {
+	it('copies a connection key only after an explicit request without revealing it in the renderer', async () => {
 		let loads = 0;
+		let copied = '';
 		state.api = {
 			credentialKey: async () => {
 				loads++;
 				return { key: 'private-test-key' };
-			}
+			},
+			copyText: async (value: string) => { copied = value; }
 		};
-		control('mcp-credential').value = 'family';
-		control('mcp-key').type = 'password';
-		await loadClientKey('mcp', false);
+		await copyAccessKey('');
 		expect(loads).toBe(0);
-		globalThis.window.confirm = () => true;
-		await loadClientKey('mcp', false);
+		await copyAccessKey('family');
 		expect(loads).toBe(1);
-		expect(control('mcp-key').value).toBe('private-test-key');
-		expect(control('mcp-key').type).toBe('password');
-		control('mcp-key').type = 'text';
-		control('show-mcp-key').checked = true;
-		clearClientKey('mcp');
-		expect(control('mcp-key').value).toBe('');
-		expect(control('mcp-key').type).toBe('password');
-		expect(control('show-mcp-key').checked).toBe(false);
+		expect(copied).toBe('private-test-key');
+		expect(JSON.stringify(state)).not.toContain('private-test-key');
+		expect(control('notice-message').textContent).not.toContain('private-test-key');
+		for (const id of ['mcp-key', 'show-mcp-key', 'claude-key', 'show-claude-key']) {
+			expect(html).not.toContain(`id="${id}"`);
+		}
 	});
 
 	it('invalidates restore approval when input changes and excludes opt-ins by default', () => {
@@ -1600,7 +1601,7 @@ describe('Admin renderer behavior', () => {
 		).toBe(true);
 	});
 
-	it('renders preferences without duplicate remote toggles or false connection readiness', () => {
+	it('omits memory/timezone controls without duplicate remote toggles or false connection readiness', () => {
 		const snapshot = {
 			config: {
 				assistant: {
@@ -1611,53 +1612,16 @@ describe('Admin renderer behavior', () => {
 				}
 			}
 		};
-		renderPreferences(snapshot);
 		renderRemoteStatus(snapshot);
-		expect(control('agent-timezone').value).toBe('America/Chicago');
-		expect(control('automatic-memory').checked).toBe(false);
+		expect(html).not.toContain('id="agent-timezone"');
+		expect(html).not.toContain('id="automatic-memory"');
+		expect(html).not.toContain('id="preferences-form"');
 		expect(control('codex-remote-status').textContent).toContain('client connection not checked');
 		expect(control('claude-remote-status').textContent).toBe('Startup off');
 		expect(html).not.toContain('id="codex-remote"');
 		expect(html).not.toContain('id="claude-remote"');
 	});
 
-	it('submits agent preferences without changing unrelated settings', async () => {
-		state.currentConfig = {
-			assistant: {
-				bindAddress: '127.0.0.1',
-				port: 4096,
-				timezone: 'UTC',
-				automaticMemory: true,
-				codexRemote: true,
-				claudeRemote: false
-			},
-			gateway: { enabled: false }
-		};
-		let submitted: unknown;
-		state.api = {
-			saveConfig: async (value: unknown) => {
-				submitted = value;
-				throw new Error('Controlled test boundary before backend apply');
-			}
-		};
-		control('agent-timezone').value = ' Europe/London ';
-		control('automatic-memory').checked = false;
-		bindPreferencesEvents();
-		await control('preferences-form').listeners.get('submit')?.({ preventDefault() {} });
-		expect((submitted as { baseConfig: unknown }).baseConfig).toEqual(state.currentConfig);
-		expect((submitted as { config: unknown }).config).toEqual({
-			assistant: {
-				bindAddress: '127.0.0.1',
-				port: 4096,
-				timezone: 'Europe/London',
-				automaticMemory: false,
-				codexRemote: true,
-				claudeRemote: false
-			},
-			gateway: { enabled: false }
-		});
-		expect(state.currentConfig.assistant.timezone).toBe('UTC');
-	});
 
 	it('preserves memory and timezone preferences when network settings change', async () => {
 		state.currentConfig = {
@@ -1681,7 +1645,7 @@ describe('Admin renderer behavior', () => {
 		control('gateway-bind').value = '127.0.0.1';
 		control('gateway-port').value = '9200';
 		bindConfigurationEvents();
-		await control('network-form').listeners.get('submit')?.({ preventDefault() {} });
+		await control('opencode-network-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect((submitted as { baseConfig: unknown }).baseConfig).toEqual(state.currentConfig);
 		expect((submitted as { config: unknown }).config).toEqual({
 			assistant: {
@@ -1690,7 +1654,7 @@ describe('Admin renderer behavior', () => {
 				timezone: 'Europe/London',
 				automaticMemory: false
 			},
-			gateway: { bindAddress: '127.0.0.1', port: 9200, enabled: true }
+			gateway: { bindAddress: '127.0.0.1', port: 9180, enabled: true }
 		});
 	});
 });

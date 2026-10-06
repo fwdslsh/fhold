@@ -222,7 +222,7 @@ prompt to `akm curate` and adds relevant knowledge to Codex. Configured search o
 embedding services may be contacted. This does not enable automatic memory
 writes, approve tools, or bypass Guardian/native sandboxing.
 
-Admin **Connections → Codex → Review knowledge recall** checks the native managed
+Admin **Apps → Codex → Review knowledge recall** checks the native managed
 inventory independently from remote startup and sign-in. **Managed · ready**
 means all expected handlers are enabled by policy; personal approve/disable
 controls are unavailable. CLI setup also skips the personal approval question.
@@ -261,9 +261,9 @@ See [Codex's hook trust model](https://learn.chatgpt.com/docs/hooks#review-and-t
 
 ## Toggles, recovery, and trust
 
-In Admin, open **Connections → Claude → Claude remote connection** and choose
+In Admin, open **Apps → Claude → Claude remote connection** and choose
 **Set up remote connection**,
-or **Connections → Codex → Set up Codex**. Confirm trusted workspace access and select
+or **Apps → Codex → Set up Codex**. Confirm trusted workspace access and select
 **Continue**. Codex uses workspace-write by default; read-only and explicit
 container isolation are under **Advanced settings**. The latter explains full
 container access before you confirm trust. The browser handles account login;

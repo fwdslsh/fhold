@@ -14,7 +14,6 @@ export function createAdminState() {
 		providersLoaded: false,
 		providerLoadPromise: undefined,
 		providerCatalogExpanded: false,
-		automaticReadinessAttempted: false,
 		activeOAuth: null,
 		operationInFlight: false,
 		disabledButtons: [],
@@ -23,6 +22,9 @@ export function createAdminState() {
 		restorePreviewDigest: null,
 		instanceRestorePreview: null,
 		lastReadiness: null,
+		lastReadinessProvider: null,
+		lastReadinessAuthSaved: false,
+		awaitingSetupFinish: false,
 		renderingSnapshot: false,
 		dirtyForms: new Set()
 	};
@@ -41,8 +43,7 @@ export const managedFormIds = [
 	'permissions-form',
 	'opencode-network-form',
 	'mcp-network-form',
-	'runtime-recovery-form',
-	'preferences-form'
+	'runtime-recovery-form'
 ];
 
 export const commonProviders = new Set([
@@ -70,11 +71,11 @@ export const viewMeta = {
 	provider: {
 		kicker: 'AI CONNECTION',
 		title: 'Agent settings',
-		description: 'AI account, memory, and recurring work.'
+		description: 'Connect and check the AI accounts your agent can use.'
 	},
 	connections: {
 		kicker: 'YOUR APPS',
-		title: 'Connections',
+		title: 'Apps',
 		description: 'Choose the app you want to use with your agent.'
 	},
 	system: {

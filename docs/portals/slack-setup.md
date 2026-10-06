@@ -25,7 +25,7 @@ fhold portal token slack \
 Both files must be mode 0600. Do not store the values in Compose environment
 variables.
 
-In fhold Admin, **Connections → Slack** presents the same scopes and event
+In fhold Admin, **Apps → Slack** presents the same scopes and event
 checklist and opens Slack's app console. **Bot tokens → Save Slack tokens** stores
 them privately. Both tokens are required initially; afterward either one can be
 rotated without re-entering the other. Default access, allowed-user rules and
@@ -46,7 +46,7 @@ blocked user always loses access. Configure users alone to allow direct
 messages; a DM cannot satisfy a channel constraint. The adapter refuses all use
 when both allowlists are empty.
 
-In the revised Admin preview, open **Connections → Slack → Who can use the bot**
+In the revised Admin preview, open **Apps → Slack → Who can use the bot**
 and enter the same IDs. Choose Chat only, Read files or Full access under
 **What can Slack do?**, then select **Save Slack settings**. Normal bot setup does
 not ask you to choose or copy a fhold key; the existing credential remains private
@@ -61,7 +61,7 @@ allowlist. Existing mappings retain their credential IDs. Editing saved
 permissions affects every use of that identity and requires confirmation;
 ordinary edits preserve the existing conversations and bot assignment. **Use bot
 permissions** removes an override, not access checks. Existing permission editing
-is under **Connections → Advanced access → Manage**. Key rotation, when needed,
+is under **Apps → Advanced access → Manage**. Key rotation, when needed,
 is under **System → Connection keys**; it is not part of bot setup.
 
 ## 3. Enable and verify

@@ -196,7 +196,7 @@
             <span>Agent settings</span>
           </button>
           <button class="nav-item" type="button" data-view="connections" aria-controls="view-connections">
-            <span>Connections</span>
+            <span>Apps</span>
           </button>
           <button class="nav-item" type="button" data-view="system" aria-controls="view-system">
             <span>System</span>
@@ -301,64 +301,68 @@
 
             <section id="provider-connection" class="panel" aria-labelledby="provider-heading">
               <div class="section-heading">
-                <div><h2 id="provider-heading">Connect an AI account</h2></div>
+                <div><h2 id="provider-heading">Your AI accounts</h2><p class="help-text">Use an account you already have, or sign in to another provider.</p></div>
                 <span id="provider-badge" class="status-badge neutral">Not checked</span>
               </div>
               <div id="provider-status" class="inline-status neutral" role="status" aria-live="polite">
-                <strong>Checking available providers…</strong>
-                <span>One moment.</span>
+                <strong>Checking your AI accounts…</strong>
+                <span>Looking for sign-ins and available providers in your agent.</span>
               </div>
+              <div class="wizard-actions"><button id="finish-provider-setup" class="primary" type="button" hidden>Continue to your agent</button></div>
 
-	              <form id="provider-form" class="form-stack">
-	                <label class="field" for="provider">
-	                  <span>AI provider</span>
-	                  <select id="provider" aria-describedby="provider-help"><option value="">Find providers first</option></select>
-	                </label>
-                <button id="test-provider" class="secondary" type="button" hidden>Verify connection</button>
-                <details id="provider-catalog" class="disclosure"><summary>Find another provider</summary>
-	                <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name" /></label>
-	                <div class="button-row compact provider-catalog-actions"><button id="show-all-providers" class="text-button" type="button">Show all providers</button><button id="load-providers" class="text-button" type="button">Refresh accounts</button></div>
-	                <p id="provider-help" class="visually-hidden">Connected and common providers appear first.</p>
-                </details>
-	                <label id="provider-method-field" class="field" for="provider-method" hidden>
-	                  <span>Sign-in method</span>
-	                  <select id="provider-method"></select>
-	                </label>
-                <details id="api-key-fields" class="disclosure" open hidden><summary>API key</summary>
-                  <label class="field" for="provider-key">
-                    <span>API key</span>
-                    <input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" />
+              <section id="provider-saved-accounts" class="provider-accounts" aria-labelledby="provider-saved-heading">
+                <div class="section-heading compact">
+                  <div><h3 id="provider-saved-heading">Your AI providers</h3></div>
+                  <button id="load-providers" class="text-button" type="button">Refresh accounts</button>
+                </div>
+                <p id="provider-saved-empty" class="provider-empty help-text">No saved sign-ins found. Choose a provider below to add an account.</p>
+                <ul id="provider-saved-list" class="provider-account-list" aria-label="Your AI providers"></ul>
+              </section>
+
+              <form id="provider-form" class="form-stack">
+                <section id="provider-account-actions" class="provider-account-actions form-stack" aria-labelledby="provider-account-heading" hidden>
+                  <div class="provider-selection-heading">
+                    <h3 id="provider-account-heading" tabindex="-1">Account sign-in</h3>
+                    <p id="provider-account-help" class="help-text">Sign in, then check that your agent can respond.</p>
+                  </div>
+                  <label id="provider-method-field" class="field" for="provider-method" hidden>
+                    <span>Sign-in method</span>
+                    <select id="provider-method"></select>
                   </label>
-                  <p id="provider-key-help" class="help-text">The key is sent directly to your local Assistant and is never displayed again.</p>
-                  <button class="primary" type="submit">Save key and verify</button>
-                </details>
-	                <div id="oauth-provider-note" class="callout form-stack" hidden>
-                  <p>Sign-in opens in your browser. Your password never passes through fhold.</p>
-	                  <div id="oauth-prompt-fields" class="form-stack"></div>
-	                  <button id="start-provider-oauth" class="primary" type="button">Open provider sign-in</button>
-	                  <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here when the provider says you are connected.</span></div>
-	                  <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
-	                  <button id="finish-provider-oauth" class="secondary" type="button" hidden>Finish sign-in and verify</button>
-	                </div>
+                  <details id="api-key-fields" class="disclosure" open hidden><summary id="provider-key-heading">Add API key</summary>
+                    <label class="field" for="provider-key">
+                      <span>New API key</span>
+                      <input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" />
+                    </label>
+                    <p id="provider-key-help" class="help-text">Stored privately in your local agent. Existing keys are never shown here.</p>
+                    <button id="provider-key-submit" class="primary" type="submit">Save key and verify</button>
+                  </details>
+                  <div id="oauth-provider-note" class="callout form-stack" hidden>
+                    <p>Sign-in opens in your browser. Your password never passes through fhold.</p>
+                    <div id="oauth-prompt-fields" class="form-stack"></div>
+                    <button id="start-provider-oauth" class="primary" type="button">Open provider sign-in</button>
+                    <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here when the provider says you are connected.</span></div>
+                    <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
+                    <div class="button-row compact">
+                      <button id="finish-provider-oauth" class="secondary" type="button" hidden>Finish sign-in and verify</button>
+                      <button id="cancel-provider-oauth" class="secondary" type="button" hidden>Cancel sign-in</button>
+                    </div>
+                  </div>
+                  <div class="button-row compact"><button id="test-provider" class="secondary" type="button" hidden>Verify connection</button></div>
+                </section>
+                <div id="provider-catalog" class="provider-picker">
+                  <h3>Choose an AI provider</h3>
+                  <p id="provider-help" class="help-text">Add an account or choose a provider to update its sign-in.</p>
+                  <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name, e.g. OpenAI" aria-describedby="provider-search-help" /></label>
+                  <p id="provider-search-help" class="help-text" role="status" aria-live="polite">Loading provider choices…</p>
+                  <label class="field" for="provider">
+                    <span>Provider</span>
+                    <select id="provider" aria-describedby="provider-help provider-search-help"><option value="">Loading providers…</option></select>
+                  </label>
+                  <div class="button-row compact provider-catalog-actions"><button id="show-all-providers" class="text-button" type="button">Show all providers</button></div>
+                </div>
               </form>
-              <details class="disclosure technical-disclosure">
-                <summary>Technical details</summary>
-                <textarea id="provider-result" class="technical-output" readonly spellcheck="false" aria-label="Provider technical details">Provider status has not been checked.</textarea>
-              </details>
             </section>
-
-            <details id="agent-preferences" class="ready-only panel panel-disclosure" hidden>
-              <summary id="preferences-heading">Memory & recurring work</summary>
-              <form id="preferences-form" class="form-stack" data-managed-form>
-                <label class="check-row"><input id="automatic-memory" type="checkbox" checked /> Automatically remember useful context</label>
-                <p class="help-text">Captures useful facts from trusted local conversations only.</p>
-                <details class="disclosure"><summary>What is remembered?</summary><p class="help-text">Uses your connected provider and AKM, not full transcripts. MCP, chat-app, and scheduled conversations are not captured automatically. Turning this off does not erase existing knowledge.</p></details>
-                <label class="field" for="agent-timezone"><span>Timezone for recurring work</span><input id="agent-timezone" autocomplete="off" required placeholder="America/Chicago" aria-describedby="timezone-help" /></label>
-                <p id="timezone-help" class="help-text">Uses this computer’s timezone by default.</p>
-                <details class="disclosure"><summary>Timezone & missed runs</summary><p class="help-text">Use a timezone such as America/Chicago or Europe/London. After downtime, tasks resume at their next scheduled time; missed runs are not replayed.</p></details>
-                <button class="secondary" type="submit">Save preferences</button>
-              </form>
-            </details>
 
             <details class="setup-only panel restore-panel" hidden>
               <summary><strong>Import from an fhold export</strong><span>Optional · do this before setup is complete</span></summary>
@@ -633,7 +637,7 @@
                 <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
                 <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
               </dl>
-              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Connections.</p>
+              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
             </details>
 
             <details id="recent-logs" class="panel panel-disclosure">

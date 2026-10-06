@@ -219,10 +219,68 @@ function authenticatedProviderIds(homeDir: string): Set<string> {
 	if (!existsSync(path)) return new Set();
 	try {
 		const value = asRecord(JSON.parse(readFileSync(path, 'utf8')) as unknown);
-		return new Set(Object.keys(value ?? {}));
+		return new Set(
+			Object.entries(value ?? {})
+				.filter(([, item]) => {
+					const auth = asRecord(item);
+					return auth?.type === 'api'
+						? typeof auth.key === 'string' && auth.key.trim().length > 0
+						: auth?.type === 'oauth' &&
+								[auth.access, auth.refresh].some(
+									(token) => typeof token === 'string' && token.trim().length > 0
+								);
+				})
+				.map(([id]) => id)
+		);
 	} catch {
 		return new Set();
 	}
+}
+
+/** Use native model capabilities, never model-name guesses or a second catalog. */
+function agentModels(provider: Record<string, unknown>): string[] {
+	return Object.entries(asRecord(provider.models) ?? {}).flatMap(([id, value]) => {
+		const model = asRecord(value);
+		const capabilities = asRecord(model?.capabilities);
+		const input = asRecord(capabilities?.input);
+		const output = asRecord(capabilities?.output);
+		return modelIdValue(id) &&
+			model?.status !== 'deprecated' &&
+			capabilities?.toolcall === true &&
+			input?.text === true &&
+			output?.text === true
+			? [id]
+			: [];
+	});
+}
+
+function readinessModel(
+	providerValue: unknown,
+	providerID: string,
+	explicitModel: string | undefined,
+	configuredModel: unknown
+): { providerID: string; modelID: string } {
+	const catalog = asRecord(providerValue);
+	const provider = (Array.isArray(catalog?.all) ? catalog.all : [])
+		.map(asRecord)
+		.find((item) => item?.id === providerID);
+	if (!provider) throw new Error(`OpenCode did not report provider ${providerID}.`);
+	const eligible = agentModels(provider);
+	if (explicitModel && !eligible.includes(explicitModel))
+		throw new Error('The selected model does not support text conversations and agent tools.');
+	const configured =
+		typeof configuredModel === 'string' && configuredModel.startsWith(`${providerID}/`)
+			? configuredModel.slice(providerID.length + 1)
+			: undefined;
+	const suggested = modelIdValue(asRecord(catalog?.default)?.[providerID]);
+	const modelID =
+		explicitModel ||
+		(configured && eligible.includes(configured) ? configured : undefined) ||
+		(suggested && eligible.includes(suggested) ? suggested : undefined) ||
+		eligible[0];
+	if (!modelID)
+		throw new Error('This provider has no available model for text conversations and agent tools.');
+	return { providerID, modelID };
 }
 
 export async function listProviders(
@@ -462,26 +520,22 @@ export async function testAssistantReadiness(
 		let selectedModel: { providerID: string; modelID: string } | undefined;
 		if (options.provider) {
 			const providerID = providerIdValue(options.provider);
-			let modelID = modelIdValue(options.model);
-			if (!modelID) {
-				const providers = asRecord(
-					await request(
-						homeDir,
-						'/provider',
-						{},
-						{
-							fetch: options.fetch,
-							timeoutMs: 10_000,
-							maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES
-						}
-					)
-				);
-				modelID = modelIdValue(asRecord(providers?.default)?.[providerID]);
-			}
-			if (!modelID) {
-				throw new Error(`OpenCode did not report a default model for ${providerID}`);
-			}
-			selectedModel = { providerID, modelID };
+			if (options.model !== undefined && !modelIdValue(options.model))
+				throw new Error('Invalid readiness model.');
+			const [providers, config] = await Promise.all([
+				request(
+					homeDir,
+					'/provider',
+					{},
+					{
+						fetch: options.fetch,
+						timeoutMs: 10_000,
+						maxResponseBytes: MAX_PROVIDER_RESPONSE_BYTES
+					}
+				),
+				request(homeDir, '/config', {}, { fetch: options.fetch, timeoutMs: 10_000 })
+			]);
+			selectedModel = readinessModel(providers, providerID, options.model, asRecord(config)?.model);
 		} else if (options.model !== undefined) {
 			throw new Error('A readiness model requires a provider.');
 		}

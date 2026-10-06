@@ -52,14 +52,14 @@
     "guardian_url": {
       "type": "string",
       "title": "Local fhold address",
-      "description": "Keep the default unless fhold shows a different address under Connections.",
+      "description": "Keep the default unless fhold shows a different address under Apps.",
       "default": "http://127.0.0.1:3830/mcp",
       "required": true
     },
     "credential_key": {
       "type": "string",
       "title": "fhold access key",
-      "description": "In fhold Admin, open Connections → Claude → Desktop chat, choose what Claude can do and select Create connection. Then select Copy access key in the connection instructions and paste it here. For an existing connection, edit permissions under Connections → Advanced access → Manage instead of creating another connection.",
+      "description": "In fhold Admin, open Apps → Claude → Desktop chat, choose what Claude can do and select Create connection. Then select Copy access key in the connection instructions and paste it here. For an existing connection, edit permissions under Apps → Advanced access → Manage instead of creating another connection.",
       "sensitive": true,
       "required": true
     }

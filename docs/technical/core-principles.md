@@ -114,11 +114,11 @@ names already present in Docker. Compose commands check project working-director
 ownership before acting, so a selected folder cannot take over another instance.
 Opening/switching homes never resizes the window or starts/stops a stack.
 
-Admin Connections is organized by the app the user wants to connect, not by
+Admin Apps is organized by the app the user wants to connect, not by
 protocol, container or harness: OpenCode first, then Claude, Codex, Discord, Slack
 and MCP. Claude offers Desktop chat and Claude remote connection, not a choice
 between similarly named developer products. Each bot owns its token setup,
-allowlists, inline permissions and individual user mappings. Connections owns
+allowlists, inline permissions and individual user mappings. Apps owns
 app permissions; there is no separate access-manager navigation destination.
 OpenCode/MCP network controls stay under that app's Advanced
 settings. App-scoped saves use the existing intent/baseline/restart path and
@@ -132,7 +132,7 @@ granting Full access requires explicit confirmation. Normal bot setup hides
 fhold keys entirely and preserves its assigned identity without a credential
 picker. Claude Desktop/MCP explicitly create a connection before showing
 the key-copy step needed by the external app. A collapsed Advanced access section
-at the bottom of Connections offers compact permission editing with real Manage
+at the bottom of Apps offers compact permission editing with real Manage
 buttons, not key cards, accounts or a policy matrix. Existing registry IDs, values, defaults and
 policy contracts do not change; no new policy or app-assignment store is added.
 Native OpenCode/Claude remote connection/Codex access is independent of Guardian
@@ -157,6 +157,22 @@ bottom of the sidebar, including at narrow widths. Setup retains visible inline
 feedback rather than placing errors in its hidden sidebar. Restart activation
 still requires explicit confirmation; moving alerts never restarts containers
 or resizes the window.
+
+Agent settings uses OpenCode's native catalog and auth flows. Saved credentials,
+runtime provider availability and a successful real-response check are different
+states; anonymous/catalog availability must not appear as a saved account or
+verified connection. Search filters the whole catalog and clears a selection that
+does not match. Key replacement is explicit, keys are never displayed, and native
+OAuth attempts stay bound to their provider/method until completed or cancelled.
+Account refresh performs no billed readiness request. Verification stays on the
+page, never chooses another provider silently or changes the Assistant default
+model; first-time setup has an explicit Continue action. Readiness selects only
+native text-input/text-output/tool-capable, non-deprecated models: compatible
+configured model, compatible native suggestion, then native catalog order.
+No model-name heuristics, duplicate provider registry or raw JSON UI is added.
+Memory and scheduling preferences remain advanced CLI/config intent, not setup
+questions. Fresh installs enable AKM/automatic memory and default to the host OS
+timezone, preserving existing explicit choices.
 
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations

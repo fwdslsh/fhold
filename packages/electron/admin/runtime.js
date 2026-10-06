@@ -8,25 +8,24 @@ import { checkInstallationReadiness, prepareInstallTarget } from './instances.js
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 
 export function renderPhase(phase) {
+	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
 	byId('install-section').hidden = phase !== 'not_installed';
 	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = phase === 'not_installed';
-	for (const element of all('.setup-only')) element.hidden = phase !== 'setup_incomplete';
-	for (const element of all('.ready-only')) element.hidden = phase !== 'ready';
-	document.body.dataset.phase = phase;
+	for (const element of all('.setup-only')) element.hidden = !setup;
+	for (const element of all('.ready-only')) element.hidden = phase !== 'ready' || setup;
+	document.body.dataset.phase = setup ? 'setup_incomplete' : phase;
 	const notifications = byId('notification-area');
-	const alertLocation = byId(phase === 'ready' ? 'sidebar-alerts' : 'setup-alerts');
+	const alertLocation = byId(phase === 'ready' && !setup ? 'sidebar-alerts' : 'setup-alerts');
 	if (notifications.parentElement !== alertLocation) alertLocation.append(notifications);
 	setSkipTarget(phase === 'not_installed' ? 'install-section' : 'main-content');
-	if (phase === 'setup_incomplete') {
+	if (setup) {
 		showView('provider');
 	} else if (phase === 'ready') {
-		showView(
-			state.currentView === 'provider' && state.lastReadiness?.ok ? 'overview' : state.currentView
-		);
+		showView(state.currentView);
 	}
 }
 
