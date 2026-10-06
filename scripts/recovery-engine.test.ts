@@ -210,7 +210,7 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		await replacement.acquireRestore();
 		for (const file of paths) expect(await readFile(file, 'utf8')).toBe(file);
 		await replacement.release();
-	});
+	}, 30_000); // Real 300-file capture/restore; the five-second unit default is too short.
 
 	test('lets existing default and custom checkpoints gain additional selections without reinitialization', async () => {
 		const f = await fixture();
