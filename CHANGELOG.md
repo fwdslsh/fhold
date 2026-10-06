@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2610060715-beta.1 — simpler setup, Apps and native AI settings
+## 0.1.2610060849-beta.1 — simpler setup, Apps and native AI settings
 
 Admin now has a focused install/import wizard, a compact instance picker and
 an app-oriented Apps page. App permissions are configured where they are used;
@@ -22,8 +22,9 @@ The Assistant includes AKM 0.9.26 and matching 0.9.26202610051302 plugins for al
 three harnesses, installed through their native mechanisms. Real-image release
 gates cover hooks, recovery, history and managed policy on amd64 and arm64.
 Claude and Codex remote connections remain experimental. Native ARM64 Admin
-startup is not yet qualified; existing scoped dependency exceptions remain
-disclosed in the release runbook.
+startup is not yet qualified; scoped dependency exceptions, including the
+approved unpatched `sprintf-js` proxy-logger finding, are disclosed in the
+release runbook.
 
 ## 0.1.2610050714-alpha.6 — simpler Admin and managed ephemeral support
 

@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.1.2610060715-beta.1",
+  "version": "0.1.2610060849-beta.1",
   "private": true,
   "license": "MIT",
   "packageManager": "bun@1.4.2",
@@ -23,7 +23,7 @@
     "portal:discord:dev": "PORTAL_ADAPTER=discord bun run packages/portal/src/index.ts",
     "portal:slack:dev": "PORTAL_ADAPTER=slack bun run packages/portal/src/index.ts",
     "cli:test": "bun run --cwd packages/cli test",
-    "audit": "bun audit --ignore GHSA-86w9-cpqp-85rv",
+    "audit": "bun audit --ignore GHSA-86w9-cpqp-85rv --ignore GHSA-hp3w-g68c-fv3c",
     "install:dev": "FH_HOME=/tmp/fhold-dev bun run packages/cli/src/main.ts install --no-start",
     "lib:test": "bun run --cwd packages/lib test",
     "test:recovery": "bun test --isolate scripts/recovery-engine.test.ts scripts/recovery-mounts.test.ts scripts/recovery-acceptance.test.ts scripts/recovery-wrapper.test.ts scripts/blob-store.test.ts scripts/assistant-recovery-runtime.test.ts",

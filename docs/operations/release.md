@@ -126,6 +126,24 @@ clean-audit claim or a blanket exclusion. Re-review before signing, certificate
 processing, changing the packer path, or when an upstream patch becomes available.
 Keep the useful bridge; do not introduce a custom crypto fork or packer.
 
+## Reviewed proxy-logger advisory
+
+On October 6, 2026 the product owner approved the specific moderate advisory
+[GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)
+in `sprintf-js` 1.1.3. It remains the latest published version with no patched
+release; the standard `bun audit fix` reports no available correction.
+It is reached through `global-agent` → `roarr` in Electron's download/build
+tools and AKM's ONNX proxy dependency. Reviewed proxy-logger call sites use
+fixed format strings with request/error data supplied separately; the finding
+concerns attacker-controlled precision format strings. That reduces the observed
+exposure, but is not a clean-audit claim or a guarantee for arbitrary extra apps.
+
+The audit command ignores only this exact advisory and the separately reviewed
+unsigned MCPB advisory. All other findings still fail. No dependency is patched,
+replaced or removed. Re-review by November 6, 2026, when a supported upstream
+fix is released, or before changing the caller/format-string boundary. Runtime
+image scans and all other release gates remain enabled.
+
 ## Public release gates
 
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux

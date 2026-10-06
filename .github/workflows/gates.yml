@@ -18,9 +18,10 @@ jobs:
           bun-version: 1.4.2
       - name: Install the single locked workspace
         run: bun install --frozen-lockfile
-      - name: Audit dependencies with the reviewed unsigned MCPB build-only exception
+      - name: Audit dependencies with reviewed specific exceptions
         # node-forge is absent from runtime images/bridge; no signing/certificate processing.
-        # Raw bun audit still reports this unpatched advisory. See docs/operations/release.md.
+        # sprintf-js is an unpatched proxy-logger dependency; its reviewed caller uses fixed formats.
+        # Raw bun audit still reports these findings. See docs/operations/release.md.
         run: bun run audit
       - name: Type check active packages
         run: bun run check
