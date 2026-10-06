@@ -246,7 +246,9 @@ describe('fhold own-backup restore', () => {
 				expect(JSON.stringify(plan)).not.toContain('unrelated-mcp-key');
 				expect(JSON.stringify(plan)).not.toContain('unrelated-local-key');
 				expect(JSON.stringify(plan)).not.toContain('private-plugin-package');
-				expect(existsSync(join(destination, 'config', 'assistant', 'opencode.json'))).toBe(false);
+				// Runtime reconciliation seeds only an empty native API preferences file,
+				// never the skipped source's plugins, MCP configuration or authority.
+				expect(JSON.parse(readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8'))).toEqual({});
 				expect(readFileSync(join(source, 'config', 'assistant', 'opencode.json'), 'utf8')).toBe(
 					original
 				);
@@ -258,7 +260,7 @@ describe('fhold own-backup restore', () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'config', 'assistant'), { recursive: true });
 		const original =
-			'{"$schema":"https://opencode.ai/config.json","model":"personal/model","small_model":"personal/small","provider":{"personal":{"options":{"apiKey":"{env:PERSONAL_API_KEY}"}}}}\n';
+			'{"$schema":"https://opencode.ai/config.json","model":"personal/model","small_model":"personal/small","disabled_providers":["old-endpoint"],"provider":{"personal":{"options":{"apiKey":"{env:PERSONAL_API_KEY}"}}}}\n';
 		writeFileSync(join(source, 'config', 'assistant', 'opencode.json'), original);
 		const plan = applyRestore({ sourceHome: source, destinationHome: destination });
 		expect(plan.entries.map((entry) => entry.relativeDestination)).toEqual([
@@ -299,7 +301,7 @@ describe('fhold own-backup restore', () => {
 		]);
 		expect(JSON.stringify(plan)).not.toContain('unused-provider-secret');
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'unused.key'))).toBe(false);
-		expect(existsSync(join(destination, 'config', 'assistant', 'opencode.json'))).toBe(false);
+		expect(JSON.parse(readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8'))).toEqual({});
 	});
 
 	it('skips native config with inline credentials without opt-in, preserving declarations', () => {

@@ -28,6 +28,17 @@ function root(): string {
 }
 
 describe('portable backup', () => {
+	it('preserves native disabled-endpoint preferences without importing runtime authority', async () => {
+		const source = join(root(), 'home');
+		const destination = join(root(), 'backup');
+		writeStackConfig(source, defaultStackConfig());
+		mkdirSync(join(source, 'config/assistant'), { recursive: true });
+		const contents = '{"model":"available/text-model","disabled_providers":["old-endpoint"],"provider":{"old-endpoint":{"options":{"baseURL":"http://192.0.2.10:1234/v1"},"models":{"text-model":{}}}}}\n';
+		writeFileSync(join(source, 'config/assistant/opencode.json'), contents);
+		const manifest = await createBackup({ sourceHome: source, destination });
+		expect(manifest.files.map((file) => file.path)).toEqual(['config/assistant/opencode.json']);
+		expect(readFileSync(join(destination, 'config/assistant/opencode.json'), 'utf8')).toBe(contents);
+	});
 	it('copies only portable data by default and writes an integrity manifest', async () => {
 		const source = join(root(), 'home');
 		const destination = join(root(), 'backup');

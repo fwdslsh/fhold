@@ -82,7 +82,7 @@ const listCommand = defineCommand({
 			return;
 		}
 		for (const provider of providers) {
-			const status = provider.authenticated || provider.connected ? 'ready' : 'not signed in';
+			const status = provider.authenticated ? 'sign-in saved' : provider.connected ? 'available' : 'not signed in';
 			const methods = provider.authMethods.map((method) => method.label).join(', ') || 'configured';
 			console.log(`${provider.id.padEnd(24)} ${status.padEnd(14)} ${methods}`);
 		}

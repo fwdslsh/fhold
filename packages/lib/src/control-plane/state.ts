@@ -18,7 +18,7 @@ import { ensureCredentialKeys } from './credential-store.js';
 import { ensureOAuthFiles } from './oauth-store.js';
 import { syncPortalCredentialBundles } from './portal-credential-store.js';
 import { ensureStackConfig, readStackConfig } from './stack-config.js';
-import { assertSafePortablePath } from './provider-files.js';
+import { assertSafePortablePath, nativePreferencesFile } from './provider-files.js';
 import { recoveryDirectory } from './recovery-config.js';
 
 const PRIVATE_FILE_MODE = 0o600;
@@ -102,6 +102,7 @@ function ensureStackEnv(state: FholdState): void {
 	const ids = operatorIds(state.homeDir, current);
 	const updates: Record<string, string> = {
 		FH_HOME: state.homeDir,
+		FH_OPENCODE_PREFERENCES_FILE: nativePreferencesFile(state.homeDir),
 		FH_SETUP_COMPLETE: current.FH_SETUP_COMPLETE === 'true' ? 'true' : 'false'
 	};
 	if (ids) {
@@ -142,6 +143,7 @@ export function ensureRuntime(state: FholdState): void {
 		if (!current.ok) throw new Error(current.error);
 	}
 	ensureHomeDirs(state.homeDir);
+	ensureRegularFile(join(state.homeDir, 'config', 'assistant', nativePreferencesFile(state.homeDir)), '{}\n');
 	const composePath = managedComposeFile(state.homeDir);
 	if (!existsSync(composePath)) throw new Error(`Managed stack file is missing: ${composePath}`);
 	ensureStackEnv(state);

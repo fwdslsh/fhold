@@ -158,17 +158,29 @@ feedback rather than placing errors in its hidden sidebar. Restart activation
 still requires explicit confirmation; moving alerts never restarts containers
 or resizes the window.
 
-Agent settings uses OpenCode's native catalog and auth flows. Saved credentials,
-runtime provider availability and a successful real-response check are different
-states; anonymous/catalog availability must not appear as a saved account or
-verified connection. Search filters the whole catalog and clears a selection that
-does not match. Key replacement is explicit, keys are never displayed, and native
-OAuth attempts stay bound to their provider/method until completed or cancelled.
-Account refresh performs no billed readiness request. Verification stays on the
-page, never chooses another provider silently or changes the Assistant default
-model; first-time setup has an explicit Continue action. Readiness selects only
-native text-input/text-output/tool-capable, non-deprecated models: compatible
-configured model, compatible native suggestion, then native catalog order.
+Agent settings starts with the resolved native default model, not a directory of
+apparently connected accounts. Saved sign-ins and endpoint definitions are a
+secondary, reviewable inventory; they never prove a working connection. Add AI
+service guides native sign-in or an OpenAI-compatible endpoint, model selection,
+an explicit short response test and an explicit Use this model action. Listing,
+saving credentials and discovering model IDs make no inference request. Model
+discovery runs from the Assistant's network, not the Admin host. Keys remain in
+native auth, never inline in generated provider configuration. Native OAuth
+attempts remain provider/method/instance bound until completed or cancelled.
+Tests stay on the page and never change the default model; only explicit Use
+changes it. The model picker uses native text-input/text-output/tool-capable,
+non-deprecated models. A model list alone is not verification of tool execution.
+Targeted `PATCH /global/config` calls let OpenCode persist and reload its own
+preferences, preserving unrelated settings and JSONC comments. Only its preferred
+user settings file is writable; native trusted clients can edit that file too.
+Config directories, plugins and operator policy remain read-only. Native reloads
+can interrupt active OpenCode work, but do not restart its process or container.
+Confirm the effective native result after reload; never roll back a native file
+from a client-side snapshot. Disable endpoint uses native `disabled_providers`,
+preserving its definition and credentials; saving it again explicitly re-enables
+only that endpoint. Sign-in removal is exact and separate from endpoint disabling
+or vendor-side revocation. Never
+silently discard restored credentials, including IDs missing from the catalog.
 No model-name heuristics, duplicate provider registry or raw JSON UI is added.
 Memory and scheduling preferences remain advanced CLI/config intent, not setup
 questions. Fresh installs enable AKM/automatic memory and default to the host OS

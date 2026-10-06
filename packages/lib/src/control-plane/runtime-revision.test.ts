@@ -15,6 +15,7 @@ import { recordAppliedRuntime, restartStatus, runtimeRevision } from './runtime-
 import { activateComposeCommand, deactivateComposeCommand } from './activation.js';
 import { buildComposeOptions } from './compose.js';
 import { composeConfigJson } from './docker.js';
+import { writeFileAtomic } from './foundation.js';
 
 const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
@@ -82,6 +83,21 @@ test('native policy files and enabled portal tokens require apply, but live auth
 	expect(readFileSync(join(home, 'state/applied-runtime.json'), 'utf8')).not.toContain(
 		'test-token'
 	);
+});
+
+test('native preferences edited in place need no container restart; replacing their bind does', async () => {
+	const { home } = await fixture();
+	const path = join(home, 'config/assistant/opencode.json');
+	recordAppliedRuntime(home, runtimeRevision(home));
+	// OpenCode's native API writes this file in place and invalidates its own cache.
+	writeFileSync(path, '{"model":"native/model","provider":{"native":{"models":{"model":{}}}}}\n');
+	expect(restartStatus(home)).toEqual({ required: false });
+	const contents = readFileSync(path, 'utf8');
+	writeFileAtomic(path, contents);
+	expect(restartStatus(home)).toEqual({ required: true });
+	recordAppliedRuntime(home, runtimeRevision(home));
+	writeFileSync(join(home, 'config/assistant/opencode.jsonc'), '// preferred native file\n{}\n');
+	expect(restartStatus(home)).toEqual({ required: true });
 });
 
 test('a failed apply or stop does not clear pending settings; successful recreation does', async () => {

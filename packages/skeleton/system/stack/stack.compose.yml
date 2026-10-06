@@ -68,6 +68,9 @@ services:
     volumes:
       - ${FH_HOME:?}/data/assistant:/home/fhold
       - ${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode:ro
+      # Native settings API writes only its preferred preferences file; persona,
+      # plugin discovery and managed policy directories remain read-only.
+      - ${FH_HOME:?}/config/assistant/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}:/home/fhold/.config/opencode/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}
       # OpenCode owns this credential file. Mount only the file rather than
       # exposing the delegated Guardian/portal secret directory to the agent.
       - ${FH_HOME:?}/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json

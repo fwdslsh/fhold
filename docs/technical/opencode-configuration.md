@@ -21,6 +21,14 @@ inside `/etc/opencode`; updates preserve host edits. See
 [managed harness configuration](../managed-harness-configuration.md) for its
 precedence, edit/restart workflow and custom deployment mounts.
 
+The user directory has one nested writable file: OpenCode's preferred global
+preferences (`opencode.jsonc` when present, otherwise `opencode.json`, otherwise
+`config.json`; fresh installs seed `opencode.json`). The control plane derives
+the filename, not a second configuration store or user option. Trusted native
+clients may edit its native fields. Persona/plugin files and all managed policy
+remain read-only. Standalone deployments with a writable native home already
+support the same API; no special fhold process wrapper is required.
+
 Project configuration, Claude compatibility discovery, external skill
 discovery, and OpenCode's embedded browser UI are disabled in the hosted
 process. This prevents a checked-out workspace from introducing startup code or
@@ -32,6 +40,55 @@ The plugin wrapper imports the exact package baked at:
 ```text
 /opt/fhold/tools/node_modules/akm-opencode/dist/index.js
 ```
+
+## Local and custom AI servers
+
+Admin's **Add AI service** presets send narrow `PATCH /global/config` requests
+to OpenCode's authenticated native API. OpenCode persists preferences and
+invalidates/reloads its own configuration; it preserves unrelated settings and
+JSONC comments. Admin never rewrites a native file or invents a reload command.
+The compatible SDK is
+bundled in the pinned OpenCode release; no SDK package or startup install is added.
+API keys use OpenCode's `/auth` API and its existing private credential store.
+
+The form stores the server's name, `options.baseURL` and chosen `models` entry.
+**Use this model** patches native `model: "provider/model"`. After native reload,
+Admin checks the effective `/config` result rather than assuming the write won.
+The higher-priority `config/opencode/opencode.json` remains operator policy;
+conflicting managed provider/model settings must be edited there, not bypassed.
+Neither endpoint saving nor default selection restarts the OpenCode process or
+container. Reloading native configuration can interrupt active OpenCode work.
+An unconfirmed effective result is reported honestly as saved but unconfirmed,
+not restored by overwriting the file with an old client-side copy.
+
+**Disable endpoint** patches native `disabled_providers`, retaining the endpoint
+definition and its separate sign-in. OpenCode's merge API does not delete provider
+definitions. Editing/saving a disabled endpoint explicitly re-enables only that
+ID; other disabled services stay disabled. **Remove sign-in** instead uses native
+`DELETE /auth/<provider>` without deleting endpoint settings or revoking the vendor
+account. Higher-priority operator configuration is never silently bypassed.
+
+Host edits that replace the preferences file's inode, or add a higher-priority
+filename, require `fhold restart` to recreate the narrow file bind. Admin's API
+writes do not require a pending-restart alert. Edit managed policy files on the
+host and restart normally; do not edit generated `state/stack.env`.
+
+**Load models** uses a bounded, one-shot `GET <baseURL>/models` from inside the
+running Assistant through ordinary Compose exec and Node's built-in fetch.
+An optional key travels on stdin, not Docker command arguments. The discovery
+helper installs nothing, starts no daemon and never prints raw responses or keys.
+If the server does not support listing models, use its exact documented model ID.
+The explicit readiness request subsequently goes through native OpenCode, using
+the chosen model; a model listing is not proof of inference or tool-call support.
+
+Common OpenAI-compatible base URL paths end in `/v1`. Use the address actually
+served by Ollama, LM Studio, llama-server or your custom service. A server on
+the host's loopback interface is not automatically reachable from a Linux bridge
+container. Use a deliberately configured private interface/network, or the host
+gateway address if the server listens on it. Keep firewall and authentication
+appropriate; do not expose a previously loopback-only server publicly to make
+setup pass. A `localhost` address targets Assistant itself. fhold does not change
+the model server's listener, launch it or fetch models.
 
 ## Trusted native sessions
 

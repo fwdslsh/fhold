@@ -87,6 +87,7 @@ describe('OpenCode setup client', () => {
 				name: 'Anthropic',
 				source: 'api',
 				modelCount: 1,
+				models: [],
 				defaultModel: 'sonnet',
 				connected: true,
 				authenticated: true,
@@ -120,7 +121,7 @@ describe('OpenCode setup client', () => {
 				connected: []
 			});
 		}) as typeof fetch;
-		expect((await listProviders(root, { fetch: fakeFetch }))[0]?.authMethods).toEqual([
+		expect((await listProviders(root, { fetch: fakeFetch })).find((provider) => provider.id === 'opencode-go')?.authMethods).toEqual([
 			{ index: 0, type: 'api', label: 'API key' }
 		]);
 	});
@@ -238,7 +239,7 @@ describe('OpenCode setup client', () => {
 			if (path === '/provider/auth') return Response.json({});
 			throw new Error(`unexpected ${path}`);
 		}) as typeof fetch;
-		expect((await listProviders(root, { fetch: providerFetch }))[0]?.id).toBe('large');
+		expect((await listProviders(root, { fetch: providerFetch })).some((provider) => provider.id === 'large')).toBe(true);
 
 		const oversizedAuthFetch = (async () => Response.json({ largeValue })) as typeof fetch;
 		await expect(

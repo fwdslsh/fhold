@@ -93,6 +93,11 @@ function assistantService(homeDir = '/tmp/home') {
 			},
 			{
 				type: 'bind',
+				source: `${homeDir}/config/assistant/opencode.json`,
+				target: '/home/fhold/.config/opencode/opencode.json'
+			},
+			{
+				type: 'bind',
 				source: `${homeDir}/knowledge/secrets/auth.json`,
 				target: '/home/fhold/.local/share/opencode/auth.json'
 			},
@@ -144,6 +149,20 @@ function auditHome(): string {
 }
 
 describe('Compose security audit', () => {
+	it('grants native preference writes without granting writable persona, plugins or policy', () => {
+		const home = auditHome();
+		const config = baseConfig(home);
+		expect(auditCompose(config, home)).toEqual([]);
+		const preference = config.services.assistant.volumes.find((mount) => mount.target === '/home/fhold/.config/opencode/opencode.json');
+		if (!preference) throw new Error('Missing native preference fixture');
+		Object.assign(preference, { read_only: true });
+		expect(auditCompose(config, home).join('\n')).toContain('opencode.json must be read-write');
+		Object.assign(preference, { read_only: false });
+		const directory = config.services.assistant.volumes.find((mount) => mount.target === '/home/fhold/.config/opencode');
+		if (!directory) throw new Error('Missing native directory fixture');
+		directory.read_only = false;
+		expect(auditCompose(config, home).join('\n')).toContain('/home/fhold/.config/opencode must be read-only');
+	});
 	it('allows only the exact read-only optional Claude managed MCP mount', () => {
 		const home = auditHome();
 		const config = baseConfig(home);

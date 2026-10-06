@@ -70,10 +70,10 @@ function friendlyError(stderr: string): string {
 
 export function runDocker(
 	args: string[],
-	options: { timeoutMs?: number; maxOutputBytes?: number; env?: NodeJS.ProcessEnv } = {}
+	options: { timeoutMs?: number; maxOutputBytes?: number; env?: NodeJS.ProcessEnv; input?: string } = {}
 ): Promise<DockerResult> {
 	return new Promise((resolve) => {
-		execFile(
+		const child = execFile(
 			dockerBin(),
 			args,
 			{
@@ -96,6 +96,9 @@ export function runDocker(
 				});
 			}
 		);
+		// Keep optional private input out of command arguments and process listings.
+		child.stdin?.on('error', () => { /* exit is reported by execFile */ });
+		child.stdin?.end(options.input);
 	});
 }
 

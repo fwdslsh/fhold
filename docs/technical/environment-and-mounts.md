@@ -60,6 +60,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_HOME` | Absolute stack home |
 | `FH_PROJECT_NAME` | Persisted instance name, or stable per-canonical-home default, from deployment intent |
 | `FH_INSTANCE_HOSTNAME` | Derived Assistant OS hostname from that same project name; not another user setting |
+| `FH_OPENCODE_PREFERENCES_FILE` | Derived native write target: existing `opencode.jsonc`, otherwise `opencode.json`, otherwise `config.json`; fresh homes seed `opencode.json`. Not a user setting. |
 | `FH_UID`, `FH_GID` | Non-root container identity |
 | `FH_IMAGE_NAMESPACE` | Image namespace; default `fwdslsh` (public Docker Hub); `fhold` selects local builds |
 | `FH_STACK_CONFIG_VERSION` | Derived intent schema version |
@@ -138,6 +139,7 @@ bypasses Guardian.
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
 | `config/assistant` | `/home/fhold/.config/opencode` | read-only |
+| `config/assistant/<preferred native file>` | `/home/fhold/.config/opencode/<same filename>` | read/write nested file mount for OpenCode's native settings API |
 | `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
@@ -154,6 +156,15 @@ Assistant's native API credential is the OpenCode server password. It receives
 no Guardian, portal, bot, Docker, or host-admin credential. Optional recovery uses
 a separate storage-only connection-string file; it is not an ingress credential
 and its value never appears in environment settings.
+
+Admin changes native provider/model preferences through OpenCode's authenticated
+global configuration API. OpenCode updates its preferred file in place and reloads
+its own cache; no process/container restart is needed. The remaining user config
+directory and managed/operator policy stay read-only. Trusted native clients can
+also edit the writable preferences file. Replacing its inode with an atomic host
+editor, or changing the preferred filename, requires `fhold restart` to refresh
+the file bind. Admin tracks that mount change, not in-place preference content,
+as pending restart. Native reloads can interrupt active OpenCode work.
 
 The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
 authentication uses username `user`. `/fhold-bundle` is an image-baked,

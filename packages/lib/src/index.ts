@@ -153,6 +153,10 @@ export {
 	type ConnectionDetails
 } from './control-plane/connection.js';
 export {
+	listProviderSettings, saveProviderEndpoint, useProviderModel, removeProviderSetup, discoverProviderModels,
+	type ProviderSettings, type ProviderEndpointInput
+} from './control-plane/provider-settings.js';
+export {
 	applyRestore,
 	planRestore,
 	type RestoreAction,

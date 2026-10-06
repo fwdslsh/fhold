@@ -13,6 +13,20 @@ import { isAbsolute, join, relative, sep } from 'node:path';
 const MAX_PROVIDER_FILE_BYTES = 1024 * 1024;
 const MAX_PROVIDER_FILES = 128;
 
+/** Match OpenCode's preferred global write target; fresh homes seed opencode.json. */
+export function nativePreferencesFile(home: string): string {
+	for (const name of ['opencode.jsonc', 'opencode.json', 'config.json']) {
+		const path = `config/assistant/${name}`;
+		assertSafePortablePath(home, path, true);
+		const stat = lstatSync(join(home, path), { throwIfNoEntry: false });
+		if (!stat) continue;
+		if (!stat.isFile() || stat.size > MAX_PROVIDER_FILE_BYTES)
+			throw new Error(`OpenCode preferences must be a regular file no larger than 1 MiB: ${path}`);
+		return name;
+	}
+	return 'opencode.json';
+}
+
 function hasControlCharacters(value: string): boolean {
 	return [...value].some(
 		(character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
@@ -128,7 +142,7 @@ function nativeConfiguration(home: string): Record<string, unknown> | null {
 /** Portable configuration is provider/model intent, never plugin or MCP runtime/credential state. */
 export function hasNonPortableNativeConfiguration(home: string): boolean {
 	const config = nativeConfiguration(home) ?? {};
-	if (Object.keys(config).some((key) => !['$schema', 'model', 'small_model', 'provider'].includes(key))) return true;
+	if (Object.keys(config).some((key) => !['$schema', 'model', 'small_model', 'provider', 'disabled_providers'].includes(key))) return true;
 	// A native provider SDK selector imports executable code, including file: SDKs
 	// from restored workspace files. It is not a portable model/auth preference.
 	const pending: unknown[] = [config.provider];

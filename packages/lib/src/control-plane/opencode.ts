@@ -44,6 +44,10 @@ export type ProviderSummary = {
 	name: string;
 	source: string;
 	modelCount: number;
+	models?: Array<{ id: string; name: string }>;
+	configured?: boolean;
+	disabled?: boolean;
+	endpoint?: { url: string; name: string; models: string[]; editable: boolean };
 	defaultModel?: string;
 	connected: boolean;
 	authenticated: boolean;
@@ -114,7 +118,11 @@ function parsePrompt(value: unknown): ProviderAuthPrompt | undefined {
 }
 
 function providerIdValue(value: string): string {
-	if (!/^[A-Za-z0-9._-]{1,128}$/.test(value)) throw new Error('Invalid provider id');
+	if (
+		!/^[A-Za-z0-9._-]{1,128}$/.test(value) ||
+		['__proto__', 'constructor', 'prototype'].includes(value)
+	)
+		throw new Error('Invalid provider id');
 	return value;
 }
 
@@ -337,15 +345,35 @@ export async function listProviders(
 			authMethods.push({ index: 0, type: 'api', label: 'API key' });
 		}
 		const defaultModel = modelIdValue(defaultModels[provider.id]);
+		const models = asRecord(provider.models) ?? {};
 		summaries.push({
 			id: provider.id,
 			name: typeof provider.name === 'string' ? provider.name : provider.id,
 			source: typeof provider.source === 'string' ? provider.source : 'unknown',
 			modelCount: Object.keys(asRecord(provider.models) ?? {}).length,
+			models: agentModels(provider).map((id) => ({
+				id,
+				name: boundedString(asRecord(models[id])?.name, 500) || id
+			})),
 			...(defaultModel ? { defaultModel } : {}),
 			connected: connected.has(provider.id),
 			authenticated: authenticated.has(provider.id),
 			authMethods
+		});
+	}
+	// Restored credentials can outlive native catalog entries. Keep them reviewable,
+	// without inventing models or claiming the old sign-in still works.
+	for (const id of authenticated) {
+		if (summaries.some((item) => item.id === id) || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) continue;
+		summaries.push({
+			id,
+			name: id,
+			source: 'saved',
+			modelCount: 0,
+			models: [],
+			connected: connected.has(id),
+			authenticated: true,
+			authMethods: []
 		});
 	}
 	return summaries.sort((left, right) => left.name.localeCompare(right.name));
@@ -373,6 +401,35 @@ export async function refreshAssistantInstance(
 	options: { fetch?: FetchLike } = {}
 ): Promise<void> {
 	await request(homeDir, '/instance/dispose', { method: 'POST' }, options);
+}
+
+/** Resolved native configuration, including managed-policy precedence. */
+export async function readAssistantConfig(
+	homeDir: string,
+	options: { fetch?: FetchLike } = {}
+): Promise<Record<string, unknown>> {
+	const value = asRecord(await request(homeDir, '/config', {}, options));
+	if (!value) throw new Error('OpenCode returned invalid configuration.');
+	return value;
+}
+
+/** Native global preferences, not the higher-precedence managed policy. */
+export async function readAssistantGlobalConfig(
+	homeDir: string,
+	options: { fetch?: FetchLike } = {}
+): Promise<Record<string, unknown>> {
+	const value = asRecord(await request(homeDir, '/global/config', {}, options));
+	if (!value) throw new Error('OpenCode returned invalid global configuration.');
+	return value;
+}
+
+/** OpenCode owns persistence, JSONC edits, cache invalidation and native reload. */
+export async function updateAssistantGlobalConfig(
+	homeDir: string,
+	patch: Record<string, unknown>,
+	options: { fetch?: FetchLike } = {}
+): Promise<void> {
+	await request(homeDir, '/global/config', { method: 'PATCH', body: JSON.stringify(patch) }, options);
 }
 
 export async function beginProviderOAuth(

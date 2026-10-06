@@ -26,7 +26,7 @@ import {
 	remoteStageText,
 	recallStatusLabel
 } from '../admin/remote.js';
-import { resetOAuthAttempt, renderProviders, loadProviders } from '../admin/providers.js';
+import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, verifyProvider } from '../admin/providers.js';
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
 import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
@@ -107,6 +107,10 @@ class Control {
 	querySelector(_selector?: string) {
 		return this.children[0] ?? new Control();
 	}
+	closest(_selector?: string) {
+		return null;
+	}
+	reportValidity() { return true; }
 	contains(control: Control) {
 		return this.children.includes(control);
 	}
@@ -135,13 +139,18 @@ function selector(name: string, ...elements: Control[]) {
 beforeEach(() => {
 	Object.assign(state, createAdminState());
 	controls = new Map(
-		[...html.matchAll(/\bid="([^"]+)"/g)].map((match) => {
+		[...html.matchAll(/<([a-z0-9]+)\b([^>]*\bid="([^"]+)"[^>]*)>/gi)].map((match) => {
 			const element = new Control();
-			element.id = match[1];
+			element.id = match[3];
+			element.tagName = match[1].toUpperCase();
+			element.hidden = /\bhidden\b/.test(match[2]);
+			element.disabled = /\bdisabled\b/.test(match[2]);
 			return [element.id, element];
 		})
 	);
 	selectors = new Map();
+	selector('#install-advanced input', control('install-home'), control('install-assistant-port'), control('install-gateway-port'));
+	state.installationReadiness = { ok: true };
 	control('install-automatic-ports').checked = true;
 	control('install-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
@@ -154,7 +163,7 @@ beforeEach(() => {
 		createElement: () => new Control()
 	} as unknown as Document;
 	globalThis.HTMLInputElement = Control as unknown as typeof HTMLInputElement;
-	globalThis.window = { confirm: () => false } as unknown as Window & typeof globalThis;
+	globalThis.window = { confirm: () => false, location: { reload() {} } } as unknown as Window & typeof globalThis;
 });
 afterEach(() => {
 	clearTimeout(state.noticeTimer);
@@ -165,7 +174,7 @@ describe('Admin static security boundary', () => {
 	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
 		expect(html).toContain('Entire instance (must be stopped)');
 		expect(html).toContain('Import an entire instance instead');
-		expect(html).toContain('do not install first');
+		expect(html).toContain('Choose a new or empty folder. Nothing is copied until you confirm.');
 		expect(html).toContain('The original instance must be stopped');
 		control('backup-scope').value = 'instance';
 		updateBackupScope();
@@ -180,23 +189,31 @@ describe('Admin static security boundary', () => {
 	});
 	it('requires a reviewed, unchanged full-instance preview and native confirmation before import', async () => {
 		let imported = false;
-		state.api = { restoreInstance: async () => { imported = true; }, confirmRestart: async () => false };
+		let confirmations = 0;
+		state.api = {
+			prepareNewInstance: async () => {},
+			restoreInstance: async ({ apply }) => { if (apply) imported = true; return { projectName: 'restored', sourceHome: '/export', destinationHome: '/restored', digest: 'a'.repeat(64), copyCount: 2, warnings: [] }; },
+			confirmRestart: async () => { confirmations++; return false; }
+		};
 		bindInstanceRestoreEvents();
-		control('instance-restore-panel').open = true;
-		control('instance-restore-panel').listeners.get('toggle')?.({});
-		expect(control('install-form').hidden).toBe(true);
+		control('begin-instance-import').listeners.get('click')?.({});
+		expect(control('instance-import-section').hidden).toBe(false);
+		expect(control('install-section').hidden).toBe(true);
 		control('instance-restore-source').value = '/export';
+		control('instance-restore-home').value = '/restored';
 		await control('apply-instance-restore').listeners.get('click')?.({});
 		expect(imported).toBe(false);
-		state.instanceRestorePreview = { sourceHome: '/export', digest: 'a'.repeat(64) };
+		expect(confirmations).toBe(0);
+		await control('instance-restore-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(control('instance-import-review').hidden).toBe(false);
 		await control('apply-instance-restore').listeners.get('click')?.({});
 		expect(imported).toBe(false);
+		expect(confirmations).toBe(1);
 		control('instance-restore-source').listeners.get('input')?.({});
 		expect(state.instanceRestorePreview).toBeNull();
 		expect(control('apply-instance-restore').disabled).toBe(true);
-		control('instance-restore-panel').open = false;
-		control('instance-restore-panel').listeners.get('toggle')?.({});
-		expect(control('install-form').hidden).toBe(false);
+		expect(control('instance-import-review').hidden).toBe(true);
+		expect(control('instance-import-choices').hidden).toBe(false);
 	});
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
 		expect(html).toContain('Import / export');
@@ -261,17 +278,17 @@ describe('Admin static security boundary', () => {
 		expect(control('instance-welcome').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
 		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual(['april', 'may']);
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'begin-new-instance']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'begin-new-instance', 'begin-instance-import']);
 		expect(control('begin-new-instance').className).toBe('secondary');
-		expect(control('new-instance-section').hidden).toBe(true);
+		expect(control('install-section').hidden).toBe(true);
 		expect(control('skip-link').getAttribute('href')).toBe('#instance-welcome');
 	});
 
-	it('offers two initial choices, not a folder form, and cancelling the picker does nothing', async () => {
+	it('offers setup, existing instance and import, not a folder form, and cancelling the picker does nothing', async () => {
 		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
 		expect(control('begin-new-instance').className).toBe('primary');
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section']);
-		expect(control('new-instance-section').hidden).toBe(true);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section', 'begin-instance-import']);
+		expect(control('install-section').hidden).toBe(true);
 		expect(control('recent-instances-section').hidden).toBe(true);
 		let opened = false;
 		state.api = {
@@ -286,28 +303,22 @@ describe('Admin static security boundary', () => {
 		expect(state.operationInFlight).toBe(false);
 	});
 
-	it('reveals naming only after setup is chosen and Back preserves the draft without selecting a home', async () => {
+	it('reveals naming only after setup is chosen and Cancel never prepares or installs a home', async () => {
 		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
-		state.api = new Proxy({}, { get: () => { throw new Error('Navigation must not call IPC.'); } });
+		let closed = 0;
+		state.api = { closeInstance: async () => { closed++; }, prepareNewInstance: async () => { throw new Error('Cancel must not prepare a home'); }, install: async () => { throw new Error('Cancel must not install'); } };
 		bindInstanceEvents();
 		await control('begin-new-instance').listeners.get('click')?.({});
-		expect(control('instance-options').hidden).toBe(true);
-		expect(control('instance-welcome-title').hidden).toBe(true);
-		expect(control('new-instance-section').hidden).toBe(false);
-		expect(control('new-instance-name').focused).toBe(true);
-		control('new-instance-name').value = 'april';
-		control('new-instance-home').value = '/my/agent';
-		await control('cancel-new-instance').listeners.get('click')?.({});
-		expect(control('instance-options').hidden).toBe(false);
-		expect(control('instance-welcome-title').hidden).toBe(false);
-		expect(control('new-instance-section').hidden).toBe(true);
-		expect(control('begin-new-instance').focused).toBe(true);
-		await control('begin-new-instance').listeners.get('click')?.({});
-		expect(control('new-instance-name').value).toBe('april');
-		expect(control('new-instance-home').value).toBe('/my/agent');
+		expect(control('instance-welcome').hidden).toBe(true);
+		expect(control('install-section').hidden).toBe(false);
+		expect(control('install-instance-name').focused).toBe(true);
+		control('install-instance-name').value = 'april';
+		control('install-home').value = '/my/agent';
+		await showInstances();
+		expect(closed).toBe(1);
 		state.operationInFlight = true;
-		await control('cancel-new-instance').listeners.get('click')?.({});
-		expect(control('new-instance-section').hidden).toBe(false);
+		await showInstances();
+		expect(closed).toBe(1);
 	});
 
 	it('shows the compatible default once and never opens an unavailable recent row', async () => {
@@ -323,7 +334,7 @@ describe('Admin static security boundary', () => {
 		expect(state.operationInFlight).toBe(false);
 		// Reordering on another render must move DOM nodes, not duplicate them.
 		renderWelcome({ defaultInstance: { ...target, available: false }, recentInstances: [] });
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section', 'begin-instance-import']);
 	});
 
 	it('locks concurrent existing-folder dialogs and recovers from cancellation or error', async () => {
@@ -399,15 +410,15 @@ describe('Admin static security boundary', () => {
 			}
 		};
 		bindInstanceEvents();
-		await control('new-instance-browse').listeners.get('click')?.({});
-		expect(control('new-instance-home').value).toBe('/new-instance');
+		await control('install-browse').listeners.get('click')?.({});
+		expect(control('install-home').value).toBe('/new-instance');
 		expect(prepared).toBe(false);
 		state.api.chooseDirectory = async () => undefined;
-		await control('new-instance-browse').listeners.get('click')?.({});
-		expect(control('new-instance-home').value).toBe('/new-instance');
+		await control('install-browse').listeners.get('click')?.({});
+		expect(control('install-home').value).toBe('/new-instance');
 		expect(prepared).toBe(false);
 	});
-	it('continues new setup only after submitting the folder and reloads the renderer', async () => {
+	it('prepares and installs only after the explicit install submission without reloading the renderer', async () => {
 		let reloads = 0;
 		globalThis.window = {
 			location: {
@@ -417,6 +428,8 @@ describe('Admin static security boundary', () => {
 			}
 		} as unknown as Window & typeof globalThis;
 		let target: unknown;
+		const config = defaultStackConfig();
+		let installs = 0;
 		state.api = {
 			prepareNewInstance: async (value) => {
 				target = value;
@@ -424,19 +437,21 @@ describe('Admin static security boundary', () => {
 			openInstance: async () => {
 				throw new Error('must use the fresh-setup boundary');
 			},
-			install: async () => {
-				throw new Error('must wait for install confirmation');
-			}
+			snapshot: async () => ({ config, services: [] }),
+			install: async () => { installs++; return { ok: true }; }
 		};
-		control('new-instance-home').value = ' /chosen/new-instance ';
-		bindInstanceEvents();
-		await control('new-instance-form').listeners.get('submit')?.({ preventDefault() {} });
+		control('install-home').value = ' /chosen/new-instance ';
+		control('install-section').hidden = false;
+		bindRuntimeEvents();
+		expect(installs).toBe(0);
+		await control('install-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(target).toEqual({
 			kind: 'local',
 			homeDir: '/chosen/new-instance',
 			name: 'personal-agent'
 		});
-		expect(reloads).toBe(1);
+		expect(installs).toBe(1);
+		expect(reloads).toBe(0);
 		expect(state.operationInFlight).toBe(false);
 	});
 	it('suggests a named default folder and leaves manually chosen folders alone', () => {
@@ -446,14 +461,14 @@ describe('Admin static security boundary', () => {
 			instancesDirectory: '/user/fhold/instances',
 			recentInstances: []
 		});
-		expect(control('new-instance-home').value).toBe('/user/fhold/instances/personal-agent');
-		control('new-instance-name').value = 'april';
-		control('new-instance-name').listeners.get('input')?.({});
-		expect(control('new-instance-home').value).toBe('/user/fhold/instances/april');
-		control('new-instance-home').value = '/custom/my-agent';
-		control('new-instance-name').value = 'may';
-		control('new-instance-name').listeners.get('input')?.({});
-		expect(control('new-instance-home').value).toBe('/custom/my-agent');
+		expect(control('install-home').value).toBe('/user/fhold/instances/personal-agent');
+		control('install-instance-name').value = 'april';
+		control('install-instance-name').listeners.get('input')?.({});
+		expect(control('install-home').value).toBe('/user/fhold/instances/april');
+		control('install-home').value = '/custom/my-agent';
+		control('install-instance-name').value = 'may';
+		control('install-instance-name').listeners.get('input')?.({});
+		expect(control('install-home').value).toBe('/custom/my-agent');
 	});
 	it('keeps the new folder input after rejection and blocks duplicate submissions', async () => {
 		let calls = 0;
@@ -463,23 +478,24 @@ describe('Admin static security boundary', () => {
 				throw new Error('Choose an empty folder.');
 			}
 		};
-		control('new-instance-home').value = '/already-installed';
-		bindInstanceEvents();
-		const submit = control('new-instance-form').listeners.get('submit');
+		control('install-home').value = '/already-installed';
+		control('install-section').hidden = false;
+		bindRuntimeEvents();
+		const submit = control('install-form').listeners.get('submit');
 		await submit?.({ preventDefault() {} });
-		expect(control('new-instance-home').value).toBe('/already-installed');
+		expect(control('install-home').value).toBe('/already-installed');
 		expect(control('notice-message').textContent).toBe('Choose an empty folder.');
-		expect(control('new-instance-location-details').open).toBe(true);
-		expect(control('new-instance-home').focused).toBe(true);
+		expect(control('install-advanced').open).toBe(true);
+		expect(control('install-home').focused).toBe(true);
 		state.operationInFlight = true;
 		await submit?.({ preventDefault() {} });
 		expect(calls).toBe(1);
 	});
 	it('reveals the optional folder location when native form validation requires it', () => {
 		bindInstanceEvents();
-		control('new-instance-home').listeners.get('invalid')?.({});
-		expect(control('new-instance-location-details').open).toBe(true);
-		expect(html).toMatch(/<details id="new-instance-location-details"[^>]*>/);
+		control('install-home').listeners.get('invalid')?.({});
+		expect(control('install-advanced').open).toBe(true);
+		expect(html).toMatch(/<details id="install-advanced"[^>]*>/);
 		expect(html).not.toContain('id="new-instance-location-preview"');
 		expect(html).not.toContain('id="open-recent-instance"');
 	});
@@ -553,11 +569,14 @@ describe('Admin static security boundary', () => {
 		control('install-gateway-port').value = '49130';
 		const calls: unknown[] = [];
 		state.api = {
+			prepareNewInstance: async ({ name }) => { config.deployment.projectName = name; },
+			snapshot: async () => ({ config: structuredClone(config), services: [] }),
 			install: async (...args) => {
 				calls.push(args);
 				return { ok: true };
 			}
 		};
+		control('install-section').hidden = false;
 		bindRuntimeEvents();
 		await control('install-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(calls[0]).toEqual([{ ...config, deployment: { projectName: 'my-agent' } }, true]);
@@ -585,6 +604,7 @@ describe('Admin static security boundary', () => {
 		renderServices({
 			phase: 'setup_incomplete',
 			services: [],
+			portalSecrets: {},
 			config: {
 				gateway: { enabled: false },
 				portals: { discord: { enabled: false }, slack: { enabled: false } }
@@ -597,29 +617,35 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('keeps account selection explicit and hides a redundant single sign-in method', () => {
-		control('provider').value = 'example';
-		renderProviders([
+		renderProviders({ providers: [
 			{
 				id: 'example',
 				name: 'Example',
 				authenticated: true,
+				models: [{ id: 'text-model', name: 'Text model' }],
 				authMethods: [{ index: 0, type: 'api', label: 'API key' }]
 			}
-		]);
+		] });
+		expect(state.providerEditor).toBeNull();
+		expect(html).toMatch(/id="provider-editor"[^>]*\bhidden\b/);
+		openProviderEditor('edit', 'example');
 		expect(control('provider').value).toBe('example');
-		expect(control('provider-method').value).toBe('0');
+		expect(control('provider-method').options.map((option) => option.value)).toEqual(['0']);
 		expect(control('provider-method-field').hidden).toBe(true);
-		expect(control('provider-status').children[1].textContent).toContain('Verify a real response');
-		expect(control('test-provider').hidden).toBe(false);
+		expect(state.providerEditor.stage).toBe('details');
+		expect(control('provider-model-step').hidden).toBe(true);
+		expect(control('use-provider-model').disabled).toBe(true);
 	});
 
 	it('offers verification after account selection, not before it', () => {
 		state.currentSnapshot = { phase: 'setup_incomplete' };
-		renderProviders([
+		renderProviders({ providers: [
 			{ id: 'example', name: 'Example', authMethods: [{ index: 0, type: 'api', label: 'API key' }] }
-		]);
+		] });
 		expect(control('provider').value).toBe('');
-		expect(control('test-provider').hidden).toBe(true);
+		expect(state.providerEditor).toBeNull();
+		expect(control('test-current-model').disabled).toBe(true);
+		expect(control('provider-default-service').textContent).toBe('No default AI service selected');
 		expect(html.indexOf('id="test-provider"')).toBeGreaterThan(html.indexOf('id="provider-form"'));
 	});
 
@@ -630,25 +656,26 @@ describe('Admin static security boundary', () => {
 			}
 		};
 		await loadProviders(false);
-		expect(control('provider-status').children[0].textContent).toBe('Cannot load AI accounts.');
-		expect(control('provider-status').children[1].textContent).toContain('Refresh accounts');
-		expect(control('provider-status').children[1].textContent).not.toContain(
+		expect(control('provider-default-status').children[0].textContent).toBe('Cannot load AI settings.');
+		expect(control('provider-default-status').children[1].textContent).toContain('refresh the setup list');
+		expect(control('provider-default-status').children[1].textContent).not.toContain(
 			'invoking remote method'
 		);
 		expect(html).not.toContain('id="provider-result"');
 		expect(state.providerLoadPromise).toBeUndefined();
 		await loadProviders(true);
 		expect(control('notice-message').textContent).toBe(
-			'Cannot reach your agent. Check that it is running, then refresh accounts.'
+			'Cannot reach your agent. Check that it is running, then refresh the setup list.'
 		);
 	});
 
 	it('opens optional portal tokens before focusing a validation or setup target', async () => {
-		control('token-portal').value = 'discord';
+		state.currentSnapshot = { phase: 'ready', config: defaultStackConfig(), portalSecrets: {} };
 		showPortalTokenForm('discord');
 		await Bun.sleep(0);
-		expect(control('portal-tokens').open).toBe(true);
-		expect(control('bot-token').focused).toBe(true);
+		expect(control('discord-tokens').open).toBe(true);
+		expect(control('discord-bot-token').focused).toBe(true);
+		expect(control('slack-tokens').open).toBe(false);
 	});
 
 	it('offers compact per-identity permission management without key reveal or rotation actions', () => {
@@ -706,9 +733,9 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('labels both native remote workers experimental without labeling Claude Desktop MCP', () => {
-		for (const name of ['Claude Code', 'Codex'])
-			expect(html).toContain(`<h3>${name} <span class="card-label">Experimental</span></h3>`);
-		expect(html).toContain('<h3>Claude Desktop</h3>');
+		for (const name of ['Claude remote connection', 'Codex'])
+			expect(html).toMatch(new RegExp(`<summary><span>${name}<small>[^<]*<\\/small><\\/span><span class="card-label">Experimental<\\/span><\\/summary>`));
+		expect(html).toMatch(/<summary><span>Desktop chat<small>[^<]*<\/small><\/span><\/summary>/);
 		for (const tool of ['claude', 'codex']) {
 			const button = new Control();
 			button.dataset.remoteConnect = tool;
@@ -742,7 +769,7 @@ describe('Admin static security boundary', () => {
 		button.listeners.get('click')?.({});
 		expect(control('remote-dialog').open).toBe(true);
 		expect(control('remote-heading').textContent).toBe(
-			'Enable Claude Remote Control (experimental)'
+			'Set up Claude remote connection (experimental)'
 		);
 		expect(control('remote-trust').checked).toBe(false);
 		expect(control('remote-sandbox-field').hidden).toBe(true);
@@ -869,12 +896,12 @@ describe('Admin static security boundary', () => {
 	it('keeps every credential display masked initially', () => {
 		for (const id of [
 			'provider-key',
-			'bot-token',
-			'app-token',
-			'credential-key',
+			'provider-endpoint-key',
+			'discord-bot-token',
+			'slack-bot-token',
+			'slack-app-token',
 			'direct-password',
-		'claude-key',
-		'mcp-key',
+			'remote-answer',
 		'runtime-recovery-connection-string'
 		]) {
 			const input = [...html.matchAll(/<input\b[^>]*>/g)].find((match) =>
@@ -1047,10 +1074,11 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('marks failed automatic checks unavailable on Overview, then recovers without clearing user errors', async () => {
 		state.currentSnapshot = { ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] };
+		render(state.currentSnapshot);
 		renderServices(state.currentSnapshot);
 		control('notice').className = 'notice error';
 		control('notice-message').textContent = 'Unsaved setting needs attention';
-		state.api = { snapshot: async () => { throw new Error('Connection unavailable'); } };
+		state.api = { snapshot: async () => { throw new Error('Connection unavailable'); }, providers: async () => ({ providers: [] }) };
 		await refreshVisibleStatus();
 		expect(control('assistant-summary').textContent).toBe('Status unavailable');
 		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
@@ -1062,6 +1090,7 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('updates status without overwriting app drafts, configuration baseline, transient passwords or explicit hook review', async () => {
 		const snapshot = runtimeSnapshot();
+		render(snapshot);
 		state.currentSnapshot = snapshot;
 		state.currentConfig = snapshot.config;
 		state.dirtyForms.add('opencode-network-form');
@@ -1079,6 +1108,7 @@ describe('Admin instance picker and automatic status', () => {
 	it('discards an old background read if an operation or a newer snapshot has superseded it', async () => {
 		for (const superseded of ['operation', 'snapshot']) {
 			state.currentSnapshot = runtimeSnapshot();
+			render(state.currentSnapshot);
 			let finish!: (value: unknown) => void;
 			state.api = { snapshot: () => new Promise((resolve) => { finish = resolve; }) };
 			const checking = refreshVisibleStatus();
@@ -1110,10 +1140,11 @@ describe('Admin instance picker and automatic status', () => {
 	it('discovers providers after an externally started Assistant becomes healthy without needing Refresh', async () => {
 		const snapshot = runtimeSnapshot();
 		state.currentSnapshot = { ...snapshot, phase: 'setup_incomplete' };
+		render(state.currentSnapshot);
 		let discoveries = 0;
 		state.api = {
 			snapshot: async () => ({ ...state.currentSnapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] }),
-			providers: async () => { discoveries++; return []; }
+			providers: async () => { discoveries++; return { providers: [] }; }
 		};
 		await refreshVisibleStatus();
 		await state.providerLoadPromise;
@@ -1122,6 +1153,7 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('polls every 15 seconds and on focus/visibility, but pauses for hidden windows, Welcome and busy operations', async () => {
 		state.currentSnapshot = runtimeSnapshot();
+		render(state.currentSnapshot);
 		let calls = 0;
 		state.api = { snapshot: async () => { calls++; return runtimeSnapshot(); } };
 		const events = new Map<string, () => void>();
@@ -1261,7 +1293,7 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('applies only after confirmation, retains the alert on failure, and handles stopped instances', async () => {
-		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true },
+		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true }, portalSecrets: {},
 			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
 		};
 		const calls: unknown[] = [];
@@ -1307,10 +1339,10 @@ describe('Admin renderer behavior', () => {
 	});
 	it('labels Guardian as an MCP API and keeps diagnostic endpoints copy-only', () => {
 		expect(html).not.toContain('Protected-access');
-		expect(html).toContain('Guardian MCP bind address');
+		expect(html).toContain('for="gateway-bind"');
 		expect(html).toContain('not a website');
-		expect(html).toContain('selected access key’s policy');
-		for (const id of ['guardian-mcp-url-detail', 'guardian-health-url-detail']) {
+		expect(html).toContain('connection; external apps may not be listed');
+		for (const id of ['mcp-url', 'guardian-health-url-detail']) {
 			expect(html).toContain(`data-copy-field="${id}"`);
 			expect(html).toContain(`<code id="${id}">`);
 		}
@@ -1322,8 +1354,8 @@ describe('Admin renderer behavior', () => {
 		expect(link).not.toContain('data-external-url');
 		expect(link).not.toContain('onclick');
 		const css = readFileSync(join(admin, 'admin.css'), 'utf8');
-		expect(css).toContain(
-			':where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible'
+		expect(css.replace(/\s+/g, '')).toContain(
+			':where(a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])):focus-visible'
 		);
 		expect(css).toContain('.field textarea {');
 	});
@@ -1332,7 +1364,7 @@ describe('Admin renderer behavior', () => {
 		const link = control('assistant-url-detail');
 		link.hidden = true;
 		const copy = new Control();
-		copy.dataset.copyField = 'guardian-mcp-url-detail';
+		copy.dataset.copyField = 'mcp-url';
 		selector('[data-copy-field]', copy);
 		const copied: string[] = [];
 		state.api = {
@@ -1353,10 +1385,10 @@ describe('Admin renderer behavior', () => {
 		expect(link.getAttribute('href')).toBe(link.textContent);
 		expect(link.hidden).toBe(false);
 		expect(link.getAttribute('tabindex')).toBeNull();
-		expect(control('guardian-url').textContent).toBe('http://[::1]:3830/mcp');
-		expect(control('guardian-mcp-url-detail').textContent).toBe('http://[::1]:3830/mcp');
+		renderConnectionDetails({ connectionDetails: { opencode: { url: 'http://192.0.2.10:3810' }, claude: { url: 'http://[::1]:3830/mcp' }, mcp: { url: 'http://[::1]:3830/mcp' } } });
+		expect(control('mcp-url').textContent).toBe('http://[::1]:3830/mcp');
 		expect(control('guardian-health-url-detail').textContent).toBe('http://[::1]:3830/health');
-		expect(control('guardian-api-status').textContent).toContain('disabled');
+		expect(control('guardian-api-status').textContent).toContain('Enable MCP access');
 		await copy.listeners.get('click')?.({});
 		expect(copied).toEqual(['http://[::1]:3830/mcp']);
 		renderNetworkDetails({
@@ -1439,15 +1471,20 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('treats failed readiness and thrown errors as persistent accessible failures', async () => {
-		const failed = await operation('Checking', async () => ({
+		renderProviders({ providers: [{ id: 'example', name: 'Example', authenticated: true, models: [{ id: 'text-model', name: 'Text model' }], authMethods: [{ index: 0, type: 'api', label: 'API key' }] }] });
+		openProviderEditor('change', 'example');
+		control('provider-model').value = 'text-model';
+		const failed = await verifyProvider('Checking', async () => ({
 			ok: false,
 			error: 'Sign-in expired'
 		}));
-		expect(failed).toBeUndefined();
+		expect(failed).toBe(false);
 		expect(control('notice').hidden).toBe(true);
 		expect(control('provider-status').getAttribute('role')).toBe('alert');
 		expect(control('provider-status').getAttribute('aria-live')).toBe('assertive');
-		expect(control('provider-badge').textContent).toBe('Needs attention');
+		expect(control('provider-status').children[1].textContent).toBe('Sign-in expired');
+		expect(control('provider-badge').hidden).toBe(true);
+		expect(control('use-provider-model').disabled).toBe(true);
 		expect(state.noticeTimer).toBeUndefined();
 		expect(state.operationInFlight).toBe(false);
 		await operation('Saving', async () => {

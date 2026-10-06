@@ -12,7 +12,7 @@ import { auditCompose } from './secret-audit.js';
 import { activateComposeCommand, assertManagedHarnessImage } from './activation.js';
 import { FH_RELEASE_VERSION } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
-import { assertSafePortablePath } from './provider-files.js';
+import { assertSafePortablePath, nativePreferencesFile } from './provider-files.js';
 import { recordAppliedRuntime, rememberRuntimeBeforeChange } from './runtime-revision.js';
 
 /** Ordinary managed-file update, not native-data rollback or a migration engine. */
@@ -54,7 +54,10 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 		const candidateCompose = join(staging, 'stack.compose.yml');
 		const candidateEnv = join(staging, 'stack.env');
 		writeFileAtomic(candidateCompose, readSeedFile('system/stack/stack.compose.yml'));
-		writeFileAtomic(candidateEnv, mergeEnvContent(readFileSync(stackEnvFile(state.homeDir), 'utf8'), stackConfigEnv(candidateConfig)));
+		writeFileAtomic(candidateEnv, mergeEnvContent(readFileSync(stackEnvFile(state.homeDir), 'utf8'), {
+			...stackConfigEnv(candidateConfig),
+			FH_OPENCODE_PREFERENCES_FILE: nativePreferencesFile(state.homeDir)
+		}));
 		const existing = buildComposeOptions(state);
 		const candidate = { ...existing, files: [candidateCompose, ...(existsSync(customComposeFile(state.homeDir)) ? [customComposeFile(state.homeDir)] : [])], envFiles: [candidateEnv] };
 		// Compose config is a local CLI operation and does not contact the daemon.

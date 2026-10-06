@@ -1711,43 +1711,150 @@ body[data-busy="true"] #main-content {
 	gap: 14px;
 }
 
-/* Account evidence, provider choice and sign-in are separate user tasks. */
-#provider-connection > .section-heading .help-text {
-	margin: 8px 0 0;
+/* The current model stays compact; editing exposes one focused setup step. */
+#provider-connection {
+	max-width: 760px;
 }
-#provider-connection > .section-heading > .status-badge {
-	flex: 0 0 auto;
+#provider-connection h2 {
+	margin-top: 0;
 }
 #provider-connection h3 {
 	margin: 0;
 	font-size: 0.9375rem;
 	line-height: 1.4;
 }
-#provider-status {
+#provider-connection .help-text,
+#provider-status,
+.provider-default-model {
 	overflow-wrap: anywhere;
 }
-.provider-accounts {
-	margin-top: 24px;
+.provider-default {
+	display: grid;
+	gap: 6px;
+	margin: 24px 0 20px;
 }
-.provider-accounts > .section-heading {
-	align-items: center;
+.provider-default-model {
+	font-size: 1.5rem;
+	font-weight: 650;
+	line-height: 1.35;
+	letter-spacing: -0.02em;
+}
+.provider-default > .help-text {
+	margin: 0;
+}
+.provider-editor > .section-heading {
+	align-items: flex-start;
 	gap: 12px;
-	margin-bottom: 10px;
 }
-.provider-accounts > .section-heading .text-button {
+.provider-editor > .section-heading .text-button {
 	flex: 0 0 auto;
 }
-.provider-empty {
+.provider-editor > .section-heading .help-text {
+	margin: 8px 0 0;
+}
+#provider-form {
+	gap: 20px;
+	margin-top: 20px;
+}
+#provider-form .form-stack {
+	gap: 14px;
+	margin-top: 0;
+}
+#provider-form .help-text {
 	margin: 0;
-	padding: 14px 16px;
-	border: 1px dashed var(--border-soft);
-	border-radius: 6px;
-	background: var(--surface-muted);
+}
+.provider-shortcuts {
+	min-width: 0;
+	margin: 0;
+	border: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 16px;
+}
+.provider-shortcut {
+	display: grid;
+	align-content: start;
+	gap: 6px;
+	min-width: 0;
+	min-height: 84px;
+	padding: 16px;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+.provider-shortcut small,
+.provider-account-state {
+	color: var(--ink-soft);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	line-height: 1.5;
+}
+.provider-picker {
+	display: grid;
+	gap: 12px;
+	margin-top: 20px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border-soft);
+}
+.provider-picker > #provider-search-help {
+	margin-top: -6px;
+}
+.provider-picker > button {
+	justify-self: start;
+}
+.provider-selection-heading {
+	display: grid;
+	gap: 6px;
+}
+#provider-form .disclosure {
+	margin-top: 0;
+}
+#provider-form .disclosure > .field {
+	margin-top: 14px;
+}
+#provider-form .disclosure > .help-text {
+	margin-top: 10px;
+}
+#provider-form .disclosure > .primary {
+	margin-top: 14px;
+}
+#provider-model-step > #provider-status {
+	margin-top: 0;
+}
+#provider-model-fields .text-button {
+	min-height: 36px;
+}
+.field-optional {
+	color: var(--ink-soft);
+	font-weight: 400;
+}
+#provider-local-url-help {
+	margin: 0;
+}
+.provider-use-actions {
+	display: grid;
+	gap: 12px;
+	padding-top: 24px;
+	border-top: 1px solid var(--border-soft);
+}
+.provider-use-actions > button {
+	justify-self: start;
+}
+.provider-use-actions:has(#use-provider-model[hidden]),
+#provider-current-model > .wizard-actions:has(#finish-provider-setup[hidden]),
+#oauth-provider-note > .button-row:not(:has(> button:not([hidden]))) {
+	display: none;
+}
+.provider-saved-setups {
+	margin-top: 28px;
+}
+.provider-saved-setups > .help-text {
+	margin: 14px 0;
 }
 .provider-account-list {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
-	gap: 10px;
+	gap: 0;
 	margin: 0;
 	padding: 0;
 	list-style: none;
@@ -1756,100 +1863,35 @@ body[data-busy="true"] #main-content {
 	display: none;
 }
 .provider-account-list > li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 	min-width: 0;
+	padding: 14px 0;
+	border-bottom: 1px solid var(--border-soft);
 }
-.provider-account {
+.provider-account-list > li:last-child {
+	border-bottom: 0;
+}
+.provider-account,
+.provider-account-info {
 	display: grid;
-	align-content: start;
 	gap: 5px;
-	width: 100%;
-	height: 100%;
-	min-height: 76px;
-	padding: 14px 16px;
-	text-align: left;
+	min-width: 0;
 	overflow-wrap: anywhere;
 }
-.provider-account[aria-pressed="true"] {
-	border-color: var(--accent-hover);
-	background: var(--surface-raised);
-	box-shadow: inset 3px 0 0 var(--accent-hover);
-}
-.provider-account small,
-.provider-account-state {
-	color: var(--ink-soft);
-	font-size: 0.75rem;
-	font-weight: 500;
-	line-height: 1.5;
-}
-#provider-form {
-	gap: 24px;
-	margin-top: 24px;
-}
-.provider-picker {
-	display: grid;
-	gap: 12px;
-	padding-top: 24px;
-	border-top: 1px solid var(--border-soft);
-}
-.provider-picker > .help-text,
-.provider-selection-heading > .help-text {
-	margin: 0;
-}
-.provider-picker > #provider-search-help {
-	margin-top: -6px;
-}
-.provider-catalog-actions {
-	margin-top: -4px;
-}
-.provider-account-actions {
-	gap: 16px;
-	margin-top: 0;
-	padding: 20px;
-	border: 1px solid var(--border-soft);
-	border-radius: 6px;
-	background: var(--surface-muted);
-}
-.provider-selection-heading {
-	display: grid;
-	gap: 5px;
-}
-.provider-account-actions > .disclosure,
-.provider-account-actions > .callout {
-	margin-top: 0;
-}
-.provider-account-actions .disclosure > .field {
-	margin-top: 16px;
-}
-.provider-account-actions .disclosure > .primary {
-	margin-top: 8px;
-}
-.provider-account-actions .callout > .form-stack {
-	margin-top: 0;
-}
-.provider-account-actions .callout > .button-row:not(:has(> button:not([hidden]))) {
-	display: none;
-}
-#provider-connection > .wizard-actions:has(#finish-provider-setup[hidden]) {
-	display: none;
+.provider-account {
+	text-align: left;
 }
 @media (max-width: 520px) {
-	#provider-connection > .section-heading {
-		flex-wrap: wrap;
-		gap: 10px;
+	.provider-shortcuts {
+		grid-template-columns: minmax(0, 1fr);
 	}
-	.provider-accounts > .section-heading {
-		flex-wrap: wrap;
-		gap: 4px 12px;
+	.provider-default-model {
+		font-size: 1.25rem;
 	}
-	.provider-account-actions {
-		padding: 16px;
-	}
-}
-:where(body[data-phase="setup_incomplete"] #provider-connection) .section-heading {
-	margin-bottom: 8px;
-}
-:where(body[data-phase="setup_incomplete"] #provider-connection h2) {
-	display: none;
 }
 
 /* Welcome is a choice of tasks, not a runtime dashboard. */

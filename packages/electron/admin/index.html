@@ -300,68 +300,102 @@
 	            </section>
 
             <section id="provider-connection" class="panel" aria-labelledby="provider-heading">
-              <div class="section-heading">
-                <div><h2 id="provider-heading">Your AI accounts</h2><p class="help-text">Use an account you already have, or sign in to another provider.</p></div>
-                <span id="provider-badge" class="status-badge neutral">Not checked</span>
-              </div>
-              <div id="provider-status" class="inline-status neutral" role="status" aria-live="polite">
-                <strong>Checking your AI accounts…</strong>
-                <span>Looking for sign-ins and available providers in your agent.</span>
-              </div>
-              <div class="wizard-actions"><button id="finish-provider-setup" class="primary" type="button" hidden>Continue to your agent</button></div>
-
-              <section id="provider-saved-accounts" class="provider-accounts" aria-labelledby="provider-saved-heading">
-                <div class="section-heading compact">
-                  <div><h3 id="provider-saved-heading">Your AI providers</h3></div>
-                  <button id="load-providers" class="text-button" type="button">Refresh accounts</button>
+              <section id="provider-current-model" class="provider-current-model" aria-labelledby="provider-heading">
+                <h2 id="provider-heading">Your agent’s AI model</h2>
+                <div class="provider-default">
+                  <span id="provider-default-service" class="card-label">No service selected</span>
+                  <strong id="provider-default-model" class="provider-default-model">Choose an AI model</strong>
+                  <p id="provider-default-status" class="help-text" role="status" aria-live="polite">A saved setup does not mean the model can respond.</p>
                 </div>
-                <p id="provider-saved-empty" class="provider-empty help-text">No saved sign-ins found. Choose a provider below to add an account.</p>
-                <ul id="provider-saved-list" class="provider-account-list" aria-label="Your AI providers"></ul>
+                <div class="button-row">
+                  <button id="test-current-model" class="secondary" type="button" disabled>Test response</button>
+                  <button id="change-provider-model" class="secondary" type="button" disabled>Change model</button>
+                  <button id="add-provider-service" class="primary" type="button">Add AI service</button>
+                </div>
+                <div class="wizard-actions"><button id="finish-provider-setup" class="primary" type="button" hidden>Continue to your agent</button></div>
               </section>
 
-              <form id="provider-form" class="form-stack">
-                <section id="provider-account-actions" class="provider-account-actions form-stack" aria-labelledby="provider-account-heading" hidden>
-                  <div class="provider-selection-heading">
-                    <h3 id="provider-account-heading" tabindex="-1">Account sign-in</h3>
-                    <p id="provider-account-help" class="help-text">Sign in, then check that your agent can respond.</p>
-                  </div>
-                  <label id="provider-method-field" class="field" for="provider-method" hidden>
-                    <span>Sign-in method</span>
-                    <select id="provider-method"></select>
-                  </label>
-                  <details id="api-key-fields" class="disclosure" open hidden><summary id="provider-key-heading">Add API key</summary>
-                    <label class="field" for="provider-key">
-                      <span>New API key</span>
-                      <input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" />
-                    </label>
-                    <p id="provider-key-help" class="help-text">Stored privately in your local agent. Existing keys are never shown here.</p>
-                    <button id="provider-key-submit" class="primary" type="submit">Save key and verify</button>
-                  </details>
-                  <div id="oauth-provider-note" class="callout form-stack" hidden>
-                    <p>Sign-in opens in your browser. Your password never passes through fhold.</p>
-                    <div id="oauth-prompt-fields" class="form-stack"></div>
-                    <button id="start-provider-oauth" class="primary" type="button">Open provider sign-in</button>
-                    <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here when the provider says you are connected.</span></div>
-                    <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
-                    <div class="button-row compact">
-                      <button id="finish-provider-oauth" class="secondary" type="button" hidden>Finish sign-in and verify</button>
-                      <button id="cancel-provider-oauth" class="secondary" type="button" hidden>Cancel sign-in</button>
-                    </div>
-                  </div>
-                  <div class="button-row compact"><button id="test-provider" class="secondary" type="button" hidden>Verify connection</button></div>
-                </section>
-                <div id="provider-catalog" class="provider-picker">
-                  <h3>Choose an AI provider</h3>
-                  <p id="provider-help" class="help-text">Add an account or choose a provider to update its sign-in.</p>
-                  <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name, e.g. OpenAI" aria-describedby="provider-search-help" /></label>
-                  <p id="provider-search-help" class="help-text" role="status" aria-live="polite">Loading provider choices…</p>
-                  <label class="field" for="provider">
-                    <span>Provider</span>
-                    <select id="provider" aria-describedby="provider-help provider-search-help"><option value="">Loading providers…</option></select>
-                  </label>
-                  <div class="button-row compact provider-catalog-actions"><button id="show-all-providers" class="text-button" type="button">Show all providers</button></div>
+              <section id="provider-editor" class="provider-editor" aria-labelledby="provider-editor-title" hidden>
+                <div class="section-heading">
+                  <div><h2 id="provider-editor-title" tabindex="-1">Add AI service</h2><p id="provider-editor-message" class="help-text" role="status" aria-live="polite">Choose where your agent’s model will run.</p></div>
+                  <button id="cancel-provider-editor" class="text-button" type="button">Cancel</button>
                 </div>
-              </form>
+                <button id="provider-editor-back" class="text-button" type="button" hidden><span aria-hidden="true">←</span> Back</button>
+                <form id="provider-form" class="form-stack">
+                  <section id="provider-service-step" aria-labelledby="provider-service-heading">
+                    <h3 id="provider-service-heading">Choose a service</h3>
+                    <fieldset class="provider-shortcuts" aria-label="AI services">
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="opencode"><strong>OpenCode Zen</strong><small>Use your Zen API key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="opencode-go"><strong>OpenCode Go</strong><small>Use your Go subscription key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="openai"><strong>OpenAI</strong><small>Use an OpenAI account or API key.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="ollama"><strong>Ollama</strong><small>Use a model on your own server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="lmstudio"><strong>LM Studio</strong><small>Use LM Studio’s API server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="llama.cpp"><strong>llama.cpp</strong><small>Use a running llama-server.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="custom"><strong>Custom endpoint</strong><small>Use an OpenAI-compatible API.</small></button>
+                      <button class="provider-shortcut" type="button" data-provider-shortcut="other"><strong>Another provider</strong><small>Choose from OpenCode’s providers.</small></button>
+                    </fieldset>
+                    <div id="provider-catalog" class="provider-picker" hidden>
+                      <p id="provider-help" class="help-text">Find the service you want to set up.</p>
+                      <label class="field" for="provider-search"><span>Search providers</span><input id="provider-search" type="search" autocomplete="off" placeholder="Search by name" aria-describedby="provider-search-help" /></label>
+                      <p id="provider-search-help" class="help-text" role="status" aria-live="polite">Loading provider choices…</p>
+                      <label class="field" for="provider"><span>Provider</span><select id="provider" aria-describedby="provider-help provider-search-help"><option value="">Choose a provider</option></select></label>
+                      <button id="show-all-providers" class="text-button" type="button">Show all providers</button>
+                    </div>
+                  </section>
+
+                  <section id="provider-account-actions" class="provider-details form-stack" aria-labelledby="provider-account-heading" hidden>
+                    <div class="provider-selection-heading"><h3 id="provider-account-heading" tabindex="-1">Service details</h3><p id="provider-account-help" class="help-text"></p></div>
+                    <label id="provider-method-field" class="field" for="provider-method" hidden><span>Sign-in method</span><select id="provider-method"></select></label>
+                    <div id="api-key-fields" class="form-stack" hidden>
+                      <label class="field" for="provider-key"><span id="provider-key-heading">API key</span><input id="provider-key" type="password" autocomplete="off" aria-describedby="provider-key-help" /></label>
+                      <p id="provider-key-help" class="help-text">Stored privately in your agent. Existing keys are never shown here.</p>
+                      <button id="provider-key-submit" class="primary" type="submit">Save key &amp; choose model</button>
+                    </div>
+                    <div id="oauth-provider-note" class="form-stack" hidden>
+                      <p class="help-text">Sign-in opens in your browser. Your password never passes through fhold.</p>
+                      <div id="oauth-prompt-fields" class="form-stack"></div>
+                      <button id="start-provider-oauth" class="primary" type="button">Sign in with your account</button>
+                      <div id="oauth-progress" class="inline-status neutral" hidden><strong>Finish sign-in in your browser.</strong><span id="oauth-instructions">Return here after completing sign-in.</span></div>
+                      <label id="oauth-code-field" class="field" for="oauth-code" hidden><span>Authorization code</span><input id="oauth-code" autocomplete="off" /></label>
+                      <div class="button-row compact"><button id="finish-provider-oauth" class="primary" type="button" hidden>Finish sign-in &amp; choose model</button><button id="cancel-provider-oauth" class="secondary" type="button" hidden>Cancel sign-in</button></div>
+                    </div>
+                    <div id="provider-endpoint-fields" class="form-stack" hidden>
+                      <label class="field" for="provider-endpoint-name"><span>Service name</span><input id="provider-endpoint-name" autocomplete="off" placeholder="My AI server" /></label>
+                      <label class="field" for="provider-base-url"><span>API server address</span><input id="provider-base-url" type="url" autocomplete="off" spellcheck="false" placeholder="http://server-address:1234/v1" aria-describedby="provider-endpoint-help provider-local-url-help" /></label>
+                      <p id="provider-endpoint-help" class="help-text">Use the API address shown by your server, usually ending in /v1.</p>
+                      <p id="provider-local-url-help" class="warning-callout">Your agent runs in a container. Here, localhost points to the agent—not this computer. Enter an address the agent can reach, and make sure your model server is running.</p>
+                      <label class="field" for="provider-endpoint-key"><span>API key <span class="field-optional">(optional)</span></span><input id="provider-endpoint-key" type="password" autocomplete="off" aria-describedby="provider-endpoint-key-help" /></label>
+                      <p id="provider-endpoint-key-help" class="help-text">Only needed if your server requires authentication. Existing keys are never shown.</p>
+                      <details id="provider-endpoint-advanced" class="disclosure"><summary>Advanced</summary><label id="provider-endpoint-id-field" class="field" for="provider-endpoint-id"><span>Service ID</span><input id="provider-endpoint-id" autocomplete="off" spellcheck="false" aria-describedby="provider-endpoint-id-help" /></label><p id="provider-endpoint-id-help" class="help-text">Identifies this saved setup in OpenCode. It cannot be changed after creation.</p></details>
+                    </div>
+                    <button id="provider-details-next" class="primary" type="button" hidden>Save details &amp; choose model</button>
+                  </section>
+
+                  <section id="provider-model-step" class="form-stack" aria-labelledby="provider-model-heading" hidden>
+                    <h3 id="provider-model-heading">Choose a model</h3>
+                    <div id="provider-model-fields" class="form-stack">
+                      <label class="field" for="provider-model"><span>Model</span><select id="provider-model" aria-describedby="provider-model-help"><option value="">Load models first</option></select></label>
+                      <p id="provider-model-help" class="help-text">Choose the model you want your agent to use.</p>
+                      <button id="load-provider-models" class="text-button" type="button">Refresh models</button>
+                      <label class="check-row"><input id="provider-model-manual" type="checkbox" /> Enter a model ID instead</label>
+                      <label id="provider-model-id-field" class="field" for="provider-model-id" hidden><span>Model ID</span><input id="provider-model-id" autocomplete="off" spellcheck="false" placeholder="Exact model ID from your server" /></label>
+                    </div>
+                    <p id="provider-test-cost" class="help-text">Testing sends a short message to this service. Its usual usage charges may apply.</p>
+                    <button id="test-provider" class="secondary" type="button">Test response</button>
+                    <div id="provider-status" class="inline-status neutral" role="status" aria-live="polite" hidden><strong>No response test yet.</strong><span>Testing does not change your agent’s current model.</span></div>
+                    <span id="provider-badge" class="visually-hidden status-badge neutral">Not tested</span>
+                    <div class="provider-use-actions"><p id="provider-use-help" class="help-text">Use this model for your agent’s future work.</p><button id="use-provider-model" class="primary" type="button" hidden>Use this model</button></div>
+                  </section>
+                </form>
+              </section>
+
+              <details id="provider-saved-accounts" class="disclosure provider-saved-setups" aria-labelledby="provider-saved-heading">
+                <summary id="provider-saved-heading">Saved AI setups</summary>
+                <p class="help-text">Saved details are not proof a service works. Edit a setup to choose and test a model.</p>
+                <p id="provider-saved-empty" class="help-text">No saved AI setups.</p>
+                <ul id="provider-saved-list" class="provider-account-list" aria-label="Saved AI setups"></ul>
+                <button id="load-providers" class="text-button" type="button">Refresh saved setups</button>
+              </details>
             </section>
 
             <details class="setup-only panel restore-panel" hidden>

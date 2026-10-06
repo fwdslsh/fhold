@@ -14,6 +14,13 @@ export function createAdminState() {
 		providersLoaded: false,
 		providerLoadPromise: undefined,
 		providerCatalogExpanded: false,
+		providerHome: undefined,
+		providerEpoch: 0,
+		providerCatalogEpoch: 0,
+		providerEditor: null,
+		providerCurrentModel: undefined,
+		providerConfigurationIssue: undefined,
+		providerTestTarget: null,
 		activeOAuth: null,
 		operationInFlight: false,
 		disabledButtons: [],
@@ -23,6 +30,7 @@ export function createAdminState() {
 		instanceRestorePreview: null,
 		lastReadiness: null,
 		lastReadinessProvider: null,
+		lastReadinessModel: null,
 		lastReadinessAuthSaved: false,
 		awaitingSetupFinish: false,
 		renderingSnapshot: false,
@@ -71,7 +79,7 @@ export const viewMeta = {
 	provider: {
 		kicker: 'AI CONNECTION',
 		title: 'Agent settings',
-		description: 'Connect and check the AI accounts your agent can use.'
+		description: 'Choose the AI service and model your agent uses.'
 	},
 	connections: {
 		kicker: 'YOUR APPS',

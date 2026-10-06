@@ -13,6 +13,7 @@ import {
 	writeFileAtomic
 } from './foundation.js';
 import { FH_RELEASE_VERSION } from './release.js';
+import { nativePreferencesFile } from './provider-files.js';
 import { defaultRecoverySettings, parseRecoverySettings, recoveryDirectory, recoveryEnvironment, recoveryStopGrace, type RecoverySettings } from './recovery-config.js';
 
 export { stackConfigFile } from './foundation.js';
@@ -569,7 +570,10 @@ export function writeStackConfig(homeDir: string, value: StackConfig): StackConf
 
 	const envPath = stackEnvFile(homeDir);
 	const current = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
-	writeFileAtomic(envPath, mergeEnvContent(current, stackConfigEnv(config)), 0o600);
+	writeFileAtomic(envPath, mergeEnvContent(current, {
+		...stackConfigEnv(config),
+		FH_OPENCODE_PREFERENCES_FILE: nativePreferencesFile(homeDir)
+	}), 0o600);
 	return config;
 }
 
@@ -580,7 +584,10 @@ export function ensureStackConfig(homeDir: string): StackConfig {
 	if (!result.ok) throw new Error(result.error);
 	const envPath = stackEnvFile(homeDir);
 	const disk = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
-	const next = mergeEnvContent(disk, stackConfigEnv(result.config));
+	const next = mergeEnvContent(disk, {
+		...stackConfigEnv(result.config),
+		FH_OPENCODE_PREFERENCES_FILE: nativePreferencesFile(homeDir)
+	});
 	if (next !== disk) writeFileAtomic(envPath, next, 0o600);
 	writeCredentialRegistry(homeDir, result.config);
 	return result.config;

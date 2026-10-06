@@ -110,7 +110,12 @@ file paths and examples. Native remote workers remain experimental.
 Edit the native files under your instance's `config/` directory and run
 `fhold restart` from that home (with `FH_HOME` unset), or select it with `--name`.
 No image rebuild is required. Updates only seed missing operator files and
-preserve your edits; the files are read-only inside the container.
+preserve your edits. Managed policy and the configuration directories are
+read-only inside the container. OpenCode's preferred user preferences file is
+the exception: Admin and trusted native clients use OpenCode's own API to edit
+and reload it without restarting the process/container. Host editors that
+replace that file or change its filename still require `fhold restart` to refresh
+its file bind. Native reloads may interrupt active OpenCode work.
 Use [the configuration map](managed-harness-configuration.md#deployment-inputs)
 to choose between ordinary user settings and enforced operator policy. Do not
 edit release-owned `system/` files or generated `state/stack.env`.
@@ -320,38 +325,64 @@ for permission before its sign-in workflow can restart containers.
 
 Live credential keys, policies and portal-user mappings still take effect
 without a restart; deferring settings does not defer credential revocation.
-Provider sign-in alone does not restart containers. If provider readiness also
+Provider sign-in and native provider/model API edits do not restart containers.
+In-place native preference changes do not create a pending-restart alert.
+If provider readiness also
 changes Guardian's moderator configuration, the pending-restart alert lets you
 choose when to apply it; verification does not open a restart prompt.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider
-login files. Existing homes gain a comparison baseline on their first managed
+login files and in-place native user preferences. The preferences filename/inode
+is tracked because replacing that file changes the container's bind mount.
+Existing homes gain a comparison baseline on their first managed
 edit or successful start with these tools. It is not a watcher for arbitrary
 files mounted through a custom Compose override; restart explicitly after
 editing those files. Status inspection itself never writes tracking state.
 
 ## Provider and knowledge
 
-In **Agent settings**, select a saved AI account to verify or update its sign-in.
-Search the full native provider catalog to add another account; a no-match search
-never keeps an unrelated provider selected. API-key accounts offer **Add API key**
-or **Replace API key**; existing keys are never displayed. Browser sign-in follows
-the provider's native prompts, with an explicit **Cancel sign-in** action.
+**Agent settings** shows the AI service and default model your agent uses. It
+does not present every saved key as a connected service. Use **Test response**
+to check the current model; the result describes this check, not permanent health.
 
-**Sign-in saved** means credentials are present, not that they work. **Available
-in agent** can also mean a provider supplied through environment/configuration
-or a public service. Only **Verified** means a real response succeeded in this
-check. Loading accounts makes no model request and does not verify them.
-Verification stays on this page; first-time setup advances only through
-**Continue to your agent**. It does not change the agent's default model.
+To change or add a service:
 
-The check uses the selected provider and a native model supporting both text
-conversations and agent tools. It prefers a compatible configured model, then
-the native suggested model, then a compatible model in native catalog order.
-Audio-only, embedding-only, non-tool and deprecated models cannot be used for
-this check. A failed response after saving credentials is reported separately
-from a failed sign-in, so you know whether the key was saved.
+1. Choose **Add AI service**, then OpenCode Zen/Go, OpenAI, Ollama, LM Studio,
+   llama.cpp or a custom OpenAI-compatible endpoint. **Another provider** searches
+   OpenCode's native catalog.
+2. Sign in or save an API key for a cloud service. For your own server, enter its
+   API URL and optional key. Existing keys are never shown. Native browser
+   sign-in has an explicit **Cancel sign-in** action.
+3. Choose a model. For an endpoint, load its advertised models or enter the exact
+   model ID. Discovery sends no inference request and is not a response test.
+4. **Test response** makes a small, potentially billed, no-tool request to that
+   exact model. Endpoint details are saved before this explicit test; a failed
+   response does not erase them or imply sign-in was not saved.
+5. **Use this model** explicitly sets the default for new conversations. Existing
+   conversations and clients can retain their own model selection. Testing alone
+   never switches your default or navigates away.
+
+Ollama, LM Studio and llama.cpp must already have a model/API server running.
+The request originates inside Assistant: `localhost` means that container, not
+your desktop. Use a private address reachable from the container and restrict
+server exposure to the intended network. fhold does not start model servers,
+download models or change their listening address. See the
+[endpoint networking notes](technical/opencode-configuration.md#local-and-custom-ai-servers).
+
+The model picker excludes audio-only, embedding-only, non-tool and deprecated
+models using native capabilities. Custom endpoint capabilities are native defaults;
+their advertised IDs do not prove tool-call support. The short response test
+proves inference, not every agent tool or vendor entitlement.
+
+Expand **Saved AI setups** to review old sign-ins, including restored records.
+They are not labeled connected or verified. Removing a saved sign-in deletes only
+that instance's native credential, not vendor access or endpoint/environment
+settings. **Disable endpoint** preserves its definition and separate sign-in,
+using OpenCode's native disabled-provider setting. Edit and test it to explicitly
+re-enable it; other disabled services stay disabled. Choose
+another default first if the setup is currently used by your agent. Advanced
+managed settings are read-only here; no operator policy is silently overwritten.
 
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.

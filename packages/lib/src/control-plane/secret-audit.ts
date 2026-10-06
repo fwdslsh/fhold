@@ -11,6 +11,7 @@ import {
 } from './stack-config.js';
 import libPackage from '../../package.json' with { type: 'json' };
 import { recoveryDirectory, recoveryEnvironment, recoveryStopGrace } from './recovery-config.js';
+import { nativePreferencesFile } from './provider-files.js';
 
 const SECRET_KEY = /(?:password|secret|token|api[_-]?key|credential|private[_-]?key)/i;
 const CORE_GRANTS: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -321,6 +322,18 @@ function auditCoreMounts(
 	expected: readonly MountGrant[] = CORE_MOUNTS[name] ?? [],
 	recoveryMounts: readonly MountGrant[] = []
 ): void {
+	if (name === 'assistant') {
+		try {
+			const file = nativePreferencesFile(homeDir);
+			expected = [...expected, {
+				source: `config/assistant/${file}`,
+				target: `/home/fhold/.config/opencode/${file}`,
+				readOnly: false
+			}];
+		} catch {
+			issues.push('Assistant native preferences file is invalid.');
+		}
+	}
 	// This optional native file makes Claude's MCP catalog exclusive. Operators
 	// add it explicitly; an empty default would suppress plugin-provided servers.
 	const optional: MountGrant[] =

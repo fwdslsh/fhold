@@ -456,7 +456,7 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 				nonPortableNativeConfiguration = hasNonPortableNativeConfiguration(sourceHome);
 				if (nonPortableNativeConfiguration) {
 					warnings.push(
-						'Skipped non-portable native OpenCode configuration: only $schema, model, small_model and provider preferences without executable SDK customization are portable. Review and recreate other customization separately; source preserved.'
+						'Skipped non-portable native OpenCode configuration: only $schema, model, small_model, provider and disabled_providers preferences without executable SDK customization are portable. Review and recreate other customization separately; source preserved.'
 					);
 					continue;
 				}
