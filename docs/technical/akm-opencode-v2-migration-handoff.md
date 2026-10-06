@@ -7,8 +7,8 @@ Status: implementation brief, not a completed migration. Reviewed 2026-10-06.
 Make AKM's OpenCode execution, history/config discovery and native plugin support
 work with OpenCode 2 while preserving dispatch and history for users whose
 primary OpenCode installation remains V1. Deliver generally usable upstream
-packages, not a fhold-specific integration. The downstream consumer is covered by
-the [fhold handoff](opencode-v2-migration-handoff.md).
+packages for AKM and akm-plugins, independent of any consuming application or
+deployment environment.
 
 Work in [itlackey/akm](https://github.com/itlackey/akm) and
 [itlackey/akm-plugins](https://github.com/itlackey/akm-plugins), on fresh feature
@@ -224,7 +224,7 @@ binary. No startup downloads, custom binary shims or PATH repairs are permitted.
 Update package exports/dependencies, build outputs and native installation
 instructions consistently. Test the built package through standard installation,
 not only its TypeScript source. Keep native Claude/Codex integrations intact;
-they need regression tests, not an OpenCode-driven rewrite. AKM/fhold must use
+they need regression tests, not an OpenCode-driven rewrite. AKM plugins must use
 compatible declared CLI versions across harnesses without runtime downloads.
 
 Preserve AKM's existing persisted-data contracts. Dependency isolation alone
@@ -288,8 +288,7 @@ V1 dispatch and history through the lightweight adapter as an acceptance conditi
 
 When publication is approved, publish the qualified AKM CLI with both native
 adapters first, then the V1 and V2 plugin artifacts declaring that CLI dependency.
-Send the exact V2 pins, entrypoint and both-major compatibility receipt to the
-fhold implementer. fhold then owns its memory wrapper, activity/keep-alive
-integration, Guardian/Admin adapters and
-container recovery qualification. AKM must not embed those product-specific
-behaviors merely to make downstream tests pass.
+Document exact package pins, native entrypoints, installation/update steps and
+the both-major compatibility receipt for users and maintainers. Keep all changes
+within AKM's existing execution, history, configuration and native plugin
+boundaries; application-specific deployment behavior is outside this work.
