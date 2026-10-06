@@ -1,4 +1,5 @@
 import { renderCredentials, renderMappings } from './access.js';
+import { renderConnectionKeys } from './keys.js';
 import {
 	renderConnectionDetails,
 	renderNetworkDetails,
@@ -81,6 +82,7 @@ export function render(snapshot, options = {}) {
 	renderRecovery(snapshot);
 	renderCredentials(snapshot);
 	renderMappings(snapshot);
+	renderConnectionKeys(snapshot);
 	renderPortalSecrets(snapshot);
 	renderConnectionDetails(snapshot);
 	restoreDirtyForms(drafts);

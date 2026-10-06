@@ -17,6 +17,9 @@ export function renderPhase(phase) {
 	for (const element of all('.setup-only')) element.hidden = phase !== 'setup_incomplete';
 	for (const element of all('.ready-only')) element.hidden = phase !== 'ready';
 	document.body.dataset.phase = phase;
+	const notifications = byId('notification-area');
+	const alertLocation = byId(phase === 'ready' ? 'sidebar-alerts' : 'setup-alerts');
+	if (notifications.parentElement !== alertLocation) alertLocation.append(notifications);
 	setSkipTarget(phase === 'not_installed' ? 'install-section' : 'main-content');
 	if (phase === 'setup_incomplete') {
 		showView('provider');

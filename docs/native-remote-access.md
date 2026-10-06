@@ -261,7 +261,8 @@ See [Codex's hook trust model](https://learn.chatgpt.com/docs/hooks#review-and-t
 
 ## Toggles, recovery, and trust
 
-In Admin, open **Connections → Claude → Claude Code** and choose **Set up Claude Code**,
+In Admin, open **Connections → Claude → Claude remote connection** and choose
+**Set up remote connection**,
 or **Connections → Codex → Set up Codex**. Confirm trusted workspace access and select
 **Continue**. Codex uses workspace-write by default; read-only and explicit
 container isolation are under **Advanced settings**. The latter explains full
@@ -271,7 +272,7 @@ accepts your answers. Cancellation or a failed prerequisite leaves startup off.
 No terminal is required for the guided Admin flow. CLI enable requires a
 terminal for prompt answers; `--trust` explicitly confirms fhold's trust
 warning but does not accept any vendor prompt.
-After setup or restart, use Admin's **Open session** for Claude or
+After setup or restart, use Admin's **Open in Claude** for Claude or
 **Get pairing code** for Codex to refresh private connection details.
 
 During initial CLI onboarding, optionally use:

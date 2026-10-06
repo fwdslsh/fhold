@@ -1,6 +1,7 @@
 import { bindUiEvents } from './ui.js';
 import { bindRuntimeEvents } from './runtime.js';
 import { bindAccessEvents } from './access.js';
+import { bindKeyEvents } from './keys.js';
 import { bindConnectionsEvents } from './connections.js';
 import { bindProvidersEvents } from './providers.js';
 import { bindBackupEvents } from './backup.js';
@@ -17,6 +18,7 @@ state.api = window.fholdAdmin;
 bindUiEvents();
 bindRuntimeEvents();
 bindAccessEvents();
+bindKeyEvents();
 bindConnectionsEvents();
 bindProvidersEvents();
 bindBackupEvents();

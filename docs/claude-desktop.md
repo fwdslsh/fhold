@@ -24,21 +24,22 @@ fhold connect claude --credential claude-desktop
 
 Download `fhold-claude-desktop-<version>.mcpb` from the matching
 [GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
-Admin's **Connections → Claude → Claude Desktop** section provides the direct download;
+Admin's **Connections → Claude → Desktop chat** section provides the direct download;
 `fhold connect claude` prints the same versioned URL. No source build is required.
 In Claude Desktop:
 
 1. Open **Settings → Extensions → Advanced settings**.
 2. In **Extension Developer**, choose **Install Extension…**.
 3. Select the `.mcpb` file.
-4. In fhold Admin, open **Connections → Claude → Claude Desktop** and choose
+4. In fhold Admin, open **Connections → Claude → Desktop chat** and choose
    **Enable access for Claude Desktop** if needed. Confirm whether to restart
    now or apply the saved change later.
 5. Under **What can Claude Desktop do?**, choose Chat only, Read files or Full
-   access and select **Save permissions**. Use Full access only for a trusted app
+   access and select **Create connection**. Use Full access only for a trusted app
    needing agent tools and file changes; granting it requires confirmation.
-   To resume an existing setup, choose **Use saved access** rather than creating
-   another identity. fhold does not detect the extension's saved assignment.
+   For an already configured extension, change its existing permissions with
+   **Connections → Advanced access → Manage**; do not create another connection
+   just to change permissions. fhold does not detect the extension's saved assignment.
 6. In the connection instructions, copy **Local address** and select **Copy
    access key**, then paste them into the extension's address and **fhold access
    key** fields. Keys appear here because the extension needs a pasted credential,
@@ -48,9 +49,12 @@ In Claude Desktop:
 The revised Admin workflow is a design preview, not live-verified client setup.
 Changing saved permissions affects all apps using that identity and requires
 confirmation; its key and conversations stay attached to the same identity.
-Choosing separate or different saved access requires updating the extension and
-starts separate conversations. **Connections → Advanced access** retains saved
-access maintenance. Claude Code's native sign-in and permissions are independent
+Creating a separate connection requires updating the extension and starts
+separate conversations; it does not replace or remove the old connection.
+**Connections → Advanced access → Manage** edits existing permissions.
+**System → Connection keys → Rotate key** replaces an exposed key, preserving
+permissions and conversations; update the extension with the new key afterward.
+The **Claude remote connection** uses native sign-in and permissions independently
 of this Desktop MCP connection.
 
 These are Anthropic's documented steps for

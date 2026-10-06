@@ -115,8 +115,9 @@ ownership before acting, so a selected folder cannot take over another instance.
 Opening/switching homes never resizes the window or starts/stops a stack.
 
 Admin Connections is organized by the app the user wants to connect, not by
-protocol, container or harness: Claude, Codex, Discord, Slack, OpenCode and MCP.
-Claude owns both Desktop and Code workflows. Each bot owns its token setup,
+protocol, container or harness: OpenCode first, then Claude, Codex, Discord, Slack
+and MCP. Claude offers Desktop chat and Claude remote connection, not a choice
+between similarly named developer products. Each bot owns its token setup,
 allowlists, inline permissions and individual user mappings. Connections owns
 app permissions; there is no separate access-manager navigation destination.
 OpenCode/MCP network controls stay under that app's Advanced
@@ -128,24 +129,34 @@ distinct. Native workers remain experimental and require native consent.
 
 Guarded apps present inline Chat only, Read files and Full access choices;
 granting Full access requires explicit confirmation. Normal bot setup hides
-fhold keys entirely. Claude Desktop/MCP explicitly save access before showing
+fhold keys entirely and preserves its assigned identity without a credential
+picker. Claude Desktop/MCP explicitly create a connection before showing
 the key-copy step needed by the external app. A collapsed Advanced access section
-at the bottom of Connections offers compact saved-access maintenance, not key
-cards, accounts or a policy matrix. Existing registry IDs, values, defaults and
+at the bottom of Connections offers compact permission editing with real Manage
+buttons, not key cards, accounts or a policy matrix. Existing registry IDs, values, defaults and
 policy contracts do not change; no new policy or app-assignment store is added.
-Native OpenCode/Claude Code/Codex access is independent of Guardian permissions.
-Copy fetches connection keys only on explicit request; there is no key-reveal UI
-and values never persist in renderer preferences. Replacement/revocation explain disruption and require
-confirmation; assignment/final-key restrictions remain native.
+Native OpenCode/Claude remote connection/Codex access is independent of Guardian
+permissions. Copy fetches connection keys only on explicit request; there is no
+key-reveal UI and values never persist in renderer preferences. Permission dialogs
+have no copy, replace or remove actions. System's collapsed Connection keys
+section owns explicit, confirmed key rotation; it preserves identity, permissions
+and conversations and explains that external apps must update their copied key.
+Native assignment/final-key restrictions remain unchanged.
 Changing a reused identity's permissions affects all uses and requires explicit
 confirmation. Ordinary edits preserve its ID/value and conversation ownership.
-Switching saved access or explicitly creating separate access warns that
-conversations remain with the old identity and external clients need reconnecting;
-never silently fork, transfer or revoke identity. Known bot assignments are shown
+Per-app saved-access selectors are not part of ordinary setup. Creating a new
+external connection is explicit; editing an existing one belongs to Advanced
+access. Never silently fork, transfer or revoke identity. Known bot assignments are shown
 honestly; external key use cannot be detected or inferred from a credential name.
 App-scoped saves preserve other drafts, use the reviewed configuration baseline
 and retain the existing deferred restart path. Opening setup/status creates no
 keys, assigns no access and performs no automatic permission escalation.
+
+Management notifications and the persistent pending-restart alert live at the
+bottom of the sidebar, including at narrow widths. Setup retains visible inline
+feedback rather than placing errors in its hidden sidebar. Restart activation
+still requires explicit confirmation; moving alerts never restarts containers
+or resizes the window.
 
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations

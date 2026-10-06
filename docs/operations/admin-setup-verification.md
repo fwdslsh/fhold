@@ -25,9 +25,9 @@ to the final wizard before running that qualification. This is an unreleased
 preview AppImage, not a new certified release. TypeScript compilation and the
 standard AppImage build are build checks, not end-to-end verification.
 
-Connections is also a current design preview: separate Claude, Codex, Discord,
-Slack, OpenCode and MCP sections replace the old client tabs/chat/native groups.
-Claude contains both Desktop and Code setup. Bot-specific tokens and user
+Connections is also a current design preview: OpenCode appears first, followed
+by Claude, Codex, Discord, Slack and MCP, replacing the old client tabs/chat/native
+groups. Claude offers Desktop chat and Claude remote connection. Bot-specific tokens and user
 mappings live with that app. Each app/network form saves only its own settings;
 bot enablement retains the existing shared MCP dependency. Credential handling,
 native consent and restart confirmation still use the existing APIs. The older
@@ -37,15 +37,20 @@ this preview does not claim live token, pairing or per-app-save verification.
 App permissions are also an unverified design preview. The rejected People &
 access / Access keys destinations, policy table and per-key cards are removed.
 Connections owns inline Chat only, Read files and Full access choices. Normal
-Discord/Slack setup never exposes a fhold key. Claude Desktop/MCP explicitly save
-access before showing the copy step required by the external app. A collapsed
-Advanced access section at the bottom of Connections retains compact saved-access
-maintenance. Existing identities, values, bot mappings and policy contracts stay
+Discord/Slack setup never exposes a fhold key or offers a saved-access picker.
+Claude Desktop/MCP explicitly create a connection before showing the copy step
+required by the external app. A collapsed Advanced access section at the bottom
+of Connections edits existing permissions through visible Manage buttons.
+Permission dialogs have no copy/replace/remove controls. System's collapsed
+Connection keys section provides confirmed rotation and then a copy-new-key
+action. Existing identities, values, bot mappings and policy contracts stay
 unchanged; no app registry or inferred external assignment is introduced. The old
 Access renderer/E2E fixtures need final alignment. Automated tests and rendered
 or live permission/copy/reconnect qualification remain deferred until the user's
 final design iteration. Source review, typechecking and preview AppImage builds
-do not qualify the feature or prove client readiness.
+do not qualify the feature or prove client readiness. Management notifications
+and pending restart appear at the sidebar bottom; setup feedback remains visible
+inside the wizard. Native restart confirmation and postponement remain unchanged.
 
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
@@ -63,13 +68,18 @@ changes made during a pending preview cannot produce a stale actionable review.
 Product navigation must never resize the window.
 
 For Connections, open each app with keyboard and pointer at normal/narrow sizes
-and 200% zoom. Check that only the chosen app's controls appear, Claude offers
-Desktop/Code methods together, and no shared token selector or separate remote
+and 200% zoom. Check that OpenCode is first, only the chosen app's controls appear,
+Claude offers Desktop chat / Claude remote connection, and no saved-access picker,
+shared token selector or separate remote
 group remains. In a disposable instance, edit two apps, save one and verify the
 other draft remains unsaved and the saved configuration is unchanged for that
 other app. Repeat for the two network forms and for bot-token/user-mapping saves.
 Confirm denied empty bot allowlists, blank-token preservation, failed-write
 draft preservation, copy-only connection keys, pending restart and cancelled restarts.
+Check that alerts appear at the sidebar bottom without clipping at normal/narrow
+widths or zoom, including when mobile navigation is collapsed. Setup errors must
+remain visible rather than moving into its hidden sidebar. Rotating a key and
+applying pending settings must still offer native confirmation and restart later.
 MCP cannot be disabled while a saved bot requires it. Run the usual native
 account/pairing verification only after explicit sign-in and workspace consent;
 startup or a running container must never be presented as a connected client.
@@ -77,37 +87,43 @@ startup or a running container must never be presented as a connected client.
 After final design approval, manually review inline permission choices and the
 collapsed Advanced access list at narrow sizes and 200% zoom. There must be no
 access-manager sidebar, policy matrix or credential cards. Check keyboard focus,
-native radio navigation, Cancel/Escape, duplicate/invalid names where external
-access is named, and failed-write messages. In a disposable home, complete a
+native radio navigation, Cancel/Escape, duplicate/invalid labels for explicitly
+created separate access, and failed-write messages. In a disposable home, complete a
 personal Discord bot setup without seeing a fhold key, then give an allowed
 person restricted permissions through Save person permissions without a
 key-naming task. Saving a mapping must
 not silently allow that person or change other mappings. Returning to bot
 permissions must warn if access would increase.
 
-For Claude Desktop/MCP, choose permissions, select Save permissions, then privately
+For Claude Desktop/MCP, choose permissions, select Create connection, then privately
 paste the copied key into the app (never into test output). Read-only refresh or
 opening setup must not create access. New external access keeps the prior Read
-files default. Use saved access to resume setup; names must not be presented as
-detected external assignments or connected-client readiness. Copy occurs only
-on request in connection details or explicit advanced maintenance; there is no
+files default and receives an automatic unique name. Confirm that reopening Admin
+does not infer an app assignment or create a key. Edit an existing connection's
+permissions through Advanced access → Manage instead of creating another. Names
+must not be presented as detected external assignments or connected-client readiness.
+Copy occurs only on request in connection details or after explicit System key
+rotation; there is no
 connection-key reveal field. Unsaved permission changes must not offer a
 misleading copy/connect action before Save permissions.
 
 Edit reused access, cancel the impact confirmation and verify nothing changed.
 Confirm a change and verify only that identity's policy changed, its ID/key and
 conversation ownership survived, and other app drafts remained. Explain known
-bot assignments and unknown external reuse before confirmation. Switching saved
-access or explicitly creating separate access must warn about separate
-conversations and reconnecting external clients; never silently fork identities,
+bot assignments and unknown external reuse before confirmation. Bot saves must
+preserve the assigned credential. Explicitly creating separate access must warn
+about separate conversations; never silently fork identities,
 transfer sessions or revoke old access. Concurrent changes reject stale saves.
-Full access still requires confirmation. OpenCode/Claude Code/Codex retain native
+Full access still requires confirmation. OpenCode/Claude remote connection/Codex retain native
 consent and must never display Guardian restrictions as their own permissions.
 
-Advanced replacement/removal must warn, require confirmation and preserve
-assigned/final-key restrictions. Connection-key values never appear in renderer
-fields or persist in preferences. Removing selected external access must
-leave an explicit unselected state, not choose more privileged access. Read-only
+In System → Connection keys, select an existing connection and cancel rotation;
+verify nothing changes. Confirm rotation and verify that only its key changes,
+permissions and conversations survive, bot keys use the normal deferred apply
+path and external apps must update. Copy new key must appear only after successful
+rotation of that selected connection. Permission dialogs must have no maintenance
+controls. Connection-key values never appear in renderer fields or persist in
+preferences. A missing connection must not select more privileged access. Read-only
 status checks must not reset drafts. Saved changes remain pending until successful
 explicit activation; restart later is still offered.
 

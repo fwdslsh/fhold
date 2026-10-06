@@ -203,7 +203,19 @@
           </button>
         </nav>
         </details>
-
+        <div id="sidebar-alerts" class="sidebar-alerts">
+          <section id="notification-area" aria-label="Notifications">
+            <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
+              <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
+              <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
+            </aside>
+            <div id="notice" class="notice" role="status" aria-live="polite" hidden>
+              <span id="notice-icon" class="notice-icon" aria-hidden="true">●</span>
+              <span id="notice-message"></span>
+              <button id="dismiss-notice" type="button" aria-label="Dismiss message">×</button>
+            </div>
+          </section>
+        </div>
       </aside>
 
       <div class="workspace">
@@ -225,18 +237,9 @@
             <h1 id="view-title" tabindex="-1">Connect your AI</h1>
             <p id="view-description" class="page-description">Choose a provider and verify that your agent can respond.</p>
           </div>
-          <div id="notice" class="notice" role="status" aria-live="polite" hidden>
-            <span id="notice-icon" class="notice-icon" aria-hidden="true">●</span>
-            <span id="notice-message"></span>
-            <button id="dismiss-notice" type="button" aria-label="Dismiss message">×</button>
-          </div>
         </header>
-
+        <div id="setup-alerts"></div>
         <main id="main-content" tabindex="-1">
-          <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
-            <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
-            <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
-          </aside>
           <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-heading">
             <div class="hero-card ready-hero">
               <div>
@@ -386,24 +389,43 @@
           </section>
 
           <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="view-title">
+            <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
+              <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
+              <div class="app-connection-body">
+                <p class="help-text">Open the server address and sign in with the username and password below. This gives full native access: use it only on this computer or a trusted private network.</p>
+                <dl class="connection-values">
+                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
+                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
+                </dl>
+                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
+                <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
+                <details class="disclosure">
+                  <summary>Advanced · network access</summary>
+                  <form id="opencode-network-form" class="form-stack" data-managed-form>
+                    <div class="field-grid two-column">
+                      <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
+                      <label class="field" for="assistant-port"><span>Port</span><input id="assistant-port" type="number" min="1" max="65535" required /></label>
+                    </div>
+                    <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>
+                    <button class="secondary" type="submit">Save OpenCode network settings</button>
+                  </form>
+                </details>
+              </div>
+            </details>
             <details id="claude-connection" class="panel panel-disclosure connection-app" data-connection-app="claude" name="connected-app">
-              <summary><span>Claude<small>Desktop chat or Claude Code remote sessions.</small></span></summary>
+              <summary><span>Claude<small>Chat on this computer or work remotely from any device.</small></span></summary>
               <div class="app-connection-body">
                 <details class="disclosure connection-method" name="claude-method">
-                  <summary>Claude Desktop</summary>
+                  <summary><span>Desktop chat<small>Use the Claude Desktop app on this computer.</small></span></summary>
                   <form id="claude-permissions-form" class="form-stack" data-managed-form>
+                    <input id="claude-credential" type="hidden" />
                     <fieldset id="claude-permissions" class="permission-options"><legend>What can Claude Desktop do?</legend>
                       <label class="permission-option"><input id="claude-policy-chat" name="claude-policy" type="radio" value="chat" required /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
                       <label class="permission-option"><input id="claude-policy-read" name="claude-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
                       <label class="permission-option"><input id="claude-policy-full" name="claude-policy" type="radio" value="full" /><span><strong>Full access</strong><small>Use tools, change files and carry out tasks within your agent’s existing permissions.</small></span></label>
                     </fieldset>
                     <p id="claude-policy-help" class="help-text" role="status"></p>
-                    <button id="save-claude-permissions" class="primary" type="submit">Save permissions</button>
-                    <details class="disclosure"><summary>Advanced · use saved access</summary>
-                      <label class="field" for="claude-credential"><span>Choose saved access</span><select id="claude-credential"></select></label>
-                      <p class="help-text">Use the same saved access to keep existing conversations. Different access starts separate conversations; update the extension with its connection key.</p>
-                      <label class="field" for="claude-access-name"><span>Custom access label (optional)</span><input id="claude-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" /><span class="help-text">Technical label for separate access; leave blank to use the suggested label.</span></label>
-                    </details>
+                    <button id="save-claude-permissions" class="primary" type="submit">Create connection</button>
                   </form>
                   <ol class="numbered-steps">
                     <li><div><strong>Enable access</strong><p id="claude-guardian-help">MCP access is disabled.</p><button class="secondary" type="button" data-enable-gateway>Enable access for Claude Desktop</button></div></li>
@@ -416,11 +438,11 @@
                   </ol>
                 </details>
                 <details class="disclosure connection-method" name="claude-method">
-                  <summary><span>Claude Code <small class="card-label">Experimental</small></span></summary>
-                  <p class="help-text">Use Claude Remote Control to work in this instance with your Claude account. Set up guides sign-in and workspace consent; Open session provides the native connection link.</p>
+                  <summary><span>Claude remote connection<small>Work with this instance from the Claude app on any device.</small></span><span class="card-label">Experimental</span></summary>
+                  <p class="help-text">Sign in with your Claude account and approve access to this instance. Then open the connection link in Claude.</p>
                   <p><span id="claude-remote-status" class="status-badge neutral">Startup not checked</span></p>
-                  <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up Claude Code</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open session</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
-                  <p class="help-text">Requires an eligible Claude subscription. Claude Code runs its own agent with access to your files. This uses native access; the MCP permissions do not apply. Disabling startup keeps your sign-in. Manage paired devices through Claude.</p>
+                  <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up remote connection</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open in Claude</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
+                  <p class="help-text">Requires an eligible Claude subscription. Remote sessions can work with this instance’s files using Claude’s own permissions. The desktop chat permissions above do not apply. Disabling startup keeps your sign-in; manage paired devices in Claude.</p>
                 </details>
               </div>
             </details>
@@ -454,6 +476,7 @@
                   </form>
                 </details>
                 <form id="discord-connections-form" class="form-stack" data-managed-form>
+                  <input id="discord-credential" type="hidden" />
                   <label class="switch"><input id="discord" type="checkbox" /><span>Enable Discord</span></label>
                   <details id="discord-access-disclosure" class="disclosure">
                     <summary>Who can use the bot</summary>
@@ -468,7 +491,6 @@
                   </fieldset>
                   <p id="discord-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Discord settings</button>
-                  <details class="disclosure"><summary>Advanced · use saved access</summary><label class="field" for="discord-credential"><span>Use saved access</span><select id="discord-credential"></select></label></details>
                 </form>
                 <details id="discord-user-access" class="disclosure">
                   <summary>Different permissions for a person</summary>
@@ -494,6 +516,7 @@
                   </form>
                 </details>
                 <form id="slack-connections-form" class="form-stack" data-managed-form>
+                  <input id="slack-credential" type="hidden" />
                   <label class="switch"><input id="slack" type="checkbox" /><span>Enable Slack</span></label>
                   <details id="slack-access-disclosure" class="disclosure">
                     <summary>Who can use the bot</summary>
@@ -508,7 +531,6 @@
                   </fieldset>
                   <p id="slack-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Slack settings</button>
-                  <details class="disclosure"><summary>Advanced · use saved access</summary><label class="field" for="slack-credential"><span>Use saved access</span><select id="slack-credential"></select></label></details>
                 </form>
                 <details id="slack-user-access" class="disclosure">
                   <summary>Different permissions for a person</summary>
@@ -516,30 +538,6 @@
                   <button class="secondary" type="button" data-add-person-permissions="slack">Add person</button>
                   <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
 
-                </details>
-              </div>
-            </details>
-
-            <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
-              <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
-              <div class="app-connection-body">
-                <p class="help-text">Open the server address and sign in with the username and password below. This gives full native access: use it only on this computer or a trusted private network.</p>
-                <dl class="connection-values">
-                  <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
-                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
-                </dl>
-                <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
-                <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
-                <details class="disclosure">
-                  <summary>Advanced · network access</summary>
-                  <form id="opencode-network-form" class="form-stack" data-managed-form>
-                    <div class="field-grid two-column">
-                      <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
-                      <label class="field" for="assistant-port"><span>Port</span><input id="assistant-port" type="number" min="1" max="65535" required /></label>
-                    </div>
-                    <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>
-                    <button class="secondary" type="submit">Save OpenCode network settings</button>
-                  </form>
                 </details>
               </div>
             </details>
@@ -553,6 +551,7 @@
                 </form>
                 <p id="mcp-guardian-help" class="help-text">MCP access is disabled.</p>
                 <form id="mcp-permissions-form" class="form-stack" data-managed-form>
+                  <input id="mcp-credential" type="hidden" />
                   <fieldset id="mcp-permissions" class="permission-options">
                     <legend>What can this app do?</legend>
                     <label class="permission-option">
@@ -579,21 +578,7 @@
                   </fieldset>
                   <p id="mcp-policy-help" class="help-text" role="status">
                   </p>
-                  <button id="save-mcp-permissions" class="primary" type="submit">Save permissions</button>
-                  <details class="disclosure">
-                    <summary>Advanced · use saved access</summary>
-                    <label class="field" for="mcp-credential">
-                      <span>Choose saved access</span>
-                      <select id="mcp-credential">
-                      </select>
-                    </label>
-                    <p class="help-text">Use the same saved access to keep existing conversations. Different access starts separate conversations; update your app with its connection key.</p>
-                    <label class="field" for="mcp-access-name">
-                      <span>Custom access label (optional)</span>
-                      <input id="mcp-access-name" autocomplete="off" spellcheck="false" maxlength="64" pattern="[a-z][a-z0-9._\-]{0,63}" />
-                      <span class="help-text">Technical label for separate access; leave blank to use the suggested label.</span>
-                    </label>
-                  </details>
+                  <button id="save-mcp-permissions" class="primary" type="submit">Create connection</button>
                 </form>
                 <section id="mcp-connect-details" hidden aria-labelledby="mcp-connect-heading">
                   <h3 id="mcp-connect-heading">Add the server to your app</h3>
@@ -633,7 +618,7 @@
             </details>
             <details id="advanced-access" class="disclosure">
               <summary>Advanced access</summary>
-              <p class="help-text">Manage saved access for reuse or recovery. External uses may not be listed. These permissions do not restrict native OpenCode, Claude Code or Codex access.</p>
+              <p class="help-text">Change permissions for existing connections. Changes apply to every app using that connection; external apps may not be listed. OpenCode, Claude remote connection and Codex use their own permissions.</p>
               <div id="saved-access" class="saved-access-list"></div>
               <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
             </details>
@@ -655,6 +640,19 @@
               <summary>Recent logs</summary>
               <button id="load-logs" class="secondary" type="button">Load logs</button>
               <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
+            </details>
+
+            <details id="connection-keys" class="panel panel-disclosure">
+              <summary>Connection keys <small>Advanced security maintenance</small></summary>
+              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
+              <form id="key-rotation-form" class="form-stack">
+                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
+                <button class="secondary" type="submit">Rotate key</button>
+              </form>
+              <div id="rotated-key-details" hidden>
+                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
+                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
+              </div>
             </details>
 
             <details id="import-export" class="panel panel-disclosure">
@@ -790,17 +788,6 @@
           <button id="save-permissions" class="primary" type="submit">Save permissions</button>
           <button id="cancel-permissions" class="secondary" type="button">Cancel</button>
         </div>
-        <details id="saved-access-maintenance" class="disclosure" hidden>
-          <summary>Copy, replace or remove access</summary>
-          <p class="help-text">Replacing or removing access interrupts apps using it. After replacement, reconnect external apps with the new access key.</p>
-          <div class="button-row compact">
-            <button id="copy-saved-access" class="secondary" type="button">Copy access key</button>
-            <button id="replace-saved-access" class="secondary" type="button">Replace access key</button>
-            <button id="remove-saved-access" class="danger subtle" type="button">Remove access</button>
-          </div>
-          <p id="saved-access-removal-help" class="help-text">
-          </p>
-        </details>
       </form>
     </dialog>
     <dialog id="remote-dialog" aria-labelledby="remote-heading">

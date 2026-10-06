@@ -205,10 +205,10 @@ export function bindRemoteEvents() {
 				? 'Automatic knowledge recall for Codex'
 				: connectionOnly
 					? tool === 'claude'
-						? 'Open Claude remote session (experimental)'
+						? 'Open Claude remote connection (experimental)'
 						: 'Get Codex pairing code (experimental)'
 					: tool === 'claude'
-						? 'Enable Claude Remote Control (experimental)'
+						? 'Set up Claude remote connection (experimental)'
 						: 'Enable Codex remote (experimental)';
 			byId('remote-trust-field').hidden = connectionOnly || recallOnly;
 			byId('remote-trust').required = !connectionOnly && !recallOnly;

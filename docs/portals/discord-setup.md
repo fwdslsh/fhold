@@ -70,9 +70,10 @@ and choose their permissions with **Save person permissions**, without naming a
 key. The user must still pass the
 allowlist. Existing mappings retain their credential IDs. Editing saved
 permissions affects every use of that identity and requires confirmation;
-switching saved access starts a separate conversation, leaving old conversations
-with the old identity. **Use bot permissions** removes an override, not access
-checks. Shared/saved access maintenance is under **Connections → Advanced access**.
+ordinary edits preserve the existing conversations and bot assignment. **Use bot
+permissions** removes an override, not access checks. Existing permission editing
+is under **Connections → Advanced access → Manage**. Key rotation, when needed,
+is under **System → Connection keys**; it is not part of bot setup.
 
 ## 3. Enable and verify
 

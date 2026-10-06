@@ -1,7 +1,7 @@
 import { offerRestart } from './restart.js';
 import { render } from './snapshot.js';
 import { policyLabels, state } from './state.js';
-import { all, byId, notice, operation, setFormClean, setOptions, setText } from './ui.js';
+import { all, byId, notice, operation, setFormClean, setText } from './ui.js';
 
 const portals = ['discord', 'slack'];
 const clients = ['claude', 'mcp'];
@@ -12,6 +12,12 @@ const appLabels = {
 	mcp: 'this MCP app'
 };
 let editor;
+
+export function credentialOptions(snapshot) {
+	return Object.entries(snapshot.config.credentials)
+		.sort(([a], [b]) => a.localeCompare(b))
+		.map(([value, config]) => ({ value, label: `${value} — ${policyLabels[config.policy]}` }));
+}
 
 function selectedPolicy(app) {
 	return document.querySelector(`input[name="${app}-policy"]:checked`)?.value;
@@ -66,33 +72,29 @@ export function updateAppPermissions(app) {
 	setText(
 		`${app}-policy-help`,
 		saved
-			? `${changed ? (portals.includes(app) ? `Unsaved permissions · save ${appLabels[app]} settings` : 'Save permissions before connecting') : `Saved: ${policyLabels[saved]}`}.${state.currentSnapshot?.pendingRestart?.required ? ' Saved changes need a restart before they apply.' : ''}`
-			: 'Choose what this app can do. Saving creates separate access automatically.'
+			? `${changed ? (portals.includes(app) ? `Unsaved permissions · save ${appLabels[app]} settings` : 'Save permissions before connecting') : `Saved: ${policyLabels[saved]}`}.`
+			: 'Choose permissions for a new connection. To change an existing connection, use Advanced access below.'
 	);
 	const details = byId(`${app}-connect-details`);
 	if (details) details.hidden = !saved || saved !== policy;
-	if (clients.includes(app)) {
-		const name = byId(`${app}-access-name`);
-		name.readOnly = Boolean(saved);
-		name.closest('.field').hidden = Boolean(saved);
-	}
+	if (clients.includes(app))
+		setText(`save-${app}-permissions`, saved ? 'Save permissions' : 'Create connection');
 }
 
 export function applyAppPermissions(config, app) {
 	const username = byId(`${app}-credential`).value;
 	const policy = selectedPolicy(app);
 	if (!config.credentials[username] || !['chat', 'read', 'full'].includes(policy)) {
-		notice('Choose saved access and permissions before saving.', 'error');
+		notice(
+			'The configured connection is unavailable. Reopen this instance before saving.',
+			'error'
+		);
 		return false;
 	}
-	const previousId = config.portals[app].credential;
-	if (
-		previousId !== username &&
-		!window.confirm(
-			`Use “${username}” for ${app}? Conversations belong to the selected access identity. Existing conversations remain with the previous identity.`
-		)
-	)
+	if (config.portals[app].credential !== username) {
+		notice('The bot connection changed. Reopen this instance before saving.', 'error');
 		return false;
+	}
 	if (
 		!confirmPolicy(
 			username,
@@ -121,9 +123,7 @@ export async function copyAccessKey(username) {
 }
 
 export function renderCredentials(snapshot) {
-	const choices = Object.entries(snapshot.config.credentials)
-		.sort(([a], [b]) => a.localeCompare(b))
-		.map(([value, config]) => ({ value, label: `${value} — ${policyLabels[config.policy]}` }));
+	const choices = credentialOptions(snapshot);
 	const list = byId('saved-access');
 	list.replaceChildren();
 	for (const choice of choices) {
@@ -133,7 +133,7 @@ export function renderCredentials(snapshot) {
 		label.textContent = choice.label;
 		const button = document.createElement('button');
 		button.type = 'button';
-		button.className = 'text-button';
+		button.className = 'secondary';
 		button.textContent = 'Manage';
 		button.dataset.manageSavedAccess = choice.value;
 		button.setAttribute('aria-label', `Manage saved access ${choice.value}`);
@@ -147,12 +147,7 @@ export function renderCredentials(snapshot) {
 			state.dirtyForms.has(`${app}-permissions-form`);
 		const selected =
 			portals.includes(app) && !dirty ? snapshot.config.portals[app].credential : field.value;
-		setOptions(
-			field,
-			clients.includes(app) ? [{ value: '', label: 'Choose saved access…' }, ...choices] : choices,
-			selected
-		);
-		if (selected && !Object.hasOwn(snapshot.config.credentials, selected)) field.value = '';
+		field.value = selected && Object.hasOwn(snapshot.config.credentials, selected) ? selected : '';
 		if (portals.includes(app) && !dirty)
 			choosePolicy(app, snapshot.config.credentials[selected]?.policy);
 		if (clients.includes(app) && !dirty)
@@ -251,17 +246,6 @@ function openEditor({ username, portal, userId } = {}) {
 		`dialog-policy-${username ? state.currentConfig.credentials[username].policy : portal ? 'chat' : 'read'}`
 	).checked = true;
 	byId('permissions-error').hidden = true;
-	byId('saved-access-maintenance').hidden = !username || Boolean(portal);
-	const blocked =
-		username &&
-		(usages(username).length || Object.keys(state.currentConfig.credentials).length === 1);
-	byId('remove-saved-access').disabled = Boolean(blocked);
-	setText(
-		'saved-access-removal-help',
-		blocked
-			? 'Keep at least one saved access and reassign bot defaults and people before removal.'
-			: 'External apps using this access will lose access if it is removed.'
-	);
 	byId('permissions-dialog').showModal();
 	(portal && !userId
 		? byId('person-id')
@@ -387,7 +371,6 @@ async function saveClient(app) {
 		)
 	)
 		return;
-	const name = byId(`${app}-access-name`).value.trim();
 	const controls = [...byId(`${app}-permissions-form`).querySelectorAll('input, select')].map(
 		(input) => ({ input, disabled: input.disabled })
 	);
@@ -403,7 +386,7 @@ async function saveClient(app) {
 					config.credentials[username].policy = policy;
 					saved = await state.api.saveConfig({ config, baseConfig: baseline });
 				} else {
-					username = name || uniqueName(app === 'claude' ? 'claude-desktop' : 'mcp-app');
+					username = uniqueName(app === 'claude' ? 'claude-desktop' : 'mcp-app');
 					saved = await state.api.credential({ action: 'create', username, policy });
 				}
 				setFormClean(`${app}-permissions-form`);
@@ -423,11 +406,6 @@ async function saveClient(app) {
 
 export function bindAccessEvents() {
 	for (const app of [...portals, ...clients]) {
-		byId(`${app}-credential`).addEventListener('change', () => {
-			const policy = state.currentConfig.credentials[byId(`${app}-credential`).value]?.policy;
-			if (policy || clients.includes(app)) choosePolicy(app, policy || 'read');
-			updateAppPermissions(app);
-		});
 		byId(`${app}-permissions`).addEventListener('change', () => updateAppPermissions(app));
 	}
 	for (const app of clients)
@@ -494,44 +472,4 @@ export function bindAccessEvents() {
 				.find((button) => button.dataset.manageSavedAccess === closed?.username)
 				?.focus();
 	});
-	byId('copy-saved-access').addEventListener('click', async () => {
-		if (!editor || state.operationInFlight) return;
-		const copied = await copyAccessKey(editor.username);
-		if (!copied) {
-			setText('permissions-error', byId('notice-message').textContent);
-			byId('permissions-error').hidden = false;
-		}
-	});
-	for (const [id, action] of [
-		['replace-saved-access', 'rotate'],
-		['remove-saved-access', 'remove']
-	])
-		byId(id).addEventListener('click', async () => {
-			if (!editor || state.operationInFlight) return;
-			const username = editor.username;
-			if (
-				!window.confirm(
-					action === 'rotate'
-						? `Replace the connection key for “${username}”? The old key stops working; update every app using it.`
-						: `Remove “${username}”? External apps using it lose access. This cannot be undone.`
-				)
-			)
-				return;
-			const saved = await operation(
-				action === 'rotate' ? 'Replacing connection key' : 'Removing saved access',
-				() => state.api.credential({ action, username }),
-				action === 'rotate'
-					? 'Key replaced. Copy it explicitly to update your apps.'
-					: 'Saved access removed.'
-			);
-			if (!saved) {
-				setText('permissions-error', byId('notice-message').textContent);
-				byId('permissions-error').hidden = false;
-			}
-			if (saved) {
-				if (action === 'remove') byId('permissions-dialog').close();
-				else editor.baseline = structuredClone(saved.config);
-				await offerRestart(saved);
-			}
-		});
 }

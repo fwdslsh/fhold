@@ -354,6 +354,57 @@ button.text-button:hover:not(:disabled) {
 	overflow-y: auto;
 }
 
+.sidebar-alerts {
+	margin-top: auto;
+}
+
+.sidebar-alerts:has(.notice:not([hidden]), .pending-restart:not([hidden])) {
+	padding-top: 24px;
+}
+
+#notification-area {
+	display: grid;
+	gap: 12px;
+}
+
+#notification-area .notice,
+#notification-area .pending-restart {
+	margin: 0;
+}
+
+.sidebar-alerts .pending-restart {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 12px;
+	padding: 12px;
+	font-size: 0.8125rem;
+}
+
+.sidebar-alerts .pending-restart p {
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.sidebar-alerts .pending-restart button {
+	width: 100%;
+}
+
+.sidebar-alerts .notice {
+	gap: 8px;
+	padding: 10px;
+	font-size: 0.8125rem;
+	font-weight: 400;
+}
+
+#notification-area p,
+#notice-message {
+	overflow-wrap: anywhere;
+}
+
+#setup-alerts:has(.notice:not([hidden]), .pending-restart:not([hidden])) {
+	margin-bottom: 24px;
+}
+
 .sidebar-instance {
 	display: flex;
 	align-items: center;
@@ -1363,8 +1414,13 @@ body[data-busy="true"] #main-content {
 		grid-column: 1 / -1;
 	}
 
+	.sidebar-alerts {
+		grid-column: 1 / -1;
+		margin: 0;
+	}
+
 	#primary-nav {
-		grid-template-columns: repeat(5, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 	}
 
 	body[data-phase="setup_incomplete"] .sidebar {

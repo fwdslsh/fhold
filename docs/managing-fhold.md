@@ -163,14 +163,17 @@ also remains in System → Installation details. Status checks run every 15 seco
 while the selected instance is visible and when Admin regains focus. They pause
 during operations and never overwrite drafts, sign-in steps, connection choices or
 the configuration baseline. Unavailable checks do not claim a stopped or healthy
-agent; provider readiness remains in Agent settings. Opening/switching instances
+agent; provider readiness remains in Agent settings. Notifications and pending
+restart appear at the bottom of the sidebar, not above page content. Setup keeps
+its feedback visible in the wizard. Opening/switching instances
 and automatic status checks never restart containers or resize the window.
 
 Agent settings owns provider readiness, memory and timezone. **Connections** is
-organized by app: **Claude**, **Codex**, **Discord**, **Slack**, **OpenCode** and
+organized by app: **OpenCode** first, then **Claude**, **Codex**, **Discord**, **Slack** and
 **MCP**. Open an app to see its instructions, status, actions and settings.
-Claude contains both Desktop extension setup and experimental Claude Code
-Remote Control. Codex contains sign-in, pairing and knowledge recall. Discord
+Claude offers **Desktop chat** for this computer and an experimental **Claude
+remote connection** for access from other devices. Codex contains sign-in,
+pairing and knowledge recall. Discord
 and Slack each contain their own bot tokens, allowed-user rules, default access
 and individual user overrides; there is no shared token/app selector.
 OpenCode contains its address, password and advanced network settings. MCP
@@ -180,7 +183,7 @@ An app's Save action changes that app, not other apps' unsaved drafts. Restart
 confirmation and the persistent pending-changes alert still apply. Native
 workers remain experimental; startup enabled is not a verified client connection.
 There is no separate access-manager sidebar destination. System holds
-installation details, recent logs, import/export,
+installation details, recent logs, advanced connection-key rotation, import/export,
 then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
@@ -196,16 +199,21 @@ Claude Desktop, MCP, Discord and Slack offer three choices:
   permissions. Choose this only for trusted apps or people; confirmation is
   required when granting it.
 
-For Claude Desktop or another MCP app, choose permissions and select **Save
-permissions** before copying the address and **Copy access key** into the external
+For Claude Desktop or another MCP app, choose permissions and select **Create
+connection** before copying the address and **Copy access key** into the external
 app's fields. A key is needed only for that connection step. New external access
-retains the existing Read files default. Names use the existing credential
-format, not a new app/account registry. **Use saved access** resumes setup with
-an existing identity; fhold cannot detect which external app uses a copied key.
-Never interpret a saved name as verified client readiness.
+retains the existing Read files default and receives a name automatically. Once
+created, **Save permissions** edits that connection for the rest of this Admin
+window. For an existing connection after reopening Admin, use **Advanced access →
+Manage** to change its permissions rather than creating another connection.
+There is no per-app saved-access picker; fhold cannot detect which external app
+uses a copied key. Never interpret a saved name as verified client readiness.
+Creating a new connection does not replace an existing app's key or conversations;
+paste the new key only if you intend to use the new, separate connection.
 
 Discord and Slack show permissions directly; fhold supplies their own access
-keys without asking you to choose, name or copy one in normal bot setup.
+keys without asking you to choose, name or copy one in normal bot setup. Saving
+bot settings preserves that bot's current connection rather than reassigning it.
 **Who can use the bot** still controls the allowlist independently.
 **Different permissions for a person → Save person permissions** sets an exact
 platform user's permissions;
@@ -215,23 +223,28 @@ removes the override, not the allowlist entry. Other app drafts are preserved.
 Existing credentials, values, policies and assignments stay unchanged until an
 explicit save. Changing saved permissions affects every use of that identity,
 including external apps fhold cannot discover. Confirm the shared effect before
-saving; existing conversations remain attached to the same identity. Choosing
-different saved access or explicitly setting up separate access starts separate
+saving; existing conversations remain attached to the same identity. Explicitly
+setting up separate access starts separate
 credential-scoped conversations. Old conversations stay with the old identity;
 external apps must be reconfigured when their connection key changes.
 
-**Advanced access**, collapsed at the bottom of Connections, offers compact saved
-access maintenance, not a policy matrix or key-card destination. Replacement
-invalidates the old key; update every external app where it was pasted. Removal
-revokes access. Both require confirmation and preserve assigned/final-key
-restrictions. Only saved bot assignments are known, not external usage.
+**Advanced access**, collapsed at the bottom of Connections, offers compact
+permission editing through **Manage** buttons, not a policy matrix or key-card
+destination. Permission dialogs do not include copy, replacement or removal.
+Only saved bot assignments are known, not external usage. Missing selected
+access never silently selects a more privileged identity.
+
+**System → Connection keys → Rotate key** is for advanced security maintenance,
+such as replacing an exposed key. Confirmation explains that the old key stops
+working. Permissions and conversations stay unchanged. After rotation, **Copy
+new key** provides the replacement for each external app where it was pasted.
+fhold supplies bot keys automatically; apply the saved change when ready.
 Copy fetches a private value only on request; there is no connection-key reveal
-field and values are never stored in renderer preferences. Missing selected access never
-silently selects a more privileged identity.
+field and values are never stored in renderer preferences.
 
 Permission saves use the existing configuration baseline and restart-now/later
 confirmation; opening or cancelling a form restarts nothing. These permissions
-do not control OpenCode's native password or Claude Code/Codex account access.
+do not control OpenCode's native password or Claude remote connection/Codex account access.
 Those connections retain native sign-in, consent and approvals. Keep copied keys
 private, like passwords. This Admin redesign is an unverified preview; see the
 [verification runbook](operations/admin-setup-verification.md).
