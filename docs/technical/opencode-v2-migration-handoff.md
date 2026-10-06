@@ -1,6 +1,7 @@
 # OpenCode 2 migration: fhold agent handoff
 
-Status: implementation brief, not a completed migration. Reviewed 2026-10-06.
+Status: implementation brief, pending AKM and akm-plugins OpenCode 2 updates.
+Reviewed 2026-10-06. This migration is not implemented or qualified.
 
 ## Objective and starting point
 
@@ -23,6 +24,14 @@ and server interfaces, while retaining supported configuration, agents, commands
 and skills. See the [native migration guide](https://opencode.ai/v2/docs/migrate-v1).
 The prerequisite AKM work has a separate
 [agent handoff](akm-opencode-v2-migration-handoff.md).
+
+The upstream dependency is tracked in
+[itlackey/akm#1049](https://github.com/itlackey/akm/issues/1049). Before qualifying
+or releasing this migration, obtain the published compatible AKM CLI and
+OpenCode 2 plugin artifacts, their exact pins and the native V1/V2 compatibility
+receipt. That upstream work includes required V1 dispatch/history support and
+separate V1/V2 plugin artifacts sharing the current AKM core. Do not bypass this
+dependency with a downstream plugin fork, vendor patch or startup install.
 
 Read [AGENTS.md](../../AGENTS.md), [core principles](core-principles.md),
 [recovery](../assistant-recovery.md) and [release gates](../operations/release.md)
