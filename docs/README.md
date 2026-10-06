@@ -13,6 +13,9 @@
 - [Architecture](technical/architecture.md) and [core principles](technical/core-principles.md).
 - [Configuration, environment and mounts](technical/environment-and-mounts.md).
 - [Native OpenCode configuration](technical/opencode-configuration.md).
+- OpenCode 2 implementation handoffs (future work, not current support):
+  [fhold migration](technical/opencode-v2-migration-handoff.md) and
+  [AKM/akm-plugins prerequisites](technical/akm-opencode-v2-migration-handoff.md).
 - [Managed harness configuration](managed-harness-configuration.md): editable native settings, enforced policies and custom hooks.
 - [MCP API reference](technical/api-spec.md).
 - [Dependencies and development](technical/package-management.md), [tests](technical/testing-workflow.md).
