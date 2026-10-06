@@ -54,17 +54,28 @@ exactly one native preference file was writable. All three optional Compose
 profiles validated together. Generated stacks were stopped normally afterward.
 
 The full source suite, typechecking and lint passed, including image-backed
-native history tests. Admin's complete source suite passed 120 tests with 828
-assertions; Chromium passed 99 assertions. Current-source screenshots were
+native history tests. Admin's complete source suite passed 121 tests with 842
+assertions; Chromium passed 107 assertions. Current-source screenshots were
 approved by the design reviewer. CLI and Linux AppImage builds passed, including
 the rebuilt AppImage's real packaged startup/preload/setup check. This
 replaces the earlier stale static fixtures rather than skipping their checks.
-Full-wizard live qualification remains a separate final UI-iteration gate.
+The complete account-free management walkthrough also passed, including full
+export/import and second-process reopening; see [its evidence](admin-setup-verification.md).
+It does not substitute for real provider setup or native consent.
 
 The controlled server qualifies native OpenCode API/SDK behavior and compatible
 HTTP transport, not actual Ollama, LM Studio or llama.cpp engines. The earlier
 real OpenCode Go readiness check remains separate evidence; no live instance or
 existing user credentials were changed for this regression.
+
+The same native regression passed again against the public
+`0.1.2610060849-beta.1` Assistant on October 6: all seven stages passed,
+including live reload, the two exact controlled responses and normal restart.
+The control fixture made no vendor requests. This verifies the native API and
+compatible transport against those actual image bytes, not later image tags.
+Separate real Go walkthroughs completed explicit Test/Use/Continue, a response
+after restart and a guarded MCP response. Management-only UI qualification
+reports `providerReadiness.attempted=false`; it is not vendor-login proof.
 
 ## Repeat manually
 

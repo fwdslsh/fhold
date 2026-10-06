@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "fhold",
   "display_name": "fhold",
-  "version": "0.1.2610060849-beta.1",
+  "version": "0.1.2610061043-beta.1",
   "description": "Use your personal fhold agent from Claude Desktop.",
   "long_description": "Connect Claude Desktop to your local fhold agent. Requests pass through fhold's protected access layer, which applies the permissions you choose for this connection and screens untrusted input.",
   "author": {

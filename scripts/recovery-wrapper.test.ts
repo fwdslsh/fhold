@@ -465,9 +465,12 @@ describe('recovery wrapper configuration and private status', () => {
 			const engine=createEngine({url:pathToFileURL(join(root,'backup')).href,instanceId:'health-clock',versions:{test:'1'},privateDir:join(roots.home,'.fhold-recovery')},{roots});
 			await engine.initialize();await mkdir(runtimeDir);await writeFile(join(runtimeDir,'recovery-writers-started'),'fixture');
 			const reservation=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){return new Response('fixture');}});const probePort=reservation.port;reservation.stop(true);
-			const values=[];let finished=false;
-			const observer=setInterval(async()=>{try{await fetch('http://127.0.0.1:'+probePort+'/live');const s=JSON.parse(await readFile(join(runtimeDir,'recovery-status.json'),'utf8'));if(s.lastPublishedAt!==null)values.push(s.lastPublishedAt);}catch{}},50);
-			const stop=setTimeout(()=>process.kill(process.pid,'SIGTERM'),6500);
+			const values=[];let finished=false,stopRequested=false;
+			const requestStop=()=>{if(!stopRequested){stopRequested=true;process.kill(process.pid,'SIGTERM');}};
+			const observer=setInterval(async()=>{try{const live=await fetch('http://127.0.0.1:'+probePort+'/live');if(!live.ok)return;const s=JSON.parse(await readFile(join(runtimeDir,'recovery-status.json'),'utf8'));if(s.lastPublishedAt!==null)values.push(s.lastPublishedAt);if(new Set(values).size>=3)requestStop();}catch{}},50);
+			// Stop on three observed healthy native publications, not assumed disk
+			// throughput. A stalled or one-shot timer still fails the bounded run.
+			const stop=setTimeout(requestStop,20_000);
 			try{await runRecovery({runtimeDir,intervalSeconds:1,maxUnsavedSeconds:5,probePort},{env:{},engine});finished=true;}
 			finally{clearInterval(observer);clearTimeout(stop);}
 			process.stdout.write(JSON.stringify({finished,publications:new Set(values).size}));
@@ -478,7 +481,7 @@ describe('recovery wrapper configuration and private status', () => {
 			{
 				env: { PATH: process.env.PATH },
 				encoding: 'utf8',
-				timeout: 12_000
+				timeout: 35_000
 			}
 		);
 		expect(result.status).toBe(0);
@@ -486,5 +489,5 @@ describe('recovery wrapper configuration and private status', () => {
 		const measured = JSON.parse(result.stdout);
 		expect(measured.finished).toBe(true);
 		expect(measured.publications).toBeGreaterThanOrEqual(3);
-	}, 15_000);
+	}, 40_000);
 });

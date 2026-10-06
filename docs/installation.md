@@ -2,14 +2,14 @@
 
 Use a non-root Linux account with Docker Engine and Compose v2. Download the
 matching x64 or ARM64 CLI or Admin AppImage from the
-[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
+[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610061043-beta.1).
 The release includes checksums and an asset manifest. The CLI is a standalone
 executable; installed releases do not require Bun, Node.js or npm on the host.
 
 For example, on Linux x64:
 
 ```bash
-curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610050714-alpha.6/fhold-cli-linux-x64
+curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.1.2610061043-beta.1/fhold-cli-linux-x64
 chmod +x fhold
 ./fhold install --name personal-agent
 ./fhold --name personal-agent setup
@@ -18,8 +18,8 @@ chmod +x fhold
 Use `fhold-cli-linux-arm64` on ARM64. CLI and Admin pull the matching pinned
 `fwdslsh/fhold-assistant` image from public Docker Hub; Guardian and Portal images
 are pulled only when enabled. A Docker Hub login is not required. For Admin,
-make the downloaded `.AppImage` executable and launch it, then choose **Create
-new instance**. Keep the CLI somewhere on your PATH to use the shorter commands
+make the downloaded `.AppImage` executable and launch it, then choose **Set up
+a new agent**. Keep the CLI somewhere on your PATH to use the shorter commands
 below. An AI provider supported by OpenCode is required for assistant responses.
 
 ## Optional source build

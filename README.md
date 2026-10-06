@@ -4,13 +4,13 @@ A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
-Linux alpha: [0.1.2610050714-alpha.6](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610050714-alpha.6).
+Linux beta: [0.1.2610061043-beta.1](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610061043-beta.1).
 Download a standalone CLI or optional Admin AppImage for x64 or ARM64.
 Fresh installs use the matching public [Docker Hub images](https://hub.docker.com/r/fwdslsh/fhold-assistant)
 automatically. No npm installation or Docker Hub account is required.
 Windows and macOS packaging is deferred. See the [release notes](CHANGELOG.md)
 and [reviewed dependency exceptions](docs/operations/release.md#reviewed-runtime-advisories)
-for this alpha's limits.
+for this prerelease's limits.
 
 Use [Installation](docs/installation.md) for downloads and first setup,
 [Managing fhold](docs/managing-fhold.md) for lifecycle, knowledge and recovery,
@@ -39,8 +39,10 @@ No separate instance selector or second instance-name registry is introduced.
 Never point fhold at a foreign or unrelated nonempty home. Supported portable
 restore requires fhold's own backup manifest; no old-product import is provided.
 
-Edit native OpenCode, Codex and Claude settings under the instance's `config/`
-directory, then restart. Updates preserve these operator-owned files; managed
+Edit managed OpenCode, Codex and Claude policies under the instance's `config/`
+directory, then restart. AI-service and model preferences instead use the native
+OpenCode API through Admin and apply without restarting the container.
+Updates preserve these operator-owned files; managed
 policies are read-only inside the container. See [harness configuration](docs/managed-harness-configuration.md)
 for paths, permissions, hooks and the alpha.3 upgrade considerations.
 

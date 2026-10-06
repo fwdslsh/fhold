@@ -536,6 +536,59 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				"!!document.querySelector('#provider-result,#automatic-memory,#agent-timezone')"
 			)
 		).toBe(false);
+		// Reproduce the real installer retry race without Docker or a billed request.
+		// Only IPC is controlled; clicks go through Chromium's native pointer events.
+		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await evaluate(`(async()=>{
+			document.documentElement.style.fontSize='';
+			const {state,createAdminState}=await import('./state.js');
+			const {renderWelcome,renderInstallationReadiness,bindInstanceEvents}=await import('./instances.js');
+			const {bindRuntimeEvents}=await import('./runtime.js');
+			Object.assign(state,createAdminState());
+			const qa=window.installQa={names:[],reads:0,installs:0,readPending:false,release:null,name:'duplicate-name'};
+			const snapshot=()=>({...${JSON.stringify(snapshot)},phase:'not_installed',homeDir:'/disposable-installs/'+qa.name,services:[],installationReadiness:{ok:true},config:{...${JSON.stringify(snapshot.config)},deployment:{...${JSON.stringify(snapshot.config.deployment)},projectName:qa.name}}});
+			state.api={
+				installationReadiness:async()=>({ok:true}),
+				prepareNewInstance:async value=>{if(qa.readPending)throw Error('Wait for the current operation to finish');qa.name=value.name;qa.names.push(value.name);},
+				snapshot:async()=>{if(++qa.reads===2){qa.readPending=true;return new Promise(resolve=>{qa.release=()=>{qa.readPending=false;resolve(snapshot());};});}return snapshot();},
+				install:async()=>{if(++qa.installs===1)throw Error('Instance name is already in use.');return {...snapshot(),phase:'setup_incomplete',services:[{name:'assistant',state:'running',health:'healthy',running:true}]};},
+				providers:async()=>({providers:[]})};
+			renderWelcome({defaultInstance:{homeDir:'/disposable-installs/default',available:false},instancesDirectory:'/disposable-installs',recentInstances:[]});
+			renderInstallationReadiness({ok:true});bindInstanceEvents();bindRuntimeEvents();
+		})()`);
+		const pointerClick = async (selector: string) => {
+			const point = await evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});target.scrollIntoView({block:'center'});const r=target.getBoundingClientRect();if(!r.width||!r.height)throw Error('Pointer target is not rendered');return {x:r.left+r.width/2,y:r.top+r.height/2};})()`) as { x: number; y: number };
+			await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+			await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+		};
+		const waitInstall = async (expression: string) => {
+			const deadline = Date.now() + 10000;
+			while (!await evaluate(expression)) {
+				if (Date.now() > deadline) throw new Error(`Install renderer did not settle: ${expression}`);
+				await Bun.sleep(10);
+			}
+		};
+		await pointerClick('#begin-new-instance');
+		await value('#install-instance-name', 'duplicate-name');
+		await pointerClick('#install');
+		await waitInstall('window.installQa.readPending');
+		expect(await evaluate("!document.querySelector('#install-section').hidden && document.querySelector('#install').getBoundingClientRect().height>0")).toBe(true);
+		expect(await evaluate("document.querySelector('#install').disabled && document.body.dataset.busy==='true'")).toBe(true);
+		await capture('install-failure-recovery-busy.png');
+		await pointerClick('#install');
+		expect(await evaluate('window.installQa.names')).toEqual(['duplicate-name']);
+		await evaluate('window.installQa.release(); void 0');
+		await waitInstall("document.body.dataset.busy==='false' && document.querySelector('#install-status').getAttribute('role')==='alert'");
+		expect(await evaluate("!document.querySelector('#install-status').hidden && document.querySelector('#install-status').textContent")).toBe('Instance name is already in use.');
+		expect(await evaluate("document.querySelector('#install').disabled")).toBe(false);
+		await capture('install-failure-retry-ready.png');
+		await value('#install-instance-name', 'distinct-name');
+		await pointerClick('#install');
+		await waitInstall("document.body.dataset.busy==='false' && document.body.dataset.phase==='setup_incomplete'");
+		expect(await evaluate('window.installQa.names')).toEqual(['duplicate-name', 'distinct-name']);
+		expect(await evaluate('window.installQa.installs')).toBe(2);
+		expect(await evaluate('window.installQa.reads')).toBe(3);
+		await capture('install-distinct-retry-passed.png');
 		expect(hashSources()).toEqual(sourceHashes);
 		writeFileSync(
 			join(root, 'qa-manifest.json'),

@@ -169,13 +169,11 @@ export function bindRuntimeEvents() {
 			byId('install-gateway-port').focus();
 			return;
 		}
-		let prepared = false;
 		const result = await operation(
 			'Setting up fhold',
 			async () => {
 				await prepareInstallTarget();
 				const snapshot = await state.api.snapshot();
-				prepared = true;
 				state.currentSnapshot = snapshot;
 				state.currentConfig = snapshot.config;
 				const config = snapshot.config;
@@ -183,12 +181,18 @@ export function bindRuntimeEvents() {
 					config.assistant.port = assistantPort;
 					config.gateway.port = gatewayPort;
 				}
-				return state.api.install(config, automaticPorts);
+				try {
+					return await state.api.install(config, automaticPorts);
+				} catch (error) {
+					// Preparing selected the target. Finish its failure-recovery read
+					// before operation() re-enables Install or permits another target.
+					await refresh();
+					throw error;
+				}
 			},
 			'fhold is installed. Next, connect your AI provider.'
 		);
 		if (result) byId('view-title').focus();
-		else if (prepared) await refresh();
 	});
 
 	byId('recovery-form').addEventListener('submit', async (event) => {

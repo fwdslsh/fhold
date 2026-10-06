@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.2610061043-beta.1 — qualified setup and reliable installation retry
+
+This corrected beta.1 includes the simpler wizard, Apps, native AI settings and
+entire stopped-instance import/export introduced below. Installation failure
+recovery now keeps its controls busy until the native snapshot finishes, so an
+immediate retry cannot race the previous operation. Published earlier beta bytes
+remain unchanged.
+
+The complete Linux x64 Admin walkthrough passed fresh installation, independent
+instances, app permissions and deferred restarts, cold directory recovery,
+cancelled and confirmed full export/import, preserved keys and native history,
+and read-only reopening in a second process. Real provider responses and the
+controlled native settings regression are recorded separately from account-free
+management checks. Claude/Codex remote connections remain experimental; ARM64
+Admin startup and the disclosed dependency exceptions remain unchanged.
+
 ## 0.1.2610060849-beta.1 — simpler setup, Apps and native AI settings
 
 Admin now has a focused install/import wizard, a compact instance picker and

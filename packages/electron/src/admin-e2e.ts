@@ -230,9 +230,11 @@ async function waitForRenderer(
 		}
 		const state = (await window.webContents.executeJavaScript(`(async () => {
 			const notice = document.querySelector('#notice');
+			const inlineError = [...document.querySelectorAll('#install-status, #instance-import-status')]
+				.find(element => !element.hidden && element.getAttribute('role') === 'alert' && element.getBoundingClientRect().height > 0);
 			return {
 				ready: Boolean(await (${expression})),
-				error: notice && !notice.hidden && notice.classList.contains('error') ? notice.textContent || 'Unknown Admin error' : ''
+				error: inlineError?.textContent || (notice && !notice.hidden && notice.classList.contains('error') ? notice.textContent || 'Unknown Admin error' : '')
 			};
 		})()`)) as RendererWaitState;
 		if (state.error && !allowError) throw new Error(`Admin renderer reported: ${state.error}`);
@@ -337,8 +339,12 @@ async function assertRenderedFloor(window: BrowserWindow, label: string): Promis
 		const controls = [...document.querySelectorAll('button,input,select,summary')].filter(visible);
 		const undersized = controls
 			.map((element) => {
-				const rect = element.getBoundingClientRect();
-				return { tag: element.tagName, id: element.id, width: rect.width, height: rect.height };
+				// Native choice glyphs are not the complete pointer target: clicking
+				// their associated label also activates them. Measure that real target.
+				const target = element.matches('input[type="radio"],input[type="checkbox"]')
+					? [...element.labels].find(visible) || element : element;
+				const rect = target.getBoundingClientRect();
+				return { tag: element.tagName, id: element.id, target: target.tagName, width: rect.width, height: rect.height };
 			})
 			.filter((item) => item.width < 24 || item.height < 24);
 		const focusTarget = document.activeElement;
@@ -370,6 +376,47 @@ async function assertRenderedFloor(window: BrowserWindow, label: string): Promis
 		result.focus !== null && result.focus.style !== 'none' && result.focus.width !== '0px',
 		`${label} does not expose a visible focus outline: ${JSON.stringify(result.focus)}`
 	);
+}
+
+async function assertRadioLabelClick(window: BrowserWindow, id: string): Promise<void> {
+	window.focus();
+	window.webContents.focus();
+	const point = await window.webContents.executeJavaScript(`(async () => {
+		const input = document.getElementById(${JSON.stringify(id)});
+		const label = input?.labels?.[0];
+		if (input?.type !== 'radio' || !label || input.checked || input.disabled) throw new Error('Expected an enabled, unselected radio with an associated label.');
+		label.scrollIntoView({block:'center'});
+		await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+		const rect = label.getBoundingClientRect();
+		if (rect.width < 44 || rect.height < 44) throw new Error('The radio label is not a 44px pointer target.');
+		return {x:Math.round(rect.left + rect.width / 2),y:Math.round(rect.top + rect.height / 2)};
+	})()`) as { x: number; y: number };
+	window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
+	window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point });
+	window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point });
+	await waitForRenderer(window, `document.getElementById(${JSON.stringify(id)}).checked`, `real label click selects ${id}`);
+	visualAudits.push({ pointer: 'native radio associated label', id, targetMinimum: 44, activationPassed: true });
+}
+
+async function openControlDisclosures(window: BrowserWindow, selector: string): Promise<void> {
+	// Open only ordinary native disclosures. Do not change hidden/disabled state,
+	// bypass application handlers, or turn a control on an inactive page visible.
+	await window.webContents.executeJavaScript(`(() => {
+		const control = document.querySelector(${JSON.stringify(selector)});
+		if (!control) throw new Error('Missing expected control.');
+		const ancestors = [];
+		for (let node = control.parentElement; node; node = node.parentElement)
+			if (node.tagName === 'DETAILS') ancestors.push(node);
+		for (const details of ancestors.reverse()) details.open = true;
+		control.scrollIntoView({block:'center'});
+	})()`);
+	await waitForRenderer(window, `(() => {
+		const control = document.querySelector(${JSON.stringify(selector)});
+		const rect = control.getBoundingClientRect();
+		const style = getComputedStyle(control);
+		return !control.closest('details:not([open])') && rect.width > 0 && rect.height > 0 &&
+			style.display !== 'none' && style.visibility !== 'hidden';
+	})()`, `visible control ${selector}`, 10_000);
 }
 
 async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<string[]> {
@@ -565,6 +612,7 @@ async function connectProviderUi(
 	)) as Record<string, unknown>;
 	assert(readiness.ok === true, `Provider readiness failed: ${JSON.stringify(readiness)}`);
 	assert(readiness.provider === provider && readiness.model === model, 'Native readiness did not confirm the exact chosen provider/model.');
+	progress('explicit exact-model response completed');
 	assert(await window.webContents.executeJavaScript("!document.querySelector('#view-provider').hidden"), 'Response test unexpectedly navigated away.');
 	await window.webContents.executeJavaScript("document.querySelector('#use-provider-model').click()");
 	await waitForRenderer(window, `(await import('./state.js')).state.providerCurrentModel?.provider === ${JSON.stringify(provider)} && (await import('./state.js')).state.providerCurrentModel?.model === ${JSON.stringify(model)} && document.querySelector('#provider-editor').hidden && document.body.dataset.busy !== 'true'`, 'explicit native default model selection');
@@ -700,7 +748,9 @@ async function run(): Promise<Record<string, unknown>> {
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
 			);
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await waitForRenderer(window,
+				"document.body.dataset.phase === 'welcome' && document.body.dataset.busy === 'false' && !document.querySelector('#choose-instance').disabled",
+				'cancelled existing-folder picker returns to available Welcome controls', 10_000);
 			assert(
 				await window.webContents.executeJavaScript("document.body.dataset.phase === 'welcome'"),
 				'Cancelled folder selection left welcome.'
@@ -1049,13 +1099,24 @@ async function run(): Promise<Record<string, unknown>> {
 			progress('provider sign-in remained incomplete without claiming a verification attempt');
 			markInstalled(homeDir);
 			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
+			await waitForRenderer(window,
+				"document.body.dataset.phase === 'ready' && !(await import('./state.js')).state.snapshotPromise && !document.querySelector('#primary-nav').hidden",
+				'the explicitly marked management-only phase');
+			await window.webContents.executeJavaScript(`(() => {
+				const overview = document.querySelector('[data-view=overview]');
+				if (!overview.getBoundingClientRect().height || overview.disabled) throw new Error('Overview navigation is not rendered and available.');
+				overview.focus();
+			})()`);
+			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+			window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
+			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
 			await waitForRenderer(
 				window,
 				`document.querySelector('#view-overview')?.hidden === false &&
 						document.querySelector('#primary-nav')?.hidden === false &&
 						!(await import('./state.js')).state.snapshotPromise`,
 				'the isolated management UI fixture',
-				60_000,
+				10_000,
 				true
 			);
 			progress('entered ready management UI through an explicit test-only fixture');
@@ -1165,6 +1226,7 @@ async function run(): Promise<Record<string, unknown>> {
 			10_000,
 			true
 		);
+		await openControlDisclosures(window, '[data-remote-enable=claude]');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-remote-enable=claude]').click();
 			if (!document.querySelector('#remote-sandbox-field').hidden) throw new Error('Codex-only sandbox option appears for Claude.');
@@ -1174,6 +1236,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'native remote setup opens from Admin with explicit trust and safe sandbox choices; no subscription login was performed'
 		);
 		const remoteStartupBeforeRecall = (await adminSnapshot()).config.assistant.codexRemote;
+		await openControlDisclosures(window, '[data-codex-recall-review]');
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-codex-recall-review]').click()"
 		);
@@ -1210,6 +1273,7 @@ async function run(): Promise<Record<string, unknown>> {
 				recallSnapshot.config.assistant.codexRemote === remoteStartupBeforeRecall,
 			'Status implicitly reviewed native hooks or enabled remote startup.'
 		);
+		await openControlDisclosures(window, '[data-codex-recall-review]');
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-codex-recall-review]').click()"
 		);
@@ -1456,8 +1520,11 @@ async function run(): Promise<Record<string, unknown>> {
 			'the explicit OpenCode password reveal'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#claude-connection').open=true; document.querySelector('#claude-permissions-form').requestSubmit()"
+			"document.querySelector('#claude-connection').open=true; document.querySelector('#claude-permissions-form').closest('details.connection-method').open=true"
 		);
+		await waitForRenderer(window, "document.querySelector('#claude-permissions-form').getBoundingClientRect().height>0 && !document.querySelector('#claude-permissions-form').closest('details:not([open])')", 'Claude Desktop method and permission controls are visible before submission');
+		await openControlDisclosures(window, '#save-claude-permissions');
+		await window.webContents.executeJavaScript("document.querySelector('#claude-permissions-form').requestSubmit()");
 		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#claude-credential').value && !document.querySelector('#claude-connect-details').hidden", 'explicit Claude Desktop connection creation');
 		const claudeRecipe = (await window.webContents.executeJavaScript(`(() => ({
 			url: document.querySelector('#claude-url')?.textContent,
@@ -1482,11 +1549,16 @@ async function run(): Promise<Record<string, unknown>> {
 			'Claude recipe omitted the matching public extension download.'
 		);
 		await assertRenderedFloor(window, 'Claude Desktop recipe');
-		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png');
+		assert(await window.webContents.executeJavaScript("document.querySelector('#claude-connect-details').getBoundingClientRect().height>0 && !document.querySelector('#claude-connect-details').closest('details:not([open])')"), 'Claude Desktop connection recipe was hidden at capture.');
+		await window.webContents.executeJavaScript("document.querySelector('#claude-connect-details').scrollIntoView({block:'center'})");
+		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png', true);
+		await openControlDisclosures(window, '#save-mcp-permissions');
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#mcp-connection').open=true; document.querySelector('#mcp-permissions-form').requestSubmit()"
 		);
 		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#mcp-credential').value && !document.querySelector('#mcp-connect-details').hidden", 'explicit MCP connection creation');
+		await assertRadioLabelClick(window, 'mcp-policy-chat');
+		await assertRadioLabelClick(window, 'mcp-policy-read');
 		const previousClipboard = await clipboard.readText();
 		try {
 			await window.webContents.executeJavaScript("document.querySelector('[data-copy-client-key=\"mcp\"]').click()");
@@ -1505,11 +1577,13 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		progress('all three complete client connection recipes rendered');
 		await assertRenderedFloor(window, 'MCP connection recipe');
-		const mcpScreenshot = await capture(window, outputDir, '04g-mcp.png');
+		await window.webContents.executeJavaScript("document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})");
+		const mcpScreenshot = await capture(window, outputDir, '04g-mcp.png', true);
 		await sizeViewport(window, 640, 640, 2);
 		await keyboardNavigation(window);
 		await assertRenderedFloor(window, 'MCP recipe at minimum size and 200% zoom');
-		const narrowMcpScreenshot = await capture(window, outputDir, '04h-mcp-reflow.png');
+		await window.webContents.executeJavaScript("document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})");
+		const narrowMcpScreenshot = await capture(window, outputDir, '04h-mcp-reflow.png', true);
 		await sizeViewport(window, 1120, 780);
 
 		await window.webContents.executeJavaScript(`(() => {
@@ -1553,10 +1627,14 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 
 		const beforeAppSave = await containerId();
-		confirmations.push(0);
+		await openControlDisclosures(window, '#slack-channels');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#slack-channels').value='C012TEST';
 			document.querySelector('#slack-channels').dispatchEvent(new Event('input',{bubbles:true}));
+		})()`);
+		await openControlDisclosures(window, '#gateway');
+		confirmations.push(0);
+		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#gateway').checked = true;
 			document.querySelector('#gateway').dispatchEvent(new Event('change', { bubbles: true }));
 			document.querySelector('#mcp-connection').open=true;
@@ -1600,7 +1678,21 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(window, "document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'cancelled Full access escalation');
 		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'read', 'Cancelling Full access escalated the saved identity.');
-		await window.webContents.executeJavaScript("document.querySelector('#cancel-permissions').click(); window.confirm=()=>true");
+		await window.webContents.executeJavaScript("document.querySelector('#cancel-permissions').click(); window.confirm=()=>true; void 0");
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('[data-manage-saved-access="e2e-reader"]').click();
+			document.querySelector('#dialog-policy-full').checked=true;
+			document.querySelector('#permissions-form').requestSubmit();
+		})()`);
+		await waitForRenderer(window, "!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'confirmed Full access escalation');
+		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'full', 'Confirmed Full access was not saved.');
+		await window.webContents.executeJavaScript(`(() => {
+			document.querySelector('[data-manage-saved-access="e2e-reader"]').click();
+			document.querySelector('#dialog-policy-read').checked=true;
+			document.querySelector('#permissions-form').requestSubmit();
+		})()`);
+		await waitForRenderer(window, "!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'restored Read access after confirmed Full');
+		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'read', 'Read access was not restored for the guarded MCP test.');
 
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#discord-connection').open=true;
@@ -1703,6 +1795,7 @@ async function run(): Promise<Record<string, unknown>> {
 		if (provider) {
 			const native = await testAssistantReadiness(homeDir);
 			assert(native.ok, 'The installed default provider failed a real request after restart.');
+			progress('native default response completed after restart');
 			let response = await guardianRequest(
 				`${guardianUrl}/mcp`,
 				{
@@ -1834,7 +1927,7 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy === 'false' && document.querySelector('#notice-message').textContent.includes('already in use')",
+			"document.body.dataset.busy === 'false' && !document.querySelector('#install').disabled && !document.querySelector('#install-status').hidden && document.querySelector('#install-status').getAttribute('role') === 'alert' && document.querySelector('#install-status').textContent.includes('already in use')",
 			'duplicate instance-name rejection',
 			10_000,
 			true
@@ -1926,9 +2019,18 @@ async function run(): Promise<Record<string, unknown>> {
 			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
 			await waitForRenderer(
 				window,
-				"document.body.dataset.phase === 'ready'",
+				"document.body.dataset.phase === 'ready' && !(await import('./state.js')).state.snapshotPromise && !document.querySelector('#primary-nav').hidden",
 				'second management-only fixture'
 			);
+			await window.webContents.executeJavaScript(`(() => {
+				const overview = document.querySelector('[data-view=overview]');
+				if (!overview.getBoundingClientRect().height || overview.disabled) throw new Error('Second instance Overview navigation is not rendered and available.');
+				overview.focus();
+			})()`);
+			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+			window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
+			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+			await waitForRenderer(window, "!document.querySelector('#view-overview').hidden", 'second instance Overview through ordinary navigation', 10_000);
 		}
 		const secondInstanceScreenshot = await capture(
 			window,
@@ -1980,6 +2082,8 @@ async function run(): Promise<Record<string, unknown>> {
 			),
 			'A stale sign-in step was accepted after switching.'
 		);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=connections]').click()");
+		await openControlDisclosures(window, '#assistant-bind');
 		assert(await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
 			window.confirm = () => false;
@@ -2029,6 +2133,9 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#runtime-recovery-enabled').checked = true;
 			document.querySelector('#runtime-recovery-enabled').dispatchEvent(new Event('change', {bubbles:true}));
+		})()`);
+		await openControlDisclosures(window, '#runtime-recovery-paths');
+		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#runtime-recovery-directory').value = ${JSON.stringify(checkpointDirectory)};
 			document.querySelector('#runtime-recovery-paths').value = '/tmp/fhold-custom-client';
 			document.querySelector('#runtime-recovery-sqlite').value = '/tmp/fhold-custom-client/state.sqlite';
@@ -2045,10 +2152,13 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').disabled && document.querySelector('#restore-runtime-recovery').disabled"), 'Offline actions were enabled with live writers.');
 		assert(await window.webContents.executeJavaScript("window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"), 'Backend initialized with live writers.');
 		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
 		await waitForRenderer(window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.') && !document.querySelector('#initialize-recovery').disabled",
 			'confirmed stop enables offline recovery operations');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		await openControlDisclosures(window, '#initialize-recovery');
 		confirmations.push(0);
 		const promptsBeforeInitCancellation = prompts.length;
 		await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').click()");
@@ -2071,10 +2181,13 @@ async function run(): Promise<Record<string, unknown>> {
 			"document.body.dataset.busy !== 'true' && document.querySelector('#runtime-recovery-details').value.startsWith('{')",
 			'read-only image coverage inspection');
 		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
 		await waitForRenderer(window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.') && document.querySelector('#pending-restart').hidden",
 			'starting initialized recovery with saved settings');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		await openControlDisclosures(window, '#check-recovery-status');
 		const customState = await runDocker(['exec', `${projectName}-assistant-1`, 'bun', '--no-env-file', '-e',
 			`const fs=require('node:fs');const {Database}=require('bun:sqlite');fs.mkdirSync('/tmp/fhold-custom-client',{recursive:true});fs.writeFileSync('/tmp/fhold-custom-client/settings.json','preserved operator settings');const db=new Database('/tmp/fhold-custom-client/state.sqlite');db.exec("PRAGMA journal_mode=WAL;CREATE TABLE state(value TEXT);INSERT INTO state VALUES('preserved SQLite data')");db.close();`]);
 		assert(customState.ok, 'Could not create synthetic custom state using native SQLite.');
@@ -2118,8 +2231,11 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open = false");
 		const priorContainer = await containerId();
 		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
 		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.')", 'final managed checkpoint and stopped writers');
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		await openControlDisclosures(window, '#restore-runtime-recovery');
 		confirmations.push(0);
 		const promptsBeforeRestoreCancellation = prompts.length;
 		await window.webContents.executeJavaScript("document.querySelector('#restore-runtime-recovery').click()");
@@ -2130,6 +2246,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery validated.')", 'native offline restore leaves writers stopped');
 		assert((await adminSnapshot()).services.length === 0, 'Offline validation started a service.');
 		confirmations.push(1);
+		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
 		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'transparent same-instance recovery after container removal');
 		assert(await containerId() !== priorContainer, 'Recovery reused the old container.');
@@ -2170,6 +2287,9 @@ async function run(): Promise<Record<string, unknown>> {
 		const cancelledExportPrompt = prompts.length + 1;
 		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
 		await waitForPrompt(cancelledExportPrompt);
+		await waitForRenderer(window,
+			"document.body.dataset.busy !== 'true' && !document.querySelector('#export-backup').disabled && document.querySelector('#backup-scope').value === 'instance'",
+			'cancelled full export leaves the ordinary export action available', 10_000);
 		assert(!existsSync(fullExport), 'Cancelled full export wrote a destination.');
 		confirmations.push(1);
 		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
@@ -2191,6 +2311,7 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(await window.webContents.executeJavaScript("document.querySelector('#install-section').hidden && !document.querySelector('#instance-import-section').hidden"), 'Fresh installation remained available while full import was selected.');
 		await window.webContents.executeJavaScript("document.querySelector('#instance-restore-back').focus()");
 		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+		window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
 		await waitForRenderer(window, `document.activeElement?.id === 'instance-restore-source' &&
 			document.querySelector('#instance-import-review').hidden && document.querySelector('#apply-instance-restore').disabled &&
@@ -2198,6 +2319,7 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#instance-restore-home').value === ${JSON.stringify(fullRestoredHome)}`, 'import Back preserves choices and invalidates the preview');
 		assert(!existsSync(fullRestoredHome), 'Import Back wrote the destination.');
 		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
+		window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
 		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled", 'Enter previews import without applying it');
 		assert(!existsSync(fullRestoredHome), 'Enter applied import instead of previewing it.');
@@ -2207,6 +2329,9 @@ async function run(): Promise<Record<string, unknown>> {
 		const cancelledImportPrompt = prompts.length + 1;
 		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
 		await waitForPrompt(cancelledImportPrompt);
+		await waitForRenderer(window,
+			"document.body.dataset.busy === 'false' && !document.querySelector('#instance-import-section').hidden && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled",
+			'cancelled full import preserves the review and re-enables its visible action', 10_000);
 		assert(!existsSync(fullRestoredHome), 'Cancelled full import changed its destination.');
 		confirmations.push(1);
 		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");

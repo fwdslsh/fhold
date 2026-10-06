@@ -454,6 +454,46 @@ describe('Admin static security boundary', () => {
 		expect(reloads).toBe(0);
 		expect(state.operationInFlight).toBe(false);
 	});
+	it('keeps visible Install disabled until a prepared failure recovery read finishes, then accepts a distinct retry', async () => {
+		const config = defaultStackConfig();
+		const snapshot = { phase: 'not_installed', homeDir: '/new-instance', config, services: [], installationReadiness: { ok: true } };
+		let reads = 0;
+		let installs = 0;
+		const names: string[] = [];
+		let release: ((value: typeof snapshot) => void) | undefined;
+		state.api = {
+			prepareNewInstance: async ({ name }) => { names.push(name); },
+			snapshot: async () => ++reads === 2 ? new Promise<typeof snapshot>(resolve => { release = resolve; }) : snapshot,
+			install: async () => { if (++installs === 1) throw new Error('Instance name is already in use.'); return { ok: true }; }
+		};
+		selector('button', control('install'));
+		control('install-section').hidden = false;
+		control('install-home').value = '/new-instance';
+		control('install-instance-name').value = 'duplicate-name';
+		bindRuntimeEvents();
+		const submit = control('install-form').listeners.get('submit');
+		const failedAttempt = submit?.({ preventDefault() {} });
+		for (let turn = 0; turn < 20 && !release; turn++) await Promise.resolve();
+		expect(release).toBeDefined();
+		expect(control('install-section').hidden).toBe(false);
+		expect(control('install').disabled).toBe(true);
+		expect(state.operationInFlight).toBe(true);
+		expect(state.snapshotPromise).toBeDefined();
+		await submit?.({ preventDefault() {} });
+		expect(names).toEqual(['duplicate-name']);
+		release?.(snapshot);
+		await failedAttempt;
+		expect(state.operationInFlight).toBe(false);
+		expect(state.snapshotPromise).toBeUndefined();
+		expect(control('install').disabled).toBe(false);
+		expect(control('install-status').hidden).toBe(false);
+		expect(control('install-status').getAttribute('role')).toBe('alert');
+		control('install-instance-name').value = 'distinct-name';
+		await submit?.({ preventDefault() {} });
+		expect(names).toEqual(['duplicate-name', 'distinct-name']);
+		expect(installs).toBe(2);
+		expect(reads).toBe(3);
+	});
 	it('suggests a named default folder and leaves manually chosen folders alone', () => {
 		bindInstanceEvents();
 		renderWelcome({

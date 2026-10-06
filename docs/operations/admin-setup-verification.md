@@ -34,15 +34,36 @@ two-screen wizard selectors, asynchronous Cancel/focus waits and a harness
 top-level `await import` expression. These were test-harness failures, not proven
 product defects, and have been corrected without production behavior changes.
 
-The latest incomplete run retains its private home at
-`/tmp/fhold-admin-e2e-wSNvGP/home` and evidence at
-`/tmp/fhold-admin-e2e-artifacts-fp3ToM`. Its stack was stopped normally. One small
-vendor response succeeded; no automatic response ran when saving sign-in.
-The current full Admin source suites pass **120 tests / 828 assertions**, with
-typecheck and scoped lint passing. The complete frozen beta.1 live walkthrough,
-including Apps, full export/import, switching and separate-process reopening,
-remains **pending** until the exact published candidate is available. The partial
-alpha run is not beta release certification.
+Subsequent qualification used the published beta.1 images and a disposable
+desktop profile. The real Go setup Test/Use/Continue, a response after restart,
+and a guarded MCP response succeeded. These are explicit vendor requests, not
+inferences from saved credentials. Response budgets include failed walkthroughs;
+the account-free management fixture never claims provider readiness.
+
+The walkthrough found an installer retry race: failure recovery released the
+busy state before its snapshot finished. The owning renderer now keeps that
+read inside the operation. Static and native Chromium regressions verify the
+disabled visible Install button, no second preparation during recovery, the
+inline error and a successful distinct-name retry. The current Admin source
+suite passes **121 tests / 842 assertions** and Chromium passes **107 assertions**.
+No production settings, image repair or extra service was introduced. Corrected
+source receives a new immutable release identity; previously published bytes
+are not replaced.
+
+The final October 6 native Electron/Docker management walkthrough passed with
+49 screenshots and 53 audit records, no serious/critical accessibility findings
+and no horizontal overflow. A second process also passed read-only reopening
+and manual-switch persistence. The walkthrough verified fresh installation,
+portable-content preservation, two healthy independent named instances, immediate
+duplicate-name rejection and distinct-name retry, app permissions/draft isolation,
+confirmed and deferred restarts, cold custom-file/SQLite recovery, live-writer
+refusal, full export/import cancellation and confirmation, Back/Enter behavior,
+preserved identity/keys, resumed native history and stable window dimensions.
+It used the published `0.1.2610060849-beta.1` images and corrected Admin source;
+native confirmation answers were simulated, not vendor sign-in or consent.
+Its report explicitly records `providerReadiness.attempted=false`, zero vendor
+requests and incomplete provider setup. Earlier real Go responses remain separate
+evidence; account-free management success is not provider-readiness proof.
 
 Apps presents OpenCode first, followed
 by Claude, Codex, Discord, Slack and MCP, replacing the old client tabs/chat/native

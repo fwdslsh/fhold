@@ -2,7 +2,7 @@
 
 Canonical source is [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
 Linux CLI/Admin downloads and signed multi-architecture container images are
-published through GitHub releases. Alpha releases are not stable releases.
+published through GitHub releases. Alpha and beta releases are not stable releases.
 fhold owns the generic images, CLI/Admin, runtime contracts and reusable tests;
 host deployment and third-party installers are outside the product boundary.
 
@@ -13,7 +13,36 @@ publishing. ARM64 Admin is cross-built and is not native-startup-qualified.
 The scoped [reviewed advisories](release.md#reviewed-runtime-advisories) remain
 disclosed exceptions, not clean-scan claims.
 
-## Unreleased source verification
+## Beta.1 source qualification
+
+The corrected `0.1.2610061043-beta.1` fixes installation-failure recovery's busy
+state without changing the image runtime or provider API. It supersedes the
+earlier beta candidate without replacing its published bytes.
+
+On October 6, all 657 enabled source tests passed; optional architecture/image
+tests remain separately gated. Type checks, lint, CLI compilation and Admin
+bundling passed. Admin's 121 tests include 842 assertions; actual Chromium
+renderer checks passed 107 assertions, including delayed recovery and retry.
+The complete native Electron/Docker management walkthrough passed fresh install,
+two named instances, Apps and deferred restarts, portable content, cold directory
+recovery, full stopped export/import with keys/history preserved, and read-only
+reopening in a second process. Its main report contains 49 screenshots and 53
+audit records, with no serious/critical accessibility findings or horizontal
+overflow. Native confirmation responses were simulated; no vendor requests were
+made and provider readiness was explicitly unattempted.
+
+Separate live Go checks against the published earlier beta completed explicit
+Test/Use/Continue, post-restart readiness and a guarded MCP response. The native
+provider-settings regression also passed all seven stages with that actual
+Assistant and controlled compatible endpoints, without vendor requests or
+container/OpenCode-process replacement during settings changes. These do not
+qualify every vendor, actual local model engine, remote pairing or ARM64 Admin.
+See [Admin qualification](admin-setup-verification.md) and
+[provider verification](admin-provider-verification.md) for scope and repetition.
+Every corrected public artifact still requires its own release workflow,
+checksum/signature verification and packaged Linux x64 startup check.
+
+## October 5 source qualification
 
 The source adds an explicit stopped, same-instance scope alongside portable
 content. It does not change the published alpha.6 artifacts or automatic
@@ -96,7 +125,7 @@ Linux x64 verification on October 5, 2026:
   the free provider rejected the setup probe. These checks do not qualify a fresh
   provider sign-in, vendor remote reconnect, external storage or ARM64 execution.
 
-This is source/build evidence, not a new published release qualification.
+This is historical source/build evidence, not certification of later artifacts.
 
 ## Alpha.6 changes and local evidence
 
