@@ -104,7 +104,7 @@ ARG SUPERCRONIC_VERSION=v0.2.49
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git libnss-wrapper tzdata tini util-linux \
+      bash ca-certificates curl git libnss-wrapper tzdata tini tree util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && case "${TARGETARCH}" in \
       amd64) supercronic_sha=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1 ;; \

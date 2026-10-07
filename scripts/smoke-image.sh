@@ -61,6 +61,8 @@ verify_runtime_versions() {
 		# Native CLIs must remain ordinary commands without an agent exporting PATH.
 		docker exec --workdir /work "$container" bash --login -c \
 			'for tool in opencode akm codex claude; do test "$(command -v "$tool")" = "/usr/local/bin/$tool" || exit 1; "$tool" --version || exit 1; done'
+		docker exec --workdir /work "$container" bash --login -c \
+			'test "$(id -un)" = fhold && tree --version && tree -L 1 /fhold-bundle/skills/fhold-admin'
 		docker exec "$container" node --input-type=module -e '
 			import {readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync} from "node:fs";
 			import {spawnSync} from "node:child_process";
