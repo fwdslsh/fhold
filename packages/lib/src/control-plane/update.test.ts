@@ -56,7 +56,7 @@ test('upgrades seed missing native policies, preserve operator edits and never r
 	expect(readFileSync(userConfig, 'utf8')).toBe(
 		'# Existing account preferences and unrelated hook approvals\n'
 	);
-});
+}, 65_000); // Two native Compose calls, each with its existing 30-second budget.
 
 test('unknown schema leaves managed and user files unchanged before any checkpoint', async () => {
 	const { home } = await fixture();
@@ -141,4 +141,4 @@ test('update advances managed release tags while preserving explicit pins, proje
 	expect(readdirSync(join(dirname(result.receipt), 'before/system/assistant'))).toContain(
 		'AGENTS.md'
 	);
-});
+}, 35_000); // One native Compose call plus installation/filesystem work.
