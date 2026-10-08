@@ -66,6 +66,231 @@ async function savedManifest(f: Awaited<ReturnType<typeof fixture>>) {
 	return { head, manifest };
 }
 
+	describe('ordinary recovery image upgrades', () => {
+	test('retrying an interrupted ownership claim does not invalidate a surviving receipt', async () => {
+		const f = await fixture();
+		await writeFile(path.join(f.roots.work, 'note'), 'checkpoint');
+		const original = f.engine();
+		await original.initialize();
+		await original.acquireRestore();
+		await original.checkpoint();
+		await original.release();
+		await writeFile(path.join(f.roots.work, 'note'), 'newer-local');
+		const store = createDirectoryStore(f.config.url);
+		const interrupted = createEngine(f.config, { ...f.options, store: {
+			...store,
+			async claim(...args) {
+				await store.claim(...args);
+				throw new Error('synthetic failure after successful claim');
+			}
+		} });
+		await expect(interrupted.acquireRestore()).rejects.toThrow('synthetic failure');
+		const retry = f.engine();
+		await retry.acquireRestore();
+		expect(await readFile(path.join(f.roots.work, 'note'), 'utf8')).toBe('newer-local');
+		await retry.release();
+	});
+
+	test('retrying first startup preserves provisioned data before any checkpoint exists', async () => {
+		const f = await fixture();
+		await writeFile(path.join(f.roots.work, 'note'), 'provisioned-local-data');
+		await f.engine().initialize();
+		const store = createDirectoryStore(f.config.url);
+		const interrupted = createEngine(f.config, { ...f.options, store: {
+			...store,
+			async claim(...args) {
+				await store.claim(...args);
+				throw new Error('synthetic failure after successful claim');
+			}
+		} });
+		await expect(interrupted.acquireRestore()).rejects.toThrow('synthetic failure');
+		const retry = f.engine();
+		await retry.acquireRestore();
+		expect(await readFile(path.join(f.roots.work, 'note'), 'utf8')).toBe('provisioned-local-data');
+		await retry.checkpoint();
+		await retry.release();
+	});
+
+	for (const limits of [{ maxFileBytes: 8 }, { maxFiles: 2 }])
+		test(`capture limit ${Object.keys(limits)[0]} does not block a receipted local restart`, async () => {
+			const f = await fixture();
+			await writeFile(path.join(f.roots.work, 'note'), 'safe');
+			const original = f.engine();
+			await original.initialize();
+			await original.acquireRestore();
+			await original.checkpoint();
+			await original.release();
+			const accepted = (await savedManifest(f)).head.value.generation;
+			for (let i = 0; i < 3; i++)
+				await writeFile(path.join(f.roots.work, `new-${i}`), 'newer local content over the capture limit');
+			const replacement = createEngine(f.config, { ...f.options, limits });
+			await replacement.acquireRestore();
+			expect(replacement.status().ready).toBe(true);
+			expect(await readFile(path.join(f.roots.work, 'new-0'), 'utf8')).toBe('newer local content over the capture limit');
+			await expect(replacement.checkpoint()).rejects.toThrow('budget');
+			expect(replacement.status().ready).toBe(true);
+			expect((await savedManifest(f)).head.value.generation).toBe(accepted);
+			await replacement.release();
+		});
+
+	for (const invalid of ['format', 'catalog', 'instanceId'] as const)
+		test(`still rejects an unsupported or wrong ${invalid} before claiming or restoring`, async () => {
+			const f = await fixture();
+			await f.engine().initialize();
+			const store = createDirectoryStore(f.config.url);
+			const head = await store.readDescriptor();
+			head.value[invalid] = invalid === 'instanceId' ? 'another-instance' : 999;
+			await writeFile(path.join(f.dir, 'backup/descriptor.json'), JSON.stringify(head.value));
+			const engine = f.engine();
+			await expect(engine.acquireRestore()).rejects.toThrow('identity/format');
+			expect(engine.status().owned).toBe(false);
+			expect(await stat(f.config.privateDir).catch(() => null)).toBeNull();
+		});
+
+	for (const invalid of ['format', 'catalog', 'instanceId'] as const)
+		test(`still rejects a manifest with an unsupported or wrong ${invalid}`, async () => {
+			const f = await fixture();
+			await writeFile(path.join(f.roots.work, 'note'), 'keep-original');
+			const original = f.engine();
+			await original.initialize();
+			await original.acquireRestore();
+			await original.checkpoint();
+			await original.release();
+			const { head, manifest } = await savedManifest(f);
+			manifest[invalid] = invalid === 'instanceId' ? 'another-instance' : 999;
+			const bytes = JSON.stringify(manifest);
+			const generation = createHash('sha256').update(bytes).digest('hex');
+			await writeFile(path.join(f.dir, 'backup/manifests', generation), bytes);
+			await writeFile(path.join(f.dir, 'backup/descriptor.json'), JSON.stringify({ ...head.value, generation }));
+			await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			const replacement = f.engine();
+			await expect(replacement.acquireRestore()).rejects.toThrow('manifest rejected');
+			expect(replacement.status().owned).toBe(false);
+			expect(await stat(f.config.privateDir).catch(() => null)).toBeNull();
+		});
+
+	for (const survivingDisk of [false, true])
+		test(`restores across dependency upgrades with ${survivingDisk ? 'a surviving local receipt' : 'empty ephemeral storage'}`, async () => {
+			const f = await fixture();
+			const database = path.join(f.roots.akmData, 'state.db');
+			const db = new Database(database);
+			db.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('conversation-history')");
+			db.close();
+			await mkdir(path.join(f.roots.home, '.codex'), { recursive: true });
+			await mkdir(path.join(f.roots.home, '.claude'), { recursive: true });
+			const files = new Map([
+				[path.join(f.roots.home, '.codex/auth.json'), 'synthetic-codex-sign-in'],
+				[path.join(f.roots.home, '.codex/config.toml'), '# native approval decision'],
+				[path.join(f.roots.home, '.claude/.credentials.json'), 'synthetic-claude-sign-in'],
+				[path.join(f.roots.stash, 'task.yaml'), 'enabled: true\n'],
+				[path.join(f.roots.work, 'note'), 'checkpoint-workspace']
+			]);
+			for (const [file, value] of files) await writeFile(file, value);
+			const original = f.engine();
+			await original.initialize();
+			await original.acquireRestore();
+			await original.checkpoint();
+			await original.release();
+			const prior = await savedManifest(f);
+			if (survivingDisk) {
+				await writeFile(path.join(f.roots.work, 'note'), 'newer-local-workspace');
+				await rename(path.join(f.roots.home, '.claude'), path.join(f.dir, 'retained-claude'));
+			} else await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			// All native versions may change, and property order is not compatibility.
+			const versions = { claude: 'next', codex: 'next', akm: '0.9.26', opencode: 'next', bun: 'next' };
+			const replacement = createEngine({ ...f.config, versions }, f.options);
+			await replacement.acquireRestore();
+			for (const [file, value] of files)
+				expect(await readFile(file, 'utf8')).toBe(survivingDisk && file.endsWith('/note') ? 'newer-local-workspace' : value);
+			const restored = new Database(database, { readonly: true });
+			expect(restored.query('SELECT value FROM marker').get()).toEqual({ value: 'conversation-history' });
+			restored.close();
+			expect(prior.manifest.versions).toEqual(f.config.versions);
+			await replacement.checkpoint();
+			await replacement.release();
+			const upgraded = await savedManifest(f);
+			expect(upgraded.manifest.versions).toEqual(versions);
+			expect(upgraded.head.value.versions).toEqual(versions);
+			expect(JSON.parse(await readFile(path.join(f.config.privateDir, 'receipt.json'), 'utf8')).versions).toEqual(versions);
+			const restart = createEngine({ ...f.config, versions }, f.options);
+			await restart.acquireRestore();
+			expect(restart.status().ready).toBe(true);
+			await restart.release();
+		});
+
+	test('automatically snapshots new native and workspace SQLite databases including WAL', async () => {
+		const f = await fixture();
+		await mkdir(path.join(f.roots.home, '.codex'), { recursive: true });
+		const oldPath = path.join(f.roots.home, '.codex/state_5.sqlite');
+		const old = new Database(oldPath);
+		old.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('native-migration')");
+		old.close();
+		const engine = f.engine();
+		await engine.initialize();
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		const paths = [path.join(f.roots.home, '.codex/state_6.sqlite'), path.join(f.roots.work, 'plugin-state'), path.join(f.roots.work, 'extra.sqlite')];
+		await rename(oldPath, paths[0]);
+		const databases = paths.map((file, index) => {
+			const db = new Database(file);
+			db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE IF NOT EXISTS marker(value TEXT)');
+			db.query('INSERT INTO marker VALUES(?)').run(`committed-wal-${index}`);
+			return db;
+		});
+		await writeFile(path.join(f.roots.work, 'ordinary.db'), 'ordinary text despite the extension');
+		await engine.checkpoint();
+		await engine.release();
+		const { manifest } = await savedManifest(f);
+		expect(manifest.members.filter((member) => member.kind === 'sqlite')).toHaveLength(3);
+		expect(manifest.members.some((member) => /-wal$|-shm$/.test(member.path))).toBe(false);
+		expect(manifest.members.find((member) => member.path === 'ordinary.db').kind).toBe('file');
+		for (const db of databases) db.close();
+		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+		const replacement = f.engine();
+		await replacement.acquireRestore();
+		for (const [index, file] of paths.entries()) {
+			const db = new Database(file, { readonly: true });
+			expect(db.query('SELECT value FROM marker WHERE value=?').get(`committed-wal-${index}`)).toEqual({ value: `committed-wal-${index}` });
+			expect(db.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+			db.close();
+		}
+		await replacement.checkpoint();
+		await replacement.release();
+	});
+
+	test('operator coverage edits skip removed and independently persistent paths without resetting recovery', async () => {
+		const f = await fixture();
+		const extra = path.join(f.dir, 'extra');
+		const independent = path.join(f.roots.work, 'independent');
+		await mkdir(extra);
+		await mkdir(independent);
+		await writeFile(path.join(extra, 'note'), 'no-longer-selected');
+		await writeFile(path.join(independent, 'note'), 'old-drive-content');
+		await writeFile(path.join(f.roots.work, 'note'), 'keep-selected');
+		const original = createEngine({ ...f.config, selection: { paths: [extra] } }, f.options);
+		await original.initialize();
+		await original.acquireRestore();
+		await original.checkpoint();
+		await original.release();
+		await rename(extra, `${extra}-retained`);
+		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+		await mkdir(independent, { recursive: true });
+		await writeFile(path.join(independent, 'note'), 'newer-independent-content');
+		const config = { ...f.config, selection: { version: 1, excludePaths: [independent] } };
+		const replacement = createEngine(config, f.options);
+		await replacement.acquireRestore();
+		expect(await stat(extra).catch(() => null)).toBeNull();
+		expect(await readFile(path.join(independent, 'note'), 'utf8')).toBe('newer-independent-content');
+		expect(await readFile(path.join(f.roots.work, 'note'), 'utf8')).toBe('keep-selected');
+		await replacement.checkpoint();
+		await replacement.release();
+		expect((await savedManifest(f)).manifest.members.map((member) => member.path)).toEqual(['note']);
+		const restart = createEngine(config, f.options);
+		await restart.acquireRestore();
+		await restart.release();
+	});
+});
+
 describe('operator-selected recovery paths and SQLite databases', () => {
 	test('uses one strict literal-path JSON format and deduplicates lists deterministically', async () => {
 		const f = await fixture();
@@ -278,7 +503,7 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		expect((await savedManifest(f)).head.value.catalog).toBe(2);
 	});
 
-	test('rejects omissions and forged selection identity before claiming or restoring', async () => {
+	test('rejects forged saved selection identity before claiming or restoring', async () => {
 		const f = await fixture();
 		const extra = path.join(f.dir, 'extra');
 		await mkdir(extra);
@@ -296,17 +521,6 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
 		await rename(extra, `${extra}-retained`);
 		await rename(databasePath, `${databasePath}-retained`);
-		const before = await readFile(path.join(f.dir, 'backup/descriptor.json'), 'utf8');
-		for (const selection of [
-			{ paths: [], sqlite: [databasePath] },
-			{ paths: [extra], sqlite: [] }
-		]) {
-			await expect(
-				createEngine({ ...f.config, selection }, f.options).acquireRestore()
-			).rejects.toThrow('does not cover');
-			expect(await readFile(path.join(f.dir, 'backup/descriptor.json'), 'utf8')).toBe(before);
-			expect(await stat(f.config.privateDir).catch(() => null)).toBeNull();
-		}
 		const { head } = await savedManifest(f);
 		head.value.selectionHash = 'f'.repeat(64);
 		await writeFile(path.join(f.dir, 'backup/descriptor.json'), JSON.stringify(head.value));
@@ -405,7 +619,7 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		expect(manifest.members.map((member) => member.path)).toEqual(['custom-file']);
 	});
 
-	test('still rejects unknown SQLite content, sidecar links and initialized database disappearance', async () => {
+	test('discovers unregistered SQLite while still rejecting sidecar links and required database disappearance', async () => {
 		const f = await fixture();
 		const extra = path.join(f.dir, 'extra');
 		await mkdir(extra);
@@ -415,14 +629,15 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		db.close();
 		const unknown = createEngine({ ...f.config, selection: { paths: [extra] } }, f.options);
 		await unknown.initialize();
-		await expect(unknown.acquireRestore()).rejects.toThrow('uncataloged SQLite');
+		await unknown.acquireRestore();
+		await unknown.checkpoint();
+		await unknown.release();
+		expect((await savedManifest(f)).manifest.members[0].kind).toBe('sqlite');
 		const config = {
 			...f.config,
-			url: pathToFileURL(path.join(f.dir, 'cataloged-backup')).href,
 			selection: { paths: [extra], sqlite: [file] }
 		};
 		const engine = createEngine(config, f.options);
-		await engine.initialize();
 		await engine.acquireRestore();
 		await engine.checkpoint();
 		await symlink(path.join(f.dir, 'outside-wal'), `${file}-wal`);
@@ -452,14 +667,18 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 			{
 				...f.config,
 				url: pathToFileURL(path.join(f.dir, 'bounded-backup')).href,
+				privateDir: path.join(f.dir, 'bounded-private'),
 				selection: { paths: [path.join(f.dir, 'oversized-file')] }
 			},
 			{ ...f.options, limits: { maxFileBytes: 5 } }
 		);
-		// A separate namespace avoids intentionally narrowing an accepted selection.
+		// Separate checkpoint state keeps this capture-limit fixture independent.
 		await writeFile(path.join(f.dir, 'oversized-file'), 'too-large');
 		await bounded.initialize();
-		await expect(bounded.acquireRestore()).rejects.toThrow('member exceeds budget');
+		await bounded.acquireRestore();
+		await expect(bounded.checkpoint()).rejects.toThrow('member exceeds budget');
+		expect(bounded.status().ready).toBe(true);
+		await bounded.release();
 	});
 
 	test('does not publish a file that changes into unregistered SQLite after inventory', async () => {
@@ -885,7 +1104,7 @@ describe('same-instance local recovery engine', () => {
 		await expect(engine.checkpoint()).rejects.toThrow('disappeared');
 		await engine.release();
 	});
-	test('unknown databases, links and invalid instance IDs are rejected', async () => {
+	test('new workspace databases are snapshotted; links and invalid instance IDs are rejected', async () => {
 		const f = await fixture();
 		expect(() => createEngine({ ...f.config, instanceId: '../escape' }, f.options)).toThrow(
 			'identity'
@@ -899,7 +1118,8 @@ describe('same-instance local recovery engine', () => {
 		const db = new Database(path.join(f.roots.work, 'arbitrary.data'));
 		db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY)');
 		db.close();
-		await expect(engine.checkpoint()).rejects.toThrow('uncataloged');
+		await engine.checkpoint();
+		expect((await savedManifest(f)).manifest.members[0].kind).toBe('sqlite');
 		await engine.release();
 	});
 	test('publication failure retains previously accepted generation', async () => {

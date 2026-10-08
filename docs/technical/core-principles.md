@@ -57,6 +57,13 @@ through normal user interfaces; they must not repair PATH, permissions or native
 settings to hide a product defect. Fix the owning layer and keep the normal path
 small and maintainable.
 
+Optional failures are logged, isolated and reported as degraded state while the
+agent continues. Scheduling, knowledge hooks, keep-alive, native remote workers
+and diagnostics do not become whole-container restart gates. Core readiness is
+the authenticated native API with its required recovery restoration and owner.
+Only an unusable core or unsafe continuation stops startup/writers, including
+missing authentication, incomplete restore or actual loss of recovery ownership.
+
 Host-specific deployment/qualification tooling and third-party addon installers
 are not part of the image, CLI/Admin or product test suite. fhold retains generic
 runtime contracts, directory/Blob transports, product tests and reusable image
@@ -243,8 +250,9 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
   `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
   Knowledge, native workers and the independent recovery timer remain available.
-  Health requires scheduler liveness when scheduling or keep-alive is enabled,
-  and fresh reconciliation only when user scheduling is enabled.
+  Missing scheduler processes or overdue reconciliation produce actionable
+  health-log warnings shown by CLI/Admin; they do not fail core readiness.
+  Reconciliation runs in the background and retries without blocking startup.
 - Optional conditional HTTP keep-alive uses native fhold activity hooks and
   the existing Supercronic process, independently of user task enablement. It
   has no cloud API authority or work-age expiry. Unknown activity keeps the
@@ -307,9 +315,10 @@ wake, scale, cloud-management tooling, extra service or mandatory sidecar is add
 
 One optional externally supplied `FH_RECOVERY_INCLUDE_FILE` extends the native
 catalog with literal absolute file/directory paths and registered SQLite files.
-The same versioned selection governs backup/restore; hashes bind it to accepted
-checkpoints. Additions preserve prior state; narrowing an accepted selection fails
-before claiming or writing targets. Lists have no fixed entry cap, but all existing
+The versioned selection is recorded with each checkpoint and bound by hashes.
+Restore applies the current selection without writing newly excluded or unselected
+paths; the next checkpoint records the edited coverage. No new namespace is
+required for coverage edits. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
 CLI/Admin expose the same generic settings through StackConfig and an operator
 policy file, not another backup engine, format, service, plugin registry or cloud
@@ -323,9 +332,10 @@ Versioned recovery policy may exclude directory roots, require independent mount
 roots and opt into recognized network-mount discovery. Ordinary local volumes
 stay covered. Excluded roots are never traversed/written; missing required mounts
 block startup. Registered SQLite and WAL/SHM paths cannot be excluded or placed
-on recognized network filesystems. Policy/effective exclusions are bound to
-accepted checkpoints; changed ownership needs a stopped-writer transition to a
-fresh namespace. Topology changes abort publication and retain partial-restore
+on recognized network filesystems. SQLite discovered in selected trees uses
+native snapshots without requiring a second path list. Recorded policy/effective
+exclusions remain part of historical checkpoints; current policy governs restore.
+Topology changes during an operation abort publication and retain partial-restore
 journals. Private inspection is read-only; confirmed offline restore starts no
 application writers.
 Native process coordination remains excluded even under an explicitly selected
@@ -334,14 +344,24 @@ live locks. This does not relax the prohibition on arbitrary links.
 
 Explicit initialization is one-time; an established missing/corrupt/incompatible
 head cannot become a blank agent. Valid newer surviving local state is preserved.
-An exact surviving receipt permits restoring only missing accepted checkpoint
+An accepted-generation surviving receipt permits restoring only missing selected checkpoint
 members after ephemeral storage loss, preserving newer surviving local files and
 databases. Unreceipted partial state and orphan WAL/SHM files remain blocked.
-Incomplete restore journals block native startup. Known initialized databases
-cannot silently disappear during active capture. Routine capture does not stop the apps, and separately captured databases
-and files are not one application-wide transaction. Readiness includes ownership
-and accepted-checkpoint age. The engine owns the accepted publication clock;
-health does not maintain a separate timestamp that can diverge after publication.
+Incomplete restore journals block native startup. Known initialized core and
+explicitly selected databases cannot silently disappear during active capture;
+versioned native Codex filenames may change during native migrations. Package
+versions and ownership epochs are provenance, not restore-compatibility gates.
+Supported checkpoint format, identity, hashes, database integrity and current
+ownership remain enforced. Native tools own their schema upgrades. Warm startup
+does not apply backup inventory limits to an already receipted home; only missing
+checkpoint members are validated and restored, without overwriting surviving data.
+Routine capture does not stop the apps, and separately captured databases and
+files are not one application-wide transaction. Readiness requires completed
+restoration and ownership. A delayed/failed checkpoint warns about durability
+and retries without stopping a working agent. Actual ownership loss still stops
+writers. Private diagnostic writes and the optional probe can fail without
+invalidating ownership; status writes retry. The engine owns the accepted publication clock; health does not maintain
+a separate timestamp that can diverge after publication.
 SIGTERM stops writers and descendants before the
 bounded final checkpoint; forced termination can lose unpublished changes.
 Writer shutdown and recovery have separate bounded waits so an in-flight capture

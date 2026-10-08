@@ -227,6 +227,7 @@ export function initialize(env = process.env, root = runtime()) {
 			remove(join(path, file));
 	}
 	publish(join(root, 'keepalive.json'), config);
+	remove(join(root, 'keepalive-status.json'));
 	return { enabled: config.enabled };
 }
 
@@ -289,12 +290,21 @@ if (invokedDirectly()) {
 				console.error('fhold: keep-alive request failed');
 		} else if (command === 'status') {
 			const config = JSON.parse(readFileSync(join(runtime(), 'keepalive.json'), 'utf8'));
+			const file = join(runtime(), 'keepalive-status.json');
+			const last = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+			const degraded =
+				config.enabled &&
+				((last.activity !== 'idle' && last.sent === false) ||
+					(last.checkedAt && Date.now() - Date.parse(last.checkedAt) > 60_000));
 			console.log(
 				JSON.stringify({
+					...last,
 					enabled: config.enabled,
-					activity: config.enabled ? activityStatus(runtime(), config.remotes) : 'disabled'
+					activity: config.enabled ? activityStatus(runtime(), config.remotes) : 'disabled',
+					degraded: Boolean(degraded)
 				})
 			);
+			if (degraded) process.exitCode = 1;
 		} else throw Error('Use init, tick, status or hook');
 	} catch {
 		if (command === 'hook') {

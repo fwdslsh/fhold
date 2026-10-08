@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import {
 	assertProjectOwnership,
+	containerWarnings,
 	composeProcessEnvironment,
 	runComposeStreaming
 } from './docker.js';
@@ -107,5 +108,34 @@ describe('Compose process environment', () => {
 		expect(environment.DOCKER_HOST).toBe('unix:///safe/docker.sock');
 		expect(environment.PATH).toBe('/safe');
 		expect(environment.CUSTOM_VALUE).toBe('from-caller');
+	});
+});
+
+describe('non-fatal optional-feature status', () => {
+	it('reads only redacted degradation messages from the latest Docker health check', async () => {
+		projectFixture([
+			[
+				{ Output: 'old failure' },
+				{
+					Output:
+						'fhold: degraded: Scheduling unavailable. Check logs.\nfhold: degraded: Scheduling unavailable. Check logs.\nnoise\n'
+				}
+			]
+		]);
+		expect(await containerWarnings('id0')).toEqual(['Scheduling unavailable. Check logs.']);
+		projectFixture([[{ Output: '' }]]);
+		expect(await containerWarnings('id0')).toEqual([]);
+	});
+	it('reports unavailable diagnostics without rejecting status or changing containers', async () => {
+		for (const values of [[null], ['broken']]) {
+			const root = projectFixture(values, values[0] === null ? 'inspect' : '');
+			const warnings = await containerWarnings('id0');
+			expect(warnings).toEqual([
+				'Optional-feature status is unavailable. Check Docker diagnostics; this does not stop the agent.'
+			]);
+			expect(existsSync(join(root, 'compose-ran'))).toBe(false);
+		}
+		projectFixture([[]]);
+		expect(await containerWarnings('id0')).toEqual([]);
 	});
 });

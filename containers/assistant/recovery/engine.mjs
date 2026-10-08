@@ -15,8 +15,6 @@ import {
 	createCatalog,
 	normalizeSelection,
 	normalizeNetworkMounts,
-	boundaryPolicy,
-	selectionCovers,
 	validPathCharacters
 } from './catalog.mjs';
 import { inspectMounts, readMountInfo } from './mounts.mjs';
@@ -48,10 +46,9 @@ const SAFE_FAILURES = new Set([
 	'recovery operation deadline exceeded',
 	'initialized required SQLite member disappeared',
 	'recovery ownership lost',
-	'recovery accepted checkpoint too old',
 	'recovery manifest checksum mismatch',
 	'recovery member checksum mismatch',
-	'recovery descriptor identity/version rejected',
+	'recovery descriptor identity/format rejected',
 	'recovery manifest rejected',
 	'recovery presence mismatch',
 	'recovery descriptor conflict',
@@ -63,7 +60,6 @@ const SAFE_FAILURES = new Set([
 	'incomplete recovery journal requires operator review',
 	'local recovery receipt authority unresolved',
 	'unreceipted local state would be overwritten',
-	'unreceipted local initialization unresolved',
 	'recovery capture budget exceeded',
 	'recovery member exceeds budget',
 	'recovery total exceeds budget',
@@ -97,7 +93,6 @@ const SAFE_FAILURES = new Set([
 	'recovery include file must be valid JSON',
 	'recovery include path overlaps protected state or destination',
 	'recovery SQLite path must name a file',
-	'recovery selection does not cover the saved catalog',
 	'recovery selection identity rejected',
 	'recovery network mount discovery must be boolean',
 	'recovery mount policies conflict',
@@ -108,8 +103,7 @@ const SAFE_FAILURES = new Set([
 	'recovery excluded path must be a directory',
 	'recovery included mount missing',
 	'recovery exclusions overlap required SQLite state',
-	'recovery mount topology changed; stop writers and review mounts',
-	'recovery boundary policy changed; prepare a new namespace with stopped writers'
+	'recovery mount topology changed; stop writers and review mounts'
 ]);
 export function sanitizeRecoveryError(error) {
 	if (error && SAFE_FAILURES.has(error.message)) return error.message;
@@ -178,15 +172,8 @@ export function createEngine(config, options = {}) {
 	const limits = { ...DEFAULT_LIMITS, ...options.limits };
 	for (const value of Object.values(limits))
 		if (!Number.isSafeInteger(value) || value < 1) throw new Error('invalid recovery limit');
-	const versions = config.versions;
-	if (
-		!versions ||
-		typeof versions !== 'object' ||
-		Array.isArray(versions) ||
-		Object.keys(versions).length === 0 ||
-		Object.values(versions).some((v) => typeof v !== 'string' || !v || v.length > 256)
-	)
-		throw new Error('recovery native versions required');
+	// Version provenance is diagnostic, not restore permission or compatibility.
+	const versions = config.versions ?? {};
 	const privateDir = config.privateDir ?? path.join(roots.home, '.fhold-recovery');
 	if (!canonicalPath(privateDir)) throw new Error('invalid private recovery path');
 	if (
@@ -302,12 +289,11 @@ export function createEngine(config, options = {}) {
 				value.catalog
 			) ||
 			value.instanceId !== instanceId ||
-			!same(value.versions, versions) ||
 			!Number.isSafeInteger(value.epoch) ||
 			value.epoch < 0 ||
 			(value.generation !== null && !/^[a-f0-9]{64}$/.test(value.generation))
 		)
-			throw new Error('recovery descriptor identity/version rejected');
+			throw new Error('recovery descriptor identity/format rejected');
 		if (
 			(value.catalog !== CATALOG_VERSION && !/^[a-f0-9]{64}$/.test(value.selectionHash)) ||
 			(value.catalog === CATALOG_VERSION && value.selectionHash !== undefined)
@@ -332,15 +318,6 @@ export function createEngine(config, options = {}) {
 				throw new Error('recovery selection identity rejected');
 		} else if (manifest.networkMounts !== undefined || selection.version !== undefined)
 			throw new Error('recovery selection identity rejected');
-		if (
-			!same(boundaryPolicy(selection), catalog.policy) ||
-			!same(networkMounts, catalog.networkMounts)
-		)
-			throw new Error(
-				'recovery boundary policy changed; prepare a new namespace with stopped writers'
-			);
-		if (!selectionCovers(catalog.selection, selection))
-			throw new Error('recovery selection does not cover the saved catalog');
 		const saved = createCatalog(roots, selection, { ...catalogOptions, networkMounts });
 		if (
 			saved.metadata.catalog !== manifest.catalog ||
@@ -352,6 +329,10 @@ export function createEngine(config, options = {}) {
 			throw new Error('recovery selection identity rejected');
 		return saved;
 	}
+	const selectedForRestore = (member, saved) => {
+		const target = saved.native(member.root, member.path);
+		return catalog.dbPaths.has(target) || catalog.allowsPath(target);
+	};
 	async function preparePrivate() {
 		await assertNoLinks(privateDir);
 		await fs.mkdir(privateDir, { recursive: true, mode: 0o700 });
@@ -363,8 +344,19 @@ export function createEngine(config, options = {}) {
 		if (!ownership) throw new Error('recovery not owned');
 		await store.renew(ownership);
 	}
+	async function checkSQLiteStorage(target) {
+		// Discovered databases use the same local-storage check as registered ones.
+		await inspectMounts(
+			{
+				...catalog,
+				sqliteFiles: new Set([...catalog.sqliteFiles, target, `${target}-wal`, `${target}-shm`])
+			},
+			await (options.readMounts ?? readMountInfo)()
+		);
+	}
 	async function sqlite(operation, source, destination) {
 		await checkMounts();
+		await checkSQLiteStorage(source);
 		await assertNoLinks(source);
 		const maximum = limits.maxDatabaseBytes;
 		let inputBytes = 0;
@@ -443,6 +435,7 @@ export function createEngine(config, options = {}) {
 			const stat = await exists(target);
 			if (!stat) return;
 			if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('recovery member type rejected');
+			if (kind === 'sqlite') await checkSQLiteStorage(target);
 			const maximum = kind === 'sqlite' ? limits.maxDatabaseBytes : limits.maxFileBytes;
 			if (stat.size > maximum) throw new Error('recovery member exceeds budget');
 			bytes += stat.size;
@@ -458,7 +451,8 @@ export function createEngine(config, options = {}) {
 				if (!stat && (await exists(sidecar))) throw new Error('SQLite input type rejected');
 			}
 			presence[id] = Boolean(stat);
-			if (previousPresence[id] && !stat)
+			// Versioned Codex database names can change through native migrations.
+			if (previousPresence[id] && !stat && !id.startsWith('codex-'))
 				throw new Error('initialized required SQLite member disappeared');
 			if (stat) {
 				await add(root, name, 'sqlite', id);
@@ -480,24 +474,26 @@ export function createEngine(config, options = {}) {
 				for (const entry of entries.sort()) await walk(root, name ? `${name}/${entry}` : entry);
 			} else if (stat.isFile()) {
 				if (catalog.sqliteFiles.has(target)) return;
-				// Unknown native SQLite must be explicitly cataloged, never copied live.
-				const handle = await fs.open(target, 'r');
-				const magic = Buffer.alloc(16);
-				try {
-					await handle.read(magic, 0, 16, 0);
-				} finally {
-					await handle.close();
-				}
-				if (
-					magic.toString() === 'SQLite format 3\0' ||
-					/\.(db|sqlite|sqlite3)(-wal|-shm)?$/.test(name)
-				)
-					throw new Error('uncataloged SQLite member rejected');
-				await add(root, name, 'file');
+				// Upstream tools and workspace apps can create new SQLite files. Detect
+				// their content, not their extension, and snapshot them natively.
+				if (/-wal$|-shm$/.test(name) && (await isSQLite(target.slice(0, -4)))) return;
+				await add(root, name, await isSQLite(target) ? 'sqlite' : 'file');
 			} else throw new Error('recovery special file rejected');
 		}
 		for (const [root, name] of catalog.trees) await walk(root, name);
 		return { members, presence };
+	}
+	async function isSQLite(target) {
+		await assertNoLinks(target);
+		if (!(await exists(target))?.isFile()) return false;
+		const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+		try {
+			const magic = Buffer.alloc(16);
+			await handle.read(magic, 0, 16, 0);
+			return magic.toString() === 'SQLite format 3\0';
+		} finally {
+			await handle.close();
+		}
 	}
 	function validateManifest(manifest, descriptor) {
 		if (
@@ -509,7 +505,6 @@ export function createEngine(config, options = {}) {
 				manifest.catalog
 			) ||
 			manifest.instanceId !== instanceId ||
-			!same(manifest.versions, versions) ||
 			!Array.isArray(manifest.members) ||
 			manifest.members.length > limits.maxFiles ||
 			!manifest.presence ||
@@ -540,16 +535,15 @@ export function createEngine(config, options = {}) {
 				member.kind === 'sqlite' &&
 				!saved.databases.some(
 					([id, root, name]) => member.id === id && member.root === root && member.path === name
-				)
+				) &&
+				!(member.id === undefined && saved.allowsFile(member.root, member.path))
 			)
 				throw new Error('recovery SQLite catalog mismatch');
 			if (member.kind === 'file' && !saved.allowsFile(member.root, member.path))
 				throw new Error('recovery file catalog mismatch');
 			if (
 				member.kind === 'file' &&
-				(member.id !== undefined ||
-					saved.sqliteFiles.has(key) ||
-					/\.(db|sqlite|sqlite3)(-wal|-shm)?$/.test(member.path))
+				(member.id !== undefined || saved.sqliteFiles.has(key))
 			)
 				throw new Error('recovery file cannot be SQLite');
 			if (
@@ -670,26 +664,13 @@ export function createEngine(config, options = {}) {
 				const previous = await store.readDescriptor();
 				if (!previous) throw new Error('recovery namespace requires explicit initialization');
 				validateDescriptor(previous.value);
-				// Verify the saved selection before claiming authority or writing any
-				// restore target. Additions are allowed; omissions never lose data.
+				// Validate saved content, then apply today's operator-selected coverage.
+				// Excluded or no-longer-selected files stay in the historical checkpoint,
+				// never get replayed onto independent mounts or outside current coverage.
 				const manifest = previous.value.generation
 					? await manifestAt(previous.value.generation, previous.value)
 					: null;
 				const saved = manifest ? savedCatalog(manifest, previous.value) : null;
-				if (
-					!manifest &&
-					previous.value.catalog === CATALOG_VERSION &&
-					!same(catalog.policy, boundaryPolicy(normalizeSelection()))
-				)
-					throw new Error(
-						'recovery boundary policy changed; prepare a new namespace with stopped writers'
-					);
-				if (
-					!manifest &&
-					previous.value.catalog !== CATALOG_VERSION &&
-					previous.value.selectionHash !== catalog.metadata.selectionHash
-				)
-					throw new Error('recovery selection identity rejected');
 				ownership = await store.acquire();
 				try {
 					head = await store.claim(previous.token, ownership);
@@ -698,8 +679,6 @@ export function createEngine(config, options = {}) {
 					if (await exists(journalPath))
 						throw new Error('incomplete recovery journal requires operator review');
 					const generation = head.value.generation;
-					const local = await inventory();
-					let restoreMembers = [];
 					const receiptBytes = (await exists(receiptPath))
 						? await readRegular(receiptPath, 64 * 1024)
 						: null;
@@ -712,33 +691,25 @@ export function createEngine(config, options = {}) {
 							receipt.catalog !== head.value.catalog ||
 							receipt.selectionHash !== head.value.selectionHash ||
 							receipt.instanceId !== instanceId ||
-							!same(receipt.versions, versions) ||
-							receipt.generation !== generation ||
-							receipt.epoch !== previous.value.epoch
+							receipt.generation !== generation
 						)
 							throw new Error('local recovery receipt authority unresolved');
-						// Local disk may contain writes newer than remote. Validate SQLite and
-						// preserve every surviving member, without requiring old hashes.
-						for (const member of local.members)
-							if (member.kind === 'sqlite')
-								await sqlite('verify', native(member.root, member.path));
-						// Mixed storage can lose only its ephemeral members. Exact receipt
-						// authority permits filling those holes from the accepted checkpoint,
-						// never overwriting surviving (potentially newer) local state.
-						const surviving = new Set(
-							local.members.map((member) => native(member.root, member.path))
-						);
-						restoreMembers =
-							manifest?.members.filter(
-								(member) => !surviving.has(saved.native(member.root, member.path))
-							) ?? [];
-					} else if (local.members.length) {
-						if (generation) throw new Error('unreceipted local state would be overwritten');
-						// Explicitly initialized empty namespace may adopt locally provisioned
-						// native state only in its first ownership epoch.
-						if (previous.value.epoch !== 0)
-							throw new Error('unreceipted local initialization unresolved');
-					} else if (manifest) restoreMembers = manifest.members;
+					} else if (generation && (await inventory()).members.length) {
+						throw new Error('unreceipted local state would be overwritten');
+					}
+					// A valid receipt identifies this disk. Preserve newer local data;
+					// backup limits and inventory checks belong to capture, not warm boot.
+					// An initialized destination with no checkpoint has nothing to replay.
+					const restoreMembers = [];
+					for (const member of manifest?.members ?? []) {
+						if (!selectedForRestore(member, saved)) continue;
+						const target = saved.native(member.root, member.path);
+						if (receiptBytes && (await exists(target))) continue;
+						if (member.kind === 'sqlite' &&
+							((await exists(`${target}-wal`)) || (await exists(`${target}-shm`))))
+							throw new Error('SQLite input type rejected');
+						restoreMembers.push(member);
+					}
 					if (restoreMembers.length) {
 						const stage = await fs.mkdtemp(path.join(privateDir, 'restore-'));
 						stages.add(stage);
@@ -755,7 +726,10 @@ export function createEngine(config, options = {}) {
 							const target = path.join(stage, member.root, member.path);
 							await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
 							await fs.writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
-							if (member.kind === 'sqlite') await sqlite('verify', target);
+							if (member.kind === 'sqlite') {
+								await checkSQLiteStorage(saved.native(member.root, member.path));
+								await sqlite('verify', target);
+							}
 						}
 						await checkMounts();
 						await privateWrite(journalPath, { instanceId, generation, stage, phase: 'publishing' });
@@ -785,12 +759,10 @@ export function createEngine(config, options = {}) {
 								await directory.close();
 							}
 						}
-						await inventory(manifest.presence);
 						await writeReceipt(generation);
 						await fs.unlink(journalPath);
 						await fs.rm(stage, { recursive: true });
 					}
-					if (manifest && !restoreMembers.length) await inventory(manifest.presence);
 					await writeReceipt(generation);
 					lastCheckpointAt = manifest?.finishedAt ?? null;
 					ready = true;
@@ -820,7 +792,10 @@ export function createEngine(config, options = {}) {
 					const source = native(member.root, member.path);
 					let bytes;
 					if (member.kind === 'sqlite') {
-						const target = path.join(stage, `${member.id}.sqlite`);
+						const target = path.join(
+							stage,
+							`${digest(serialize([member.root, member.path]))}.sqlite`
+						);
 						await sqlite('capture', source, target);
 						bytes = await readRegular(target, limits.maxDatabaseBytes);
 					} else {
@@ -870,7 +845,7 @@ export function createEngine(config, options = {}) {
 				await owned(true);
 				head = await store.compareAndSwap(
 					head.token,
-					{ ...head.value, ...catalog.metadata, generation, checkpointAt: manifest.finishedAt },
+					{ ...head.value, ...catalog.metadata, versions, generation, checkpointAt: manifest.finishedAt },
 					ownership
 				);
 				await writeReceipt(generation);

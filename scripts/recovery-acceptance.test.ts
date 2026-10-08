@@ -184,7 +184,9 @@ describe('same-instance engine replacement on a real directory', () => {
 			native.close();
 		}
 		await expect(readFile(join(replacement.roots.stash, 'removed.txt'))).rejects.toThrow();
-		await unlink(join(replacement.roots.home, '.codex/queue_1.sqlite'));
+		// Native versioned Codex filenames can migrate; losing the core session
+		// database still must not replace the accepted checkpoint with empty state.
+		await unlink(join(replacement.roots.home, '.local/share/opencode/opencode.db'));
 		await expect(replacement.engine.checkpoint()).rejects.toThrow('disappeared');
 		expect(replacement.engine.status().generation).toBe(generation);
 		await replacement.engine.release();

@@ -14,6 +14,7 @@ import {
 	classifyInstall,
 	composeLogs,
 	composePs,
+	containerWarnings,
 	completeProviderOAuth,
 	configureGuardianModeratorModel,
 	connectionDetails,
@@ -199,11 +200,16 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	if (!config.ok) throw new Error(config.error);
 	const result = await composePs(buildComposeOptions(current));
 	const services = result.ok
-		? parseComposePsRows(result.stdout).map((row) => ({
-				name: row.service,
-				state: row.state,
-				health: row.health
-			}))
+		? await Promise.all(
+				parseComposePsRows(result.stdout).map(async (row) => ({
+					name: row.service,
+					state: row.state,
+					health: row.health,
+					...(row.service === 'assistant' && row.state === 'running' && row.id
+						? { warnings: await containerWarnings(row.id) }
+						: {})
+				}))
+			)
 		: [];
 	let recovery: ReturnType<typeof recoverySnapshot> | undefined;
 	let recoveryError: string | undefined;

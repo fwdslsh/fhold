@@ -72,6 +72,9 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 			const services = (resolved.config as { services?: Record<string, { image?: unknown; profiles?: unknown }> }).services;
 			if (!services) throw new Error('Candidate Compose services are missing');
 			for (const [service, definition] of Object.entries(services)) {
+				// Preflight fhold's managed images, not operator-owned add-ons that
+				// Compose can build normally without a pre-existing image reference.
+				if (!['assistant', 'guardian', 'discord', 'slack'].includes(service)) continue;
 				if (Array.isArray(definition.profiles) && !definition.profiles.some((profile) => candidate.profiles?.includes(String(profile)))) continue;
 				if (typeof definition.image !== 'string') throw new Error(`Candidate service image is missing: ${service}`);
 				const image = await runDocker(['image', 'inspect', '--format', '{{.Id}}', definition.image]);
@@ -111,9 +114,11 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 				return { service, containerId: value.Id, imageId: value.Image, imageReference: value.Config.Image };
 			});
 			evidence = { ...evidence, runningImages: rows };
-			if (rows.length !== selectedImages.length || selectedImages.some((selected) => {
+			if (selectedImages.some((selected) => {
 				const matches = rows.filter((row) => row.service === selected.service);
-				return matches.length !== 1 || matches[0]?.imageId !== selected.imageId || matches[0]?.imageReference !== selected.imageReference;
+				// The content ID identifies the image; tags/aliases need not match its
+				// original creation reference, and Compose may have several replicas.
+				return matches.length === 0 || matches.some((row) => row.imageId !== selected.imageId);
 			})) throw new Error('Running containers do not match the preflight-selected image identities');
 			evidence = { ...evidence, runningContainersUpgraded: true, runningImages: rows };
 			recordAppliedRuntime(state.homeDir, revision);

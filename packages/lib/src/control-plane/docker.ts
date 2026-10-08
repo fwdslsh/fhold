@@ -70,7 +70,12 @@ function friendlyError(stderr: string): string {
 
 export function runDocker(
 	args: string[],
-	options: { timeoutMs?: number; maxOutputBytes?: number; env?: NodeJS.ProcessEnv; input?: string } = {}
+	options: {
+		timeoutMs?: number;
+		maxOutputBytes?: number;
+		env?: NodeJS.ProcessEnv;
+		input?: string;
+	} = {}
 ): Promise<DockerResult> {
 	return new Promise((resolve) => {
 		const child = execFile(
@@ -97,7 +102,9 @@ export function runDocker(
 			}
 		);
 		// Keep optional private input out of command arguments and process listings.
-		child.stdin?.on('error', () => { /* exit is reported by execFile */ });
+		child.stdin?.on('error', () => {
+			/* exit is reported by execFile */
+		});
 		child.stdin?.end(options.input);
 	});
 }
@@ -262,6 +269,32 @@ export function composePs(options: ComposeOptions): Promise<DockerResult> {
 	return runDocker(['compose', ...buildComposeArgs(options), 'ps', '-a', '--format', 'json'], {
 		env: composeProcessEnvironment(options.envFiles)
 	});
+}
+
+/** Optional-feature diagnostics never turn a successful status read into a failure. */
+export async function containerWarnings(id: string): Promise<string[]> {
+	const result = await runDocker(['inspect', '--format', '{{json .State.Health.Log}}', id], {
+		timeoutMs: 5_000
+	});
+	try {
+		if (!result.ok) throw new Error('Unavailable');
+		const log: unknown = JSON.parse(result.stdout);
+		if (!Array.isArray(log)) throw new Error('Unavailable');
+		const last = log.at(-1);
+		const output = last && typeof last.Output === 'string' ? last.Output : '';
+		return [
+			...new Set<string>(
+				output
+					.split(/\r?\n/)
+					.filter((line: string) => line.startsWith('fhold: degraded: '))
+					.map((line: string) => line.slice('fhold: degraded: '.length))
+			)
+		];
+	} catch {
+		return [
+			'Optional-feature status is unavailable. Check Docker diagnostics; this does not stop the agent.'
+		];
+	}
 }
 
 export function composeLogs(options: ComposeOptions, tail = 250): Promise<DockerResult> {

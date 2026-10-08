@@ -79,7 +79,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_SETUP_COMPLETE` | Install completion marker |
 | `FH_RECOVERY_URL`, `FH_INSTANCE_ID` | Derived recovery enable/destination and stable identity; file destinations use `/recovery` inside the container |
 | `FH_RECOVERY_DIRECTORY` | Exact operator backup bind root; off/Blob use an unused private placeholder under `state/` |
-| `FH_RECOVERY_INTERVAL_SECONDS`, `FH_RECOVERY_MAX_UNSAVED_SECONDS`, `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | Bounded capture/health/operation settings from recovery intent |
+| `FH_RECOVERY_INTERVAL_SECONDS`, `FH_RECOVERY_MAX_UNSAVED_SECONDS`, `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | Capture cadence, overdue-backup warning threshold and operation deadline from recovery intent |
 | `FH_RECOVERY_INCLUDE_FILE`, `FH_RECOVERY_STATE_DIR` | Fixed policy and namespace-scoped private-state container locations |
 | `FH_RECOVERY_CREDENTIAL_FILE`, `FH_RECOVERY_CLIENT_ID` | Private file path or optional managed identity UUID, never a credential value |
 | `FH_ASSISTANT_STOP_GRACE` | Derived complete writer/final-recovery shutdown budget |
@@ -178,6 +178,14 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 `FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
+
+Invalid optional settings log their names and degrade only the affected feature.
+Malformed scheduler intent disables scheduling; numeric recovery/shutdown tuning
+falls back to its documented defaults. Core health remains successful when the
+authenticated agent is usable. Docker's health output carries optional-feature
+warnings into CLI status and Admin; unavailable diagnostics never restart the
+container. Authentication, safe restore and actual exclusive ownership remain
+required.
 
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at

@@ -14,7 +14,7 @@ product qualification and do not establish current account or service readiness.
 | `containers/assistant/entrypoint.sh` | Validate capabilities, restore before seeding/writers, scheduling independence, native startup and separate writer/final-checkpoint shutdown budgets. |
 | `containers/assistant/fhold-recovery.mjs` | Runtime configuration, init/inspect/offline-restore/status/unlock interfaces, worker timer, private HTTP probes and the engine's accepted-publication clock. |
 | `containers/assistant/recovery/engine.mjs` | Bounded inventory/snapshots, integrity validation, immutable generations, receipt/journal authority, compatibility, ownership and conditional publication. |
-| `containers/assistant/recovery/catalog.mjs` | Explicit native trees/databases, versioned custom selections, additive catalog validation and permanent transient/private exclusions. |
+| `containers/assistant/recovery/catalog.mjs` | Native trees/databases, versioned custom selections, current restore coverage and permanent transient/private exclusions. |
 | `containers/assistant/recovery/selection.mjs` | Pure selection normalization/ownership policy shared by the image engine and host settings; no host authority or second backup writer. |
 | `containers/assistant/recovery/mounts.mjs` | Linux mount visibility, required mounts, network exclusions, local SQLite placement and topology fencing. |
 | `containers/assistant/recovery/sqlite-worker.mjs` | SQLite-native bounded snapshot and integrity subprocess operations. |
@@ -45,10 +45,15 @@ second recovery writer.
 
 One instance has one writer. Never auto-take-over an unreleased owner. Restore
 refuses corrupt/incompatible heads and unresolved existing target data rather than
-creating a blank agent. Exact native dependency versions are required; updates
-need a deliberate compatibility procedure. Known initialized databases cannot
-silently disappear. Extra SQLite is registered explicitly, never discovered and
-copied as ordinary files.
+creating a blank agent. Native dependency versions are diagnostic provenance,
+not compatibility gates; native tools own their database migrations. A failed
+startup does not invalidate an accepted-generation receipt by advancing an epoch.
+Known initialized core or explicitly selected databases cannot silently disappear;
+versioned Codex filenames may change. SQLite in selected directories is discovered
+by its header and snapshotted natively, never copied as a changing ordinary file.
+Coverage edits keep the namespace and leave newly excluded paths untouched.
+Delayed/failed backups warn and retry without stopping the agent; actual lost
+ownership still stops writers.
 
 Fixed limits and monotonic deadlines are acceptance bounds, not measured capacity.
 SQLite consistency is per database; sequential files/databases are not one
@@ -57,5 +62,5 @@ can lose unpublished changes. Retention and independent protection against an
 agent with same-UID access are external storage responsibilities.
 
 Real network mounts, custom plugin/drive matrices, native-client account readiness,
-upgrade transitions and representative RPO/RTO remain separate qualification
+native schema-change coverage and representative RPO/RTO remain separate qualification
 gates. Keep native approvals and real image behavior intact when testing.

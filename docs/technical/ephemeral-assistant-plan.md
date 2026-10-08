@@ -29,10 +29,11 @@ controller, plugin registry, startup installer or mandatory sidecar.
    preserve validated surviving local state and refuse unresolved conflicts.
 4. Start authenticated OpenCode and enabled native workers. User scheduling is
    independently controlled by `FH_SCHEDULER_ENABLED`; recovery does not use cron.
-5. Capture each registered SQLite database consistently and ordinary selected
+5. Capture each SQLite database in selected trees or the explicit SQLite list consistently and ordinary selected
    files within fixed resource/deadline limits. Publish immutable content and
    conditionally accept a complete generation under ownership.
-6. Admit requests only with ownership, restore and accepted-checkpoint health.
+6. Admit requests after restoration with active ownership. Failed/overdue backups
+   report a durability warning and retry without stopping a working agent.
 7. On TERM, stop writers/descendants, take a separately budgeted final checkpoint,
    and release ownership last. Forced termination can lose unpublished changes.
 
@@ -45,16 +46,18 @@ actions. Never initialize over an established missing/corrupt/incompatible head.
 
 Retain the standard container roots and external include-file selection. Explicit
 additional paths restore to their original locations; host `FH_HOME` does not
-remap container paths. Additions are supported, but narrowing an accepted catalog
-is refused. Native plugin caches/private state require deliberate coverage.
+remap container paths. Coverage edits apply on restart to the same destination;
+newly excluded or unselected paths are left untouched, and historical checkpoints
+retain their recorded coverage. Native plugin caches/private state require deliberate coverage.
 
 The external application separates recovery-owned ephemeral state, independently
 persistent drives and external configuration/secrets. Declare required independent
 roots with the [mount policy](../assistant-recovery.md#independently-persistent-mounts);
 they are not traversed or restored. Ordinary local volumes retain their recovery
 coverage. Pre-populated recovery-owned mounts without a valid receipt can block
-restoration. SQLite cannot use a network mount. Arbitrary links, special files and
-unregistered SQLite are not supported.
+restoration. SQLite cannot use a network mount. Arbitrary links and special files
+are not supported. SQLite is detected by its header and snapshotted natively,
+not copied as a changing file.
 
 Portable user backup and offline native-history transfer remain different formats;
 neither substitutes for sensitive same-instance runtime recovery.
@@ -64,8 +67,9 @@ neither substitutes for sensitive same-instance runtime recovery.
 - Deployment-specific network filesystems, permission models and custom plugin/drive
   layouts. Local bind-mount smokes are not SMB/NFS qualification.
 - Forced-stop/storage-outage recovery and readiness-aware external retry/admission.
-- A deliberate compatibility workflow for native dependency/schema upgrades;
-  current recovery requires exact recorded native versions.
+- Native schema upgrades remain native-tool responsibilities. Recovery records
+  dependency versions for diagnosis, not equality checks; published-image upgrade
+  smokes cover empty storage, surviving receipts and a subsequent restart.
 - Representative capacity, operation duration, disk/memory headroom, loss windows
   and safe external retention. Per-database snapshots are not application-wide
   transactions or an SLA.

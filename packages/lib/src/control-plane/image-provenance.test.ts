@@ -17,13 +17,17 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function fixture(namespace = 'fhold', managedPolicy = true, imagePresent = true) {
+async function fixture({ namespace = 'fhold', managedPolicy = true, imagePresent = true, alias = false, replicas = 1, buildAddon = false }: {
+	namespace?: string; managedPolicy?: boolean; imagePresent?: boolean;
+	alias?: boolean; replicas?: number; buildAddon?: boolean;
+} = {}) {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-image-provenance-')); roots.push(root);
 	const home = join(root, 'home'); await installHome({ homeDir: home });
 	const read = readStackConfig(home); if (!read.ok) throw new Error(read.error);
 	read.config.deployment.imageNamespace = namespace; writeStackConfig(home, read.config);
 	const state = createFholdState(home);
 	const resolved = await composeConfigJson(buildComposeOptions(state)); if (!resolved.ok) throw new Error(resolved.stderr);
+	if (buildAddon) resolved.config.services.addon = { build: { context: root } };
 	const callsPath = join(root, 'calls.jsonl');
 	const docker = join(root, 'docker');
 	const imageReference = `${namespace}/fhold-assistant:${read.config.deployment.images.assistant}`;
@@ -34,12 +38,13 @@ const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n');
 if (args.includes('pull') && !args.includes('up')) writeFileSync(${JSON.stringify(join(root, 'pulled'))}, 'pulled');
 if (args.includes('config') && args.includes('--format')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});
-if (args.includes('ps') && args.includes('-q')) console.log('fixture-container');
+if (args.includes('ps') && args.includes('-q')) console.log(${JSON.stringify([...Array.from({ length: replicas }, (_, i) => `fixture-container-${i}`), ...(buildAddon ? ['fixture-addon'] : [])].join('\n'))});
 if (args[0] === 'image' && args[1] === 'inspect') {
   if (!${imagePresent} && !existsSync(${JSON.stringify(join(root, 'pulled'))})) process.exit(1);
   console.log(args.some(arg => arg.includes('managed-harness-policy')) ? ${JSON.stringify(managedPolicy ? '1' : '<no value>')} : ${JSON.stringify(imageId)});
 }
-if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'fixture-container', Image: imageId, Config: { Image: imageReference, Labels: { 'com.docker.compose.project': read.config.deployment.projectName, 'com.docker.compose.service': 'assistant' } } }))});
+if (args[0] === 'inspect') for (let i = 0; i < ${replicas}; i++) console.log(JSON.stringify({ Id: 'fixture-container-'+i, Image: ${JSON.stringify(imageId)}, Config: { Image: ${JSON.stringify(alias ? 'same-image:different-alias' : imageReference)}, Labels: ${JSON.stringify({ 'com.docker.compose.project': read.config.deployment.projectName, 'com.docker.compose.service': 'assistant' })} } }));
+if (args[0] === 'inspect' && ${buildAddon}) console.log(JSON.stringify({ Id: 'fixture-addon', Image: ${JSON.stringify(`sha256:${'b'.repeat(64)}`)}, Config: { Image: 'operator-addon:compose-built', Labels: ${JSON.stringify({ 'com.docker.compose.project': read.config.deployment.projectName, 'com.docker.compose.service': 'addon' })} } }));
 `);
 	chmodSync(docker, 0o700); process.env.FH_DOCKER_BIN = docker;
 	const calls = () => existsSync(callsPath) ? readFileSync(callsPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]) : [];
@@ -47,7 +52,7 @@ if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'fi
 }
 
 test('an older pinned image cannot activate managed-only policy or change a running stack during update', async () => {
-	const { home, state, calls } = await fixture('fhold', false);
+	const { home, state, calls } = await fixture({ managedPolicy: false });
 	const managed = join(home, 'system/assistant/AGENTS.md');
 	writeFileSync(managed, 'prior release sentinel');
 	const config = readFileSync(join(home, 'state/stack.json'));
@@ -60,7 +65,7 @@ test('an older pinned image cannot activate managed-only policy or change a runn
 });
 
 test('fresh registry activation pulls a missing image before policy inspection', async () => {
-	const { state, calls } = await fixture('registry.example.test/fhold', true, false);
+	const { state, calls } = await fixture({ namespace: 'registry.example.test/fhold', imagePresent: false });
 	await activateComposeCommand(state, ['up', '-d']);
 	const pull = calls().findIndex(args => args.includes('pull'));
 	const up = calls().findIndex(args => args.includes('up'));
@@ -70,7 +75,7 @@ test('fresh registry activation pulls a missing image before policy inspection',
 });
 
 test.each(['fhold', 'registry.example.test/fhold'])('a missing %s image with no-pull never triggers an implicit registry fetch', async (namespace) => {
-		const { state, calls } = await fixture(namespace, true, false);
+		const { state, calls } = await fixture({ namespace, imagePresent: false });
 		await expect(activateComposeCommand(state, ['up', '-d', '--pull', 'never'])).rejects.toThrow('Pull or build');
 		expect(calls().some(args => args.includes('pull') || args.includes('up'))).toBe(false);
 });
@@ -81,6 +86,15 @@ test('an omitted pull never contacts a registry for the exact local fhold namesp
 	expect(calls().some((args) => args.includes('pull') && !args.includes('up'))).toBe(false);
 	const up = calls().find((args) => args.includes('up')); expect(up).toContain('--pull');
 	expect(up?.[up.indexOf('--pull') + 1]).toBe('never');
+});
+
+test('image activation verifies content IDs without rejecting tag aliases or Compose replicas', async () => {
+	const { home } = await fixture({ alias: true, replicas: 2 });
+	const result = await updateHome({ homeDir: home, start: true });
+	const receipt = JSON.parse(readFileSync(result.receipt, 'utf8'));
+	expect(receipt.runningContainersUpgraded).toBe(true);
+	expect(receipt.runningImages).toHaveLength(2);
+	expect(receipt.runningImages.every((image) => image.imageReference === 'same-image:different-alias')).toBe(true);
 });
 
 test('an explicit local pull fails before Docker calls or managed file/checkpoint changes', async () => {
@@ -109,7 +123,7 @@ test('local activation preserves supplied build flags/arrays and forbids every c
 });
 
 test('explicit registry namespaces retain default, explicit-pull and no-pull update behavior', async () => {
-	const { home, state, calls } = await fixture('registry.example.test/reviewed-fhold');
+	const { home, state, calls } = await fixture({ namespace: 'registry.example.test/reviewed-fhold' });
 	await updateHome({ homeDir: home, start: true });
 	await updateHome({ homeDir: home, start: true, pull: true });
 	await updateHome({ homeDir: home, start: true, pull: false });
@@ -122,7 +136,7 @@ test('explicit registry namespaces retain default, explicit-pull and no-pull upd
 test('fresh installs select the public images and updates pull the pinned release by default', async () => {
 	const namespace = defaultStackConfig('/tmp/fhold-public-default').deployment.imageNamespace;
 	expect(namespace).toBe('fwdslsh');
-	const { home, state, calls } = await fixture(namespace);
+	const { home, state, calls } = await fixture({ namespace });
 	const resolved = await composeConfigJson(buildComposeOptions(state));
 	if (!resolved.ok) throw new Error(resolved.stderr);
 	const config = readStackConfig(home);
@@ -130,4 +144,13 @@ test('fresh installs select the public images and updates pull the pinned releas
 	expect(resolved.config.services.assistant.image).toBe(`fwdslsh/fhold-assistant:${config.config.deployment.images.assistant}`);
 	await updateHome({ homeDir: home, start: true });
 	expect(calls().filter((args) => args.includes('pull') && !args.includes('up'))).toHaveLength(1);
+});
+
+test('operator-owned Compose build services do not need fhold image provenance before update', async () => {
+	const { home } = await fixture({ buildAddon: true });
+	const result = await updateHome({ homeDir: home, start: true });
+	const receipt = JSON.parse(readFileSync(result.receipt, 'utf8'));
+	expect(receipt.runningContainersUpgraded).toBe(true);
+	expect(receipt.selectedImages.map((image) => image.service)).toEqual(['assistant']);
+	expect(receipt.runningImages.map((image) => image.service)).toEqual(['assistant', 'addon']);
 });

@@ -9,12 +9,15 @@ import { canonicalPath, readSelection } from './recovery/catalog.mjs';
 import { assertNoLinks, readRegular } from './recovery/directory-store.mjs';
 import { createRecoveryStore } from './recovery/storage.mjs';
 
-export function integerSetting(env, name, fallback, min, max) {
+export function integerSetting(env, name, fallback, min, max, warnings = []) {
 	const text = env[name] ?? String(fallback);
-	if (!/^\d+$/.test(text)) throw new Error(`Invalid ${name}`);
 	const value = Number(text);
-	if (!Number.isSafeInteger(value) || value < min || value > max)
-		throw new Error(`Invalid ${name}`);
+	if (!/^\d+$/.test(text) || !Number.isSafeInteger(value) || value < min || value > max) {
+		const warning = `${name} is invalid; using the default ${fallback}. Correct the setting and restart.`;
+		warnings.push(warning);
+		console.error(`fhold: degraded: ${warning}`);
+		return fallback;
+	}
 	return value;
 }
 
@@ -37,29 +40,54 @@ export function recoveryConfig(env = process.env) {
 	const includeFile = env.FH_RECOVERY_INCLUDE_FILE;
 	if (includeFile !== undefined && !canonicalPath(includeFile))
 		throw new Error('recovery include file must be an absolute path');
-	const intervalSeconds = integerSetting(env, 'FH_RECOVERY_INTERVAL_SECONDS', 60, 1, 86_400);
-	const maxUnsavedSeconds = integerSetting(env, 'FH_RECOVERY_MAX_UNSAVED_SECONDS', 300, 5, 604_800);
-	if (maxUnsavedSeconds < intervalSeconds)
-		throw new Error('Recovery maximum unsaved age must cover its capture interval');
+	const warnings = [];
+	const intervalSeconds = integerSetting(
+		env,
+		'FH_RECOVERY_INTERVAL_SECONDS',
+		60,
+		1,
+		86_400,
+		warnings
+	);
+	const maxUnsavedSeconds = integerSetting(
+		env,
+		'FH_RECOVERY_MAX_UNSAVED_SECONDS',
+		300,
+		5,
+		604_800,
+		warnings
+	);
 	const operationSeconds = integerSetting(
 		env,
 		'FH_RECOVERY_OPERATION_TIMEOUT_SECONDS',
 		120,
 		1,
-		3_600
+		3_600,
+		warnings
 	);
-	const probePort = integerSetting(env, 'FH_RECOVERY_PROBE_PORT', 0, 0, 65_535);
-	if (probePort === Number(env.OPENCODE_PORT || 4096))
-		throw new Error('Recovery probe cannot use the Assistant port');
+	let probePort = integerSetting(env, 'FH_RECOVERY_PROBE_PORT', 0, 0, 65_535, warnings);
+	if (probePort === Number(env.OPENCODE_PORT || 4096)) {
+		warnings.push(
+			'Recovery probe conflicts with the Assistant port; the optional probe is disabled. Correct its port and restart.'
+		);
+		probePort = 0;
+	}
 	const toolsPath = '/opt/fhold/tools/package.json';
 	let dependencies;
 	try {
 		dependencies = JSON.parse(readFileSync(toolsPath, 'utf8')).dependencies;
 	} catch {
-		dependencies = JSON.parse(
-			readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'tools/package.json'), 'utf8')
-		).dependencies;
+		try {
+			dependencies = JSON.parse(
+				readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'tools/package.json'), 'utf8')
+			).dependencies;
+		} catch {
+			warnings.push(
+				'Native package provenance is unavailable; recovery still operates. Review the Assistant image.'
+			);
+		}
 	}
+	dependencies ??= {};
 	return {
 		// Let the transport validate the original text, including dot segments and
 		// escapes; URL normalization must not silently select another namespace.
@@ -72,6 +100,7 @@ export function recoveryConfig(env = process.env) {
 		maxUnsavedSeconds,
 		operationSeconds,
 		probePort,
+		warnings,
 		versions: Object.fromEntries([
 			...[
 				'opencode-ai',
@@ -175,7 +204,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	let owner = false;
 	let failure = false;
 	let failureCause;
-	let lastAttemptError;
 	let lastLoggedFailure;
 	let nextCapture = 0;
 	let lastAttemptFailed = false;
@@ -186,6 +214,8 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	let renewing = false;
 	let statusWrite = Promise.resolve();
 	let probe;
+	let statusReportingFailed = false;
+	const warnings = [...(config.warnings ?? [])];
 	const stop = () => {
 		stopping = true;
 		clearTimeout(timer);
@@ -193,36 +223,46 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	};
 	process.on('SIGTERM', stop);
 	process.on('SIGINT', stop);
-	// Clock corrections must not extend the time allowed for unsaved writes.
+	// Clock corrections must not hide an overdue-backup warning.
 	// The engine owns accepted publication state; health must not keep a
 	// second clock that can diverge from committed manifests and receipts.
 	const age = () => (performance.now() - (engine.status().lastCheckpointTick ?? began)) / 1_000;
-	const healthy = () =>
-		owner &&
-		!failure &&
-		!stopping &&
-		state === 'running' &&
-		Number.isFinite(engine.status().lastCheckpointTick) &&
-		age() < config.maxUnsavedSeconds;
+	const healthy = () => owner && !failure && !stopping && state === 'running';
 	const publishStatus = () => {
 		const checkpoint = engine.status();
 		const value = {
 			format: 1,
 			state,
 			healthy: healthy(),
+			durable:
+				healthy() &&
+				!lastAttemptFailed &&
+				Number.isFinite(checkpoint.lastCheckpointTick) &&
+				age() < config.maxUnsavedSeconds,
 			updatedAt: Date.now(),
 			lastPublishedAt: checkpoint.lastCheckpointTick === null ? null : checkpoint.lastCheckpointAt,
 			lastAttemptFailed,
+			warnings,
 			failure: failureCause ? sanitizeRecoveryError(failureCause) : engine.status().failure,
 			maxUnsavedSeconds: config.maxUnsavedSeconds
 		};
-		const write = statusWrite.then(() => writeStatus(statusFile, value));
-		statusWrite = write.catch(() => {});
-		return write;
+		// Observation must not masquerade as storage-ownership loss.
+		statusWrite = statusWrite
+			.then(() => writeStatus(statusFile, value))
+			.then(() => {
+				statusReportingFailed = false;
+			})
+			.catch(() => {
+				if (!statusReportingFailed)
+					console.error(
+						'fhold: degraded: Recovery status could not be written. Check private runtime permissions; recovery continues and status publication retries.'
+					);
+				statusReportingFailed = true;
+			});
+		return statusWrite;
 	};
 	const captureFailed = (error) => {
 		lastAttemptFailed = true;
-		lastAttemptError = error;
 		const reason = sanitizeRecoveryError(error);
 		if (reason !== lastLoggedFailure) {
 			process.stderr.write(`fhold recovery: checkpoint failed (${reason}).\n`);
@@ -230,17 +270,25 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		}
 	};
 	if (config.probePort) {
-		probe = Bun.serve({
-			hostname: '0.0.0.0',
-			port: config.probePort,
-			fetch: async (request) => {
-				const route = new URL(request.url).pathname;
-				if (!['/live', '/ready'].includes(route)) return new Response('Not found', { status: 404 });
-				const ready =
-					route === '/live' ? !failure && !stopping : healthy() && (await nativeReady(env));
-				return new Response(ready ? 'ok' : 'not ready', { status: ready ? 200 : 503 });
-			}
-		});
+		try {
+			probe = Bun.serve({
+				hostname: '0.0.0.0',
+				port: config.probePort,
+				fetch: async (request) => {
+					const route = new URL(request.url).pathname;
+					if (!['/live', '/ready'].includes(route))
+						return new Response('Not found', { status: 404 });
+					const ready =
+						route === '/live' ? !failure && !stopping : healthy() && (await nativeReady(env));
+					return new Response(ready ? 'ok' : 'not ready', { status: ready ? 200 : 503 });
+				}
+			});
+		} catch {
+			const warning =
+				'Recovery readiness probe is unavailable. Check its port; recovery and the agent continue.';
+			warnings.push(warning);
+			console.error(`fhold: degraded: ${warning}`);
+		}
 	}
 	try {
 		await publishStatus();
@@ -252,8 +300,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		// Renewal never shares the synchronous SQLite subprocess's event loop.
 		const failClosed = (error) => {
 			failure = true;
-			failureCause ??=
-				error ?? lastAttemptError ?? new Error('recovery accepted checkpoint too old');
+			failureCause ??= error;
 			state = 'failed';
 			stop();
 			// Stop native writers promptly even while a bounded capture is in flight.
@@ -267,10 +314,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 			}
 		};
 		renewal = setInterval(() => {
-			if (age() >= config.maxUnsavedSeconds) {
-				failClosed();
-				return;
-			}
 			if (renewing || stopping) return;
 			renewing = true;
 			engine
@@ -293,7 +336,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 					try {
 						await engine.checkpoint();
 						lastAttemptFailed = false;
-						lastAttemptError = undefined;
 						lastLoggedFailure = undefined;
 					} catch (error) {
 						captureFailed(error);
@@ -355,15 +397,13 @@ async function main() {
 		const healthy =
 			status.healthy === true &&
 			Number.isFinite(status.updatedAt) &&
-			status.updatedAt <= now &&
-			now - status.updatedAt < 5_000 &&
-			Number.isFinite(status.lastPublishedAt) &&
-			status.lastPublishedAt > 0 &&
-			status.lastPublishedAt <= now &&
-			Number.isFinite(status.maxUnsavedSeconds) &&
-			status.maxUnsavedSeconds > 0 &&
-			(now - status.lastPublishedAt) / 1_000 < status.maxUnsavedSeconds;
+			now - status.updatedAt < 5_000;
 		process.stdout.write(`${JSON.stringify({ ...status, healthy })}\n`);
+		for (const warning of status.warnings ?? []) console.error(`fhold: degraded: ${warning}`);
+		if (status.durable === false)
+			console.error(
+				'fhold: degraded: Recovery backups need attention. Review checkpoint status and storage access; captures retry without stopping the agent.'
+			);
 		if (!healthy) process.exitCode = 1;
 		return;
 	}

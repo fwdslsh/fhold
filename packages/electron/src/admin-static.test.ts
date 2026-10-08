@@ -220,7 +220,8 @@ describe('Admin static security boundary', () => {
 		expect(html).toContain('Ephemeral container support');
 		expect(html).toContain('different formats and are not interchangeable');
 		expect(html).toContain('No native conversations or remote sign-ins');
-		expect(html).toContain('native tool versions must match');
+		expect(html).toContain('including after ordinary image upgrades');
+		expect(html).not.toContain('native tool versions must match');
 		expect(html).toContain('Guardian/portal state');
 		expect(html).toContain('Initialize new destination');
 		expect(html).toContain('To import portable content, create a fresh instance');
@@ -1098,6 +1099,25 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-status-detail').textContent).toContain('retry automatically');
 		expect(control('start-stack').disabled).toBe(true);
 	});
+	it('shows optional-feature warnings without reporting a usable agent stopped or blocking setup', () => {
+		const assistant = {
+			name: 'assistant',
+			state: 'running',
+			health: 'healthy',
+			warnings: ['Scheduling is unavailable. Check logs.']
+		};
+		const snapshot = { ...runtimeSnapshot(), services: [assistant] };
+		renderServices(snapshot);
+		expect(control('assistant-summary').textContent).toBe('Running · needs attention');
+		expect(control('overview-heading').textContent).toContain('running');
+		expect(control('runtime-status-detail').textContent).toContain('Scheduling is unavailable');
+		expect(control('runtime-status-detail').hidden).toBe(false);
+		expect(control('setup-recovery').hidden).toBe(true);
+		expect(control('restart-stack').disabled).toBe(false);
+		renderServices({ ...snapshot, services: [{ ...assistant, warnings: [] }] });
+		expect(control('assistant-summary').textContent).toBe('Running normally');
+		expect(control('runtime-status-detail').hidden).toBe(true);
+	});
 	it('coalesces overlapping snapshot reads without a manual refresh control', async () => {
 		const snapshot = emptySnapshot();
 		state.currentSnapshot = snapshot;
@@ -1307,6 +1327,17 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-recovery-status').children[0].textContent).toContain('stopped');
 		renderRecoveryStatus({ state: 'ready', lastPublishedAt: Date.now() });
 		expect(control('runtime-recovery-status').children[0].textContent).toBe('Checkpoint accepted.');
+	});
+	it('shows backup failures or overdue checkpoints without reporting a stopped agent or accepted checkpoint', () => {
+		fixture();
+		for (const status of [
+			{ state: 'ready', durable: false, lastPublishedAt: null },
+			{ state: 'ready', durable: true, lastAttemptFailed: true, failure: 'recovery Blob transport failed' }
+		]) {
+			renderRecoveryStatus(status);
+			expect(control('runtime-recovery-status').children[0].textContent).toBe('Agent is running; backups need attention.');
+			expect(control('runtime-recovery-status').className).not.toContain('success');
+		}
 	});
 });
 

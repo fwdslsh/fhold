@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased — recovery upgrades without version locks
+
+Assistant recovery no longer rejects valid checkpoints or surviving receipts
+because image dependencies changed. Package versions remain diagnostic provenance;
+native tools own their database upgrades. Retried startup does not invalidate a
+receipt solely by advancing the ownership epoch. Backup inventory limits no
+longer block startup of an already receipted home or provisioned first-run data.
+
+Coverage edits now use the existing destination and leave newly excluded paths
+untouched. SQLite created in selected directories is detected and snapshotted
+without requiring manual registration. Overdue/failed checkpoints warn and retry
+without shutting down a working agent. Invalid optional remote-worker settings
+no longer prevent OpenCode from starting, and image activation verifies content
+IDs rather than tag spelling or an assumed single replica. Operator-owned Compose
+add-ons can build normally without fhold demanding a pre-existing image reference.
+
+Identity, supported checkpoint formats, checksums, database integrity, path
+boundaries and exclusive writer ownership remain enforced. Regression tests and
+published-image upgrade smokes cover cold storage, surviving local state and
+restoring a checkpoint made by the upgraded image.
+
+Optional scheduling, reconciliation, knowledge hooks, keep-alive, native-worker
+and diagnostic failures no longer stop a usable agent. Reconciliation starts in
+the background and retries. CLI status, Admin Overview and the built-in admin
+skill show actionable warnings separately from core readiness. Invalid numeric
+tuning uses safe defaults; failed status writes retry and an unavailable optional
+probe does not invalidate recovery ownership. Real-image smoke tests stop optional
+processes and verify native sessions and shell tools remain usable.
+
 ## 0.1.2610061043-beta.1 — qualified setup and reliable installation retry
 
 This corrected beta.1 includes the simpler wizard, Apps, native AI settings and

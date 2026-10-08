@@ -55,8 +55,12 @@ fi
 		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${body}\n`);
 		chmodSync(path, 0o755);
 	};
-	stub('akm', 'printf "sync\\n" >>"$EVENTS"');
-	stub('fhold-keepalive', ':');
+	stub(
+		'akm',
+		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
+	);
+	stub('fhold-task', ':');
+	stub('fhold-keepalive', 'exit "${FIXTURE_KEEPALIVE_EXIT:-0}"');
 	stub('supercronic', "trap 'exit 0' TERM; while sleep 0.1; do :; done");
 	stub(
 		'fhold-remote',
@@ -90,7 +94,7 @@ if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
   printf 'recovery-environment-retained\n' >>"$EVENTS"
 fi
 test ! -e "$FH_RUNTIME_DIR/recovery-writers-started"
-test ! -e "$FH_RUNTIME_DIR/recovery-status.json"
+if [ "\${FIXTURE_BLOCKED_STATUS:-0}" != 1 ]; then test ! -e "$FH_RUNTIME_DIR/recovery-status.json"; fi
 trap 'printf "final-checkpoint\\n" >>"$EVENTS"; sleep "\${FIXTURE_FINAL_SECONDS:-0}"; printf "final-complete\\n" >>"$EVENTS"; printf "released\\n" >>"$EVENTS"; exit 0' TERM
 if [ "\${FIXTURE_RESTORE_FAIL:-0}" = 1 ]; then exit 1; fi
 sleep 0.3
@@ -105,6 +109,10 @@ while sleep 0.1; do :; done`
 			writeFileSync(join(runtime, name), 'stale fixture');
 		}
 	}
+	if (extra.FIXTURE_BLOCKED_STATUS === '1')
+		mkdirSync(join(root, 'runtime/recovery-status.json'), { recursive: true });
+	if (extra.FIXTURE_BLOCKED_OPTIONAL_PID)
+		mkdirSync(join(root, `runtime/${extra.FIXTURE_BLOCKED_OPTIONAL_PID}.pid`), { recursive: true });
 	const child = spawn('bash', [script], {
 		env: {
 			...process.env,
@@ -144,12 +152,19 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
-	it('rejects malformed recovery operation budgets before bootstrap writes', async () => {
+	it('uses safe default recovery budgets when numeric settings are malformed', async () => {
 		for (const value of ['0', '-1', 'false', '1.5', '3601']) {
 			const run = fixture({ FH_RECOVERY_OPERATION_TIMEOUT_SECONDS: value });
-			expect(await finished(run.child)).toBe(1);
-			expect(run.events()).toEqual([]);
-			expect(existsSync(join(run.root, 'runtime'))).toBe(false);
+			try {
+				await until(() => run.events().includes('native'));
+				expect(run.child.exitCode).toBeNull();
+				expect(readFileSync(join(run.root, 'runtime/degraded-configuration'), 'utf8')).toContain(
+					'defaults'
+				);
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
 		}
 	});
 
@@ -169,19 +184,81 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events.indexOf('native-stopped')).toBeLessThan(events.indexOf('final-checkpoint'));
 		expect(events.indexOf('final-complete')).toBeLessThan(events.indexOf('released'));
 	});
-	it('rejects invalid flags before runtime/filesystem/native writes', async () => {
-		for (const name of [
-			'FH_SCHEDULER_ENABLED',
-			'FH_CODEX_REMOTE',
-			'FH_CLAUDE_REMOTE',
-			'FH_CODEX_SANDBOX'
-		]) {
-			const run = fixture({ [name]: 'false' });
-			expect(await finished(run.child)).toBe(1);
-			expect(run.events()).toEqual([]);
-			expect(existsSync(join(run.root, 'runtime'))).toBe(false);
+	it('disables malformed scheduling intent without preventing native startup', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: 'false' });
+		try {
+			await until(() => run.events().includes('native'));
+			expect(run.events()).not.toContain('sync');
+			expect(run.child.exitCode).toBeNull();
+			expect(existsSync(join(run.root, 'runtime/degraded-configuration'))).toBe(true);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
 		}
 	});
+	it('does not block native startup on slow or failing initial task reconciliation', async () => {
+		const run = fixture({
+			FH_SCHEDULER_ENABLED: '1',
+			FIXTURE_SYNC_SECONDS: '30',
+			FIXTURE_SYNC_EXIT: '1'
+		});
+		try {
+			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
+			expect(run.child.exitCode).toBeNull();
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	it('a keep-alive initialization failure disables only keep-alive', async () => {
+		const run = fixture({
+			FH_SCHEDULER_ENABLED: '1',
+			FH_KEEPALIVE_URL: 'invalid',
+			FIXTURE_KEEPALIVE_EXIT: '1'
+		});
+		try {
+			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
+			expect(run.child.exitCode).toBeNull();
+			expect(readFileSync(join(run.root, 'runtime/degraded-keepalive'), 'utf8')).toContain(
+				'Correct'
+			);
+			expect(readFileSync(join(run.root, 'crontabs/fhold'), 'utf8')).not.toContain(
+				'fhold-keepalive tick'
+			);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	for (const component of ['scheduler', 'reconciliation'])
+		it(`a stopped ${component} does not stop native sessions or the recovery owner`, async () => {
+			const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
+			try {
+				await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
+				process.kill(
+					Number(readFileSync(join(run.root, `runtime/${component}.pid`), 'utf8')),
+					'SIGTERM'
+				);
+				await Bun.sleep(150);
+				expect(run.child.exitCode).toBeNull();
+				expect(run.events()).not.toContain('native-stopped');
+				expect(run.events()).not.toContain('released');
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
+	for (const name of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE', 'FH_CODEX_SANDBOX'])
+		it(`invalid optional ${name} does not prevent native assistant startup`, async () => {
+			const run = fixture({ [name]: 'false' });
+			try {
+				await until(() => run.events().includes('native'));
+				expect(run.child.exitCode).toBeNull();
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
 
 	for (const tool of ['codex', 'claude'] as const)
 		it(`restores before writers and starts enabled ${tool} with scheduling off on every boot`, async () => {
@@ -220,7 +297,9 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 				);
 				if (recoveryUrl) {
 					for (const tool of ['claude', 'codex'])
-						expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf(`remote-${tool}`));
+						expect(run.events().indexOf('restored')).toBeLessThan(
+							run.events().indexOf(`remote-${tool}`)
+						);
 				}
 				expect(run.events()).not.toContain('sync');
 			} finally {
@@ -289,6 +368,34 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
+	it('does not block startup when an old diagnostic status cannot be removed', async () => {
+		const run = fixture({ FH_RECOVERY_URL: 'file:///fixture', FIXTURE_BLOCKED_STATUS: '1' });
+		try {
+			await until(() => run.events().includes('native'));
+			expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf('native'));
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	for (const feature of ['scheduler', 'codex', 'claude']) {
+		it(`a blocked optional ${feature} PID file does not stop the agent`, async () => {
+			const run = fixture({
+				FIXTURE_BLOCKED_OPTIONAL_PID: feature,
+				FH_SCHEDULER_ENABLED: feature === 'scheduler' ? '1' : '0',
+				FH_CODEX_REMOTE: feature === 'codex' ? '1' : '0',
+				FH_CLAUDE_REMOTE: feature === 'claude' ? '1' : '0'
+			});
+			try {
+				await until(() => run.events().includes('native'));
+				await new Promise(resolve => setTimeout(resolve, 100));
+				expect(run.child.exitCode).toBeNull();
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
+	}
 
 	it('refuses relative, root-alias, and symbolic-link runtime paths before writes', async () => {
 		for (const runtime of ['relative', '/', '/tmp/..', '/tmp/./private', '/tmp//private']) {
@@ -314,7 +421,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 	it('default scheduler continues task synchronization', async () => {
 		const run = fixture({ FH_SCHEDULER_ENABLED: '1' });
 		try {
-			await until(() => run.events().includes('native'));
+			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
 			expect(run.events()).toContain('sync');
 			expect(existsSync(join(run.root, 'runtime', 'scheduler.pid'))).toBe(true);
 			expect(existsSync(join(run.root, 'runtime', 'reconciliation.pid'))).toBe(true);

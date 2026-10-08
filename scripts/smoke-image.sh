@@ -133,6 +133,59 @@ verify_builtin_skills() {
 	docker exec "$container" bash -c 'for script in /etc/opencode/skills/*/scripts/*.sh; do bash -n "$script" || exit 1; done'
 }
 
+verify_optional_failure_isolation() {
+	# Kill only a disposable fixture's optional processes. Exercise the shipped
+	# health probe, agent diagnostics and native shell API, without repairing any
+	# image files or requiring provider accounts.
+	docker exec "$container" node --input-type=module -e '
+		import assert from "node:assert/strict";
+		import { readFileSync } from "node:fs";
+		import { spawnSync } from "node:child_process";
+		const runtime = "/tmp/fhold-runtime";
+		for (const feature of ["scheduler", "reconciliation"]) process.kill(Number(readFileSync(`${runtime}/${feature}.pid`, "utf8")), "SIGTERM");
+		await new Promise(resolve => setTimeout(resolve, 1000));
+		const health = spawnSync("fhold-healthcheck", [], {encoding:"utf8", timeout:10000});
+		assert.equal(health.status, 0, "Optional process failure must not make the agent unhealthy");
+		assert.match(health.stdout, /fhold: degraded: Scheduled tasks are unavailable/);
+		assert.match(health.stdout, /Task reconciliation is unavailable/);
+		const status = spawnSync("bun", ["/etc/opencode/skills/fhold-admin/scripts/status.mjs"], {encoding:"utf8", timeout:15000});
+		assert.equal(status.status, 0);
+		const diagnostics = JSON.parse(status.stdout);
+		assert.equal(diagnostics.agentReady, true);
+		assert.ok(diagnostics.warnings.some(warning => warning.includes("Scheduled tasks")));
+		const authorization = "Basic " + Buffer.from("user:assistant-smoke-password-0000000000000000").toString("base64");
+		async function api(path, body) {
+			const response = await fetch("http://127.0.0.1:4096" + path + "?directory=%2Fwork", {
+				method:"POST", headers:{authorization,"content-type":"application/json"},
+				body:JSON.stringify(body), signal:AbortSignal.timeout(30000)
+			});
+			assert.ok(response.ok, `Native API failed: ${response.status}`);
+			return response.json();
+		}
+		const session = await api("/session", {title:"Optional-service degradation qualification"});
+		const message = await api(`/session/${session.id}/shell`, {agent:"build", command:"printf fhold-core-remains-usable"});
+		assert.ok(message.parts.some(part => part.type === "tool" && part.state?.output?.includes("fhold-core-remains-usable")), "Native tool must remain usable");
+		console.log("Optional scheduler/reconciliation failures: native sessions/tools stay usable and report warnings");'
+
+	# Ordinary standalone configuration errors degrade only the affected features.
+	# This fresh fixture uses the image defaults; no helper/CLI is substituted.
+	docker rm -f "$container" >/dev/null
+	docker run -d --name "$container" --init --network none \
+		--cap-drop=ALL --security-opt no-new-privileges:true \
+		-e OPENCODE_SERVER_PASSWORD=assistant-smoke-password-0000000000000000 \
+		-e FH_SCHEDULER_ENABLED=invalid -e FH_KEEPALIVE_URL=invalid \
+		-e FH_CODEX_REMOTE=invalid -e FH_CLAUDE_REMOTE=0 \
+		-e FH_SHUTDOWN_SECONDS=invalid "$image" >/dev/null
+	wait_for_health
+	docker exec "$container" bun /etc/opencode/skills/fhold-admin/scripts/status.mjs | docker exec -i "$container" bun -e '
+		const result = await Bun.stdin.json();
+		if (!result.agentReady || result.schedulerEnabled || !result.warnings.some(warning => warning.includes("runtime settings")) ||
+			!result.warnings.some(warning => warning.includes("Keep-alive")) ||
+			!result.warnings.some(warning => warning.includes("FH_CODEX_REMOTE")))
+			throw Error("Malformed optional settings blocked startup or hid degradation");'
+	printf '%s\n' 'Malformed optional settings: authenticated agent is healthy with actionable warnings'
+}
+
 verify_image_metadata
 case "$kind" in
 assistant)
@@ -266,6 +319,7 @@ CONFIG
 	docker exec "$container" opencode debug skill | docker exec -i "$container" bun -e \
 		'const skills = await Bun.stdin.json(); if (!skills.some(skill => skill.name === "fhold-admin")) throw Error("Native built-ins require the optional AKM catalog source");'
 	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
+	verify_optional_failure_isolation
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"

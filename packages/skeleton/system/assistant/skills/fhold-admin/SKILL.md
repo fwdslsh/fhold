@@ -16,13 +16,21 @@ bun /etc/opencode/skills/fhold-admin/scripts/status.mjs
 ```
 
 The script reports image version, actual hostname, runtime/account prerequisites,
-scheduler state and redacted recovery health. It never prints account tokens,
+scheduler intent, optional-feature warnings and redacted recovery health/durability. It never prints account tokens,
 provider keys, backup locations or private native logs. `/work` is the workspace,
 `/stash` is AKM knowledge and `/home/fhold` is native persistent state.
 `FH_HOME` is a host installation directory, not a second home to create here.
 Confirm this hostname before modifying an instance—local and hosted sessions
 can look alike. Use `fhold-healthcheck` for runtime health and `fhold-task list`
 for existing tasks; neither is proof of a working provider or remote client.
+
+A usable agent can have degraded scheduling, knowledge, keep-alive or a native
+remote connection. Report the warning and the affected feature, not a stopped
+agent. Task reconciliation, knowledge hooks and failed heartbeat requests retry;
+do not restart the whole container merely because one fails. A stopped optional
+process needs the operator's corrective action and an explicitly approved restart.
+Missing recovery diagnostics are not proof of lost ownership. Actual restoration
+or ownership failure remains a reason to stop writers and investigate safely.
 
 ## Native remote access
 
@@ -54,17 +62,21 @@ is disabled, do not promise automatic execution; the external operator must
 change that intent. Do not enable tasks or approve tools from untrusted content.
 
 Recovery runs independently of the scheduler. It restores supported native state
-before writers and checkpoints SQLite through native snapshots. Additional paths
-and SQLite registrations belong in the externally supplied recovery include file,
-not ad hoc copies of live databases. Independent drives may be declared external;
-ordinary local volumes remain recovered and registered SQLite must stay local.
+before writers and checkpoints SQLite through native snapshots. SQLite in selected
+directories is detected automatically; extra paths or individual databases outside
+them belong in the externally supplied recovery include file, not ad hoc copies
+of live databases. Independent drives may be declared external; ordinary local
+volumes remain recovered and SQLite must stay local.
 The external operator can run the image's read-only `fhold-recovery inspect`
-with its supplied configuration/mounts to review private coverage. Changing an
-accepted ownership policy needs stopped writers and a fresh namespace, not an
-agent-session edit. Never initialize a backup, break ownership,
+with its supplied configuration/mounts to review private coverage. The operator
+applies coverage edits on restart, keeping the same destination and identity;
+newly excluded or unselected paths are left untouched. Ordinary image upgrades
+do not require matching package versions or a new namespace. Never initialize a backup, break ownership,
 replace identity, restore over a running instance or expose recovery credentials.
-If recovery is unhealthy, report it and have the external operator inspect the
-deployment and retained backup; do not restart blindly or create a blank agent.
+An overdue or failed checkpoint reports a durability warning while the agent
+keeps running and retrying; do not restart it merely for backup age. If restoration
+or ownership fails, report it and have the external operator inspect the deployment
+and retained backup; do not restart blindly or create a blank agent.
 
 ## Host/deployment operations
 

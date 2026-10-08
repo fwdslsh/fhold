@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const image = process.env.FH_RECOVERY_TEST_IMAGE;
 assert.ok(image, 'Set FH_RECOVERY_TEST_IMAGE to the exact candidate image');
+const sourceImage = process.env.FH_RECOVERY_UPGRADE_FROM_IMAGE || image;
+const survivingHome = process.env.FH_RECOVERY_TEST_SURVIVING_HOME === '1';
 const uid = process.getuid?.();
 const gid = process.getgid?.();
 assert.ok(
@@ -22,6 +24,8 @@ const root = await mkdtemp(join(tmpdir(), 'fhold-recovery-smoke-'));
 await chmod(root, 0o700);
 const backup = join(root, 'backup');
 await mkdir(backup, { mode: 0o700 });
+const nativeHome = join(root, 'native-home');
+if (survivingHome) await mkdir(nativeHome, { mode: 0o700 });
 const url = process.env.FH_RECOVERY_TEST_URL || 'file:///backup';
 const network = process.env.FH_RECOVERY_TEST_DOCKER_NETWORK;
 const credentialFile = process.env.FH_RECOVERY_TEST_CREDENTIAL_FILE;
@@ -81,6 +85,8 @@ await writeFile(
 const created = new Set();
 const report = {
 	image,
+	sourceImage,
+	survivingHome,
 	runtimeUser,
 	instance,
 	fixture: root,
@@ -123,6 +129,7 @@ const common = [
 	envFile,
 	'--mount',
 	`type=bind,source=${backup},target=/backup`,
+	...(survivingHome ? ['--mount', `type=bind,source=${nativeHome},target=/home/fhold`] : []),
 	'--mount',
 	`type=bind,source=${includeFile},target=/run/fhold-recovery-includes.json,readonly`,
 	'--mount',
@@ -154,9 +161,9 @@ async function poll(probe, label, timeout = 120_000) {
 	}
 	throw new Error(`Timed out ${label}: ${last?.message || 'condition not met'}`);
 }
-async function start(suffix) {
+async function start(suffix, selectedImage = image) {
 	const name = `fhold-recovery-smoke-${instance}-${suffix}`;
-	const id = await docker(['run', '-d', '--name', name, ...common, '-p', '127.0.0.1::4096', image]);
+	const id = await docker(['run', '-d', '--name', name, ...common, '-p', '127.0.0.1::4096', selectedImage]);
 	created.add(id);
 	await poll(async () => {
 		await docker(['exec', id, 'fhold-healthcheck'], 15_000);
@@ -215,7 +222,7 @@ async function released() {
 		false
 	);
 	assert.equal(
-		manifest.members.filter((member) => member.kind === 'sqlite' && member.id.startsWith('custom-'))
+		manifest.members.filter((member) => member.kind === 'sqlite' && member.id?.startsWith('custom-'))
 			.length,
 		3
 	);
@@ -234,6 +241,7 @@ async function released() {
 
 try {
 	report.imageId = await docker(['image', 'inspect', image, '--format', '{{.Id}}']);
+	report.sourceImageId = await docker(['image', 'inspect', sourceImage, '--format', '{{.Id}}']);
 	const initName = `fhold-recovery-smoke-${instance}-init`;
 	created.add(initName);
 	await docker([
@@ -245,7 +253,7 @@ try {
 		...common,
 		'--entrypoint',
 		'/usr/local/bin/fhold-recovery',
-		image,
+		sourceImage,
 		'init',
 		'--confirm-new-instance'
 	]);
@@ -270,7 +278,7 @@ try {
 	);
 	report.checks.missingRequiredMountBlocksNativeStartup = true;
 	report.checks.explicitInitialization = true;
-	const first = await start('first');
+	const first = await start('first', sourceImage);
 	assert.equal(await docker(['exec', first.id, 'id', '-u']), String(uid));
 	assert.equal(await docker(['exec', first.id, 'id', '-g']), String(gid));
 	report.checks.nonRootHostIdentity = true;
@@ -381,10 +389,17 @@ try {
 	report.checks.realPinnedCatalogInspected = true;
 	await stop(first);
 	await released();
+	if (survivingHome)
+		await writeFile(join(nativeHome, '.custom-client/newer-local-note'), 'newer-surviving-native-state', { mode: 0o600 });
 	for (const [name, directory] of Object.entries(external))
 		await writeFile(join(directory, 'external.txt'), `newer-${name}`, { mode: 0o644 });
 	report.checks.gracefulFinalCheckpointAndRelease = true;
 	const second = await start('replacement');
+	if (survivingHome) {
+		await execBun(second.id, `import assert from'node:assert/strict';import{readFile}from'node:fs/promises';assert.equal(await readFile('/home/fhold/.custom-client/newer-local-note','utf8'),'newer-surviving-native-state');`);
+		report.checks.survivingReceiptAndNewerLocalStatePreserved = true;
+	}
+	report.checks.imageUpgradeRestored = sourceImage !== image;
 	await execBun(
 		second.id,
 		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';
@@ -405,7 +420,7 @@ try {
 		second.id,
 		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/fhold/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/fhold/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid','reconciliation.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`
 	);
-	report.checks.emptyLayerReplacement = true;
+	report.checks.emptyLayerReplacement = !survivingHome;
 	await execBun(
 		second.id,
 		`
@@ -415,12 +430,13 @@ try {
 		assert.equal(await readFile('/tmp/fhold-extra state/nested/note','utf8'),'synthetic-extra-directory');
 		assert.equal((await stat('/tmp/fhold-extra state/nested/note')).mode&0o777,0o700);
 		assert.equal(await readFile('/tmp/fhold-settings.json','utf8'),'synthetic-individual-file');
-		assert.equal(await access('/home/fhold/not-selected').then(()=>true).catch(()=>false),false);
+		assert.equal(await access('/home/fhold/not-selected').then(()=>true).catch(()=>false),${survivingHome});
+		if(${survivingHome})assert.equal(await readFile('/home/fhold/not-selected','utf8'),'excluded-sentinel');
 		for(const[index,file]of ${JSON.stringify(customSelection.sqlite)}.entries()){
 			const db=new Database(file,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');
 			assert.equal(db.query('SELECT value FROM marker').get().value,'synthetic-custom-sqlite-'+index);db.close();
 		}
-		console.log('custom paths and registered SQLite files restored into an empty container');
+		console.log('custom paths and registered SQLite files preserved or restored');
 	`
 	);
 	report.checks.customPathsAndSqliteRestored = true;
@@ -435,6 +451,13 @@ try {
 	report.checks.schedulerDisabled = true;
 	await stop(second);
 	await released();
+	const restarted = await start('candidate-restart');
+	const restartedSessions = await (await api(restarted, '/session')).json();
+	assert.ok(restartedSessions.some((value) => value.id === session.id), 'new candidate checkpoint restores on the next restart');
+	await verifyNativeFiles(restarted);
+	await stop(restarted);
+	await released();
+	report.checks.upgradedCheckpointRestoredOnNextRestart = true;
 	const offlineName = `fhold-recovery-smoke-${instance}-offline`;
 	created.add(offlineName);
 	await docker([

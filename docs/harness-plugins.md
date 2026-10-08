@@ -116,7 +116,16 @@ new container boot clear the corresponding observations.
 Inspect the redacted current decision with `fhold-keepalive status`. The private
 `$FH_RUNTIME_DIR/keepalive-status.json` records the last tick and whether its
 request succeeded. A failed request is retried on the next tick and is logged
-without its target or response. It does not stop the native agent.
+without its target or response. It does not stop the native agent. Invalid
+keep-alive configuration disables only heartbeats for that boot and reports
+an actionable warning. A stopped scheduler or stale/failed heartbeat appears
+in CLI status and Admin Overview without making OpenCode unhealthy.
+
+AKM plugin initialization and hook errors likewise warn without rejecting native
+agent startup or prompts. Failed hooks retry on subsequent events; automatic
+memory capture retries on a later eligible turn. Correct AKM settings and reload
+OpenCode after an initialization failure. Native tool errors and security policy
+remain owned by their respective tools, not silently converted into success.
 
 This is best-effort activity signaling, not an atomic scale-in veto. Transport
 failures or work beginning after termination was committed can interrupt work.

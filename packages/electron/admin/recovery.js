@@ -117,6 +117,9 @@ export function renderRecoveryStatus(status) {
 	if (status.state === 'disabled') {
 		title.textContent = 'Ephemeral container support is off.';
 		detail.textContent = 'Local persistence is unchanged. Import / export remains available above.';
+	} else if (status.state === 'ready' && (status.durable === false || status.lastAttemptFailed)) {
+		title.textContent = 'Agent is running; backups need attention.';
+		detail.textContent = status.failure || 'The last checkpoint is overdue. Recovery will retry without stopping your agent. Check the backup destination and instance logs.';
 	} else if (status.state === 'ready') {
 		title.textContent = 'Checkpoint accepted.';
 		detail.textContent = `Last publication: ${new Date(status.lastPublishedAt).toLocaleString()}. This is same-instance recovery, not a portable archive.`;
@@ -135,7 +138,7 @@ export function renderRecoveryStatus(status) {
 				: 'Save does not create a checkpoint. Apply settings and check the running recovery worker.');
 	}
 	panel.append(title, detail);
-	panel.className = `inline-status ${status.state === 'ready' ? 'success' : status.failure ? 'error' : 'neutral'}`;
+	panel.className = `inline-status ${status.state === 'ready' && status.durable !== false && !status.lastAttemptFailed ? 'success' : status.failure ? 'error' : 'neutral'}`;
 }
 
 export function bindRecoveryEvents() {
