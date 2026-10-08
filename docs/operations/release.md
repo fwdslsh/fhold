@@ -21,9 +21,9 @@ registry intent retains its pull behavior; this is not a new configuration flag.
 
 ## Frozen version contract
 
-Use `X.Y.yyMMddHHmm` in UTC (20yy), optionally `-alpha`, `-beta` or `-rc` and
-a positive serial. Real dates/hours/minutes, canonical integers and numeric
-precedence are enforced by `scripts/set-version.mjs`.
+For the **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
+`-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
+canonical integers and numeric precedence are enforced by `scripts/set-version.mjs`.
 Released candidate versions are frozen. An existing receipt permits an
 identical source/content retry only. Changed source or artifact bytes require
 a new version; unpublished candidates are not an exception.
@@ -52,6 +52,26 @@ boundary with native `BUN_OPTIONS='--no-env-file --config=/dev/null'`. Verify
 that hostile `/work/bunfig.toml` preloads do not execute through managed helpers
 using the real-image/native-harness smoke. This is an image runtime option,
 not a replacement launcher or configuration service.
+
+### Planned patch format from 0.2
+
+Starting with the **0.2 release line**, replace the hour/minute timestamp with
+`X.Y.yyMMdd<build>`: two-digit year, month, day, then an unpadded positive daily
+build number. Keep the date in UTC; start the build counter at `1` each day and
+increment it for each new release build. Existing immutable-version and
+identical-content retry rules still apply.
+
+Examples: `0.2.2610081` is build 1 on October 8, 2026;
+`0.3.2612225-beta.1` is build 5 on December 22, 2026, marked beta 1.
+Alpha, beta and rc suffixes remain supported, including their optional positive
+serials. No existing 0.1 versions, tags or artifacts will be renamed.
+
+This is a planned change, **not implemented by the current 0.1 tooling**. Before
+releasing 0.2, update version parsing/stamping, release-intent collision checks,
+workflow inputs, artifact validation and their tests together. Parse date and
+build separately for chronological comparison: with an unpadded counter,
+`26100810` (October 8, build 10) is numerically larger than `2610091`
+(October 9, build 1), so ordinary numeric patch ordering is not chronological.
 
 ## Linux acceptance
 

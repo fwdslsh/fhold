@@ -1,5 +1,14 @@
 # Changelog
 
+## Planned for 0.2 — date and daily-build patch versions
+
+The patch format will change from `yyMMddHHmm` to `yyMMdd<build>`: two-digit
+UTC year/month/day plus a daily build number starting at 1. Examples:
+`0.2.2610081` and `0.3.2612225-beta.1`. Alpha, beta and rc suffixes remain
+supported. Current 0.1 tooling and all existing release versions stay unchanged;
+see the [release runbook](docs/operations/release.md#planned-patch-format-from-02)
+for the implementation work required before 0.2.
+
 ## 0.1.2610081904-beta.2 — reliable upgrades and idle native remotes
 
 Assistant recovery no longer rejects valid checkpoints or surviving receipts

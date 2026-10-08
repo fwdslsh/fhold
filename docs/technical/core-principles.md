@@ -395,8 +395,13 @@ GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribut
 host. GitHub builds Linux standalone CLI and Admin AppImage downloads and
 publishes Assistant/Guardian/Portal images to public Docker Hub. Every candidate
 needs its own artifact and runtime gates; earlier artifacts do not qualify changed source.
-Versions use real UTC `X.Y.yyMMddHHmm` timestamps and explicit alpha/beta/rc
-channels. The CLI remains a standalone executable, not an npm bootstrap package.
+The 0.1 release line uses real UTC `X.Y.yyMMddHHmm` timestamps and explicit
+alpha/beta/rc channels. From 0.2, the planned patch format is `yyMMdd<build>`:
+UTC year/month/day plus an unpadded daily build number starting at 1, with the
+same prerelease suffixes. See the [release runbook](../operations/release.md#planned-patch-format-from-02)
+for examples, ordering requirements and the tooling transition; current 0.1
+versions and tooling remain unchanged. The CLI remains a standalone executable,
+not an npm bootstrap package.
 Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
 Explicit local builds use the `fhold` namespace without registry pulls. Native
 Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
