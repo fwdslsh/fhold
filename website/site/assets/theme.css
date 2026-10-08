@@ -1,0 +1,10 @@
+:root {
+  color-scheme: dark;
+  --font-body: 105%/1.65 system-ui, sans-serif;
+  --color-text: #e4eeec;
+  --color-background: #131c23;
+  --color-link: #b9dfd5;
+  --color-rule: #40515e;
+  --measure: 68rem;
+  --space: clamp(1.1rem, 4vw, 2.5rem);
+}
