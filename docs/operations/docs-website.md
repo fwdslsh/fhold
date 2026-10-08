@@ -3,7 +3,7 @@
 The website is built in this repository from the canonical `docs/**` Markdown
 files. Site presentation lives in `website/site/`; Unify configuration lives in
 `website/unify.yaml`. The published template is pinned as
-`unify-docs-template@0.1.2` through native `extends:` in Unify 0.11.8.
+`unify-docs-template@0.1.2` through native `extends:` in Unify 0.11.9.
 The renderer is pinned in `website/package.json` and the repository's single
 `bun.lock`; Unify resolves the template's exact version itself.
 
@@ -44,7 +44,7 @@ raw Markdown a second time. `docs:dev` watches local presentation directly.
 Restart it after editing canonical docs, which live outside the website project.
 
 The generator walks nested documents, gives them titles/descriptions, resolves
-relative documentation links to `.html` website routes, and sends links to
+relative documentation links to their section paths, and sends links to
 unpublished repository files to GitHub. Code examples remain unchanged. The
 Guides, Connect, and Reference indexes serve users; architecture, tests, release
 procedures, plans, and implementation reviews are under Maintainers. The
@@ -80,8 +80,11 @@ for the initial project-pages site.
 and its `prepare:template` callers have been removed. Local layout, assets, and
 generated pages override the npm template; its page-directory script is inherited.
 
-Unify does not convert `.md` link targets to `.html`. Keep repository Markdown
-links usable on GitHub; the generator rewrites documentation links before Unify
-renders them, preserving anchors and code examples. Strict build/audit verifies
-the resulting site. Test both the project subpath and a root-domain base URL when
-changing template versions, routing, or URL handling.
+[Unify 0.11.9](https://github.com/fwdslsh/unify/releases/tag/v0.11.9) rewrites
+links to emitted Markdown pages to their published URLs, including pretty URLs
+and the configured base path. The old extension-conversion workaround is removed.
+The generator retains `.md` targets while mapping documents into their sections
+and repository-only references to GitHub. Query strings, anchors, and code
+examples remain intact; canonical Markdown still works in GitHub and editors.
+Strict build/audit verifies the resulting site. Test both the project subpath
+and a root-domain base URL when changing template versions, routing, or URL handling.
