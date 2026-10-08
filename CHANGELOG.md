@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2610081836-beta.2 — reliable upgrades and idle native remotes
+## 0.1.2610081857-beta.2 — reliable upgrades and idle native remotes
 
 Assistant recovery no longer rejects valid checkpoints or surviving receipts
 because image dependencies changed. Package versions remain diagnostic provenance;
