@@ -332,7 +332,9 @@ own histories and permissions; fhold's automatic OpenCode memory capture and
 restricted scheduled profile do not implicitly apply to vendor-native sessions.
 
 `process-running` means only that the local process started, not that sign-in,
-pairing, a remote client, or a tool call succeeded. `waiting-to-retry` includes an
+pairing, a remote client, or a tool call succeeded. `sign-in-needed` identifies a
+supervisor waiting for the required native account, not a disabled worker.
+It includes the next account-check time. `waiting-to-retry` includes an
 exit code and next attempt time. Failures retry every five minutes without
 stopping OpenCode or scheduled work. Inspect native output with `fhold remote
 logs codex` or `fhold remote logs claude` when pairing fails. Do not paste those logs into
@@ -340,13 +342,16 @@ public issues without removing pairing links and account details.
 
 ## Acceptance checklist
 
-1. Fresh install: both remote switches are false; neither remote worker starts.
+1. Fresh install: both supervisors default on. Without subscription sign-in,
+   both report `sign-in-needed` and neither remote worker starts. Once OpenCode
+   activity is idle, enabled keep-alive sends no requests.
 2. Use guided enable in CLI and Admin. Verify only the selected worker pauses,
    a native sign-in link opens in the host browser (with a printed fallback),
    and trust/consent are explicit human answers. Do not copy host authentication.
    Cancel once and verify startup stays off with no lingering setup process.
-3. Enable one switch. Verify OpenCode and scheduler remain healthy; the other
-   vendor remains stopped. Inspect local status, then pair a supported client.
+3. Complete setup for one vendor. Verify OpenCode and scheduler remain healthy;
+   the other unsigned-in vendor still waits. Inspect status, then pair a supported
+   client. Explicitly disabled workers must remain off.
 4. From that client, create a session, inspect a workspace file, request a harmless
    file edit, and exercise both approve and deny. Confirm approvals are not bypassed.
    For Codex, verify sandboxed execution works on this host; report unsupported
@@ -354,9 +359,11 @@ public issues without removing pairing links and account details.
 5. Restart Assistant. Verify native sign-in persists and the remote agent starts
    again. Confirm session continuation using the vendor's own supported flow;
    no OpenCode session or Guardian policy should appear in the vendor history.
-6. Test missing sign-in/consent in an isolated fresh home. The worker should wait
-   to retry while OpenCode and scheduler stay healthy; no pairing link enters
-   Docker logs. Fix through interactive setup with startup temporarily disabled.
+6. Test missing sign-in/consent in an isolated fresh home. Missing sign-in waits
+   without a worker; native consent waits keep activity unknown. Both leave
+   OpenCode and scheduler healthy, with no pairing link in Docker logs. A failed
+   account-status check must not silently classify an enabled worker as idle or
+   prevent native startup. Fix through the ordinary interactive setup flow.
 7. Disable both switches. Verify all remote child processes stop and no additional
    port, privileged mount, or Guardian/portal credential reaches Assistant.
 
