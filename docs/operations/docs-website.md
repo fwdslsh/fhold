@@ -10,9 +10,11 @@ The npm docs starter supplies the page-directory script, not the fwdslsh brand.
 Local presentation in `website/site/` uses the family palette, Inter prose,
 JetBrains Mono navigation/code, Protest Revolution wordmark, terminal panels,
 cards, and responsive sidebar from Unify's own `examples/unify-docs` site.
-`assets/fhold.css` records its upstream source revision. Keep this styling
+`assets/family.css` records its upstream source revision. Keep this styling
 aligned with `fwdslsh.dev` and `unify.fwdslsh.dev`; do not substitute the generic
 starter's system-font layout or a separate product palette.
+The family stylesheet has a distinct asset name so previously cached versions
+of the old product theme cannot be combined with the new layout.
 
 ## Build and preview
 
