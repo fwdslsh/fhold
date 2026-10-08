@@ -4,12 +4,11 @@
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"prepare:template": "bun scripts/template-shim.mjs",
-		"check": "bun run prepare:template && bun run unify build --dry-run --strict --audit",
-		"build": "bun run prepare:template && bun run unify build --clean --strict --audit",
-		"dev": "bun run prepare:template && bun run unify dev"
+		"check": "bun run unify build --dry-run --strict --audit",
+		"build": "bun run unify build --clean --strict --audit",
+		"dev": "bun run unify dev"
 	},
 	"devDependencies": {
-		"@fwdslsh/unify": "0.11.7"
+		"@fwdslsh/unify": "0.11.8"
 	}
 }

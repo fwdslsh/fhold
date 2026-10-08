@@ -3,8 +3,9 @@
 The website is built in this repository from the canonical `docs/**` Markdown
 files. Site presentation lives in `website/site/`; Unify configuration lives in
 `website/unify.yaml`. The published template is pinned as
-`unify-docs-template@0.1.1`, and the renderer version is pinned in
-`website/package.json`. Both use the repository's single `bun.lock`.
+`unify-docs-template@0.1.2` through native `extends:` in Unify 0.11.8.
+The renderer is pinned in `website/package.json` and the repository's single
+`bun.lock`; Unify resolves the template's exact version itself.
 
 The npm docs starter supplies the page-directory script, not the fwdslsh brand.
 Local presentation in `website/site/` uses the family palette, Inter prose,
@@ -29,17 +30,21 @@ bun run docs:dev
 ```
 
 `docs:check` performs a strict dry-run with the audit gate. `docs:build` writes
-only `website/dist/`. The template staging tree in `website/.cache/` and the
-output are ignored; do not commit generated pages or copies of upstream layouts.
-`docs:dev` previews the prepared snapshot. While the temporary shim is in place,
-restart it after editing canonical docs, the generator, or local presentation
-files; Unify watches the staged source tree rather than those original inputs.
-First preparation downloads the pinned npm template through Unify's native
-`init` command. npm lifecycle scripts are not run. Site preparation replaces
-only its disposable staging directory; it never changes `docs/`.
+only `website/dist/`; do not commit generated pages or fetched template files.
+Unify fetches the pinned npm template into its own template cache on the first
+build, then reuses it offline. No staging script or copied template tree is
+required. Template configuration and generators are never adopted; this site's
+own configuration controls every build. Keep `catalog: true` because All pages
+reads the catalog.
+
+`source: site` names the local presentation in `website/site/`; the generator
+renders canonical `docs/**` into Unify's generated overlay. This preserves
+section routes, the fwdslsh design, and repository links without publishing the
+raw Markdown a second time. `docs:dev` watches local presentation directly.
+Restart it after editing canonical docs, which live outside the website project.
 
 The generator walks nested documents, gives them titles/descriptions, resolves
-relative documentation links to their website routes, and sends links to
+relative documentation links to `.html` website routes, and sends links to
 unpublished repository files to GitHub. Code examples remain unchanged. The
 Guides, Connect, and Reference indexes serve users; architecture, tests, release
 procedures, plans, and implementation reviews are under Maintainers. The
@@ -68,26 +73,15 @@ If a custom domain is added later, set its Pages binding and DNS record, then
 change the base URL in `website/unify.yaml`. No domain or DNS change is required
 for the initial project-pages site.
 
-## Temporary template shim — removal required
+## Native template build
 
-Tracking issue: [Unify #118](https://github.com/fwdslsh/unify/issues/118).
+[Unify 0.11.8](https://github.com/fwdslsh/unify/releases/tag/v0.11.8) implements
+[#118](https://github.com/fwdslsh/unify/issues/118). The temporary template shim
+and its `prepare:template` callers have been removed. Local layout, assets, and
+generated pages override the npm template; its page-directory script is inherited.
 
-Current Unify uses `template:` for scaffold/update provenance rather than a
-build-time dependency. `website/scripts/template-shim.mjs` is a temporary
-workaround: it calls native `unify init` in an ignored directory, applies our
-local presentation files, and exposes that tree as the configured source.
-It implements no template resolver, updater, or runtime feature.
-
-**Remove the shim after a released Unify version implements #118 and supports
-this site's template/local-content combination.** Do not remove it merely when
-the issue closes or a prerelease mentions the feature. The replacement change:
-
-1. Pin that released renderer version and update `bun.lock`.
-2. Replace `source: .cache/template/site` with the native external-template
-   configuration defined by the upstream release, preserving the pinned template
-   and local overrides. Do not guess its future key names.
-3. Delete `website/scripts/template-shim.mjs`, the `prepare:template` script,
-   and its prefixes from check/build/dev. Keep the canonical-docs generator,
-   presentation files, tests, and Pages workflow.
-4. Run the site tests, strict build/audit, mobile/filter checks, and verify both
-   project-subpath and root-domain output before publishing the replacement.
+Unify does not convert `.md` link targets to `.html`. Keep repository Markdown
+links usable on GitHub; the generator rewrites documentation links before Unify
+renders them, preserving anchors and code examples. Strict build/audit verifies
+the resulting site. Test both the project subpath and a root-domain base URL when
+changing template versions, routing, or URL handling.
