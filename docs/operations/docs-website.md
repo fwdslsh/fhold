@@ -21,6 +21,9 @@ bun run docs:dev
 `docs:check` performs a strict dry-run with the audit gate. `docs:build` writes
 only `website/dist/`. The template staging tree in `website/.cache/` and the
 output are ignored; do not commit generated pages or copies of upstream layouts.
+`docs:dev` previews the prepared snapshot. While the temporary shim is in place,
+restart it after editing canonical docs, the generator, or local presentation
+files; Unify watches the staged source tree rather than those original inputs.
 First preparation downloads the pinned npm template through Unify's native
 `init` command. npm lifecycle scripts are not run. Site preparation replaces
 only its disposable staging directory; it never changes `docs/`.
