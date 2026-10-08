@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { claudePrompt, remoteCommand, remoteEnvironment } from '../containers/assistant/fhold-remote.mjs';
+import { claudePrompt, remoteAccount, remoteCommand, remoteEnvironment } from '../containers/assistant/fhold-remote.mjs';
 
 async function until(check: () => boolean, timeoutMs = 4_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
@@ -21,6 +21,58 @@ async function until(check: () => boolean, timeoutMs = 4_000): Promise<void> {
 }
 
 describe('optional native remote workers', () => {
+	it('uses native subscription-account status, not file presence, and preserves unknown failures', () => {
+		const check = (tool: string, exitCode: number, stdout = '', stderr = '', signalCode = 0) =>
+			remoteAccount(tool, { run: () => ({ exitCode, stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), signalCode }) });
+		expect(check('codex', 0, '', 'Logged in using ChatGPT\n')).toBe('signed-in');
+		expect(check('codex', 1, '', 'Not logged in\n')).toBe('signed-out');
+		expect(check('codex', 0, '', 'Logged in using an API key - redacted')).toBe('signed-out');
+		expect(check('claude', 0, JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }))).toBe('signed-in');
+		expect(check('claude', 1, JSON.stringify({ loggedIn: false, authMethod: 'none' }))).toBe('signed-out');
+		expect(check('claude', 0, JSON.stringify({ loggedIn: true, authMethod: 'api_key' }))).toBe('signed-out');
+		for (const tool of ['claude', 'codex']) {
+			expect(check(tool, 1, '', 'native diagnostic failed')).toBe('unknown');
+			expect(check(tool, 0, 'unrecognized native response')).toBe('unknown');
+			expect(check(tool, 0, 'Not logged in', '', 9)).toBe('unknown');
+			expect(remoteAccount(tool, { run: () => { throw Error('missing native CLI'); } })).toBe('unknown');
+		}
+	});
+	it('waits unsigned-in, starts after native sign-in, and restarts only its worker', async () => {
+		for (const tool of ['claude', 'codex']) {
+			const root = mkdtempSync(join(tmpdir(), 'fhold-remote-account-test-'));
+			const module = join(import.meta.dir, '../containers/assistant/fhold-remote.mjs');
+			const state = join(root, 'remote', `${tool}.json`);
+			writeFileSync(join(root, tool), `#!/usr/bin/env node
+const fs=require('node:fs');
+if (process.argv[2] === 'login' || process.argv[2] === 'auth') {
+ const signedIn=fs.existsSync('signed-in');
+ if (${JSON.stringify(tool)} === 'claude') console.log(JSON.stringify({loggedIn:signedIn,authMethod:signedIn?'claude.ai':'none'}));
+ else console.error(signedIn?'Logged in using ChatGPT':'Not logged in');
+ process.exit(signedIn?0:1);
+}
+fs.appendFileSync('workers','1'); setInterval(()=>{},1000);`, {mode:0o700});
+			const env = { ...process.env, FH_RUNTIME_DIR: root, PATH: `${root}:${process.env.PATH}` };
+			const child = Bun.spawn([process.execPath, '--eval', `import {superviseRemote} from ${JSON.stringify(module)}; await superviseRemote(${JSON.stringify(tool)}, {workdir:${JSON.stringify(root)}, retryMs:100});`], {env, stdout:'pipe', stderr:'pipe'});
+			const snapshot = () => JSON.parse(readFileSync(state, 'utf8'));
+			try {
+				await until(() => existsSync(state) && snapshot().state === 'sign-in-needed');
+				expect(snapshot()).toHaveProperty('retryAt');
+				expect(existsSync(join(root, 'workers'))).toBe(false);
+				writeFileSync(join(root, 'signed-in'), 'synthetic native account fixture');
+				await until(() => snapshot().state === 'process-running' && existsSync(join(root, 'workers')));
+				expect(readFileSync(join(root, 'workers'), 'utf8')).toBe('1');
+				const restart = Bun.spawn([process.execPath, module, tool, 'restart'], {env, stdout:'pipe', stderr:'pipe'});
+				expect(await restart.exited).toBe(0);
+				await until(() => readFileSync(join(root, 'workers'), 'utf8') === '11');
+				child.kill('SIGTERM');
+				expect(await child.exited).toBe(0);
+				expect(snapshot().state).toBe('stopped');
+			} finally {
+				child.kill('SIGTERM'); await child.exited;
+				rmSync(root, {recursive:true, force:true});
+			}
+		}
+	}, 15_000);
 	it('retains native approvals, one Claude session, and no Assistant/portal credentials in child env', () => {
 		expect(remoteCommand('codex')).toContain('sandbox_mode="workspace-write"');
 		expect(remoteCommand('codex').slice(0, 5)).toEqual(['codex', 'app-server', '--remote-control', '--listen', 'unix://']);
@@ -88,7 +140,7 @@ describe('optional native remote workers', () => {
 			join(root, 'codex'),
 			// A natural exit flushes the large pipe before the supervisor reads it.
 			// process.exit() can truncate the trailing assertions on busy runners.
-			'#!/usr/bin/env node\nconst fs=require("node:fs"); fs.appendFileSync("attempts", "1"); console.log("pairing-private " + "茶".repeat(100000)); console.log(process.env.OPENCODE_SERVER_PASSWORD ?? "no-assistant-password"); console.log(JSON.stringify(process.argv.slice(2))); process.exitCode=23;'
+			'#!/usr/bin/env node\nif(process.argv[2]==="login"){console.error("Logged in using ChatGPT");process.exit(0);} const fs=require("node:fs"); fs.appendFileSync("attempts", "1"); console.log("pairing-private " + "茶".repeat(100000)); console.log(process.env.OPENCODE_SERVER_PASSWORD ?? "no-assistant-password"); console.log(JSON.stringify(process.argv.slice(2))); process.exitCode=23;'
 		);
 		chmodSync(join(root, 'codex'), 0o700);
 		const module = join(import.meta.dir, '../containers/assistant/fhold-remote.mjs');
@@ -144,6 +196,7 @@ describe('optional native remote workers', () => {
 			join(root, 'claude'),
 			[
 				'#!/usr/bin/env node',
+				'if(process.argv[2]==="auth"){console.log(JSON.stringify({loggedIn:true,authMethod:"claude.ai"}));process.exit(0);}',
 				'const {spawn}=require("node:child_process"); const {writeFileSync}=require("node:fs");',
 				'const child=spawn(process.execPath,["-e",' +
 					JSON.stringify(session) +
@@ -187,6 +240,7 @@ describe('optional native remote workers', () => {
 		const state = join(root, 'remote', 'claude.json');
 		writeFileSync(join(root, 'claude'), `#!/usr/bin/env node
 const fs=require('node:fs');
+if(process.argv[2]==='auth'){console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}));process.exit(0);}
 if(!process.stdin.isTTY || !process.stdout.isTTY) process.exit(81);
 fs.appendFileSync('attempts','1');
 console.log('Trust /work? [y/N]');

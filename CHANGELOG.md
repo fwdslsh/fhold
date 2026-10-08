@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — recovery upgrades without version locks
+## 0.1.2610081836-beta.2 — reliable upgrades and idle native remotes
 
 Assistant recovery no longer rejects valid checkpoints or surviving receipts
 because image dependencies changed. Package versions remain diagnostic provenance;
@@ -28,6 +28,19 @@ skill show actionable warnings separately from core readiness. Invalid numeric
 tuning uses safe defaults; failed status writes retry and an unavailable optional
 probe does not invalidate recovery ownership. Real-image smoke tests stop optional
 processes and verify native sessions and shell tools remain usable.
+
+Native remote supervisors now wait for required subscription sign-in before
+launching Claude/Codex workers. Fresh unsigned-in instances can become idle and
+stop conditional keep-alive normally; sign-in is picked up on retry or the existing
+worker restart. Failed account checks and unknown signed-in activity remain
+conservative. No new enablement flag or activity expiry is added. The standard
+image smoke runs with both remotes at their default-on setting and verifies real
+native work keeps heartbeats running, then stops them when work completes.
+
+Claude/Codex remote connections remain experimental. This release does not move
+to OpenCode 2 or add managed-workload identity forwarding. The previously
+disclosed, owner-approved dependency exceptions and ARM64 Admin startup
+qualification limit remain unchanged; see the release runbook.
 
 ## 0.1.2610061043-beta.1 — qualified setup and reliable installation retry
 

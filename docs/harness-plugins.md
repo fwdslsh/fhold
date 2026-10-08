@@ -107,8 +107,16 @@ outside recovered user state.
 Any active work or unknown observation sends a heartbeat. All observed work
 must be idle before heartbeats stop. A running process by itself is never
 classified as busy or idle. An enabled native worker with no observed fhold
-hooks is unknown. A stopped worker or a worker waiting to retry sign-in is not
-active by itself. Stale markers after crashes, missed completion events, or
+hooks is unknown, including restored signed-in workers before their first observed
+session. Before launching a remote worker, its supervisor asks the native CLI for
+the required subscription-account status. A confirmed missing account reports
+`sign-in-needed` and waits without starting that worker, so a fresh unsigned-in
+instance can become idle normally. Native sign-in is rechecked on the existing
+retry interval; the built-in setup skills can restart that supervisor immediately.
+No new switch, auth file, credential inspection or idle marker is required.
+A failed/unrecognized status check is not proof of inactivity: normal native
+startup continues and missing coverage stays unknown. A stopped worker or a
+worker waiting to retry is not active by itself. Stale markers after crashes, missed completion events, or
 unsupported background-task metadata conservatively keep the instance awake;
 they never expire to make scaling appear successful. Session-end events or a
 new container boot clear the corresponding observations.

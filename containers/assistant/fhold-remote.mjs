@@ -54,6 +54,31 @@ export function remoteEnvironment(source) {
 	return env;
 }
 
+// Ask the installed CLI, not its credential files. Account presence is not
+// token validity, remote consent, client readiness or activity coverage.
+export function remoteAccount(tool, { env = process.env, workdir = '/work', run = Bun.spawnSync } = {}) {
+	try {
+		const result = run(tool === 'claude' ? ['claude', 'auth', 'status'] : ['codex', 'login', 'status'], {
+			cwd: workdir, env: remoteEnvironment(env), stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 5000
+		});
+		if (result.signalCode) return 'unknown';
+		if (tool === 'claude') {
+			const account = JSON.parse(result.stdout.toString());
+			if (account.loggedIn === false) return 'signed-out';
+			if (result.exitCode === 0 && account.loggedIn === true) {
+				if (account.authMethod === 'claude.ai') return 'signed-in';
+				if (account.authMethod === 'api_key') return 'signed-out';
+			}
+		} else {
+			const output = `${result.stdout}\n${result.stderr}`;
+			if (result.exitCode === 0 && /^Logged in using ChatGPT\s*$/m.test(output)) return 'signed-in';
+			if ((result.exitCode === 1 && /^Not logged in\s*$/m.test(output)) ||
+				(result.exitCode === 0 && /^Logged in (?:using|with) an API key\b/m.test(output))) return 'signed-out';
+		}
+	} catch { /* Failed diagnostics are not proof of an inactive worker. */ }
+	return 'unknown';
+}
+
 export function claudePrompt(text) {
 	const trust = text.lastIndexOf('Trust ');
 	const consent = text.lastIndexOf('Enable Remote Control?');
@@ -91,6 +116,13 @@ export async function superviseRemote(
 		});
 		chmodSync(`${statusFile}.tmp`, 0o600);
 		renameSync(`${statusFile}.tmp`, statusFile);
+	};
+	const waitForRetry = async (state, details = {}) => {
+		status(state, { ...details, retryAt: new Date(Date.now() + retryMs).toISOString() });
+		await new Promise((resolve) => {
+			wake = resolve;
+			timer = setTimeout(resolve, retryMs);
+		});
 	};
 	const record = (chunk) => {
 		// Pairing links can be sensitive. Keep bounded output in a private file,
@@ -166,6 +198,12 @@ export async function superviseRemote(
 			groupForced = false;
 			log = Buffer.alloc(0);
 			record('');
+			if (remoteAccount(tool, { env, workdir }) === 'signed-out') {
+				record(`Native ${tool} account sign-in is needed. Use its built-in setup skill or host CLI/Admin.\n`);
+				await waitForRetry('sign-in-needed');
+				restartRequested = false;
+				continue;
+			}
 			const code = tool === 'claude' ? await (async () => {
 				child = Bun.spawn([binary, ...args], {
 					cwd: workdir,
@@ -234,14 +272,7 @@ export async function superviseRemote(
 				continue;
 			}
 			if (!stopping) {
-				status('waiting-to-retry', {
-					exitCode: code,
-					retryAt: new Date(Date.now() + retryMs).toISOString()
-				});
-				await new Promise((resolve) => {
-					wake = resolve;
-					timer = setTimeout(resolve, retryMs);
-				});
+				await waitForRetry('waiting-to-retry', { exitCode: code });
 			}
 		}
 	} finally {

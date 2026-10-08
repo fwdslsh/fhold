@@ -2,7 +2,7 @@
 // Private stdio bridge to native prompts, not a network service or auth format.
 import { createInterface } from 'node:readline';
 import { stripVTControlCharacters } from 'node:util';
-import { remoteCommand, remoteEnvironment } from './fhold-remote.mjs';
+import { remoteAccount, remoteCommand, remoteEnvironment } from './fhold-remote.mjs';
 
 export function setupCommands(tool, sandbox) {
 	if (!['workspace-write', 'read-only', 'danger-full-access'].includes(sandbox))
@@ -88,29 +88,7 @@ export async function guidedSetup(
 		for (const [stage, args] of commands) {
 			if (cancelled) throw new Error('Setup cancelled or expired; remote access remains off.');
 			if (stage === 'sign-in') {
-				const account = Bun.spawnSync(
-					tool === 'claude' ? ['claude', 'auth', 'status'] : ['codex', 'login', 'status'],
-					{
-						cwd: workdir,
-						env: remoteEnvironment(env),
-						stdin: 'ignore',
-						stdout: 'pipe',
-						stderr: 'pipe',
-						timeout: 5000
-					}
-				);
-				let signedIn = false;
-				if (account.exitCode === 0) {
-					if (tool === 'codex') signedIn = /chatgpt/i.test(`${account.stdout}${account.stderr}`);
-					else {
-						try {
-							signedIn = JSON.parse(account.stdout.toString()).loggedIn === true;
-						} catch {
-							/* native status unavailable */
-						}
-					}
-				}
-				if (signedIn) {
+				if (remoteAccount(tool, { env, workdir }) === 'signed-in') {
 					emit({
 						output: 'Existing native account sign-in found; checking remote prerequisites.\n'
 					});

@@ -457,17 +457,18 @@ describe('recovery wrapper configuration and private status', () => {
 			import {runRecovery} from ${JSON.stringify(wrapper)};
 			import {mkdir,writeFile} from 'node:fs/promises';
 			const runtimeDir=${JSON.stringify(root)};
-			const events=[];const publication={lastCheckpointAt:null,lastCheckpointTick:null};
+			const events=[];let captures=0;const publication={lastCheckpointAt:null,lastCheckpointTick:null};
 			const wallNow=Date.now;
-			setTimeout(()=>{Date.now=()=>wallNow()-60000;},100);
 			const engine={
 				status(){return {failure:null,...publication};},
 				async acquireRestore(){events.push('restore'); await mkdir(runtimeDir,{recursive:true}); await writeFile(runtimeDir+'/recovery-writers-started','fixture');},
 				async renew(){events.push('renew');},
-				async checkpoint(){publication.lastCheckpointAt=Date.now();publication.lastCheckpointTick=performance.now();events.push('checkpoint');},
+				async checkpoint(){publication.lastCheckpointAt=Date.now();publication.lastCheckpointTick=performance.now();events.push('checkpoint');
+					if(++captures===1)Date.now=()=>wallNow()-60000;
+					else if(captures===2)process.kill(process.pid,'SIGTERM');},
 				async release(){events.push('release');}
 			};
-			setTimeout(()=>process.kill(process.pid,'SIGTERM'),1300);
+			// Stop after the real periodic capture, not a startup-relative wall timer.
 			await runRecovery({runtimeDir,intervalSeconds:1,maxUnsavedSeconds:10,probePort:0},{env:{FH_SCHEDULER_ENABLED:'0'},engine});
 			process.stdout.write(JSON.stringify(events));
 		`;

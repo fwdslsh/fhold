@@ -153,7 +153,7 @@ reader.on('line', line => {
 			`
 if (process.argv[2] === 'auth') {
  if (process.argv[3] !== 'status') process.exit(12);
- console.log(JSON.stringify({loggedIn:true})); process.exit(0);
+ console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai'})); process.exit(0);
 }
 console.log('Trust /work? [y/N]');
 require('node:readline').createInterface({input:process.stdin}).on('line', line => {
