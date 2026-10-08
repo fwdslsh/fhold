@@ -30,7 +30,7 @@ const configure = defineCommand({
 		to: { type: 'string', description: 'credential-free file: or azblob: recovery URL' },
 		instanceId: { type: 'string', description: 'stable recovery instance ID' },
 		interval: { type: 'string', description: 'checkpoint cadence in seconds' },
-		maxUnsaved: { type: 'string', description: 'maximum unsaved age in seconds' },
+		maxUnsaved: { type: 'string', description: 'warn when the last checkpoint is older than this many seconds' },
 		timeout: { type: 'string', description: 'operation timeout in seconds' },
 		selectionFile: {
 			type: 'string',

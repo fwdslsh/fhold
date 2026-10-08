@@ -21,16 +21,10 @@ done
 readonly SCHEDULER_ENABLED="${FH_SCHEDULER_ENABLED:-1}"
 export FH_RUNTIME_DIR="$RUNTIME_DIR"
 
-# Reject malformed capability inputs before even creating bootstrap files.
-for variable in FH_SCHEDULER_ENABLED FH_CODEX_REMOTE FH_CLAUDE_REMOTE; do
-  case "${!variable-1}" in
-    0|1) ;;
-    *) echo "assistant: $variable must be 0 or 1" >&2; exit 1 ;;
-  esac
-done
-case "${FH_CODEX_SANDBOX-workspace-write}" in
-  workspace-write|read-only|danger-full-access) ;;
-  *) echo 'assistant: FH_CODEX_SANDBOX must be workspace-write, read-only or danger-full-access' >&2; exit 1 ;;
+# Remote worker configuration must not prevent the primary assistant starting.
+case "$SCHEDULER_ENABLED" in
+  0|1) ;;
+  *) echo 'assistant: FH_SCHEDULER_ENABLED must be 0 or 1' >&2; exit 1 ;;
 esac
 readonly SHUTDOWN_SECONDS="${FH_SHUTDOWN_SECONDS:-25}"
 readonly RESTORE_SECONDS="${FH_RESTORE_TIMEOUT_SECONDS:-300}"
@@ -365,7 +359,7 @@ for tool in codex claude; do
   case "${!variable-1}" in
     0) ;;
     1) setsid env "${writer_env[@]}" fhold-remote "$tool" & remote_pids+=("$!"); writer_pids+=("$!") ;;
-    *) echo "assistant: $variable must be 0 or 1" >&2; exit 1 ;;
+    *) echo "assistant: $variable must be 0 or 1; skipping this optional remote worker" >&2 ;;
   esac
 done
 

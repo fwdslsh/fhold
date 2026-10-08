@@ -208,10 +208,12 @@ describe('versioned recovery mount policy', () => {
 		expect((await manifest(f)).networkMounts).toEqual([share]);
 		expect((await manifest(f)).members).toEqual([]);
 		f.setMounts(table([row(2, 1, f.roots.work)]));
-		await expect(
-			f.engine({ version: 1, autoExcludeNetworkMounts: true }).acquireRestore()
-		).rejects.toThrow('boundary policy');
-		expect(f.engine().status().owned).toBe(false);
+		const replacement = f.engine({ version: 1, autoExcludeNetworkMounts: true });
+		await replacement.acquireRestore();
+		await replacement.checkpoint();
+		await replacement.release();
+		expect((await manifest(f)).networkMounts).toEqual([]);
+		expect(await fs.readFile(path.join(share, 'note'), 'utf8')).toBe('external');
 	});
 
 	test('exact network-mount opt-ins capture regular files but never permit network SQLite', async () => {
@@ -233,7 +235,34 @@ describe('versioned recovery mount policy', () => {
 		}
 	});
 
-	test('rejects symlink policy paths, non-directory exclusions and unknown SQLite in retained trees', async () => {
+	test('discovered SQLite still requires local storage for capture and restore', async () => {
+		const f = await fixture();
+		const file = path.join(f.roots.work, 'plugin-state');
+		const db = new Database(file);
+		db.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('keep-local')");
+		db.close();
+		await f.engine().initialize();
+		f.setMounts(table([row(2, 1, f.roots.work, 'nfs4')]));
+		const network = f.engine();
+		await network.acquireRestore();
+		await expect(network.checkpoint()).rejects.toThrow('local storage');
+		expect((await f.store.readDescriptor()).value.generation).toBeNull();
+		await network.release();
+		f.setMounts(table());
+		const engine = f.engine();
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		await engine.release();
+		await fs.rename(file, path.join(f.dir, 'retained-database'));
+		f.setMounts(table([row(2, 1, f.roots.work, 'nfs4')]));
+		await expect(f.engine().acquireRestore()).rejects.toThrow('local storage');
+		expect(await fs.stat(file).catch(() => null)).toBeNull();
+		const retained = new Database(path.join(f.dir, 'retained-database'), { readonly: true });
+		expect(retained.query('SELECT value FROM marker').get()).toEqual({ value: 'keep-local' });
+		retained.close();
+	});
+
+	test('rejects symlink policy paths and non-directory exclusions without guessing SQLite from filenames', async () => {
 		const f = await fixture();
 		const linked = path.join(f.roots.work, 'link');
 		await fs.symlink(f.roots.stash, linked);
@@ -249,7 +278,10 @@ describe('versioned recovery mount policy', () => {
 		await fs.writeFile(path.join(f.roots.work, 'unknown.sqlite'), 'not-registered');
 		const engine = f.engine();
 		await engine.initialize();
-		await expect(engine.acquireRestore()).rejects.toThrow('uncataloged');
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		await engine.release();
+		expect((await manifest(f)).members.find((member) => member.path === 'unknown.sqlite')?.kind).toBe('file');
 	});
 
 	test('handles selected-root, ancestor and file network mounts while leaving the filesystem root out of discovery', async () => {
@@ -358,7 +390,7 @@ describe('accepted policy and topology fencing', () => {
 		expect(await fs.readFile(file, 'utf8')).toBe('original');
 	});
 
-	test('rejects policy ownership changes before claiming; unchanged policy allows additive inclusions and WAL snapshots', async () => {
+	test('applies operator policy edits in the same namespace and preserves WAL snapshots', async () => {
 		const f = await fixture();
 		const databasePath = path.join(f.roots.work, 'custom.sqlite');
 		const db = new Database(databasePath);
@@ -375,16 +407,14 @@ describe('accepted policy and topology fencing', () => {
 		await engine.acquireRestore();
 		await engine.checkpoint();
 		await engine.release();
-		const previous = await f.store.readDescriptor();
 		for (const changed of [
 			{ ...selection, excludePaths: [] },
 			{ ...selection, autoExcludeNetworkMounts: true }
 		]) {
 			const attempted = f.engine(changed);
-			await expect(attempted.acquireRestore()).rejects.toThrow('boundary policy');
-			expect(attempted.status().owned).toBe(false);
-			expect(previous).not.toBe(null);
-			expect((await f.store.readDescriptor())?.value.epoch).toBe(previous?.value.epoch);
+			await attempted.acquireRestore();
+			await attempted.checkpoint();
+			await attempted.release();
 		}
 		const expanded = f.engine({ ...selection, paths: [path.join(f.dir, 'optional')] });
 		await expanded.acquireRestore();
@@ -394,6 +424,37 @@ describe('accepted policy and topology fencing', () => {
 			1
 		);
 		db.close();
+	});
+
+	test('retries a coverage change without requiring its first checkpoint to have completed', async () => {
+		for (const withCheckpoint of [false, true]) {
+			const f = await fixture();
+			const file = path.join(f.roots.work, 'note');
+			await fs.writeFile(file, 'keep-local');
+			const initial = f.engine();
+			await initial.initialize();
+			await initial.acquireRestore();
+			if (withCheckpoint) await initial.checkpoint();
+			await initial.release();
+			const accepted = await f.store.readDescriptor();
+			const selection = { version: 1, excludePaths: [path.join(f.roots.work, 'cache')] };
+			const changed = f.engine(selection);
+			await changed.acquireRestore();
+			await changed.release();
+			const receipt = JSON.parse(
+				await fs.readFile(path.join(f.roots.home, '.fhold-recovery/receipt.json'), 'utf8')
+			);
+			expect(receipt.selectionHash).toBe(accepted?.value.selectionHash);
+			expect(receipt.generation).toBe(accepted?.value.generation);
+			const retry = f.engine(selection);
+			await retry.acquireRestore();
+			expect(await fs.readFile(file, 'utf8')).toBe('keep-local');
+			await retry.checkpoint();
+			await retry.release();
+			expect((await f.store.readDescriptor())?.value.selectionHash).not.toBe(
+				accepted?.value.selectionHash
+			);
+		}
 	});
 
 	test('does not accept a checkpoint after mounts change during object upload; renewal withdraws readiness', async () => {

@@ -308,8 +308,10 @@ external-mount/exclusion policy through the editable
 `config/recovery/include.json`. They do not mount drives. Storage credentials and
 runtime recovery policy are intentionally not ported by a portable archive.
 See [Assistant recovery](assistant-recovery.md#configure-through-admin-or-cli)
-for the same operations through `fhold recovery`, exact coverage and transition
-limits. Managed recovery requires the updated Compose assets; an older instance
+for the same operations through `fhold recovery` and coverage details. Ordinary
+image updates and coverage edits keep the same checkpoint destination. Failed or
+overdue backups show a warning without stopping the agent; loss of ownership still
+stops writers. Managed recovery requires the updated Compose assets; an older instance
 must be explicitly updated before these settings can be saved.
 
 ### Save changes, restart when ready

@@ -220,7 +220,8 @@ describe('Admin static security boundary', () => {
 		expect(html).toContain('Ephemeral container support');
 		expect(html).toContain('different formats and are not interchangeable');
 		expect(html).toContain('No native conversations or remote sign-ins');
-		expect(html).toContain('native tool versions must match');
+		expect(html).toContain('including after ordinary image upgrades');
+		expect(html).not.toContain('native tool versions must match');
 		expect(html).toContain('Guardian/portal state');
 		expect(html).toContain('Initialize new destination');
 		expect(html).toContain('To import portable content, create a fresh instance');
@@ -1307,6 +1308,17 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-recovery-status').children[0].textContent).toContain('stopped');
 		renderRecoveryStatus({ state: 'ready', lastPublishedAt: Date.now() });
 		expect(control('runtime-recovery-status').children[0].textContent).toBe('Checkpoint accepted.');
+	});
+	it('shows backup failures or overdue checkpoints without reporting a stopped agent or accepted checkpoint', () => {
+		fixture();
+		for (const status of [
+			{ state: 'ready', durable: false, lastPublishedAt: null },
+			{ state: 'ready', durable: true, lastAttemptFailed: true, failure: 'recovery Blob transport failed' }
+		]) {
+			renderRecoveryStatus(status);
+			expect(control('runtime-recovery-status').children[0].textContent).toBe('Agent is running; backups need attention.');
+			expect(control('runtime-recovery-status').className).not.toContain('success');
+		}
 	});
 });
 

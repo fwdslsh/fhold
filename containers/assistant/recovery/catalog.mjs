@@ -64,13 +64,6 @@ function defaultExcluded(root, name) {
 	);
 }
 
-export function selectionCovers(current, previous) {
-	return (
-		previous.paths.every((old) => current.paths.some((item) => containsPath(item, old))) &&
-		previous.sqlite.every((old) => current.sqlite.includes(old))
-	);
-}
-
 /** Roots in manifests are derived from the reviewed selection, never accepted
  * from the backup itself. External paths get stable IDs and the exact same
  * container destination on restore. Overlapping selections are deduplicated. */
@@ -144,24 +137,26 @@ export function createCatalog(
 			: selection.paths.length || selection.sqlite.length
 				? { catalog: CUSTOM_CATALOG_VERSION, selectionHash: hash(JSON.stringify(selection)) }
 				: { catalog: CATALOG_VERSION };
-	const excluded = (root, name) => {
-		const target = native(root, name);
+	const excludedPath = (target) => {
 		return (
 			exclusions.some((item) => containsPath(item, target)) ||
 			blocked.some((item) => containsPath(item, target)) ||
 			outside.some((item) => containsPath(item, target)) ||
-			(defaultExcluded(root, name) &&
+			(Object.entries(baseRoots).some(([root, base]) =>
+				containsPath(base, target) && defaultExcluded(root, path.relative(base, target))
+			) &&
 				!selection.paths.some((item) => containsPath(item, target)) &&
 				!selection.sqlite.includes(target))
 		);
 	};
-	const allowsFile = (root, name) => {
-		const target = native(root, name);
+	const excluded = (root, name) => excludedPath(native(root, name));
+	const allowsPath = (target) => {
 		return (
 			trees.some(([treeRoot, treeName]) => containsPath(native(treeRoot, treeName), target)) &&
-			!excluded(root, name)
+			!excludedPath(target)
 		);
 	};
+	const allowsFile = (root, name) => allowsPath(native(root, name));
 	return {
 		roots,
 		native,
@@ -170,6 +165,7 @@ export function createCatalog(
 		dbPaths,
 		sqliteFiles,
 		excluded,
+		allowsPath,
 		allowsFile,
 		metadata,
 		selection,

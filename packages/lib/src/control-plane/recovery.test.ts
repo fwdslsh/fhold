@@ -141,7 +141,6 @@ describe('managed runtime recovery', () => {
 			{ instanceId: '' },
 			{ intervalSeconds: 0 },
 			{ maxUnsavedSeconds: 1 },
-			{ intervalSeconds: 301 },
 			{ operationTimeoutSeconds: 3_601 },
 			{ authentication: 'host-cli' },
 			{ clientId: 'not-a-uuid' },
@@ -152,6 +151,7 @@ describe('managed runtime recovery', () => {
 			);
 		expect(recoveryStopGrace({ ...base.recovery, enabled: true })).toBe(297);
 		expect(recoveryStopGrace(base.recovery)).toBe(30);
+		expect(parseStackConfig({ ...base, recovery: { ...base.recovery, intervalSeconds: 3600 } }).ok).toBe(true);
 	});
 	it('saves additive coverage only, derives exact mounts/inputs and retains persistent restart state', async () => {
 		const { home, root } = await fixture();
@@ -276,7 +276,7 @@ describe('managed runtime recovery', () => {
 		expect(backup.files.some((file) => file.path.includes('recovery'))).toBe(false);
 		expect(JSON.stringify(backup)).not.toContain('synthetic-secret');
 	});
-	it('refuses a changed accepted ownership policy, preserves the old namespace and scopes a new private receipt', async () => {
+	it('saves changed coverage in the same namespace without replacing native receipts', async () => {
 		const { home, root } = await fixture();
 		const current = recoverySnapshot(home);
 		const settings = {
@@ -294,13 +294,13 @@ describe('managed runtime recovery', () => {
 		const receipt = join(home, 'data/recovery', namespace, 'receipt.json');
 		writeFileAtomic(receipt, 'preserve exact native receipt');
 		const selection = { ...current.selection, excludePaths: ['/work/private-drive'] };
-		expect(() =>
-			saveRecoverySettings(home, {
-				settings,
-				selection,
-				baselineDigest: recoverySnapshot(home).digest
-			})
-		).toThrow('ownership policy');
+		saveRecoverySettings(home, {
+			settings,
+			selection,
+			baselineDigest: recoverySnapshot(home).digest
+		});
+		expect(recoverySnapshot(home).selection.excludePaths).toEqual(selection.excludePaths);
+		expect(readFileSync(receipt, 'utf8')).toBe('preserve exact native receipt');
 		const next = {
 			...settings,
 			destination: directoryRecoveryDestination(join(root, 'new-checkpoints'))

@@ -79,7 +79,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_SETUP_COMPLETE` | Install completion marker |
 | `FH_RECOVERY_URL`, `FH_INSTANCE_ID` | Derived recovery enable/destination and stable identity; file destinations use `/recovery` inside the container |
 | `FH_RECOVERY_DIRECTORY` | Exact operator backup bind root; off/Blob use an unused private placeholder under `state/` |
-| `FH_RECOVERY_INTERVAL_SECONDS`, `FH_RECOVERY_MAX_UNSAVED_SECONDS`, `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | Bounded capture/health/operation settings from recovery intent |
+| `FH_RECOVERY_INTERVAL_SECONDS`, `FH_RECOVERY_MAX_UNSAVED_SECONDS`, `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | Capture cadence, overdue-backup warning threshold and operation deadline from recovery intent |
 | `FH_RECOVERY_INCLUDE_FILE`, `FH_RECOVERY_STATE_DIR` | Fixed policy and namespace-scoped private-state container locations |
 | `FH_RECOVERY_CREDENTIAL_FILE`, `FH_RECOVERY_CLIENT_ID` | Private file path or optional managed identity UUID, never a credential value |
 | `FH_ASSISTANT_STOP_GRACE` | Derived complete writer/final-recovery shutdown budget |

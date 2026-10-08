@@ -85,8 +85,6 @@ export function parseRecoverySettings(value: unknown, projectName: string): Reco
 		)
 			throw new Error(`recovery.${key} must be an integer from ${min} to ${max}.`);
 	}
-	if (result.maxUnsavedSeconds < result.intervalSeconds)
-		throw new Error('Maximum unsaved age must cover the checkpoint interval.');
 	if (
 		!['connection-string', 'managed-identity'].includes(String(result.authentication)) ||
 		typeof result.clientId !== 'string' ||

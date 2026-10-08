@@ -3,7 +3,6 @@ import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
 	normalizeSelection,
-	boundaryPolicy,
 	type RecoverySelection
 } from '../../../../containers/assistant/recovery/selection.mjs';
 import {
@@ -16,7 +15,6 @@ import { assertSafePortablePath } from './provider-files.js';
 import {
 	parseRecoverySettings,
 	recoveryDirectory,
-	recoveryEnvironment,
 	type RecoverySettings
 } from './recovery-config.js';
 import { readStackConfig, writeStackConfig } from './stack-config.js';
@@ -69,7 +67,7 @@ export function recoverySnapshot(homeDir: string) {
 	};
 }
 
-/** Save only; native engine owns filesystem/database/version/namespace validation. */
+/** Save only; the native engine validates files, databases and checkpoint identity. */
 export function saveRecoverySettings(
 	homeDir: string,
 	value: { settings: unknown; selection: unknown; baselineDigest: string }
@@ -84,24 +82,6 @@ export function saveRecoverySettings(
 		const bytes = `${JSON.stringify(selection, null, 2)}\n`;
 		if (Buffer.byteLength(bytes) > MAX_POLICY_BYTES)
 			throw new Error('Recovery selection file exceeds 4 MiB.');
-		const receipt = join(
-			homeDir,
-			'data/recovery',
-			recoveryEnvironment(current.settings).FH_RECOVERY_STATE_DIR.slice(
-				'/run/fhold-recovery-state/'.length
-			),
-			'receipt.json'
-		);
-		if (
-			existsSync(receipt) &&
-			current.settings.destination === settings.destination &&
-			current.settings.instanceId === settings.instanceId &&
-			JSON.stringify(boundaryPolicy(current.selection)) !==
-				JSON.stringify(boundaryPolicy(selection))
-		)
-			throw new Error(
-				'An established recovery ownership policy needs a new destination or instance ID. Keep the old checkpoint and follow the stopped-writer transition guide.'
-			);
 		if (
 			!readFileSync(managedComposeFile(homeDir), 'utf8').includes(
 				'/run/fhold-recovery/include.json'

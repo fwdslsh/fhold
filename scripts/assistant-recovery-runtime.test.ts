@@ -169,19 +169,23 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events.indexOf('native-stopped')).toBeLessThan(events.indexOf('final-checkpoint'));
 		expect(events.indexOf('final-complete')).toBeLessThan(events.indexOf('released'));
 	});
-	it('rejects invalid flags before runtime/filesystem/native writes', async () => {
-		for (const name of [
-			'FH_SCHEDULER_ENABLED',
-			'FH_CODEX_REMOTE',
-			'FH_CLAUDE_REMOTE',
-			'FH_CODEX_SANDBOX'
-		]) {
-			const run = fixture({ [name]: 'false' });
-			expect(await finished(run.child)).toBe(1);
-			expect(run.events()).toEqual([]);
-			expect(existsSync(join(run.root, 'runtime'))).toBe(false);
-		}
+	it('rejects an invalid primary scheduler flag before runtime/filesystem/native writes', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: 'false' });
+		expect(await finished(run.child)).toBe(1);
+		expect(run.events()).toEqual([]);
+		expect(existsSync(join(run.root, 'runtime'))).toBe(false);
 	});
+	for (const name of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE', 'FH_CODEX_SANDBOX'])
+		it(`invalid optional ${name} does not prevent native assistant startup`, async () => {
+			const run = fixture({ [name]: 'false' });
+			try {
+				await until(() => run.events().includes('native'));
+				expect(run.child.exitCode).toBeNull();
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
 
 	for (const tool of ['codex', 'claude'] as const)
 		it(`restores before writers and starts enabled ${tool} with scheduling off on every boot`, async () => {

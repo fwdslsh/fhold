@@ -174,3 +174,12 @@ jobs:
         env:
           FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
         run: node scripts/smoke-recovery.mjs
+      - name: Verify published-image upgrades with empty storage and surviving receipts
+        if: matrix.image == 'assistant'
+        env:
+          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
+          FH_RECOVERY_UPGRADE_FROM_IMAGE: fwdslsh/fhold-assistant:0.1.2610050714-alpha.6
+        run: |
+          docker pull "$FH_RECOVERY_UPGRADE_FROM_IMAGE"
+          node scripts/smoke-recovery.mjs
+          FH_RECOVERY_TEST_SURVIVING_HOME=1 node scripts/smoke-recovery.mjs

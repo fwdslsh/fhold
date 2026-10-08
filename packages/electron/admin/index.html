@@ -719,7 +719,7 @@
 
             <details id="runtime-recovery" class="panel panel-disclosure">
               <summary>Ephemeral container support <small>Automatic checkpoints · same-instance continuity</small></summary>
-              <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup; native tool versions must match. Optional for ordinary local installs.</p>
+              <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup, including after ordinary image upgrades. Optional for ordinary local installs.</p>
               <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
               <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Ephemeral container support is off.</strong><span>Local data remains in this instance’s home.</span></div>
               <form id="runtime-recovery-form" class="form-stack" data-managed-form>
@@ -739,7 +739,7 @@
                       <label class="field" for="runtime-recovery-instance-id"><span>Stable recovery instance ID</span><input id="runtime-recovery-instance-id" autocomplete="off" /><span class="help-text">Keep this ID unchanged when replacing storage. Never share it between running replicas.</span></label>
                       <div class="field-grid three-column">
                         <label class="field" for="runtime-recovery-interval"><span>Checkpoint interval (seconds)</span><input id="runtime-recovery-interval" type="number" min="1" max="86400" /></label>
-                        <label class="field" for="runtime-recovery-max-unsaved"><span>Maximum unsaved age (seconds)</span><input id="runtime-recovery-max-unsaved" type="number" min="5" max="604800" /></label>
+                        <label class="field" for="runtime-recovery-max-unsaved"><span>Warn when backups are older than (seconds)</span><input id="runtime-recovery-max-unsaved" type="number" min="5" max="604800" /></label>
                         <label class="field" for="runtime-recovery-timeout"><span>Operation timeout (seconds)</span><input id="runtime-recovery-timeout" type="number" min="1" max="3600" /></label>
                       </div>
                       <p class="help-text">These bound recovery work, not a zero-loss guarantee. fhold sets the container’s termination grace to allow writer shutdown and a final checkpoint. Recovery is independent of scheduled tasks.</p>
@@ -751,7 +751,7 @@
                       <label class="check-row"><input id="runtime-recovery-auto-network" type="checkbox" /> Automatically exclude recognized SMB/NFS mounts</label>
                       <label class="field" for="runtime-recovery-recover-mounts"><span>Mounts to keep despite automatic exclusion</span><textarea id="runtime-recovery-recover-mounts" rows="2" spellcheck="false"></textarea></label>
                       <p class="help-text">Ordinary local volumes remain covered. Missing required mounts stop recovery. Native or registered SQLite files and their WAL/SHM cannot be excluded or placed on recognized network filesystems.</p>
-                      <p class="help-text">Changing established mount ownership requires a stopped-writer transition to a new recovery namespace, not editing old receipts. Additional paths/databases may be added, but removing captured coverage is refused by the native engine.</p>
+                      <p class="help-text">Coverage changes apply after restart. Recovery restores only currently selected content; excluded drives and removed paths are left untouched. Historical checkpoints remain in the backup destination. Delayed backups show a warning without stopping your agent.</p>
                       <p class="help-text">Editable policy file: <code id="runtime-recovery-policy-path">config/recovery/include.json</code></p>
                     </div>
                   </details>

@@ -39,8 +39,6 @@ export function recoveryConfig(env = process.env) {
 		throw new Error('recovery include file must be an absolute path');
 	const intervalSeconds = integerSetting(env, 'FH_RECOVERY_INTERVAL_SECONDS', 60, 1, 86_400);
 	const maxUnsavedSeconds = integerSetting(env, 'FH_RECOVERY_MAX_UNSAVED_SECONDS', 300, 5, 604_800);
-	if (maxUnsavedSeconds < intervalSeconds)
-		throw new Error('Recovery maximum unsaved age must cover its capture interval');
 	const operationSeconds = integerSetting(
 		env,
 		'FH_RECOVERY_OPERATION_TIMEOUT_SECONDS',
@@ -175,7 +173,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	let owner = false;
 	let failure = false;
 	let failureCause;
-	let lastAttemptError;
 	let lastLoggedFailure;
 	let nextCapture = 0;
 	let lastAttemptFailed = false;
@@ -193,23 +190,22 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	};
 	process.on('SIGTERM', stop);
 	process.on('SIGINT', stop);
-	// Clock corrections must not extend the time allowed for unsaved writes.
+	// Clock corrections must not hide an overdue-backup warning.
 	// The engine owns accepted publication state; health must not keep a
 	// second clock that can diverge from committed manifests and receipts.
 	const age = () => (performance.now() - (engine.status().lastCheckpointTick ?? began)) / 1_000;
-	const healthy = () =>
-		owner &&
-		!failure &&
-		!stopping &&
-		state === 'running' &&
-		Number.isFinite(engine.status().lastCheckpointTick) &&
-		age() < config.maxUnsavedSeconds;
+	const healthy = () => owner && !failure && !stopping && state === 'running';
 	const publishStatus = () => {
 		const checkpoint = engine.status();
 		const value = {
 			format: 1,
 			state,
 			healthy: healthy(),
+			durable:
+				healthy() &&
+				!lastAttemptFailed &&
+				Number.isFinite(checkpoint.lastCheckpointTick) &&
+				age() < config.maxUnsavedSeconds,
 			updatedAt: Date.now(),
 			lastPublishedAt: checkpoint.lastCheckpointTick === null ? null : checkpoint.lastCheckpointAt,
 			lastAttemptFailed,
@@ -222,7 +218,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	};
 	const captureFailed = (error) => {
 		lastAttemptFailed = true;
-		lastAttemptError = error;
 		const reason = sanitizeRecoveryError(error);
 		if (reason !== lastLoggedFailure) {
 			process.stderr.write(`fhold recovery: checkpoint failed (${reason}).\n`);
@@ -252,8 +247,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		// Renewal never shares the synchronous SQLite subprocess's event loop.
 		const failClosed = (error) => {
 			failure = true;
-			failureCause ??=
-				error ?? lastAttemptError ?? new Error('recovery accepted checkpoint too old');
+			failureCause ??= error;
 			state = 'failed';
 			stop();
 			// Stop native writers promptly even while a bounded capture is in flight.
@@ -267,10 +261,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 			}
 		};
 		renewal = setInterval(() => {
-			if (age() >= config.maxUnsavedSeconds) {
-				failClosed();
-				return;
-			}
 			if (renewing || stopping) return;
 			renewing = true;
 			engine
@@ -293,7 +283,6 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 					try {
 						await engine.checkpoint();
 						lastAttemptFailed = false;
-						lastAttemptError = undefined;
 						lastLoggedFailure = undefined;
 					} catch (error) {
 						captureFailed(error);
@@ -355,14 +344,7 @@ async function main() {
 		const healthy =
 			status.healthy === true &&
 			Number.isFinite(status.updatedAt) &&
-			status.updatedAt <= now &&
-			now - status.updatedAt < 5_000 &&
-			Number.isFinite(status.lastPublishedAt) &&
-			status.lastPublishedAt > 0 &&
-			status.lastPublishedAt <= now &&
-			Number.isFinite(status.maxUnsavedSeconds) &&
-			status.maxUnsavedSeconds > 0 &&
-			(now - status.lastPublishedAt) / 1_000 < status.maxUnsavedSeconds;
+			now - status.updatedAt < 5_000;
 		process.stdout.write(`${JSON.stringify({ ...status, healthy })}\n`);
 		if (!healthy) process.exitCode = 1;
 		return;

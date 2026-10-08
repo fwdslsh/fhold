@@ -307,9 +307,10 @@ wake, scale, cloud-management tooling, extra service or mandatory sidecar is add
 
 One optional externally supplied `FH_RECOVERY_INCLUDE_FILE` extends the native
 catalog with literal absolute file/directory paths and registered SQLite files.
-The same versioned selection governs backup/restore; hashes bind it to accepted
-checkpoints. Additions preserve prior state; narrowing an accepted selection fails
-before claiming or writing targets. Lists have no fixed entry cap, but all existing
+The versioned selection is recorded with each checkpoint and bound by hashes.
+Restore applies the current selection without writing newly excluded or unselected
+paths; the next checkpoint records the edited coverage. No new namespace is
+required for coverage edits. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
 CLI/Admin expose the same generic settings through StackConfig and an operator
 policy file, not another backup engine, format, service, plugin registry or cloud
@@ -323,9 +324,10 @@ Versioned recovery policy may exclude directory roots, require independent mount
 roots and opt into recognized network-mount discovery. Ordinary local volumes
 stay covered. Excluded roots are never traversed/written; missing required mounts
 block startup. Registered SQLite and WAL/SHM paths cannot be excluded or placed
-on recognized network filesystems. Policy/effective exclusions are bound to
-accepted checkpoints; changed ownership needs a stopped-writer transition to a
-fresh namespace. Topology changes abort publication and retain partial-restore
+on recognized network filesystems. SQLite discovered in selected trees uses
+native snapshots without requiring a second path list. Recorded policy/effective
+exclusions remain part of historical checkpoints; current policy governs restore.
+Topology changes during an operation abort publication and retain partial-restore
 journals. Private inspection is read-only; confirmed offline restore starts no
 application writers.
 Native process coordination remains excluded even under an explicitly selected
@@ -334,14 +336,23 @@ live locks. This does not relax the prohibition on arbitrary links.
 
 Explicit initialization is one-time; an established missing/corrupt/incompatible
 head cannot become a blank agent. Valid newer surviving local state is preserved.
-An exact surviving receipt permits restoring only missing accepted checkpoint
+An accepted-generation surviving receipt permits restoring only missing selected checkpoint
 members after ephemeral storage loss, preserving newer surviving local files and
 databases. Unreceipted partial state and orphan WAL/SHM files remain blocked.
-Incomplete restore journals block native startup. Known initialized databases
-cannot silently disappear during active capture. Routine capture does not stop the apps, and separately captured databases
-and files are not one application-wide transaction. Readiness includes ownership
-and accepted-checkpoint age. The engine owns the accepted publication clock;
-health does not maintain a separate timestamp that can diverge after publication.
+Incomplete restore journals block native startup. Known initialized core and
+explicitly selected databases cannot silently disappear during active capture;
+versioned native Codex filenames may change during native migrations. Package
+versions and ownership epochs are provenance, not restore-compatibility gates.
+Supported checkpoint format, identity, hashes, database integrity and current
+ownership remain enforced. Native tools own their schema upgrades. Warm startup
+does not apply backup inventory limits to an already receipted home; only missing
+checkpoint members are validated and restored, without overwriting surviving data.
+Routine capture does not stop the apps, and separately captured databases and
+files are not one application-wide transaction. Readiness requires completed
+restoration and ownership. A delayed/failed checkpoint warns about durability
+and retries without stopping a working agent. Actual ownership loss still stops
+writers. The engine owns the accepted publication clock; health does not maintain
+a separate timestamp that can diverge after publication.
 SIGTERM stops writers and descendants before the
 bounded final checkpoint; forced termination can lose unpublished changes.
 Writer shutdown and recovery have separate bounded waits so an in-flight capture

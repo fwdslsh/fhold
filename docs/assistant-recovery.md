@@ -19,7 +19,7 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 
 Keep these contracts/formats separate. Portable imports deliberately do not
 replay runtime credentials or checkpoint authority; recovery must preserve that
-authority and its exact-native-version contract. Combining their writers would
+authority and native state. Combining their writers would
 complicate those guarantees. Container exclusions are never silently applied to
 host portable backup. See [managing fhold](managing-fhold.md) for those flows.
 
@@ -54,9 +54,10 @@ rollback point. Stale ownership still requires separate external verification.
 **Inspect saved coverage** is read-only. **Advanced recovery settings** exposes
 additional paths/SQLite and exclusions/required mounts/discovery. These are
 literal container paths, not host names; listing them does not mount a drive.
-The native engine still checks databases, mounts, versions and accepted authority.
-Established ownership changes require the stopped-writer/new-namespace transition
-below, not a checkbox override.
+The native engine checks database integrity, required mounts and accepted
+authority. Ordinary image upgrades and coverage edits do not require a new
+destination. Package versions are recorded for diagnosis, not used to reject
+an otherwise valid checkpoint. Native tools handle their own database upgrades.
 
 The CLI uses the same shared operations:
 
@@ -103,7 +104,7 @@ members. A different home or image does not make a checkpoint portable.
 | `FH_INSTANCE_ID` | Required with recovery; stable lowercase slug, not a replica/revision name. |
 | `FH_SCHEDULER_ENABLED` | `1`; set `0` to disable user scheduling only. |
 | `FH_RECOVERY_INTERVAL_SECONDS` | `60`; capture cadence, 1–86,400 seconds. |
-| `FH_RECOVERY_MAX_UNSAVED_SECONDS` | `300`; fail closed on unsaved age, at least the capture interval. |
+| `FH_RECOVERY_MAX_UNSAVED_SECONDS` | `300`; warn when the last accepted checkpoint is older than this threshold. Does not stop the agent; independent of the capture interval. |
 | `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | `120`; monotonic between-step/SQLite budget, 1–3,600 seconds. |
 | `FH_RECOVERY_PROBE_PORT` | `0` (off); private health-only probe, not the native API port. |
 | `FH_RECOVERY_STATE_DIR` | `/home/fhold/.fhold-recovery`; private staging/receipt, no arbitrary native-tree overlap. |
@@ -234,12 +235,16 @@ its separate task-review requirement.
 Periodic captures use SQLite-native snapshots, never a changing database/WAL
 file copy. Each database is individually consistent, but sequential databases
 and workspace/auth files do not form one application-wide transaction. Capture
-intervals must be recorded. Readiness depends on restoration, ownership and
-durability status, not a recovery worker PID alone. Accepted-checkpoint age is
-owned by the engine after conditional publication and its private receipt write;
-the supervisor uses that same monotonic clock. A later staging-cleanup error must
-not make an accepted, receipted checkpoint disappear from health bookkeeping.
-An older restored checkpoint alone does not count as a fresh boot publication.
+intervals must be recorded. Readiness requires completed restoration and active
+ownership, not a recovery worker PID alone. An overdue or failed checkpoint
+reports `durable: false` and a backup warning while the agent keeps running and
+retrying. It does not make a working agent unhealthy or trigger a restart.
+Actual ownership loss still stops writers to prevent competing checkpoints.
+Accepted-checkpoint age is owned by the engine after conditional publication
+and its private receipt write; the supervisor uses that same monotonic clock.
+A later staging-cleanup error must not make an accepted, receipted checkpoint
+disappear from health bookkeeping. An older restored checkpoint alone does not
+count as a fresh boot publication.
 
 The potential loss window includes the timer interval, capture and upload time;
 outages make it longer. SIGTERM should stop writers and descendants before a
@@ -266,8 +271,7 @@ The fixed default engine limits are 10,000 files, 64 MiB per ordinary file,
 bytes, 4 MiB manifest and configured 120-second whole-operation/SQLite budgets.
 The operation uses monotonic deadline checks between steps, including restore,
 but this is not cancellation of a kernel-level hung filesystem call.
-Oversized/unknown native
-SQLite members fail closed rather than becoming plain file copies. These are
+Oversized SQLite members are rejected rather than becoming plain file copies. These are
 acceptance caps, not promised capacity: captured buffers, databases, temporary
 snapshots, downloads and application WAL growth consume additional memory/disk.
 Use externally enforced filesystem quotas and headroom; a free-space check is
@@ -276,14 +280,22 @@ Recovery preserves ordinary file contents and owner executable bits, not full
 ACLs/xattrs/group permissions or empty-directory metadata. Unsupported state
 must be reviewed explicitly rather than advertised as a perfect home clone.
 
-Restore validates identity, versions, member hashes, SQLite integrity and path
-containment before admitting writers. An empty replacement layout restores
-manifest membership, including deletions. With an exact surviving recovery
-receipt, a partially ephemeral layout can restore missing checkpoint members,
-including registered SQLite databases, while preserving every surviving local
-file or database, which may contain newer writes. This is not permission to
+Restore validates identity, supported checkpoint format, member hashes, SQLite
+integrity and path containment before admitting writers. Package versions remain
+provenance in the descriptor, manifest and receipt, not an upgrade gate.
+Native tools migrate their own schemas when they start; recovery does not
+implement a dependency-version compatibility matrix. An empty replacement layout
+restores members selected by the current configuration. A surviving receipt
+matching the accepted generation permits missing selected members to be restored,
+including SQLite databases, while preserving every surviving local file or
+database, which may contain newer writes. Changing the image or retrying a failed
+startup does not invalidate that receipt. Recovery does not rescan a receipted
+home against backup size/count limits before starting native tools. Those limits
+apply to capture and restored artifacts, not newer surviving local files. This is not permission to
 adopt unreceipted local state, ignore orphan WAL/SHM files or overwrite existing
-files. A database disappearing during an active capture still blocks publication.
+files. Unexpected loss of an initialized core or explicitly registered database
+still blocks publication. Versioned Codex database filenames and newly discovered
+databases may change as native tools migrate their state.
 Unresolved authority fails closed. Corruption does not authorize automatic
 rollback to an older generation.
 
@@ -291,7 +303,7 @@ Container recovery retains the existing native roots (`/home/fhold`,
 `/stash`, `/work`, `/opt/akm/data`, `/etc/akm`). Explicit additional paths restore
 to their original absolute container locations. Container `FH_HOME` does not
 remap them; host CLI/Admin home selection remains separate. Symbolic links and
-unregistered SQLite state are refused rather than silently followed or copied.
+special files are refused rather than silently followed or copied.
 Directory artifacts can live on qualifying local or network mounts, but no real
 network-mounted filesystem was exercised in the current qualification.
 
@@ -299,14 +311,15 @@ network-mounted filesystem was exercised in the current qualification.
 
 The image owns an explicit, versioned catalog in
 [`catalog.mjs`](../containers/assistant/recovery/catalog.mjs). It recursively captures
-ordinary files in these trees, plus the individually registered SQLite databases:
+ordinary files and SQLite databases in these trees, plus individually selected
+SQLite databases outside them:
 
 | Tree | Included state |
 | --- | --- |
 | `/work` | Workspace files, Git metadata and other regular files. |
 | `/stash` | Knowledge, task sources/results and private native provider files. |
 | `/home/fhold/.config/opencode`, `.local/share/opencode`, `.local/state/opencode` | Native OpenCode configuration, sessions, account and supporting files. |
-| `/home/fhold/.codex` | Codex configuration, account, sessions, approvals and registered databases. |
+| `/home/fhold/.codex` | Codex configuration, account, sessions, approvals and databases. |
 | `/home/fhold/.claude`, `.claude.json` | Claude configuration, account, sessions and consent. |
 | `/opt/akm/data`, `/etc/akm` | AKM durable state, logs and configuration. |
 
@@ -346,12 +359,13 @@ For example, mount it read-only; it contains paths, not authentication keys:
   are supported; globs, tilde/environment expansion, trailing slashes, dot segments,
   relative paths, links and special files are not. Repeated/overlapping entries
   capture each physical file once. Missing paths/databases may initialize later;
-  once a database is captured, its unexpected disappearance blocks publication.
-- Each registered SQLite file uses the same bounded native `VACUUM INTO` snapshot
+  unexpected loss of a captured explicitly registered database blocks publication.
+- Each SQLite file uses the same bounded native `VACUUM INTO` snapshot
   and integrity validation as the built-in databases. Committed WAL changes are
   included, but live `-wal`/`-shm` files are never ordinary backup members. Additional
-  SQLite found in an ordinary directory must also be listed in `sqlite`, even if
-  its filename has no database extension. Databases must remain on local storage.
+  SQLite is identified by its file header in selected directories, regardless of
+  extension; it does not need a separate `sqlite` entry. The explicit list selects
+  individual databases outside those directories. Databases must remain on local storage.
   Each database is consistent individually, not one transaction across all apps.
 - Operator-selected paths can opt into a normally omitted cache, but cannot select
   recovery staging/receipts, runtime coordination, its storage credentials, its own
@@ -368,14 +382,12 @@ For example, mount it read-only; it contains paths, not authentication keys:
   their hash into the descriptor/receipt. Restore never adopts paths from a backup
   that the current operator configuration does not cover. The external tooling
   must preserve this configuration across replacements; it is not itself restored.
-- To add entries, stop/restart with the expanded file. Existing default checkpoints
-  and previously selected files/databases are retained; the first new accepted
-  checkpoint records the expanded selection. Reordering/duplicates do not change
-  its identity. Restore from an older point supports the additional missing paths.
-  Removing/narrowing an accepted selection is refused before claiming or writing
-  targets; keep the old entries or deliberately use a new recovery namespace.
-  Before the first checkpoint of a newly initialized custom namespace, use the
-  same selection used for `init`. Never reinitialize an existing namespace.
+- Apply selection changes on the next restart. Restore uses the current selection
+  and leaves newly excluded, unselected or independent paths untouched. The next
+  accepted checkpoint records the new selection; older immutable checkpoints
+  remain intact. Adding or removing entries does not require a new destination,
+  identity or receipt. Reordering/duplicates do not change the normalized selection.
+  Never reinitialize an existing namespace.
 
 Files restore to their original locations without overwriting pre-existing files.
 The image's non-root user must be able to create/write the chosen locations and
@@ -448,8 +460,8 @@ unreceipted local runtime state.
 
 Built-in and explicitly registered SQLite **and WAL/SHM paths** cannot be
 excluded, even before a database exists. Recognized network placement fails even
-with discovery off or a mount opt-in. Unknown SQLite in retained trees still
-needs registration. Excluded content is not inspected/certified: relocate any
+with discovery off or a mount opt-in. Newly discovered SQLite in retained trees
+also uses native snapshots and must remain local. Excluded content is not inspected/certified: relocate any
 database an application opens there to local storage. See SQLite's
 [network-filesystem guidance](https://sqlite.org/useovernet.html).
 
@@ -470,40 +482,37 @@ path-bearing output is for operators, not public health. `status` remains compac
 Versioned policies use catalog 3: normalized policy and effective automatic
 exclusions are hash-bound to the immutable manifest and descriptor/receipt.
 Catalogs 1/2 and legacy include files remain readable with original coverage;
-old images reject catalog 3 rather than ignoring exclusions. Effective ownership
-must match accepted checkpoints, including previously discovered mount roots.
-Missing/newly excluded drives cannot silently lose historical members or receive
-old restored contents. Additive paths/SQLite remain supported with unchanged
-ownership policy. Policy changes need the explicit transition below.
+old images reject catalog 3 rather than ignoring exclusions. Historical manifests
+retain their recorded selection and hashes. Restore applies the current policy,
+including current network-mount discovery, without overwriting newly excluded
+or independently owned paths. Required mounts must still exist. These coverage
+edits keep the same instance identity and checkpoint destination.
 
 ### Change an established recovery ownership policy
 
-This release supports fresh namespaces and unchanged ownership, not an automatic
-policy-migration engine. For an existing recovered directory moving onto an
-independent drive:
+Coverage can change on restart without a policy-migration engine or new
+checkpoint namespace. For an existing recovered directory moving onto an
+independent drive, the external operator handles the data move:
 
 1. Stop and externally confirm all old writers/publishers and descendants have
    stopped. Retain the checkpoint, original disk, private receipts and logs.
-2. Restore/validate offline with the **original policy** and an exact-native-version
-   compatible image into empty local native paths. Override the normal entrypoint
+2. If necessary, restore/validate offline with the **original policy** into empty
+   local native paths. Override the normal entrypoint
    and run `fhold-recovery restore --confirm-stopped` with the old destination,
    identity and mounts. It releases ownership after validation, without seeding
    defaults or starting writers. Valid surviving local state is preserved.
 3. Transfer the relevant content offline to the independently provisioned drive;
    verify it and mount its exact declared root. External tooling owns this move.
-4. Supply the new policy, a **genuinely unused recovery namespace**, and a fresh
-   `FH_RECOVERY_STATE_DIR` outside captured trees. Retain the old private directory;
-   `/home/fhold/.fhold-recovery` stays excluded even under whole-home selection.
-   If the old private directory used a custom location, keep it outside selection
-   or explicitly exclude it in the new policy too.
-   Never edit/copy old receipts or manifests to invent new authority.
-5. Initialize once and start normally. The first ownership epoch can adopt the
-   reviewed local state. Verify an accepted checkpoint and cold replacement
-   before retiring old artifacts.
+4. Supply the new policy with the **same destination, instance ID and private
+   recovery state**. Never edit receipts or historical manifests. The new policy
+   keeps the independent drive out of restore and future capture.
+5. Start normally; do not initialize again. Verify the independent content and
+   an accepted checkpoint before retiring any old copies. Historical checkpoints
+   retain their original members, even when the new selection omits them.
 
 `--confirm-stopped` is an operator assertion, not proof that another writer is
-dead. This transition deliberately avoids replaying old copies over independent
-contents or silently narrowing historical coverage.
+dead. Selecting or excluding a path is not a data-copy operation; recovery never
+migrates files onto an independent drive or provisions the mount.
 
 ## Qualification limits
 
@@ -517,6 +526,9 @@ use real provider/vendor accounts or an existing home.
 bun run test:recovery
 FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE bun run smoke:recovery
 FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE bun run smoke:recovery:blob
+# Exercise a published-image upgrade with empty storage, then a surviving home:
+FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE FH_RECOVERY_UPGRADE_FROM_IMAGE=YOUR_PUBLISHED_SOURCE_IMAGE bun run smoke:recovery
+FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE FH_RECOVERY_UPGRADE_FROM_IMAGE=YOUR_PUBLISHED_SOURCE_IMAGE FH_RECOVERY_TEST_SURVIVING_HOME=1 bun run smoke:recovery
 ```
 
 `FH_RECOVERY_TEST_IMAGE` is required for both image commands; choose the exact
@@ -548,13 +560,16 @@ readiness or sandbox support. Keep account and hosting qualification separate.
 No real network-mounted filesystem or numerical RPO/RTO is qualified by these tests.
 
 The reusable focused recovery suite covers explicit custom file/directory/database
-lists, additive catalogs, WAL/concurrent captures, empty-layout restoration,
+lists, coverage edits, discovered SQLite, WAL/concurrent captures, empty-layout restoration,
 workspace/Git/modes/deletions, all registered Codex databases, initialized-presence
 enforcement, corruption/deadline/ownership refusal, safe errors and accepted
-publication clocks. Entrypoint tests cover scheduler independence and separate
+publication clocks, upgrades with changed dependency versions, surviving receipts
+and backup warnings without stopping the agent. Entrypoint tests cover scheduler independence and separate
 writer/final-checkpoint budgets. Exact-image directory and Blob-emulator smokes
 exercise native session/shell/file APIs, restored state and all three offline
-AKM harnesses without copying host accounts or repairing image behavior.
+AKM harnesses without copying host accounts or repairing image behavior. Upgrade
+smokes replace a published image in cold-storage and surviving-home modes, then
+restore a checkpoint produced by the replacement image on its next restart.
 
 See [Linux product qualification](operations/alpha-qualification.md) for exact
 candidate evidence and remaining product gates. Host-specific deployment,

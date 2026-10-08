@@ -101,13 +101,7 @@ describe('recovery wrapper configuration and private status', () => {
 		}
 		for (const interval of ['0', 'false', '-1', '1.5', '999999'])
 			expect(() => recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: interval })).toThrow();
-		expect(() =>
-			recoveryConfig({
-				...base,
-				FH_RECOVERY_INTERVAL_SECONDS: '60',
-				FH_RECOVERY_MAX_UNSAVED_SECONDS: '5'
-			})
-		).toThrow();
+		expect(recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: '3600' }).intervalSeconds).toBe(3600);
 	});
 
 	it('keeps durability interval unchanged when user scheduling is disabled', () => {
@@ -264,12 +258,12 @@ describe('recovery wrapper configuration and private status', () => {
 		expect(result.stdout).toBe('');
 	});
 
-	it('refuses future or nonfinite wall-clock status and publication timestamps', () => {
+	it('uses worker health without reinterpreting diagnostic wall-clock checkpoint timestamps', () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-future-'));
 		for (const timestamps of [
 			{ updatedAt: Date.now() + 30_000, lastPublishedAt: Date.now() },
 			{ updatedAt: Date.now(), lastPublishedAt: Date.now() + 30_000 },
-			{ updatedAt: null, lastPublishedAt: Date.now() },
+			{ updatedAt: Date.now(), lastPublishedAt: null },
 			{ updatedAt: Date.now(), lastPublishedAt: 'not-a-number' }
 		]) {
 			writeFileSync(
@@ -281,10 +275,34 @@ describe('recovery wrapper configuration and private status', () => {
 				env: { PATH: process.env.PATH, FH_RUNTIME_DIR: root },
 				encoding: 'utf8'
 			});
-			expect(result.status).toBe(1);
-			expect(JSON.parse(result.stdout).healthy).toBe(false);
+			expect(result.status).toBe(0);
+			expect(JSON.parse(result.stdout).healthy).toBe(true);
 			expect(result.stderr).toBe('');
 		}
+	});
+
+	it('overdue or failed backups do not stop a working assistant or block native readiness', () => {
+		const runtimeDir = mkdtempSync(join(tmpdir(), 'fhold-wrapper-backup-outage-'));
+		const code = `
+			import {runRecovery} from ${JSON.stringify(wrapper)};
+			import {mkdir,writeFile,readFile} from 'node:fs/promises';
+			const runtimeDir=${JSON.stringify(runtimeDir)};let renewals=0,observed;
+			const engine={status(){return {failure:'recovery Blob transport failed',lastCheckpointAt:null,lastCheckpointTick:null};},
+				async acquireRestore(){await mkdir(runtimeDir,{recursive:true});await writeFile(runtimeDir+'/recovery-writers-started','fixture');},
+				async renew(){renewals++;},async checkpoint(){throw Error('recovery Blob transport failed');},async release(){}};
+			const native=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){return new Response('ok');}});
+			const reservation=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){return new Response('fixture');}});const probePort=reservation.port;reservation.stop(true);
+			const timer=setTimeout(async()=>{const status=JSON.parse(await readFile(runtimeDir+'/recovery-status.json','utf8'));const ready=await fetch('http://127.0.0.1:'+probePort+'/ready');observed={healthy:status.healthy,durable:status.durable,ready:ready.ok,renewals};process.kill(process.pid,'SIGTERM');},1400);
+			try{await runRecovery({runtimeDir,intervalSeconds:1,maxUnsavedSeconds:0.01,probePort},{env:{OPENCODE_PORT:String(native.port),OPENCODE_SERVER_PASSWORD:'synthetic'},engine});}catch{}
+			finally{clearTimeout(timer);native.stop(true);}
+			process.stdout.write(JSON.stringify(observed));
+		`;
+		const result = spawnSync(process.execPath, ['--no-env-file', '--config=/dev/null', '--eval', code], {
+			env: { PATH: process.env.PATH }, encoding: 'utf8', timeout: 5000
+		});
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({ healthy: true, durable: false, ready: true, renewals: 1 });
+		expect(result.stderr).toBe('fhold recovery: checkpoint failed (recovery Blob transport failed).\n');
 	});
 
 	it('reports a safe missing-namespace failure without dumping environment', () => {
