@@ -21,7 +21,7 @@
 - [Dependencies and development](technical/package-management.md), [tests](technical/testing-workflow.md).
 - [Admin verification](operations/admin-setup-verification.md) and [release gates](operations/release.md).
 - [Linux qualification and release limits](operations/alpha-qualification.md).
-- [Documentation website](operations/docs-website.md): build, Pages deployment, and temporary template shim removal.
+- [Documentation website](operations/docs-website.md): native npm template builds and Pages deployment.
 
 Canonical source and contributions live at [fwdslsh/fhold](https://github.com/fwdslsh/fhold).
 The [Linux beta release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610061043-beta.1)

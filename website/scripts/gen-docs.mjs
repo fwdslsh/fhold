@@ -43,9 +43,11 @@ function inventory(root, prefix = '') {
 
 const escapeHtml = (text) =>
 	text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
-const hrefFor = (route) => `/${route.replace(/\.md$/, '.html')}`;
+const hrefFor = (route) => `/${route}`;
 
-export function rewriteLinks(markdown, source, routes, repo) {
+export function remapLinks(markdown, source, routes, repo) {
+	// Move document references into the site's sections and repository-only
+	// references to GitHub. Unify handles Markdown-to-HTML URLs during build.
 	// Preserve examples in fences/code spans; only real Markdown links change.
 	let fence = null;
 	return markdown
@@ -123,7 +125,7 @@ export function generateDocs({ docs, repo, output }) {
 			page(
 				title,
 				description,
-				`${rewriteLinks(markdown, source, routes, repo)}\n\n<p class="source-link"><a href="https://github.com/fwdslsh/fhold/blob/main/${sourcePath}">View this page on GitHub</a></p>`
+				`${remapLinks(markdown, source, routes, repo)}\n\n<p class="source-link"><a href="https://github.com/fwdslsh/fhold/blob/main/${sourcePath}">View this page on GitHub</a></p>`
 			)
 		);
 	}
@@ -157,8 +159,12 @@ export function generateDocs({ docs, repo, output }) {
 		'_includes/docnav.html',
 		`<nav class="docnav" id="docnav" aria-label="Documentation sections">${Object.entries(sections)
 			.map(([section, [title]]) => {
-				const links = `<ul><li><a href="/${section}/index.html">${escapeHtml(title)} overview</a></li>${groups[section]
-					.map((entry) => `<li><a href="${hrefFor(entry.route)}">${escapeHtml(entry.title)}</a></li>`)
+				const links = `<ul><li><a href="/${section}/index.html">${escapeHtml(title)} overview</a></li>${groups[
+					section
+				]
+					.map(
+						(entry) => `<li><a href="${hrefFor(entry.route)}">${escapeHtml(entry.title)}</a></li>`
+					)
 					.join('')}</ul>`;
 				return section === 'maintainers'
 					? `<details class="maintainer-nav"><summary>${escapeHtml(title)}</summary>${links}</details>`
