@@ -1,0 +1,13 @@
+# This config controls the website; docs/** remains the canonical content.
+# TEMPORARY: source points at template-shim.mjs's ignored staging tree.
+# Remove that staging step after https://github.com/fwdslsh/unify/issues/118
+# ships; see ../docs/operations/docs-website.md for the removal checklist.
+source: .cache/template/site
+output: dist
+generate: scripts/gen-docs.mjs
+pretty-urls: true
+base-url: https://fwdslsh.github.io/fhold/
+catalog: true
+search-corpus: true
+template:
+  source: unify-docs-template@0.1.1

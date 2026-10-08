@@ -13,9 +13,14 @@
     "packages/electron",
     "packages/claude-desktop",
     "containers/assistant/tools",
-    "containers/guardian/tools"
+    "containers/guardian/tools",
+    "website"
   ],
   "scripts": {
+    "docs:build": "bun run --cwd website build",
+    "docs:check": "bun run --cwd website check",
+    "docs:dev": "bun run --cwd website dev",
+    "docs:test": "bun test ./website/tests/docs-site.test.mjs",
     "admin:dev": "bun run --cwd packages/electron bundle && FH_HOME=/tmp/fhold-admin-dev FH_REPO_ROOT=\"$PWD\" bun run --cwd packages/electron start",
     "admin:e2e": "bun run --cwd packages/electron test:e2e",
     "guardian:dev": "bun run packages/guardian/src/server.ts",

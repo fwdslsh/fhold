@@ -15,6 +15,9 @@ for this prerelease's limits.
 Use [Installation](docs/installation.md) for downloads and first setup,
 [Managing fhold](docs/managing-fhold.md) for lifecycle, knowledge and recovery,
 and [the documentation map](docs/README.md) for connections and technical details.
+The [documentation website](https://fwdslsh.github.io/fhold/) is built from these
+same files; contributor build and deployment details are in the
+[website runbook](docs/operations/docs-website.md).
 
 Optional Guardian supplies authenticated, policy-scoped MCP. One Portal image
 adds Discord and Slack. The local Admin utility manages setup and settings,

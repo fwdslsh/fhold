@@ -6,6 +6,7 @@ packages/*/coverage/
 packages/*/test-results/
 test-results/
 .cache/
+website/dist/
 package-lock.json
 
 # Instance homes and local credentials never belong in source control.

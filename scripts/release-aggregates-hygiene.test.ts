@@ -163,8 +163,12 @@ describe('release workflows', () => {
 		}
 		expect([...actions].sort()).toEqual([
 			'actions/checkout@v7.0.1',
+			'actions/configure-pages@v6.0.0',
+			'actions/deploy-pages@v5.0.1',
 			'actions/download-artifact@v8.0.1',
+			'actions/setup-node@v7.1.0',
 			'actions/upload-artifact@v7.0.1',
+			'actions/upload-pages-artifact@v5.0.0',
 			'aquasecurity/trivy-action@v0.36.0',
 			'docker/build-push-action@v7.4.0',
 			'docker/login-action@v4.6.0',
