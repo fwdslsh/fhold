@@ -4,31 +4,80 @@
     <title>A home for your personal AI</title>
     <meta name="description" content="Install fhold, connect your AI provider, and give your personal agent persistent knowledge, recurring work, and access from the tools you use.">
   </head>
-  <body>
+  <body class="home">
     <main>
-      <p class="eyebrow">f/hold documentation</p>
-      <h1>A home for your personal AI.</h1>
-      <p class="lead">One persistent agent, a library that grows with you, and recurring work that keeps moving.</p>
-      <p>fhold brings OpenCode, AKM knowledge, and scheduling together in one Assistant container. Set it up on Linux, connect your AI provider, and manage it with the CLI or optional local Admin app.</p>
-      <p class="actions"><a class="button" href="/guides/installation.html">Install and start</a> <a href="/guides/managing-fhold.html">Manage your agent →</a></p>
-      <section>
-        <h2>Make it yours</h2>
-        <div class="cards">
-          <article><h3>Keep knowledge and work</h3><p>Manage your library, schedules, backups, and recovery.</p><a href="/guides/managing-fhold.html">Manage fhold →</a></article>
-          <article><h3>Connect your tools</h3><p>Use MCP clients, Claude Desktop, Discord, Slack, or experimental native remote workers.</p><a href="/connect/index.html">Connect →</a></article>
-          <article><h3>Choose your settings</h3><p>Configure native harnesses, hooks, permissions, environment, and mounts.</p><a href="/reference/index.html">Configuration reference →</a></article>
+      <section class="hero">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="kicker">~/fhold $</p>
+            <h1>f/hold</h1>
+            <p class="tagline">A home for your personal AI.</p>
+            <p class="lede">One persistent agent, a library that grows with you, and recurring work that keeps moving. OpenCode, AKM knowledge, and scheduling in one Assistant container you run yourself.</p>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="/guides/installation.html">Install and start</a>
+              <a class="btn btn-ghost" href="https://github.com/fwdslsh/fhold">/ GitHub</a>
+            </div>
+          </div>
+          <div class="hero-demo">
+            <figure class="term" style="margin: 0;">
+              <figcaption class="term-head">
+                <span class="term-dot red" aria-hidden="true"></span>
+                <span class="term-dot amber" aria-hidden="true"></span>
+                <span class="term-dot green" aria-hidden="true"></span>
+                <span class="term-title">your personal agent</span>
+              </figcaption>
+              <pre class="term-body"><span class="prompt">$</span> <span class="cmd">fhold install --name personal-agent</span>
+<span class="prompt">$</span> <span class="cmd">fhold -n personal-agent setup</span>
+<span class="prompt">$</span> <span class="cmd">fhold -n personal-agent status</span></pre>
+            </figure>
+          </div>
         </div>
       </section>
-      <section>
-        <h2>Start with the right guide</h2>
-        <ul>
-          <li><a href="/guides/installation.html">Installation</a> — downloads, setup, and your first agent.</li>
-          <li><a href="/reference/managed-harness-configuration.html">Harness configuration</a> — native settings and managed policy.</li>
-          <li><a href="/guides/assistant-recovery.html">Assistant recovery</a> — opt-in recovery for ephemeral containers.</li>
-          <li><a href="/guides/harness-plugins.html">Built-in plugins</a> — knowledge, skills, and keep-alive behavior.</li>
-        </ul>
+      <section class="home-section">
+        <div class="inner">
+          <div class="chip-row">
+            <span class="label">Your agent's home</span>
+            <span class="chip">OpenCode</span>
+            <span class="chip">AKM knowledge</span>
+            <span class="chip">Recurring work</span>
+            <span class="aside">one Assistant container, your choice of AI provider.</span>
+          </div>
+        </div>
       </section>
-      <p>fhold is a Linux prerelease. Read the <a href="https://github.com/fwdslsh/fhold/releases">release notes</a> for the current downloads and support limits.</p>
+      <section class="home-section">
+        <div class="inner">
+          <h2>Make it yours</h2>
+          <div class="card-grid">
+            <article class="card featured">
+              <h3>Keep knowledge and work</h3>
+              <p>Manage your library, schedules, backups, and recovery with the CLI or optional local Admin app.</p>
+              <a class="more" href="/guides/managing-fhold.html">Manage fhold →</a>
+            </article>
+            <article class="card">
+              <h3>Connect your tools</h3>
+              <p>Use MCP clients, Claude Desktop, Discord, Slack, or experimental native remote workers.</p>
+              <a class="more" href="/connect/index.html">Connect →</a>
+            </article>
+            <article class="card">
+              <h3>Choose your settings</h3>
+              <p>Configure native harnesses, hooks, permissions, environment, and mounts.</p>
+              <a class="more" href="/reference/index.html">Configuration reference →</a>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="home-section fhold-start">
+        <div class="inner">
+          <h2>Start with the right guide</h2>
+          <ul>
+            <li><a href="/guides/installation.html">Installation</a> — downloads, setup, and your first agent.</li>
+            <li><a href="/reference/managed-harness-configuration.html">Harness configuration</a> — native settings and managed policy.</li>
+            <li><a href="/guides/assistant-recovery.html">Assistant recovery</a> — opt-in recovery for ephemeral containers.</li>
+            <li><a href="/guides/harness-plugins.html">Built-in plugins</a> — knowledge, skills, and keep-alive behavior.</li>
+          </ul>
+          <p class="lede">fhold is a Linux prerelease. Read the <a href="https://github.com/fwdslsh/fhold/releases">release notes</a> for the current downloads and support limits.</p>
+        </div>
+      </section>
     </main>
   </body>
 </html>

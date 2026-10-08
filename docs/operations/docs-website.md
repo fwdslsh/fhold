@@ -6,6 +6,14 @@ files. Site presentation lives in `website/site/`; Unify configuration lives in
 `unify-docs-template@0.1.1`, and the renderer version is pinned in
 `website/package.json`. Both use the repository's single `bun.lock`.
 
+The npm docs starter supplies the page-directory script, not the fwdslsh brand.
+Local presentation in `website/site/` uses the family palette, Inter prose,
+JetBrains Mono navigation/code, Protest Revolution wordmark, terminal panels,
+cards, and responsive sidebar from Unify's own `examples/unify-docs` site.
+`assets/fhold.css` records its upstream source revision. Keep this styling
+aligned with `fwdslsh.dev` and `unify.fwdslsh.dev`; do not substitute the generic
+starter's system-font layout or a separate product palette.
+
 ## Build and preview
 
 With Bun and Node/npm available:

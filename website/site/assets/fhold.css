@@ -1,41 +1,719 @@
+/* fhold uses the fwdslsh family design from Unify's own documentation site.
+   Adapted from examples/unify-docs/site/assets/style.css in fwdslsh/unify
+   (9701cf6e31e458d43824928017d692d84aa77b30, MIT).
+   The npm docs starter remains responsible for the page-directory script;
+   these local presentation styles match unify.fwdslsh.dev and fwdslsh.dev. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0e0a;
+  --bg-panel: #0d1117;
+  --bg-card: #161b22;
+  --border: #30363d;
+  --border-faint: #21262d;
+  --text: #e6edf3;
+  --text-2: #c9d1d9;
+  --dim: #8b949e;
+  --green: #3fb950;
+  --green-bright: #00ff41;
+  --code: #79c0ff;
+  --code-bg: rgba(110, 118, 129, 0.2);
+  --green-tint: rgba(63, 185, 80, 0.08);
+  --gradient: linear-gradient(135deg, #00ff41 0%, #00cc33 100%);
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --display: "Protest Revolution", "Arial Black", sans-serif;
+  --measure: 47rem;
+  --head-h: 4rem;
+}
+
 * { box-sizing: border-box; }
-body { overflow-wrap: anywhere; }
-a { text-underline-offset: .2em; }
-a:hover { color: #fff; }
-:focus-visible { outline: 3px solid #c0ded8; outline-offset: 4px; }
-.skip-link { position: absolute; left: 1rem; top: -10rem; padding: .5rem; background: #1d2731; }
-.skip-link:focus { top: 1rem; }
-.site-header { border-bottom: 1px solid var(--color-rule); padding-bottom: 1.25rem; margin-bottom: 2.5rem; }
-.brand { display: inline-flex; align-items: center; gap: .6rem; text-decoration: none; font-size: 1.6rem; font-weight: 750; }
-.brand span { font-size: .85rem; font-weight: 400; color: #b3c2c9; }
-nav { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; margin-top: 1rem; }
-nav a { margin: 0; }
-main { max-width: 55rem; }
-h1, h2, h3 { line-height: 1.2; }
-h1 { font-size: clamp(2rem, 5vw, 3.6rem); letter-spacing: -.035em; }
-h2 { margin-top: 2.5rem; padding-top: 1.2rem; border-top: 1px solid var(--color-rule); }
-h3 { font-size: 1.2rem; }
-li { margin-block: .6rem; }
-.eyebrow { color: #b3c2c9; font-size: .9rem; }
-.lead { font-size: 1.3rem; color: #c0ded8; }
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-block: 2rem; }
-.button { display: inline-block; background: #c0ded8; color: #14232b; font-weight: 650; padding: .65rem 1rem; border-radius: .4rem; text-decoration: none; }
-.button:hover { background: #def0eb; color: #14232b; }
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-.cards article { padding: 1.1rem; border: 1px solid var(--color-rule); border-radius: .6rem; background: #1d2731; }
-.cards h3 { margin-top: 0; }
-pre { max-width: 100%; overflow: auto; padding: 1rem; background: #0c141a; border: 1px solid var(--color-rule); border-radius: .4rem; font-size: .88rem; }
-code { font-family: ui-monospace, monospace; }
-:not(pre) > code { background: #23323c; padding: .1em .25em; border-radius: .2em; }
-table { display: block; overflow: auto; border-collapse: collapse; max-width: 100%; font-size: .9rem; }
-th, td { border: 1px solid var(--color-rule); padding: .6rem; text-align: left; }
-blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid #c0ded8; color: #bdcbd1; }
-input[type="search"] { font: inherit; color: var(--color-text); background: #1d2731; border: 1px solid #91ada8; border-radius: .3rem; padding: .6rem; }
-.all-pages-search label { display: block; font-weight: 650; margin-bottom: .4rem; }
-.all-pages-search input { width: 100%; max-width: 30rem; }
-.all-pages-count { min-height: 1.5em; }
+
+/* overflow-x: clip is the page-level guarantee: wide content scrolls inside
+   its own container (pre, table, terminal) and the page itself never scrolls
+   sideways. clip, not hidden, so no scroll container is created and the
+   sticky sidebar keeps working. */
+html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-2);
+  font: 1rem/1.7 var(--sans);
+  overflow-wrap: break-word;
+}
+
+/* Design-time only: a layout's slot fallbacks preview in the browser, and this
+   keeps the wrapper from adding a box. Built pages contain no <slot> at all. */
+slot { display: contents; }
+
+::selection { background: rgba(63, 185, 80, 0.35); color: var(--text); }
+
+a { color: var(--green); text-underline-offset: 0.18em; }
+a:hover { color: var(--green-bright); }
+a:focus-visible, .skip:focus { outline: 2px solid var(--green); outline-offset: 2px; }
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 30;
+  padding: 0.5rem 0.75rem;
+  background: var(--green);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-weight: 600;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- masthead */
+
+.site-head {
+  background: rgba(10, 14, 10, 0.95);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-head-bar {
+  max-width: 77.5rem;
+  height: var(--head-h);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+}
+
+.wordmark-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 8px;
+  background: var(--gradient);
+  color: var(--bg);
+  font-family: var(--display);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.wordmark-name {
+  font-family: var(--display);
+  font-size: 1.375rem;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.head-pill {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1875rem 0.625rem;
+}
+
+.head-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.head-links a {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 0.375rem 0.125rem;
+  transition: color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.head-links a:hover { color: var(--green); }
+
+/* The mobile shortcut row: the sidebar sits after the article on small
+   screens, so these two anchors are how a phone reaches it. */
+.subnav {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 77.5rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--border-faint);
+}
+
+.subnav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-2);
+  text-decoration: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4375rem 0.875rem;
+}
+
+.subnav a:hover { color: var(--green); border-color: var(--green); }
+.subnav svg { stroke: var(--dim); }
+
+@media (min-width: 60rem) {
+  .site-head {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    backdrop-filter: blur(10px);
+  }
+  body { padding-top: var(--head-h); }
+  .subnav { display: none; }
+}
+
+/* The bar must fit every width without wrapping or spilling: the two
+   far links go first, then the pill. Measured, not guessed. */
+@media (max-width: 40rem) {
+  /* The row never clips: it shrinks a step, and scrolls sideways before it would. */
+  .head-links { gap: 0.875rem; min-width: 0; overflow-x: auto; }
+  .head-links a { font-size: 0.75rem; white-space: nowrap; }
+  .head-links .head-far, .head-pill { display: none; }
+  .site-head-bar { padding: 0 1rem; }
+}
+@media (max-width: 22.5rem) {
+  .site-head-bar { gap: 0.5rem; }
+}
+
+/* ------------------------------------------------------------------ shell */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+  max-width: 77.5rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.shell > * { min-width: 0; }
+main { min-width: 0; }
+main > * { max-width: var(--measure); }
+
+@media (min-width: 60rem) {
+  .shell {
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+    grid-template-areas: "nav main";
+    gap: 3.5rem;
+    align-items: start;
+    padding-top: 2.5rem;
+  }
+  .shell > main { grid-area: main; }
+  .shell > .docnav { grid-area: nav; }
+  .docnav {
+    position: sticky;
+    top: calc(var(--head-h) + 1.5rem);
+    max-height: calc(100vh - var(--head-h) - 3rem);
+    overflow-y: auto;
+  }
+}
+
+/* On small screens the sidebar renders after the article (source order), as a
+   compact directory of the whole site. */
+@media (max-width: 59.9375rem) {
+  .docnav {
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+  }
+}
+
+/* The front page opts out of the sidebar shell entirely via its own body
+   class; root-attribute merging (§9) unions it onto the layout's body. */
+body.home .shell { display: block; max-width: none; padding: 0; }
+body.home .docnav, body.home .subnav { display: none; }
+body.home main > * { max-width: none; }
+
+/* ------------------------------------------------------------------- nav */
+
+.docnav { display: flex; flex-direction: column; gap: 1.5rem; }
+
+.docnav-label {
+  margin: 0 0 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--dim);
+}
+
+.docnav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--border);
+}
+
+.docnav li a {
+  display: block;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.84375rem;
+  line-height: 1.45;
+  color: var(--text-2);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  margin-left: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.docnav li a:hover {
+  color: var(--green);
+  border-left-color: var(--green);
+}
+
+.docnav-all {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+.docnav-all a { color: var(--dim); text-decoration: none; }
+.docnav-all a:hover { color: var(--green); }
+
+/* ------------------------------------------------------------------ prose */
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 2rem 0 0.75rem;
+}
+h1 { font-size: 2.375rem; margin-top: 0; }
+h2 {
+  font-size: 1.4375rem;
+  font-weight: 600;
+  padding-top: 1.375rem;
+  border-top: 1px solid var(--border-faint);
+}
+h3 { font-size: 1.125rem; font-weight: 600; }
+h4, h5, h6 { font-size: 1rem; }
+
+/* Headings carry slug ids, so every one is a deep link; the fixed header
+   must not cover the target it jumps to. */
+h2[id], h3[id], h4[id] { scroll-margin-top: 1rem; }
+@media (min-width: 60rem) {
+  h2[id], h3[id], h4[id] { scroll-margin-top: calc(var(--head-h) + 1rem); }
+}
+
+p, ul, ol { margin: 0 0 1rem; }
+li { margin: 0.25rem 0; }
+li::marker { color: var(--dim); }
+
+.kicker {
+  margin: 0 0 0.625rem;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--green);
+}
+
+.lede { font-size: 1.0625rem; color: var(--dim); }
+
+strong { color: var(--text); }
+
+/* Blockquotes render as the family's callout: the green bar and tint that
+   fwdslsh.dev uses for "worth knowing". */
+blockquote {
+  margin: 0 0 1.25rem;
+  padding: 0.875rem 1.25rem;
+  border-left: 4px solid var(--green);
+  border-radius: 0 8px 8px 0;
+  background: var(--green-tint);
+  color: var(--text-2);
+}
+blockquote > :last-child { margin-bottom: 0; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.855em;
+  color: var(--code);
+  background: var(--code-bg);
+  padding: 0.1em 0.4em;
+  border-radius: 6px;
+  /* Long tokens (paths, URLs) break rather than push the page sideways. */
+  overflow-wrap: anywhere;
+}
+
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  line-height: 1.75;
+}
+pre code {
+  background: none;
+  padding: 0;
+  color: var(--text-2);
+  font-size: 0.84375rem;
+}
+
+/* Specs are full of wide tables; let them scroll rather than break the page. */
+table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin: 0 0 1.25rem;
+}
+th, td {
+  padding: 0.625rem 1rem;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-faint);
+}
+th:first-child { border-top-left-radius: 7px; }
+th:last-child { border-top-right-radius: 7px; }
+td { border-bottom: 1px solid var(--border-faint); color: var(--text-2); }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(110, 118, 129, 0.08); }
+
+hr { border: 0; border-top: 1px solid var(--border-faint); margin: 2.5rem 0; }
+
+img { max-width: 100%; height: auto; }
+
+/* ------------------------------------------------------- home page: hero */
+
+.hero {
+  padding: 4.5rem 1.5rem 3rem;
+  background: radial-gradient(43.75rem 21.25rem at 50% 0%, rgba(63, 185, 80, 0.08), transparent);
+}
+
+.hero-grid {
+  max-width: 72.5rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4.5rem;
+}
+
+.hero-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.hero-copy h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(3.5rem, 7vw, 5.25rem);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--green);
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero-copy h1 {
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+.hero-copy .tagline {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.1875rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.hero-copy .lede { margin: 0; max-width: 32.5rem; }
+
+.hero-demo { flex: 1; min-width: 0; }
+
+.cta-row { display: flex; flex-wrap: wrap; gap: 0.875rem; margin-top: 0.5rem; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8125rem 1.625rem;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-primary { background: var(--gradient); color: var(--bg); }
+.btn-primary:hover {
+  color: var(--bg);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 255, 65, 0.25);
+}
+
+.btn-ghost { border: 2px solid var(--border); color: var(--text); }
+.btn-ghost:hover { border-color: var(--green); color: var(--green); transform: translateY(-2px); }
+
+@media (max-width: 60rem) {
+  .hero { padding-top: 3rem; }
+  .hero-grid { flex-direction: column; gap: 2.5rem; }
+  .hero-copy { text-align: center; align-items: center; }
+  .cta-row { justify-content: center; }
+  .hero-demo { width: 100%; max-width: 34rem; }
+}
+
+/* -------------------------------------------------------------- terminal */
+
+.term {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.term-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6875rem 1rem;
+}
+
+.term-dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; }
+.term-dot.red { background: #ff5f56; }
+.term-dot.amber { background: #ffbd2e; }
+.term-dot.green { background: #27ca3f; }
+
+.term-title {
+  margin-left: 0.625rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.term-body {
+  margin: 0;
+  padding: 1.375rem 1.5rem;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  line-height: 2;
+  overflow-x: auto;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.term .prompt { color: var(--green); font-weight: 600; }
+.term .cmd { color: var(--text); }
+.term .out { color: var(--dim); }
+.term .url { color: var(--code); }
+
+/* On a phone the longest transcript line fits without even the inner
+   scroll kicking in. */
+@media (max-width: 26rem) {
+  .term-body { font-size: 0.75rem; padding: 1.125rem 1rem; }
+}
+
+/* ---------------------------------------------------- home page: sections */
+
+.home-section { padding: 1.5rem 1.5rem 3rem; }
+.home-section > .inner {
+  max-width: 72.5rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.home-section h2 { margin: 0; padding: 0; border: 0; font-size: 1.5rem; font-weight: 700; }
+
+.chip-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+.chip-row .label {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: 0.25rem;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--code);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.375rem 0.75rem;
+  white-space: nowrap;
+}
+
+.chip-row .aside { font-size: 0.8125rem; color: var(--dim); }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.75rem 1.625rem;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--gradient);
+  transform: scaleX(0);
+  transition: transform 0.25s ease;
+}
+
+.card:hover { transform: translateY(-3px); border-color: var(--green); }
+.card:hover::before { transform: scaleX(1); }
+
+.card.featured { border-color: var(--green); }
+.card.featured::before { transform: scaleX(1); }
+
+.card h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.card p { margin: 0; font-size: 0.875rem; line-height: 1.65; color: var(--dim); flex: 1; }
+
+.card .more {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* ----------------------------------------------------------------- footer */
+
+.site-foot {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  margin-top: 3rem;
+  padding: 2.5rem 1.5rem 2.75rem;
+  text-align: center;
+}
+
+.site-foot .inner {
+  max-width: 72.5rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem; }
+.foot-links a {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.foot-links a:hover { color: var(--green); }
+
+.site-foot p { margin: 0; font-family: var(--mono); font-size: 0.8125rem; color: var(--dim); }
+.foot-family { font-size: 0.75rem; }
+.foot-family span { color: var(--green); }
+.foot-family .self { color: var(--text); }
+
+/* ------------------------------------------------------------------ print */
+
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-card: #f6f8fa;
+    --border: #d0d7de;
+    --border-faint: #d8dee4;
+    --text: #1f2328;
+    --text-2: #1f2328;
+    --dim: #57606a;
+    --code: #0550ae;
+    --code-bg: #f6f8fa;
+    --green-tint: #f6f8fa;
+  }
+  body { padding-top: 0; }
+  .site-head, .subnav, .docnav, .site-foot, .skip { display: none; }
+  .shell { display: block; padding: 0; }
+  a { color: var(--text); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+/* fhold's page directory and source links use the same family tokens. */
+.source-link { border-top: 1px solid var(--border-faint); margin-top: 2.5rem; padding-top: 1rem; font-size: 0.875rem; }
+.foot-family a { color: var(--green); text-decoration: none; }
+.all-pages-search label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text); }
+.all-pages-search input {
+  width: 100%;
+  max-width: 30rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+  font: inherit;
+}
+.all-pages-search input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.all-pages-count { color: var(--dim); min-height: 1.7em; }
 .all-pages-list h2 { text-transform: capitalize; }
-.all-pages-error { border: 1px solid var(--color-rule); padding: 1rem; }
-.source-link { border-top: 1px solid var(--color-rule); margin-top: 2.5rem; padding-top: 1rem; font-size: .9rem; }
-.site-footer { color: #b3c2c9; }
-@media (max-width: 44rem) { .cards { grid-template-columns: 1fr; } }
+.all-pages-error { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.docnav .maintainer-nav { color: var(--dim); font-size: 0.84375rem; }
+.docnav .maintainer-nav summary { cursor: pointer; font-family: var(--mono); padding-bottom: 0.75rem; }
+.docnav .maintainer-nav ul { margin-top: 0.5rem; }
+.hero-copy .kicker { margin: 0; }
+.fhold-start { padding-bottom: 1rem; }
+.fhold-start .lede { max-width: 45rem; }

@@ -155,9 +155,16 @@ export function generateDocs({ docs, repo, output }) {
 	);
 	write(
 		'_includes/docnav.html',
-		`<nav aria-label="Documentation sections">${Object.entries(sections)
-			.map(([section, [title]]) => `<a href="/${section}/index.html">${escapeHtml(title)}</a>`)
-			.join(' ')} <a href="/all-pages.html">All pages</a></nav>\n`
+		`<nav class="docnav" id="docnav" aria-label="Documentation sections">${Object.entries(sections)
+			.map(([section, [title]]) => {
+				const links = `<ul><li><a href="/${section}/index.html">${escapeHtml(title)} overview</a></li>${groups[section]
+					.map((entry) => `<li><a href="${hrefFor(entry.route)}">${escapeHtml(entry.title)}</a></li>`)
+					.join('')}</ul>`;
+				return section === 'maintainers'
+					? `<details class="maintainer-nav"><summary>${escapeHtml(title)}</summary>${links}</details>`
+					: `<div><p class="docnav-label">${escapeHtml(title)}</p>${links}</div>`;
+			})
+			.join('\n')}<p class="docnav-all"><a href="/all-pages.html">All pages →</a></p></nav>\n`
 	);
 	return files.length;
 }
