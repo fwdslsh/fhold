@@ -2,10 +2,22 @@ name: GitHub CI
 
 on:
   pull_request:
+    # Docs/site changes have their own strict Unify verification workflow.
+    # Do not ignore all Markdown: runtime skills and prompts also use .md.
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - 'README.md'
+      - '.github/workflows/deploy-docs.yml'
   push:
     branches:
       - main
       - 'release/**'
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - 'README.md'
+      - '.github/workflows/deploy-docs.yml'
 
 permissions:
   contents: read

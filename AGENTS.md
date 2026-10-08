@@ -92,6 +92,10 @@ Guardian authentication/moderation/ownership/path containment protections.
 
 ## Development and verification
 
+Docs and website-only changes use the documentation workflow rather than the
+full container matrix. Keep this separation when editing CI; shared root
+manifests/lockfiles and runtime Markdown skills/prompts still require full CI.
+
 Use AKM curate/show before inventing a workflow or unfamiliar configuration;
 record useful feedback. Use strict TypeScript, Web/Node/Bun built-ins and the
 private shared library rather than duplicating domain operations. Edit with

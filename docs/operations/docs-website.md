@@ -48,6 +48,12 @@ Changes to docs, site files, this workflow, or the manifests/lockfile trigger
 verification. Strict build and audit findings stop publication. Ordinary
 site-content rollback is a reviewed Git revert followed by deployment.
 
+Changes confined to `docs/**`, `website/**`, the root `README.md`, or this
+website's deployment workflow do not trigger the full product/container CI.
+The website workflow still verifies docs and site changes. Mixed changes,
+shared root manifests/lockfiles, runtime skills/prompts, and product/CI files
+retain full CI; release validation also retains its full stack gate.
+
 If a custom domain is added later, set its Pages binding and DNS record, then
 change the base URL in `website/unify.yaml`. No domain or DNS change is required
 for the initial project-pages site.
