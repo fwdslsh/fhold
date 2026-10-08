@@ -45,11 +45,14 @@ export function renderServices(snapshot) {
 	renderConnectionStatus(snapshot);
 	updateGuardianGuide();
 	const unavailable = !!snapshot.dockerError;
+	const warnings = snapshot.services.flatMap((service) => service.warnings ?? []);
 	setText(
 		'runtime-status-detail',
-		unavailable ? 'Container status is unavailable. fhold will retry automatically.' : ''
+		unavailable
+			? 'Container status is unavailable. fhold will retry automatically.'
+			: warnings.join(' ')
 	);
-	byId('runtime-status-detail').hidden = !unavailable;
+	byId('runtime-status-detail').hidden = !unavailable && warnings.length === 0;
 	const services = byId('services');
 	services.replaceChildren();
 	if (snapshot.services.length === 0) {
@@ -70,10 +73,15 @@ export function renderServices(snapshot) {
 			identity.append(name, technical);
 			const status = document.createElement('span');
 			const healthy = isHealthy(service);
+			const degraded = healthy && service.warnings?.length > 0;
 			setBadge(
 				status,
-				healthy ? 'Running normally' : [service.state, service.health].filter(Boolean).join(' · '),
-				healthy ? 'success' : 'neutral'
+				degraded
+					? 'Running · needs attention'
+					: healthy
+						? 'Running normally'
+						: [service.state, service.health].filter(Boolean).join(' · '),
+				degraded ? 'warning' : healthy ? 'success' : 'neutral'
 			);
 			row.append(identity, status);
 			services.append(row);
@@ -81,12 +89,15 @@ export function renderServices(snapshot) {
 	}
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
 	const guardian = snapshot.services.find((service) => service.name === 'guardian');
+	const degraded = isHealthy(assistant) && assistant.warnings?.length > 0;
 	setText(
 		'overview-heading',
 		unavailable
 			? 'Container status is unavailable.'
 			: isHealthy(assistant)
-				? 'Your personal agent is ready.'
+				? degraded
+					? 'Your agent is running; some features need attention.'
+					: 'Your personal agent is ready.'
 				: assistant
 					? 'Your agent needs attention.'
 					: 'Your agent is stopped.'
@@ -96,7 +107,9 @@ export function renderServices(snapshot) {
 		unavailable
 			? 'Status unavailable'
 			: isHealthy(assistant)
-				? 'Running normally'
+				? degraded
+					? 'Running · needs attention'
+					: 'Running normally'
 				: assistant
 					? 'Needs attention'
 					: 'Stopped'

@@ -5,6 +5,7 @@ import {
 	buildComposeCliArgs,
 	buildComposeOptions,
 	composePs,
+	containerWarnings,
 	createFholdState,
 	deactivateComposeCommand,
 	ensureDockerReady,
@@ -55,11 +56,9 @@ export async function runStopAction(): Promise<void> {
 export async function runRestartAction(homeDir?: string): Promise<void> {
 	const state = await readyState(homeDir);
 	await withLock(state, (lock) =>
-		activateComposeCommand(
-			state,
-			['up', '-d', '--force-recreate', '--remove-orphans', '--wait'],
-			{ lock }
-		)
+		activateComposeCommand(state, ['up', '-d', '--force-recreate', '--remove-orphans', '--wait'], {
+			lock
+		})
 	);
 }
 
@@ -77,11 +76,21 @@ export async function readStatus(): Promise<Record<string, unknown>> {
 	const config = readStackConfig(state.homeDir);
 	if (!config.ok) throw new Error(config.error);
 	const result = await composePs(buildComposeOptions(state));
+	const services = result.ok
+		? await Promise.all(
+				parseComposePsRows(result.stdout).map(async (row) => ({
+					...row,
+					...(row.service === 'assistant' && row.state === 'running' && row.id
+						? { warnings: await containerWarnings(row.id) }
+						: {})
+				}))
+			)
+		: [];
 	return {
 		homeDir: state.homeDir,
 		config: config.config,
 		pendingRestart: restartStatus(state.homeDir),
-		services: result.ok ? parseComposePsRows(result.stdout) : [],
+		services,
 		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' })
 	};
 }

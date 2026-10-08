@@ -156,6 +156,27 @@ test('a hook-reporting error remains unknown until a new boot', () => {
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
+test('a new boot clears old keep-alive failures; status reports failures without credentials', async () => {
+	const root = fixture();
+	event(root, 'UserPromptSubmit');
+	await tick({ root, fetch: async () => new Response(null, { status: 503 }) });
+	event(root, 'Stop');
+	const script = join(import.meta.dir, '../plugins/fhold/scripts/activity.mjs');
+	const child = Bun.spawn(['node', script, 'status'], {
+		env: { ...process.env, FH_RUNTIME_DIR: root },
+		stdout: 'pipe',
+		stderr: 'pipe'
+	});
+	const status = JSON.parse(await new Response(child.stdout).text());
+	expect(await child.exited).toBe(1);
+	expect(status.degraded).toBe(true);
+	expect(status.activity).toBe('idle');
+	expect(status).not.toHaveProperty('url');
+	expect(status).not.toHaveProperty('authorization');
+	initialize({}, root);
+	expect(() => readFileSync(join(root, 'keepalive-status.json'))).toThrow();
+});
+
 async function withOpenCode(
 	run: (plugin: Awaited<ReturnType<typeof FholdPlugin>>, root: string) => Promise<void>
 ) {

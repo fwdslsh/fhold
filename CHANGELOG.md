@@ -21,6 +21,14 @@ boundaries and exclusive writer ownership remain enforced. Regression tests and
 published-image upgrade smokes cover cold storage, surviving local state and
 restoring a checkpoint made by the upgraded image.
 
+Optional scheduling, reconciliation, knowledge hooks, keep-alive, native-worker
+and diagnostic failures no longer stop a usable agent. Reconciliation starts in
+the background and retries. CLI status, Admin Overview and the built-in admin
+skill show actionable warnings separately from core readiness. Invalid numeric
+tuning uses safe defaults; failed status writes retry and an unavailable optional
+probe does not invalidate recovery ownership. Real-image smoke tests stop optional
+processes and verify native sessions and shell tools remain usable.
+
 ## 0.1.2610061043-beta.1 — qualified setup and reliable installation retry
 
 This corrected beta.1 includes the simpler wizard, Apps, native AI settings and

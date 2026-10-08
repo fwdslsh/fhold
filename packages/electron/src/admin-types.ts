@@ -24,6 +24,7 @@ export type AdminSnapshot = {
 		name: string;
 		state: string;
 		health: string;
+		warnings?: string[];
 	}>;
 	dockerError?: string;
 	installationReadiness?: { ok: boolean; message?: string };

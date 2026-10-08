@@ -243,20 +243,34 @@ describe('personal memory capture', () => {
 	});
 });
 
-describe('Assistant scheduler health', () => {
-	it('requires every essential process and fresh successful task reconciliation', async () => {
+describe('Assistant readiness and optional-feature degradation', () => {
+	it('keeps a usable authenticated agent healthy when scheduling or reconciliation fails', async () => {
 		const root = home();
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
+		const server = Bun.serve({
+			hostname: '127.0.0.1',
+			port: 0,
+			fetch: (request) =>
+				request.headers.get('authorization') ===
+				`Basic ${Buffer.from('user:fixture-only').toString('base64')}`
+					? new Response('{}')
+					: new Response('Unauthorized', { status: 401 })
+		});
 		const run = async () => {
 			const child = Bun.spawn(['bash', script], {
 				env: {
 					...process.env,
 					FH_RUNTIME_DIR: root,
 					FH_SCHEDULER_ENABLED: '1',
-					FH_RECOVERY_URL: ''
+					FH_RECOVERY_URL: '',
+					FH_KEEPALIVE_URL: '',
+					FH_CODEX_REMOTE: '0',
+					FH_CLAUDE_REMOTE: '0',
+					OPENCODE_PORT: String(server.port),
+					OPENCODE_SERVER_PASSWORD: 'fixture-only'
 				},
 				stdin: 'ignore',
-				stdout: 'ignore',
+				stdout: 'pipe',
 				stderr: 'ignore',
 				timeout: 2000,
 				killSignal: 'SIGKILL'
@@ -264,16 +278,98 @@ describe('Assistant scheduler health', () => {
 			const exitCode = await child.exited;
 			// A killed or timed-out shell is not a successful unhealthy-state check.
 			expect(child.signalCode).toBeNull();
-			return exitCode;
+			return { exitCode, output: await new Response(child.stdout).text() };
 		};
-		expect(await run()).toBe(1);
-		for (const child of ['assistant', 'scheduler', 'reconciliation'])
-			writeFileSync(join(root, `${child}.pid`), String(process.pid));
-		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
-		expect(await run()).toBe(1);
-		writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
-		writeFileSync(join(root, 'scheduler.pid'), '999999999');
-		expect(await run()).toBe(1);
+		try {
+			expect((await run()).exitCode).toBe(1);
+			for (const child of ['assistant', 'scheduler', 'reconciliation'])
+				writeFileSync(join(root, `${child}.pid`), String(process.pid));
+			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
+			const stale = await run();
+			expect(stale.exitCode).toBe(0);
+			expect(stale.output).toContain('degraded: Task reconciliation');
+			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
+			writeFileSync(join(root, 'scheduler.pid'), '999999999');
+			const dead = await run();
+			expect(dead.exitCode).toBe(0);
+			expect(dead.output).toContain('degraded: Scheduled tasks');
+			writeFileSync(join(root, 'scheduler.pid'), String(process.pid));
+			expect(await run()).toEqual({ exitCode: 0, output: '' });
+			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) + 3600));
+			expect((await run()).exitCode).toBe(0);
+			writeFileSync(join(root, 'assistant.pid'), '999999999');
+			expect((await run()).exitCode).not.toBe(0);
+		} finally {
+			server.stop(true);
+		}
+	});
+});
+
+describe('optional AKM integration failures', () => {
+	async function plugin(upstream: string, run: (create: Function, root: string) => Promise<void>) {
+		const root = home();
+		const dependency = join(root, 'upstream.mjs');
+		writeFileSync(dependency, upstream);
+		const entry = join(root, 'plugin.mjs');
+		// Unit-only dependency injection; image smokes load the unmodified native plugin.
+		const source = readFileSync(
+			join(import.meta.dir, '../packages/skeleton/system/assistant/plugins/akm.js'),
+			'utf8'
+		)
+			.replace('/opt/fhold/tools/node_modules/akm-opencode/dist/index.js', dependency)
+			.replace(
+				"'../lib/memory.js'",
+				JSON.stringify(
+					new URL('../packages/skeleton/system/assistant/lib/memory.js', import.meta.url).href
+				)
+			);
+		writeFileSync(entry, source);
+		const previous = process.env.FH_RUNTIME_DIR;
+		process.env.FH_RUNTIME_DIR = root;
+		try {
+			await run((await import(entry)).AkmPlugin, root);
+		} finally {
+			if (previous === undefined) delete process.env.FH_RUNTIME_DIR;
+			else process.env.FH_RUNTIME_DIR = previous;
+		}
+	}
+	it('disables a failed integration without rejecting native plugin initialization', async () => {
+		await plugin(
+			'export async function AkmPlugin(){throw Error("private-upstream-payload")}',
+			async (create, root) => {
+				expect(await create({})).toEqual({});
+				const warning = readFileSync(join(root, 'degraded-knowledge'), 'utf8');
+				expect(warning).toContain('Knowledge integration is unavailable');
+				expect(warning).not.toContain('private-upstream-payload');
+			}
+		);
+	});
+	it('isolates failed knowledge hooks, retries them and clears only recovered failures', async () => {
+		await plugin(
+			'export async function AkmPlugin(){return {event:async input=>{if(input.fail)throw Error("private-upstream-payload")}}}',
+			async (create, root) => {
+				const hooks = await create({});
+				await hooks.event({ fail: true, event: { type: 'fixture' } });
+				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
+				await hooks['chat.message']({ agent: 'build' }, { parts: [] });
+				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
+				await hooks.event({ event: { type: 'fixture' } });
+				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(false);
+			}
+		);
+	});
+	it('does not clear a failed trusted hook when an untrusted session skips it', async () => {
+		await plugin(
+			'export async function AkmPlugin(){return {"chat.message":async input=>{if(input.fail)throw Error("fixture")}}}',
+			async (create, root) => {
+				const hooks = await create({});
+				await hooks['chat.message']({ agent: 'build', fail: true }, { parts: [] });
+				await hooks['chat.message']({ agent: 'remote' }, { parts: [] });
+				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
+				await hooks['chat.message']({ agent: 'build' }, { parts: [] });
+				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(false);
+			}
+		);
 	});
 });
 

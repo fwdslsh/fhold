@@ -45,6 +45,11 @@ Tests must exercise the shipped image through normal user interfaces; never
 repair its PATH, settings or permissions inside a test to conceal a product bug.
 Disposable fixtures may isolate accounts/data, not supply missing product behavior.
 Prefer a small, maintainable solution over another helper, service or exception.
+Default to logging, isolating an optional failure and reporting actionable degraded
+state while the agent continues. Scheduling, knowledge hooks, keep-alive and
+diagnostics must not become whole-container restart gates. Stop only when the
+core cannot run or continuing is unsafe, including authentication, incomplete
+restore and actual loss of exclusive recovery ownership.
 
 ## Ownership and data safety
 

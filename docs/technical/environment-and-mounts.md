@@ -179,6 +179,14 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
 
+Invalid optional settings log their names and degrade only the affected feature.
+Malformed scheduler intent disables scheduling; numeric recovery/shutdown tuning
+falls back to its documented defaults. Core health remains successful when the
+authenticated agent is usable. Docker's health output carries optional-feature
+warnings into CLI status and Admin; unavailable diagnostics never restart the
+container. Authentication, safe restore and actual exclusive ownership remain
+required.
+
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at

@@ -116,6 +116,11 @@ members. A different home or image does not make a checkpoint portable.
 | `FH_RESTORE_TIMEOUT_SECONDS` | `300`; entrypoint wait for validated restoration before native startup. |
 | `FH_SHUTDOWN_SECONDS` | `25`; writer-stop grace, not the final backup deadline. |
 
+Invalid numeric timing/probe settings log their setting names and use the
+documented defaults; they do not prevent a valid instance from starting.
+Invalid scheduler enablement disables scheduling only. Identity, destination,
+authentication and restore-safety errors still require correction before startup.
+
 Set the existing native API password through its normal private secret-file
 contract. Codex/Claude workers remain independent and experimental. Both
 supervisors default on, with independent explicit off switches.
@@ -220,7 +225,8 @@ separate from emulator evidence. S3 is not qualified. There are no cloud
 management tools, hosting selectors, mandatory sidecars or startup installs.
 
 The private health-only probe has `/live` and `/ready`, no control API. Do not
-route it publicly. Recovery environment must be removed from native worker/tool
+route it publicly. A conflicting or unavailable probe warns and is disabled;
+it does not prevent restoration, checkpoints or native startup. Recovery environment must be removed from native worker/tool
 launch environments, but trusted same-UID code is not OS-isolated from private recovery
 files; external storage policies must protect retention/rollback independently.
 
@@ -240,11 +246,22 @@ ownership, not a recovery worker PID alone. An overdue or failed checkpoint
 reports `durable: false` and a backup warning while the agent keeps running and
 retrying. It does not make a working agent unhealthy or trigger a restart.
 Actual ownership loss still stops writers to prevent competing checkpoints.
+Private status publication is diagnostic: write failures warn and retry without
+being treated as ownership loss. If status cannot be read, report diagnostics as
+unavailable, not as proof that a live owner lost its lock. The owner still enforces
+restoration and renewals independently; its exit stops the native writers.
 Accepted-checkpoint age is owned by the engine after conditional publication
 and its private receipt write; the supervisor uses that same monotonic clock.
 A later staging-cleanup error must not make an accepted, receipted checkpoint
 disappear from health bookkeeping. An older restored checkpoint alone does not
 count as a fresh boot publication.
+
+Core health proves the authenticated agent is usable and, when configured,
+restoration completed with a live recovery owner. Optional task reconciliation,
+scheduler, knowledge and keep-alive failures appear as health-log warnings in
+CLI status and Admin Overview. They never trigger a whole-container restart.
+Reconciliation and heartbeat failures retry; a stopped optional process requires
+corrective action and an explicit restart. Readiness is not provider/client readiness.
 
 The potential loss window includes the timer interval, capture and upload time;
 outages make it longer. SIGTERM should stop writers and descendants before a

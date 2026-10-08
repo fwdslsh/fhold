@@ -1099,6 +1099,25 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-status-detail').textContent).toContain('retry automatically');
 		expect(control('start-stack').disabled).toBe(true);
 	});
+	it('shows optional-feature warnings without reporting a usable agent stopped or blocking setup', () => {
+		const assistant = {
+			name: 'assistant',
+			state: 'running',
+			health: 'healthy',
+			warnings: ['Scheduling is unavailable. Check logs.']
+		};
+		const snapshot = { ...runtimeSnapshot(), services: [assistant] };
+		renderServices(snapshot);
+		expect(control('assistant-summary').textContent).toBe('Running · needs attention');
+		expect(control('overview-heading').textContent).toContain('running');
+		expect(control('runtime-status-detail').textContent).toContain('Scheduling is unavailable');
+		expect(control('runtime-status-detail').hidden).toBe(false);
+		expect(control('setup-recovery').hidden).toBe(true);
+		expect(control('restart-stack').disabled).toBe(false);
+		renderServices({ ...snapshot, services: [{ ...assistant, warnings: [] }] });
+		expect(control('assistant-summary').textContent).toBe('Running normally');
+		expect(control('runtime-status-detail').hidden).toBe(true);
+	});
 	it('coalesces overlapping snapshot reads without a manual refresh control', async () => {
 		const snapshot = emptySnapshot();
 		state.currentSnapshot = snapshot;

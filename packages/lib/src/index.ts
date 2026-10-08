@@ -194,6 +194,7 @@ export {
 	composeConfigJson,
 	composePreflight,
 	composePs,
+	containerWarnings,
 	ensureDockerReady,
 	assertProjectOwnership,
 	parseComposePsRows,

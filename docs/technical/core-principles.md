@@ -57,6 +57,13 @@ through normal user interfaces; they must not repair PATH, permissions or native
 settings to hide a product defect. Fix the owning layer and keep the normal path
 small and maintainable.
 
+Optional failures are logged, isolated and reported as degraded state while the
+agent continues. Scheduling, knowledge hooks, keep-alive, native remote workers
+and diagnostics do not become whole-container restart gates. Core readiness is
+the authenticated native API with its required recovery restoration and owner.
+Only an unusable core or unsafe continuation stops startup/writers, including
+missing authentication, incomplete restore or actual loss of recovery ownership.
+
 Host-specific deployment/qualification tooling and third-party addon installers
 are not part of the image, CLI/Admin or product test suite. fhold retains generic
 runtime contracts, directory/Blob transports, product tests and reusable image
@@ -243,8 +250,9 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
   `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
   Knowledge, native workers and the independent recovery timer remain available.
-  Health requires scheduler liveness when scheduling or keep-alive is enabled,
-  and fresh reconciliation only when user scheduling is enabled.
+  Missing scheduler processes or overdue reconciliation produce actionable
+  health-log warnings shown by CLI/Admin; they do not fail core readiness.
+  Reconciliation runs in the background and retries without blocking startup.
 - Optional conditional HTTP keep-alive uses native fhold activity hooks and
   the existing Supercronic process, independently of user task enablement. It
   has no cloud API authority or work-age expiry. Unknown activity keeps the
@@ -351,7 +359,8 @@ Routine capture does not stop the apps, and separately captured databases and
 files are not one application-wide transaction. Readiness requires completed
 restoration and ownership. A delayed/failed checkpoint warns about durability
 and retries without stopping a working agent. Actual ownership loss still stops
-writers. The engine owns the accepted publication clock; health does not maintain
+writers. Private diagnostic writes and the optional probe can fail without
+invalidating ownership; status writes retry. The engine owns the accepted publication clock; health does not maintain
 a separate timestamp that can diverge after publication.
 SIGTERM stops writers and descendants before the
 bounded final checkpoint; forced termination can lose unpublished changes.

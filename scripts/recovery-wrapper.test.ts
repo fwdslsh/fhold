@@ -91,7 +91,7 @@ describe('recovery wrapper configuration and private status', () => {
 			);
 		}
 	});
-	it('rejects secret-bearing URLs and invalid independent timing inputs', () => {
+	it('rejects secret-bearing destinations but falls back from invalid numeric tuning', () => {
 		for (const url of [
 			'file:///tmp/backup?secret=fake-private-value',
 			'file:///tmp/backup#token',
@@ -99,9 +99,49 @@ describe('recovery wrapper configuration and private status', () => {
 		]) {
 			expect(() => recoveryConfig({ ...base, FH_RECOVERY_URL: url })).toThrow();
 		}
-		for (const interval of ['0', 'false', '-1', '1.5', '999999'])
-			expect(() => recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: interval })).toThrow();
-		expect(recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: '3600' }).intervalSeconds).toBe(3600);
+		for (const interval of ['0', 'false', '-1', '1.5', '999999']) {
+			const config = recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: interval });
+			expect(config.intervalSeconds).toBe(60);
+			expect(config.warnings).toHaveLength(1);
+			expect(config.warnings[0]).toContain('FH_RECOVERY_INTERVAL_SECONDS');
+			expect(config.warnings[0]).toBe(
+				'FH_RECOVERY_INTERVAL_SECONDS is invalid; using the default 60. Correct the setting and restart.'
+			);
+		}
+		expect(recoveryConfig({ ...base, FH_RECOVERY_PROBE_PORT: '4096' }).probePort).toBe(0);
+		expect(recoveryConfig({ ...base, FH_RECOVERY_INTERVAL_SECONDS: '3600' }).intervalSeconds).toBe(
+			3600
+		);
+	});
+	it('keeps recovery ownership and checkpoints when status writes or the optional probe fail', () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-observation-'));
+		const code = `
+			import {runRecovery} from ${JSON.stringify(wrapper)};
+			import {mkdir,writeFile,rmdir,readFile} from 'node:fs/promises';
+			const runtimeDir=${JSON.stringify(root)};
+			await mkdir(runtimeDir+'/recovery-status.json');
+			const blocker=Bun.serve({hostname:'0.0.0.0',port:0,fetch(){return new Response('fixture');}});
+			const events=[];const publication={lastCheckpointAt:null,lastCheckpointTick:null};let count=0;
+			const engine={status(){return {failure:null,...publication};},
+				async acquireRestore(){events.push('restore');await writeFile(runtimeDir+'/recovery-writers-started','fixture');},
+				async renew(){events.push('renew');},
+				async checkpoint(){events.push('checkpoint');publication.lastCheckpointAt=Date.now();publication.lastCheckpointTick=performance.now();if(++count===1){await rmdir(runtimeDir+'/recovery-status.json');setTimeout(()=>process.kill(process.pid,'SIGTERM'),300);}},
+				async release(){events.push('release');}};
+			await runRecovery({runtimeDir,intervalSeconds:60,maxUnsavedSeconds:300,probePort:blocker.port},{env:{},engine});
+			blocker.stop(true);console.log(JSON.stringify({events,status:JSON.parse(await readFile(runtimeDir+'/recovery-status.json','utf8'))}));
+		`;
+		const result = spawnSync(process.execPath, ['--no-env-file', '--eval', code], {
+			env: { PATH: process.env.PATH },
+			encoding: 'utf8',
+			timeout: 5_000
+		});
+		expect(result.status).toBe(0);
+		const observed = JSON.parse(result.stdout);
+		expect(observed.events).toEqual(['restore', 'checkpoint', 'checkpoint', 'release']);
+		expect(observed.status.state).toBe('stopped');
+		expect(observed.status.warnings.join(' ')).toContain('probe');
+		expect(result.stderr).toContain('status could not be written');
+		expect(result.stderr).toContain('probe is unavailable');
 	});
 
 	it('keeps durability interval unchanged when user scheduling is disabled', () => {
@@ -297,12 +337,25 @@ describe('recovery wrapper configuration and private status', () => {
 			finally{clearTimeout(timer);native.stop(true);}
 			process.stdout.write(JSON.stringify(observed));
 		`;
-		const result = spawnSync(process.execPath, ['--no-env-file', '--config=/dev/null', '--eval', code], {
-			env: { PATH: process.env.PATH }, encoding: 'utf8', timeout: 5000
-		});
+		const result = spawnSync(
+			process.execPath,
+			['--no-env-file', '--config=/dev/null', '--eval', code],
+			{
+				env: { PATH: process.env.PATH },
+				encoding: 'utf8',
+				timeout: 5000
+			}
+		);
 		expect(result.status).toBe(0);
-		expect(JSON.parse(result.stdout)).toEqual({ healthy: true, durable: false, ready: true, renewals: 1 });
-		expect(result.stderr).toBe('fhold recovery: checkpoint failed (recovery Blob transport failed).\n');
+		expect(JSON.parse(result.stdout)).toEqual({
+			healthy: true,
+			durable: false,
+			ready: true,
+			renewals: 1
+		});
+		expect(result.stderr).toBe(
+			'fhold recovery: checkpoint failed (recovery Blob transport failed).\n'
+		);
 	});
 
 	it('reports a safe missing-namespace failure without dumping environment', () => {
