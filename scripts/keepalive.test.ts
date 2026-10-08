@@ -147,6 +147,30 @@ test('unknown startup, unobserved native workers and consent waits fail awake', 
 	expect(requests).toBe(3);
 });
 
+test('unsigned-in remotes are inactive, but observed work and unknown activated coverage stay awake', async () => {
+	const root = fixture();
+	mkdirSync(join(root, 'remote'));
+	initialize({FH_KEEPALIVE_URL:'https://instance.example/'}, root);
+	coverage('opencode', true, root);
+	for (const tool of ['claude','codex'])
+		writeFileSync(join(root, 'remote', `${tool}.json`), JSON.stringify({state:'sign-in-needed'}));
+	let requests = 0;
+	const fetch = async () => { requests++; return new Response(null); };
+	expect((await tick({root,fetch})).activity).toBe('idle');
+	expect(requests).toBe(0);
+	// Genuine native work takes precedence even if a supervisor is waiting.
+	event(root, 'UserPromptSubmit');
+	expect((await tick({root,fetch})).activity).toBe('busy');
+	event(root, 'Stop');
+	writeFileSync(join(root, 'remote/codex.json'), JSON.stringify({state:'process-running'}));
+	expect((await tick({root,fetch})).activity).toBe('unknown');
+	event(root, 'SessionStart');
+	expect((await tick({root,fetch})).activity).toBe('idle');
+	writeFileSync(join(root, 'remote/claude.json'), JSON.stringify({state:'approval-needed'}));
+	expect((await tick({root,fetch})).activity).toBe('unknown');
+	expect(requests).toBe(3);
+});
+
 test('a hook-reporting error remains unknown until a new boot', () => {
 	const root = fixture();
 	writeFileSync(join(root, 'activity/unknown'), '');

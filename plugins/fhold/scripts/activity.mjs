@@ -166,7 +166,7 @@ export function activityStatus(root = runtime(), remotes = ['claude', 'codex']) 
 		if (!files.includes('opencode.ready')) return 'unknown';
 		for (const tool of remotes) {
 			const state = JSON.parse(readFileSync(join(root, 'remote', `${tool}.json`), 'utf8')).state;
-			if (['stopped', 'waiting-to-retry'].includes(state)) continue;
+			if (['stopped', 'waiting-to-retry', 'sign-in-needed'].includes(state)) continue;
 			if (state !== 'process-running' || !files.includes(`${tool}.ready`)) return 'unknown';
 		}
 		return 'idle';

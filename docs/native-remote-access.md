@@ -1,6 +1,6 @@
 # Experimental Codex and Claude Code remote sessions
 
-Both integrations remain experimental in alpha.4.
+Both integrations remain experimental.
 Both supervisors default on. Both have native
 account, consent, host and client requirements, and either can be disabled.
 Only a future release with explicit end-to-end validation may remove that label.
@@ -17,6 +17,14 @@ its conversation history, or apply Guardian credential policies. Use OpenCode
 or Guardian MCP if you want the fhold personal agent and its existing sessions.
 
 Both supervisors default on and wait for native sign-in/consent.
+The existing supervisor checks `claude auth status` or `codex login status`
+before launching a worker. Confirmed missing subscription sign-in reports
+`sign-in-needed` and retries without keeping an otherwise idle instance awake.
+Completing the built-in setup flow restarts the worker immediately; ordinary
+native sign-in is picked up on the next retry. Status failures do not prevent
+native startup or affect OpenCode. Signed-in worker activity remains unknown
+until native hooks establish coverage; account presence is not proof of idle,
+valid tokens, consent or a working client connection.
 Explicit off choices are preserved. No public URL, extra container, SSH daemon, published
 port, host-home mount, or runtime package installation is added. The release image
 bakes exact CLI versions. Native account state stays in `FH_HOME/data/assistant`

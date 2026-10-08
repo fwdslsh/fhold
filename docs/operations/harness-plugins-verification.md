@@ -1,5 +1,23 @@
 # Native plugins and keep-alive verification
 
+## beta.2 unsigned-in lifecycle regression — 2026-10-08
+
+The standard Assistant image smoke now leaves both remote supervisors at their
+default-on setting. Their installed native CLIs report missing sign-in; both
+supervisors wait in `sign-in-needed` without starting accountless workers.
+The offline keep-alive image smoke verified a real OpenCode shell task generated
+two cron-driven authenticated requests, with zero requests during the idle periods
+before and after. No synthetic activity markers or worker-disable workaround was
+used. The local full suite passed 704 tests, with three opt-in skips.
+
+Native OpenCode, Claude and Codex AKM recall passed independently of account
+sign-in. CLI/Admin builds and type/lint checks passed. These local Linux x64
+development-image checks do not qualify cloud autoscaling, native vendor-account
+validity or a signed-in remote client; those remain separate from the repository's
+native amd64/arm64 CI and published artifact checks.
+
+## Earlier local development qualification — 2026-10-04
+
 Local Linux x64 branch verification on 2026-10-04. These are development images,
 not published releases or evidence of GitHub CI/cloud autoscaler qualification.
 

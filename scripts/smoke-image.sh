@@ -279,15 +279,14 @@ assistant)
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
 	if [ "$remote" != 0 ]; then
-		# Codex's foreground app-server stays available without an account. Its
-		# native Unix pairing socket must exist; enrollment is a separate stage.
-		docker exec "$container" test -S /home/fhold/.codex/app-server-control/app-server-control.sock
+		# Default-on supervisors wait for the native account, without launching
+		# unsigned-in workers or pretending their activity hooks have run.
+		docker exec "$container" test ! -e /home/fhold/.codex/app-server-control/app-server-control.sock
 		docker exec "$container" test ! -e /home/fhold/.codex/packages/app-server-daemon
-		[[ "$(docker exec "$container" fhold-remote codex status)" == *process-running* ]]
-		for tool in claude; do
+		for tool in codex claude; do
 			deadline=$((SECONDS + 45))
-			while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *waiting-to-retry* ]]; do
-				if ((SECONDS >= deadline)); then echo "$tool did not fail safely without login" >&2; exit 1; fi
+			while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *sign-in-needed* ]]; do
+				if ((SECONDS >= deadline)); then echo "$tool did not wait for native sign-in" >&2; exit 1; fi
 				sleep 1
 			done
 			docker exec "$container" fhold-remote "$tool" status

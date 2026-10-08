@@ -256,7 +256,11 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - Optional conditional HTTP keep-alive uses native fhold activity hooks and
   the existing Supercronic process, independently of user task enablement. It
   has no cloud API authority or work-age expiry. Unknown activity keeps the
-  instance awake; managed hooks must remain enabled. This is best-effort signaling,
+  instance awake; managed hooks must remain enabled. Native supervisors use the
+  installed CLI's account status to wait in `sign-in-needed` before launching an
+  unsigned-in worker. This inactive state permits idle without fabricating native
+  hook observations. Failed status checks and missing signed-in worker coverage
+  remain unknown, not proof of idle. This is best-effort signaling,
   not a scale-in veto. See [the runtime contract](../harness-plugins.md).
 - Automatic memory captures validated non-secret facts only from trusted native
   build/plan sessions through the existing provider and remains configurable.

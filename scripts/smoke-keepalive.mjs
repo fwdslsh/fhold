@@ -68,8 +68,12 @@ async function api(path, body) {
 try {
   await until(async () => { try { await api('/global/health'); return true; } catch { return false; } });
   await api('/config?directory=%2Fwork');
-  try { await until(() => activityStatus('/tmp/fhold-runtime', []) === 'idle', 15); }
-  catch { throw Error('Initial activity was ' + activityStatus('/tmp/fhold-runtime', []) + ': ' + readdirSync('/tmp/fhold-runtime/activity').join(',')); }
+  await until(() => ['claude', 'codex'].every(tool => {
+    try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
+    catch { return false; }
+  }), 30);
+  try { await until(() => activityStatus('/tmp/fhold-runtime') === 'idle', 15); }
+  catch { throw Error('Initial activity was ' + activityStatus('/tmp/fhold-runtime') + ': ' + readdirSync('/tmp/fhold-runtime/activity').join(',')); }
   for (const username of ['', 'opencode']) {
     const response = await fetch('http://127.0.0.1:4096/global/health', {headers:{authorization:'Basic ' + Buffer.from(username + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64')}});
     assert.equal(response.status, 401, 'Only the configured username should authenticate');
@@ -80,13 +84,13 @@ try {
   const session = await api('/session?directory=%2Fwork', {title:'Disposable keep-alive qualification'});
   await api('/session/' + session.id + '/message?directory=%2Fwork', {noReply:true, parts:[{type:'text', text:'Append-only history fixture; do not execute.'}]});
   await pause(500);
-  assert.equal(activityStatus('/tmp/fhold-runtime', []), 'idle', 'Append-only history is not active work');
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'idle', 'Append-only history is not active work');
   const task = api('/session/' + session.id + '/shell?directory=%2Fwork', {agent:'build', command:'sleep 45; printf fhold-keepalive-complete'});
-  await until(() => activityStatus('/tmp/fhold-runtime', []) === 'busy', 10);
+  await until(() => activityStatus('/tmp/fhold-runtime') === 'busy', 10);
   console.log('Native OpenCode work was observed; waiting for real scheduler ticks.');
   await task;
   assert.ok(count >= quiet + 2, 'The scheduler must keep sending during long native work');
-  await until(() => activityStatus('/tmp/fhold-runtime', []) === 'idle', 10);
+  await until(() => activityStatus('/tmp/fhold-runtime') === 'idle', 10);
   const completed = count;
   await pause(22000);
   assert.equal(count, completed, 'Keep-alive must stop after native work finishes');
@@ -96,7 +100,7 @@ try {
   const cron = readFileSync('/tmp/fhold-crontabs/fhold', 'utf8');
   assert.ok(cron.includes('fhold-keepalive tick'));
   assert.ok(!cron.includes('# akm:task'), 'User scheduling remains disabled');
-  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0}));
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0}));
 } finally { sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve)); }
 `;
 
@@ -114,10 +118,6 @@ try {
 		'no-new-privileges:true',
 		'-e',
 		`OPENCODE_SERVER_PASSWORD=${password}`,
-		'-e',
-		'FH_CODEX_REMOTE=0',
-		'-e',
-		'FH_CLAUDE_REMOTE=0',
 		'-e',
 		'FH_SCHEDULER_ENABLED=0',
 		'-e',
