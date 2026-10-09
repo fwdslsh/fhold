@@ -101,6 +101,7 @@ fs.appendFileSync('workers','1'); setInterval(()=>{},1000);`, {mode:0o700});
 				AKM_AUTO_MEMORY: '0',
 				AKM_AUTO_LEARNING: '0',
 				BUN_OPTIONS: '--no-env-file --config=/dev/null',
+				CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX: 'friendly-agent',
 				OPENCODE_SERVER_PASSWORD: 'secret',
 				OPENCODE_SERVER_PASSWORD_FILE: '/secret',
 				GUARDIAN_KEY: 'secret',
@@ -123,6 +124,7 @@ fs.appendFileSync('workers','1'); setInterval(()=>{},1000);`, {mode:0o700});
 			AKM_AUTO_MEMORY: '0',
 			AKM_AUTO_LEARNING: '0',
 			BUN_OPTIONS: '--no-env-file --config=/dev/null',
+			CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX: 'friendly-agent',
 			DISABLE_AUTOUPDATER: '1'
 		});
 	});

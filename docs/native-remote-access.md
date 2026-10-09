@@ -156,6 +156,27 @@ Control consent through `claude remote-control --spawn same-dir --capacity 1`.
 API keys, `claude setup-token` and `CLAUDE_CODE_OAUTH_TOKEN` cannot authenticate
 Remote Control; it requires the full-scope native subscription login.
 
+### Friendly names in hosted containers
+
+In a standalone deployment, set the native environment variable
+`CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=my-agent` on the Assistant container
+to prefix Claude's generated remote session names. fhold passes this non-secret
+native option to the Claude worker unchanged; no fhold-specific naming layer is
+needed. Save it in the external deployment configuration so it survives new
+containers. It changes the display prefix, not the OS hostname, `FH_INSTANCE_ID`,
+recovery destination or account state. Claude also supports `--name` for an
+explicitly launched session and renaming from its own app; see the
+[native Remote Control options](https://code.claude.com/docs/en/remote-control#start-a-remote-control-session).
+
+The pinned Codex 0.160.0 remote controller derives its server name from the
+[OS hostname](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/app-server-transport/src/transport/remote_control/controller.rs).
+It has no qualified independent display-name setting in this image. Managed
+local instances already use their instance name as hostname; externally hosted
+containers may show a platform-generated name. Do not change recovery identity,
+intercept hostname calls or patch Codex to disguise this limitation.
+[Issue #15](https://github.com/fwdslsh/fhold/issues/15) tracks native Codex naming
+support and any future guided naming option.
+
 ### Sign in from an OpenCode conversation
 
 Ask the assistant: **“Help me sign in to Claude Code.”** The built-in

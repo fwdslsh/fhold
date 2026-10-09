@@ -178,7 +178,7 @@ jobs:
         if: matrix.image == 'assistant'
         env:
           FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
-          FH_RECOVERY_UPGRADE_FROM_IMAGE: fwdslsh/fhold-assistant:0.1.2610050714-alpha.6
+          FH_RECOVERY_UPGRADE_FROM_IMAGE: fwdslsh/fhold-assistant:0.1.2610081904-beta.2
         run: |
           docker pull "$FH_RECOVERY_UPGRADE_FROM_IMAGE"
           node scripts/smoke-recovery.mjs

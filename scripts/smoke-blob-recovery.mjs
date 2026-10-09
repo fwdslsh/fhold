@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Azurite by default; explicit live mode uses only an existing scoped container.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const image = process.env.FH_RECOVERY_TEST_IMAGE;
 assert.ok(image, 'Set FH_RECOVERY_TEST_IMAGE to the exact Blob-enabled candidate');
@@ -70,37 +71,18 @@ if (!live)
 const created = new Set();
 let madeNetwork = false;
 
-function command(executable, args, { timeout = 120000, env = process.env } = {}) {
-	return new Promise((resolve, reject) => {
-		const child = spawn(executable, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
-		const chunks = [];
-		let bytes = 0;
-		const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
-		for (const stream of [child.stdout, child.stderr])
-			stream.on('data', (chunk) => {
-				bytes += chunk.length;
-				if (bytes > 2000000) child.kill('SIGKILL');
-				else chunks.push(chunk);
-			});
-		child.once('error', (error) => {
-			clearTimeout(timer);
-			reject(error);
-		});
-		child.once('exit', (code, signal) => {
-			clearTimeout(timer);
-			const output = Buffer.concat(chunks)
-				.toString()
-				.replaceAll(emulatorKey, '[public-emulator-key]')
-				.replaceAll(connection, '[emulator-connection]');
-			if (code === 0) resolve(output.trim());
-			else
-				reject(
-					new Error(
-						`${executable} ${args[0]} failed (${code ?? signal})${live ? '' : `: ${output.slice(-6000)}`}`
-					)
-				);
-		});
-	});
+const runFile = promisify(execFile);
+async function command(executable, args, { timeout = 120000, env = process.env } = {}) {
+	const redact = (text) => String(text ?? '').replaceAll(emulatorKey, '[public-emulator-key]').replaceAll(connection, '[emulator-connection]');
+	try {
+		const { stdout, stderr } = await runFile(executable, args, { env, timeout, killSignal: 'SIGKILL', maxBuffer: 2_000_000 });
+		// Preserve local diagnostics without corrupting machine-readable stdout.
+		if (stderr && !live) process.stderr.write(redact(stderr));
+		return redact(stdout).trim();
+	} catch (error) {
+		const detail = live ? '' : `: ${redact(`${error.stdout ?? ''}${error.stderr ?? ''}`).slice(-6000)}`;
+		throw new Error(`${executable} ${args[0]} failed (${error.code ?? error.signal})${detail}`);
+	}
 }
 const docker = (args, timeout) => command('docker', args, { timeout });
 async function imageScript(name, script, timeout = 180000) {

@@ -30,7 +30,7 @@ for (const file of [...manifests, ...composeFiles]) {
 	if (manifests.includes(file)) {
 		const current = JSON.parse(content).version;
 		if (!parseSemver(current)) throw new Error(`Invalid current release in ${file}`);
-		if (parseSemver(version).pa < parseSemver(current).pa) throw new Error(`Release clock regression in ${file}`);
+		if (parseSemver(version).date < parseSemver(current).date) throw new Error(`Release date regression in ${file}`);
 		if (compareVersions(version, current) < 0) throw new Error(`Release precedence/clock regression in ${file}`);
 	}
 	else if (!/\$\{FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION:-[^}]*\}/.test(content))

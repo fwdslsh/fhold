@@ -509,6 +509,18 @@ describe('release completeness gate', () => {
 		});
 	});
 
+	test('daily-build releases share artifact naming, checksums and immutable retry validation', () => {
+		withDir((dir) => {
+			const version = '0.2.2610081-beta.1';
+			const required = writeCompleteDist(dir, version);
+			expect(required).toContain(`fhold-admin-${version}-x86_64-linux.AppImage`);
+			expect(required).toContain(`fhold-claude-desktop-${version}.mcpb`);
+			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
+			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
+		});
+		expect(() => requiredReleaseAssets('0.2.26100801-beta.1')).toThrow('Invalid');
+	});
+
 	test('release asset retries are immutable and version/calendar validation is shared', () => {
 		withDir((dir) => {
 			const version = '0.1.2610020008-alpha.1';

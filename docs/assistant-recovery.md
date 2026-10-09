@@ -172,6 +172,17 @@ and its descendants have stopped before explicitly transferring ownership.
 A timeout or replica count of one is not proof that the old writer is stopped.
 Never manually remove a lock while an old writer may still run.
 
+For an image upgrade, drain the old deployment before starting its replacement.
+An orchestrator reporting **Stopped**, **NotRunning**, or an old successful
+readiness result does not prove the final checkpoint finished or ownership was
+released. Wait for the old replicas/processes and descendants to be removed,
+allow the full termination grace described below, and check for completed
+checkpoint publication and owner release. Do not update/restart immediately
+after only a stop request is accepted. An interrupted shutdown may leave an
+owner nonce even when the final process is gone; use the exact-owner unlock
+procedure below only after external confirmation that every old owner stopped.
+Keep deployment-specific lifecycle scripts outside the fhold runtime.
+
 Blob uses a 60-second descriptor lease, renewed every 10 seconds with a conservative
 45-second local safety window. A persistent owner nonce remains after lease expiry:
 expiry alone never authorizes takeover. Neither descriptor fencing nor a timer can

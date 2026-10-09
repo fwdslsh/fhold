@@ -2,12 +2,13 @@
 // Black-box image qualification. Uses only new synthetic containers and retains
 // its private destination/report. Does not prove vendor sign-in or reconnect.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const image = process.env.FH_RECOVERY_TEST_IMAGE;
 assert.ok(image, 'Set FH_RECOVERY_TEST_IMAGE to the exact candidate image');
@@ -94,32 +95,17 @@ const report = {
 	qualification: 'synthetic local image only; no provider or vendor account readiness'
 };
 
-function command(executable, args, timeout = 120_000) {
-	return new Promise((resolve, reject) => {
-		const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-		const chunks = [];
-		let length = 0;
-		const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
-		for (const stream of [child.stdout, child.stderr])
-			stream.on('data', (chunk) => {
-				length += chunk.length;
-				if (length > 2_000_000) child.kill('SIGKILL');
-				else chunks.push(chunk);
-			});
-		child.once('error', (error) => {
-			clearTimeout(timer);
-			reject(error);
-		});
-		child.once('exit', (code, signal) => {
-			clearTimeout(timer);
-			const output = Buffer.concat(chunks).toString().replaceAll(password, '[synthetic-password]');
-			if (code === 0) resolve(output.trim());
-			else
-				reject(
-					new Error(`${executable} ${args[0]} failed (${code ?? signal}): ${output.slice(-6000)}`)
-				);
-		});
-	});
+const runFile = promisify(execFile);
+async function command(executable, args, timeout = 120_000) {
+	const redact = (text) => String(text ?? '').replaceAll(password, '[synthetic-password]');
+	try {
+		const { stdout, stderr } = await runFile(executable, args, { timeout, killSignal: 'SIGKILL', maxBuffer: 2_000_000 });
+		// JSON belongs on stdout; degraded-state diagnostics stay on stderr.
+		if (stderr) process.stderr.write(redact(stderr));
+		return redact(stdout).trim();
+	} catch (error) {
+		throw new Error(`${executable} ${args[0]} failed (${error.code ?? error.signal}): ${redact(`${error.stdout ?? ''}${error.stderr ?? ''}`).slice(-6000)}`);
+	}
 }
 const docker = (args, timeout) => command('docker', args, timeout);
 const common = [

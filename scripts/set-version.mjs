@@ -19,7 +19,7 @@ export { SEMVER_RE, parseSemver, compareVersions, releaseIntent } from './releas
  */
 export function setComposeImageTags(file, version) {
 	if (!parseSemver(version)) {
-		throw new Error(`version must be a calendar-valid X.Y.yyMMddHHmm fhold release, got '${version}'`);
+		throw new Error(`version must be a calendar-valid fhold release, got '${version}'`);
 	}
 	const before = readFileSync(file, 'utf-8');
 	let count = 0;
@@ -40,7 +40,7 @@ export function setComposeImageTags(file, version) {
 /** Stamp `version` into a package.json file (in place). Returns the new version. */
 export function setVersion(file, version) {
 	if (!parseSemver(version)) {
-		throw new Error(`version must be a calendar-valid X.Y.yyMMddHHmm fhold release, got '${version}'`);
+		throw new Error(`version must be a calendar-valid fhold release, got '${version}'`);
 	}
 	const pkg = JSON.parse(readFileSync(file, 'utf-8'));
 	pkg.version = version;

@@ -1,13 +1,29 @@
 # Changelog
 
-## Planned for 0.2 — date and daily-build patch versions
+## 0.2.2610081-beta.1 — current AKM and date/build releases
 
-The patch format will change from `yyMMddHHmm` to `yyMMdd<build>`: two-digit
+The patch format changes from `yyMMddHHmm` to `yyMMdd<build>`: two-digit
 UTC year/month/day plus a daily build number starting at 1. Examples:
 `0.2.2610081` and `0.3.2612225-beta.1`. Alpha, beta and rc suffixes remain
-supported. Current 0.1 tooling and all existing release versions stay unchanged;
-see the [release runbook](docs/operations/release.md#planned-patch-format-from-02)
-for the implementation work required before 0.2.
+supported. Release tools compare date and daily counter separately, including
+multi-digit builds and next-day resets, and accept the 0.1 → 0.2 boundary without
+rewriting historical tags. See the [release runbook](docs/operations/release.md#date-and-daily-build-from-02).
+
+The Assistant now ships AKM 0.9.30 and matching 0.9.30202610090106 plugins for
+OpenCode, Claude and Codex, installed through their standard native mechanisms.
+There are no startup downloads, vendor patches or extra services. OpenCode remains
+on the qualified 1.x API while upstream AKM/OpenCode 2 integration is pending.
+
+Recovery guidance now explains draining the previous deployment, allowing final
+checkpoint/ownership release and using exact-owner unlock only after confirmed
+termination (#14). Native remote naming guidance covers Claude's supported
+display prefix and the pinned Codex hostname limitation (#15); recovery identity
+is unchanged. Both remote integrations remain experimental. Scoped dependency
+exceptions and unqualified ARM64 Admin startup remain disclosed in the runbook.
+
+Recovery verification scripts use standard subprocess handling with separate
+JSON stdout and diagnostic stderr. A degraded-state warning no longer causes a
+spurious JSON parse failure in directory or Blob upgrade qualification.
 
 ## 0.1.2610081904-beta.2 — reliable upgrades and idle native remotes
 

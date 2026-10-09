@@ -1,5 +1,42 @@
 # Native plugins and keep-alive verification
 
+## 0.2.2610081-beta.1 local candidate — 2026-10-08
+
+The local Linux x64 Assistant candidate
+`fhold/assistant:release-0.2.2610081-beta.1` passed the standard image smoke.
+Real OpenCode, Claude and Codex session/prompt hooks recalled the same fixture
+knowledge with AKM **0.9.30** and plugin **0.9.30202610090106**. The image uses
+the normal pinned OpenCode package and native Claude/Codex marketplace installers;
+no startup installation or replacement harness loader was used.
+
+The full local suite passed **710 tests, zero failures, one opt-in skip**, with
+image-backed native history enabled. The skipped controlled native-provider
+test then passed separately using the current compiled CLI, the same image bytes
+under a standard local-build tag, and a local HTTP model fixture. It verified
+native AI settings take effect without restarting the container and survive a
+normal restart; it does not qualify a vendor account or real model inference.
+Type checks, lint (39 existing warnings), locked dependency audit with its two
+previously reviewed exceptions, CLI/Admin/MCPB builds, shell syntax, disposable
+CLI installation/all-profile Compose, and docs build/check/tests passed.
+
+`smoke-recovery.mjs` upgraded the published **0.1.2610081904-beta.2** image to
+the candidate with both an empty ephemeral layer and a surviving native home/
+receipt. Native sessions, knowledge, synthetic account/trust files, custom
+paths, SQLite snapshots and independent mounted data survived, including the
+next candidate restart. `smoke-blob-recovery.mjs` passed against Azurite; this is
+emulator semantics, not live cloud identity/autoscaling qualification.
+The recovery scripts now keep warning stderr separate from machine-readable
+stdout through Node's standard subprocess API; an initial combined-stream parse
+failure and its successful rerun are not evidence of lost data.
+
+The native managed-policy smoke passed for all three harnesses. The real
+OpenCode/cron keep-alive smoke observed three requests during work and zero
+while idle, with unsigned-in default-on workers waiting and user scheduling off.
+Both remote integrations remain experimental. These are local development-image
+results; public multi-architecture images and Linux downloads require their own
+GitHub workflow, signing and checksum verification. No live user instance was
+changed by this qualification.
+
 ## beta.2 unsigned-in lifecycle regression — 2026-10-08
 
 The standard Assistant image smoke now leaves both remote supervisors at their

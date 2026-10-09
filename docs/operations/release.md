@@ -21,7 +21,7 @@ registry intent retains its pull behavior; this is not a new configuration flag.
 
 ## Frozen version contract
 
-For the **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
+For the historical **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
 `-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
 canonical integers and numeric precedence are enforced by `scripts/set-version.mjs`.
 Released candidate versions are frozen. An existing receipt permits an
@@ -32,8 +32,9 @@ Establish release intent once and carry it across all package manifests, CLI
 version, image tags, Admin/MCPB manifests, filenames, checksums and receipt.
 `releaseIntent` binds version to revision/content hash, rejects regressed
 clocks/collisions and accepts retries only for the same identity.
-At the same minute use a higher prerelease serial; stable collisions require
-another minute.
+For historical 0.1 releases, at the same minute use a higher prerelease serial;
+stable collisions require another minute. Current releases use the daily build
+counter below.
 
 `VERSION=<frozen-version> node scripts/bump-release.mjs` previews stamping;
 `STAMP=true` explicitly writes. It must preflight every listed input first.
@@ -53,7 +54,7 @@ that hostile `/work/bunfig.toml` preloads do not execute through managed helpers
 using the real-image/native-harness smoke. This is an image runtime option,
 not a replacement launcher or configuration service.
 
-### Planned patch format from 0.2
+### Date and daily build from 0.2
 
 Starting with the **0.2 release line**, replace the hour/minute timestamp with
 `X.Y.yyMMdd<build>`: two-digit year, month, day, then an unpadded positive daily
@@ -66,12 +67,15 @@ Examples: `0.2.2610081` is build 1 on October 8, 2026;
 Alpha, beta and rc suffixes remain supported, including their optional positive
 serials. No existing 0.1 versions, tags or artifacts will be renamed.
 
-This is a planned change, **not implemented by the current 0.1 tooling**. Before
-releasing 0.2, update version parsing/stamping, release-intent collision checks,
-workflow inputs, artifact validation and their tests together. Parse date and
-build separately for chronological comparison: with an unpadded counter,
+The shared release parser, stamping, intent checks and artifact validator support
+this format and retain historical 0.1 timestamps. Release comparisons parse date
+and build separately: with an unpadded counter,
 `26100810` (October 8, build 10) is numerically larger than `2610091`
 (October 9, build 1), so ordinary numeric patch ordering is not chronological.
+Do not use an ordinary SemVer patch comparison to select the newest daily build.
+Changing the minor version from 0.1 to 0.2 on the same UTC date is valid; the
+shorter patch is not a clock regression. Publication does not rewrite existing
+tags, recovery formats or instance identities.
 
 ## Linux acceptance
 
