@@ -109,7 +109,7 @@
     "website": {
       "name": "@fhold/website",
       "devDependencies": {
-        "@fwdslsh/unify": "0.11.9",
+        "@fwdslsh/unify": "0.11.12",
       },
     },
   },
@@ -249,7 +249,7 @@
 
     "@fhold/website": ["@fhold/website@workspace:website"],
 
-    "@fwdslsh/unify": ["@fwdslsh/unify@0.11.9", "", { "dependencies": { "js-yaml": "^5.3.0", "markdown-it": "^14.3.0" }, "peerDependencies": { "bun": ">=1.2.0" }, "optionalPeers": ["bun"], "bin": { "unify": "src/cli.js" } }, "sha512-adNn+YL71w/S1ENAMPARjNn/NBIVIyUA8HotFwJaSBmdmK/qA6S6xfznLPKKUyouplv8Kv/RAC1scFO8UbD8sw=="],
+    "@fwdslsh/unify": ["@fwdslsh/unify@0.11.12", "", { "dependencies": { "js-yaml": "^5.3.0", "markdown-it": "^14.3.0" }, "peerDependencies": { "bun": ">=1.2.0" }, "optionalPeers": ["bun"], "bin": { "unify": "src/cli.js" } }, "sha512-Gk2KVIyvCfqkKony2sCLf8qdQX7sYJSMenOVe2sLM6aK7WjgFPb2g31QP9//bvJlAJPn7Yi361bvg705ipzJ1g=="],
 
     "@huggingface/jinja": ["@huggingface/jinja@0.5.10", "", {}, "sha512-SgS1D1bglQ94ceD4ZCL6eayUDy9uV1xuyk61OjgSxU5GJh7upqZCKII0JoTYMc6wWsg3JUgaPRX0ElQzXPk3Cw=="],
 

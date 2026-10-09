@@ -1,0 +1,16 @@
+/* fhold docs: the styles only this site's own pages need. Everything else is
+   the fwdslsh theme, unify-docs-template's stylesheet, which this site extends
+   (unify.yaml); _includes/head.html links this file after it. */
+
+/* The link back to each page's source, which scripts/gen-docs.mjs appends. */
+.source-link { border-top: 1px solid var(--border-faint); margin-top: 2.5rem; padding-top: 1rem; font-size: 0.875rem; }
+
+/* The sidebar's maintainer section, folded away by default. */
+.docnav .maintainer-nav { color: var(--dim); font-size: 0.875rem; }
+.docnav .maintainer-nav summary { cursor: pointer; font-family: var(--mono); padding-bottom: 0.75rem; }
+.docnav .maintainer-nav ul { margin-top: 0.5rem; }
+
+.foot-family a { text-decoration: none; }
+
+.fhold-start { padding-bottom: 1rem; }
+.fhold-start .lede { max-width: 45rem; }

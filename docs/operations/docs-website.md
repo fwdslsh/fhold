@@ -3,19 +3,18 @@
 The website is built in this repository from the canonical `docs/**` Markdown
 files. Site presentation lives in `website/site/`; Unify configuration lives in
 `website/unify.yaml`. The published template is pinned as
-`unify-docs-template@0.1.2` through native `extends:` in Unify 0.11.9.
+`unify-docs-template@0.3.0` through native `extends:` in Unify 0.11.12.
 The renderer is pinned in `website/package.json` and the repository's single
 `bun.lock`; Unify resolves the template's exact version itself.
 
-The npm docs starter supplies the page-directory script, not the fwdslsh brand.
-Local presentation in `website/site/` uses the family palette, Inter prose,
-JetBrains Mono navigation/code, Protest Revolution wordmark, terminal panels,
-cards, and responsive sidebar from Unify's own `examples/unify-docs` site.
-`assets/family.css` records its upstream source revision. Keep this styling
-aligned with `fwdslsh.dev` and `unify.fwdslsh.dev`; do not substitute the generic
-starter's system-font layout or a separate product palette.
-The family stylesheet has a distinct asset name so previously cached versions
-of the old product theme cannot be combined with the new layout.
+The template is the fwdslsh family theme that fwdslsh.dev, unify.fwdslsh.dev and
+akm.fwdslsh.dev also build on: its layout, stylesheet, page directory and
+`assets/theme.css`. This site keeps only what names it, in the template's four
+identity includes (`website/site/_includes/head.html`, `nav.html`, `footer.html`,
+and the `docnav.html` the generator writes), plus its own pages and
+`assets/site.css` for the few rules only this site needs. To change a color,
+font or size, add `website/site/assets/theme.css` with the template's custom
+properties you want to override; do not restyle the family theme here.
 
 ## Build and preview
 
@@ -56,8 +55,10 @@ otherwise belong under Maintainers.
 
 `.github/workflows/deploy-docs.yml` checks pull requests and deploys successful
 builds on `main` or manual dispatch. It uses the GitHub Pages artifact/deployment
-actions, with `https://fwdslsh.github.io/fhold/` as the initial base URL.
-Repository Pages settings must use **GitHub Actions** as the source.
+actions. The site is published at `https://fhold.fwdslsh.dev/`, the base URL in
+`website/unify.yaml`: Repository Pages settings must use **GitHub Actions** as the
+source and bind the custom domain `fhold.fwdslsh.dev`, whose DNS CNAME points to
+`fwdslsh.github.io`.
 
 Changes to docs, site files, this workflow, or the manifests/lockfile trigger
 verification. Strict build and audit findings stop publication. Ordinary
@@ -69,9 +70,8 @@ The website workflow still verifies docs and site changes. Mixed changes,
 root manifests, runtime skills/prompts, and product/CI files
 retain full CI; release validation also retains its full stack gate.
 
-If a custom domain is added later, set its Pages binding and DNS record, then
-change the base URL in `website/unify.yaml`. No domain or DNS change is required
-for the initial project-pages site.
+To move the site to another domain, set its Pages binding and DNS record, then
+change the base URL in `website/unify.yaml`.
 
 ## Native template build
 
