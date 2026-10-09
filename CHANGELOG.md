@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.2610091-beta.2 — reliable Slack connections
+
+The optional Discord/Slack Portal now runs on Node 24.21.0 LTS, the supported
+runtime for its SDKs. This fixes Slack Socket Mode authenticating successfully
+but repeatedly disconnecting when Bun's built-in WebSocket implementation lacks
+the SDK's heartbeat APIs. Existing bot tokens, allowlists, permissions and
+conversation databases are preserved; no account reconfiguration is required.
+
+Portal health follows the current native connection instead of retaining the
+initial login result. Slack's SDK handles reconnection, and a disconnected portal
+does not stop the Assistant. An image-backed regression test exercises genuine
+heartbeat frames, message acknowledgement and delivery after reconnection.
+The image uses standard Node HTTP/SQLite APIs without SDK patches, startup
+installs, new services or additional operator settings.
+
+AKM and its harness plugins remain at the versions shipped in beta.1. OpenCode
+remains on its qualified 1.x API; Claude/Codex remote connections remain
+experimental. Previously disclosed dependency exceptions and the ARM64 Admin
+startup qualification limit remain unchanged; see the
+[release runbook](docs/operations/release.md).
+
 ## 0.2.2610081-beta.1 — current AKM and date/build releases
 
 The patch format changes from `yyMMddHHmm` to `yyMMdd<build>`: two-digit
