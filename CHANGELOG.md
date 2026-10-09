@@ -2,8 +2,8 @@
 
 ## 0.2.2610091-beta.2 — reliable Slack connections
 
-The optional Discord/Slack Portal now runs on Node 24.21.0 LTS, the supported
-runtime for its SDKs. This fixes Slack Socket Mode authenticating successfully
+The optional Discord/Slack Portal now runs on Node 24.21.0 LTS with the official
+Debian 13 slim base, using its SDKs' supported runtime. This fixes Slack Socket Mode authenticating successfully
 but repeatedly disconnecting when Bun's built-in WebSocket implementation lacks
 the SDK's heartbeat APIs. Existing bot tokens, allowlists, permissions and
 conversation databases are preserved; no account reconfiguration is required.

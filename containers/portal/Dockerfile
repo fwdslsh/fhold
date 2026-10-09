@@ -17,7 +17,7 @@ RUN bun build src/index.ts --target=node --packages=external --outfile=dist/inde
 
 # Slack Socket Mode needs the real undici WebSocket and heartbeat implementation.
 # Bun substitutes an incomplete builtin; use the SDK's supported Node runtime.
-FROM node:24.21.0-bookworm-slim
+FROM node:24.21.0-trixie-slim
 ARG PLATFORM_VERSION
 ARG VCS_REF
 ARG BUILD_DATE
