@@ -29,10 +29,14 @@ export class DiscordPortal {
 	private readonly credentials = new PortalCredentialRegistry('discord');
 	private readonly conversations = new ConversationStore();
 	private readonly queue = new ConversationQueue();
-	private readonly allowedGuilds = parseIds(Bun.env.DISCORD_ALLOWED_GUILDS);
-	private readonly allowedRoles = parseIds(Bun.env.DISCORD_ALLOWED_ROLES);
-	private readonly allowedUsers = parseIds(Bun.env.DISCORD_ALLOWED_USERS);
-	private readonly blockedUsers = parseIds(Bun.env.DISCORD_BLOCKED_USERS);
+	private readonly allowedGuilds = parseIds(process.env.DISCORD_ALLOWED_GUILDS);
+	private readonly allowedRoles = parseIds(process.env.DISCORD_ALLOWED_ROLES);
+	private readonly allowedUsers = parseIds(process.env.DISCORD_ALLOWED_USERS);
+	private readonly blockedUsers = parseIds(process.env.DISCORD_BLOCKED_USERS);
+
+	isReady(): boolean {
+		return this.client.isReady();
+	}
 
 	async start(): Promise<void> {
 		await this.chat.connect(this.credentials.defaultCredential());

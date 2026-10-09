@@ -1,6 +1,11 @@
 # Slack adapter
 
 Slack is an optional Socket Mode adapter and MCP client of Guardian.
+The Portal image runs both adapters on Node LTS. Slack's SDK needs native undici
+WebSocket heartbeats; the pinned Bun runtime's builtin undici replacement
+[does not provide that surface](https://github.com/oven-sh/bun/issues/37110).
+Bun remains the build/test tool, not the Portal runtime. No SDK patch,
+runtime installation or operator workaround is required.
 
 ## 1. Create the Slack app
 
@@ -112,6 +117,10 @@ to complete that explicit decision with a full MCP client; chat text is never
 treated as permission approval.
 
 Continuity state is stored at `data/portal/slack/portal.db`.
+The database format and conversation handles are unchanged when updating the
+Portal runtime. Its health check follows the current platform connection rather
+than remaining healthy after the first successful login. The SDK owns reconnects;
+a disconnected bot does not stop the Assistant.
 
 Existing bot/app token files can be configured through `fhold portal token`
 with `--no-apply`. Keep those files private and configure fhold's own allowlist

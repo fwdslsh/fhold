@@ -5,7 +5,8 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=node --packages=external --outfile=dist/index.mjs",
+    "start": "bun run build && node dist/index.mjs",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

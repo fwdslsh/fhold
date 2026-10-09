@@ -1,23 +1,28 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+
+import { pathToFileURL } from 'node:url';
 
 import { errorMessage, startHealthServer } from './runtime.js';
 
-export async function startPortal(adapter = Bun.env.PORTAL_ADAPTER ?? ''): Promise<void> {
+export async function startPortal(adapter = process.env.PORTAL_ADAPTER ?? ''): Promise<void> {
 	if (adapter !== 'discord' && adapter !== 'slack') {
 		throw new Error('PORTAL_ADAPTER must be discord or slack');
 	}
 	const health = startHealthServer(`portal:${adapter}`);
 	if (adapter === 'discord') {
 		const { DiscordPortal } = await import('./discord.js');
-		await new DiscordPortal().start();
+		const portal = new DiscordPortal();
+		await portal.start();
+		health.ready(() => portal.isReady());
 	} else {
 		const { SlackPortal } = await import('./slack.js');
-		await new SlackPortal().start();
+		const portal = new SlackPortal();
+		await portal.start();
+		health.ready(() => portal.isReady());
 	}
-	health.ready();
 }
 
-if (import.meta.main) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	startPortal().catch((error) => {
 		console.error(
 			JSON.stringify({

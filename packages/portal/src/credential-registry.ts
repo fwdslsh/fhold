@@ -101,7 +101,7 @@ export function credentialConversationKey(username: string, platformKey: string)
 export class PortalCredentialRegistry {
 	constructor(
 		private readonly adapter: PortalAdapter,
-		private readonly path = Bun.env.PORTAL_CREDENTIALS_FILE ?? ''
+		private readonly path = process.env.PORTAL_CREDENTIALS_FILE ?? ''
 	) {
 		if (!path) throw new Error('PORTAL_CREDENTIALS_FILE is required');
 	}

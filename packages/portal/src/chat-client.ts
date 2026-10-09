@@ -56,7 +56,7 @@ export class GuardianChatClient {
 	>();
 
 	private async createClient(token: string): Promise<Client> {
-		const url = new URL(Bun.env.MCP_SERVER_URL ?? 'http://guardian:8080/mcp');
+		const url = new URL(process.env.MCP_SERVER_URL ?? 'http://guardian:8080/mcp');
 		if (url.protocol !== 'http:' && url.protocol !== 'https:') {
 			throw new Error('MCP_SERVER_URL must use http or https');
 		}

@@ -17,6 +17,10 @@ supercronic. Guardian and the single Discord/Slack Portal image are optional.
 CLI is the primary installer/orchestrator; Admin is a local settings utility
 with no server, chat, updater, tray or background control plane. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
+Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
+with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
+Platform health follows the live SDK connection; a failed/disconnected portal
+does not stop the Assistant. Vendor WebSocket implementations are not patched.
 
 OpenCode owns provider discovery, models, authentication and native approvals.
 AKM owns knowledge and task formats. No parallel provider registry, proxy,
