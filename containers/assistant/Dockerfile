@@ -5,6 +5,14 @@ ARG NPM_VERSION=12.2.0
 RUN npm install --global "npm@${NPM_VERSION}" \
     && test "$(npm --version)" = "${NPM_VERSION}"
 
+# Build the unchanged upstream scheduler with a patched supported Go runtime.
+# The latest prebuilt release still embeds Go 1.26.6; no vendor code is patched.
+FROM golang:1.26.9-bookworm AS scheduler-build
+ARG SUPERCRONIC_VERSION=v0.2.49
+RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
+    -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
+    "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
+
 FROM oven/bun:1.4.2 AS tools
 ARG TARGETARCH
 WORKDIR /repo
@@ -98,25 +106,13 @@ RUN mkdir -p /native-defaults/codex \
 
 FROM oven/bun:1.4.2-slim
 
-ARG TARGETARCH
-ARG SUPERCRONIC_VERSION=v0.2.49
-
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
       bash ca-certificates curl git libnss-wrapper tzdata tini tree util-linux \
-    && rm -rf /var/lib/apt/lists/* \
-    && case "${TARGETARCH}" in \
-      amd64) supercronic_sha=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1 ;; \
-      arm64) supercronic_sha=02aa0cb229ba09050cba6638059dadb9eedc2276632ea43d6a57a2f8c1629dd5 ;; \
-      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac \
-    && curl -fsSL --retry 5 --retry-all-errors \
-      -o /usr/local/bin/supercronic \
-      "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" \
-    && echo "${supercronic_sha}  /usr/local/bin/supercronic" | sha256sum -c - \
-    && chmod 0755 /usr/local/bin/supercronic
+    && rm -rf /var/lib/apt/lists/*
 
+COPY --from=scheduler-build /go/bin/supercronic /usr/local/bin/supercronic
 COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 # Keep the compatible, pinned upstream npm/npx installed in the Node stage,

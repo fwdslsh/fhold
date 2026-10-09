@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2610092-beta.3 — automatic replies for long-running work
+## 0.2.2610093-beta.3 — automatic replies for long-running work
 
 Slack and Discord now keep tracking running Guardian jobs until they complete,
 fail or need explicit input. The old overall reply deadline and raw job-token
@@ -14,6 +14,11 @@ messages remain queued behind active work. A failed progress notice is logged
 without abandoning the job. Existing permission approvals remain explicit.
 Automatic final-reply delivery requires the Portal to remain running; a Portal
 restart does not cancel native work but does not recover pending notifications.
+
+The Assistant builds the unchanged Supercronic v0.2.49 source with Go 1.26.9
+in a standard build-only Docker stage, correcting newly reported HTTP/TLS
+denial-of-service advisories in the older Go runtime of its upstream prebuilt
+binary. The compiler is not shipped and no upstream source is modified.
 
 AKM, native harness versions, experimental remote status and the disclosed
 dependency/platform qualification limits remain unchanged from beta.2. See the

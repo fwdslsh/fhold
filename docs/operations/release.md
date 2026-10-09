@@ -134,6 +134,17 @@ not a clean-scan claim. Remove the entries when a supported npm release fixes
 them; re-review before expiry. Existing running instances are not updated by a
 source or release publication.
 
+## Scheduler build provenance
+
+The October 9, 2026 image scan found CVE-2026-78667 and CVE-2026-97031
+in the Go 1.26.6 runtime of the latest upstream Supercronic v0.2.49 binary.
+The Assistant now builds that same pinned source using the standard versioned
+`go install` command in an official Go 1.26.9 build stage. The compiler and build
+dependencies stay out of the final image. No scheduler source, dependencies or
+runtime configuration are patched, and no scan exception is added.
+See [Supercronic's releases](https://github.com/aptible/supercronic/releases/tag/v0.2.49)
+and the [Go release history](https://go.dev/doc/devel/release#go1.26.0).
+
 ## Reviewed build-tool advisory
 
 Raw `bun audit` continues to report `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 is
