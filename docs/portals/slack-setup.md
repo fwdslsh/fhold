@@ -111,6 +111,14 @@ scope permits that. Thread replies retain an opaque, credential-scoped Guardian
 conversation handle. Changing a user's mapping starts fresh policy continuity.
 Send `/clear` or `!clear` to reset it.
 
+Long-running requests receive one "still working" notice. The bot keeps checking
+and posts the completed response in the same thread; no MCP client or job ID is
+needed just because work takes more than a few minutes. New messages in that
+conversation remain queued behind the active request. The Portal must stay
+running to deliver the response: restarting it does not cancel native agent work,
+but automatic reply delivery is not recovered across a Portal restart. The agent's
+work and history remain available in OpenCode.
+
 The Slack adapter is intentionally a conversational subset of the MCP catalog.
 If a `full` agent pauses for a permission decision, the adapter tells the user
 to complete that explicit decision with a full MCP client; chat text is never

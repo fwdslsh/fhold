@@ -121,6 +121,14 @@ Replies continue within a per-user channel/thread and credential-scoped
 conversation. Changing a user's mapping starts fresh policy continuity. Send
 `/clear` or `!clear` to discard that local conversation handle.
 
+Long-running requests receive one "still working" notice. The bot keeps checking
+and replies to the original message when the response is ready; no MCP client or
+job ID is needed just because work takes more than a few minutes. New messages in
+that conversation remain queued behind the active request. The Portal must stay
+running to deliver the response: restarting it does not cancel native agent work,
+but automatic reply delivery is not recovered across a Portal restart. The agent's
+work and history remain available in OpenCode.
+
 The adapter stores only opaque Guardian session handles in
 `data/portal/discord/portal.db`.
 

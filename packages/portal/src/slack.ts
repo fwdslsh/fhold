@@ -110,7 +110,10 @@ export class SlackPortal {
 		await this.queue.run(key, async () => {
 			const previous = this.conversations.get('slack', key);
 			try {
-				const result = await this.chat.chat(text, credential, previous);
+				const result = await this.chat.chat(text, credential, previous, async (update) => {
+					this.conversations.set('slack', key, update.conversation);
+					await say({ text: update.text, thread_ts: threadTs });
+				});
 				this.conversations.set('slack', key, result.conversation);
 				for (const chunk of splitMessage(result.text, 3_800)) {
 					await say({ text: chunk, thread_ts: threadTs });

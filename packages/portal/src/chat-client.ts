@@ -1,8 +1,10 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 import type { PortalCredential } from './credential-registry.js';
+import { createLogger, errorMessage } from './runtime.js';
 
 type ChatResult = { conversation: string; text: string };
+const log = createLogger('portal:chat');
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -125,7 +127,8 @@ export class GuardianChatClient {
 	async chat(
 		message: string,
 		credential: PortalCredential,
-		conversation?: string
+		conversation?: string,
+		onWorking?: (update: ChatResult) => Promise<unknown>
 	): Promise<ChatResult> {
 		let result = await this.call(
 			'fhold.agent.run',
@@ -137,9 +140,24 @@ export class GuardianChatClient {
 			credential
 		);
 		let structured = asRecord(result.structuredContent);
-		const stopAt = Date.now() + 150_000;
-		while (!result.isError && structured?.status === 'running' && Date.now() < stopAt) {
-			if (typeof structured.job !== 'string') break;
+		if (
+			!result.isError &&
+			structured?.status === 'running' &&
+			typeof structured.session === 'string'
+		) {
+			try {
+				await onWorking?.({
+					conversation: structured.session,
+					text: "I'm still working on this. I'll post the result here when it's ready."
+				});
+			} catch (error) {
+				log.warn('progress_delivery_failed', { error: errorMessage(error) });
+			}
+		}
+		while (!result.isError && structured?.status === 'running') {
+			if (typeof structured.job !== 'string') {
+				throw new Error('Guardian did not provide a handle for the running job.');
+			}
 			result = await this.call(
 				'fhold.job.get',
 				{
@@ -160,13 +178,6 @@ export class GuardianChatClient {
 			return {
 				conversation: structured.session,
 				text: interactionText(structured).slice(0, 100_000)
-			};
-		}
-		if (structured.status === 'running') {
-			const job = typeof structured.job === 'string' ? structured.job : '(unavailable)';
-			return {
-				conversation: structured.session,
-				text: `The agent is still working. Connect with a full MCP client to poll or cancel this job: ${job}`
 			};
 		}
 		if (structured.status === 'failed') {
