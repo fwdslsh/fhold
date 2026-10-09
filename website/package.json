@@ -9,6 +9,6 @@
 		"dev": "bun run unify dev"
 	},
 	"devDependencies": {
-		"@fwdslsh/unify": "0.11.9"
+		"@fwdslsh/unify": "0.11.12"
 	}
 }

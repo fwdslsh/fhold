@@ -1,10 +1,10 @@
 # This config controls the website; docs/** remains the canonical content.
 # Local presentation overrides the template; the generator renders ../docs/.
 source: site
-extends: unify-docs-template@0.1.2
+extends: unify-docs-template@0.3.0
 output: dist
 generate: scripts/gen-docs.mjs
 pretty-urls: true
-base-url: https://fwdslsh.github.io/fhold/
+base-url: https://fhold.fwdslsh.dev/
 catalog: true
 search-corpus: true
