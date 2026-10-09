@@ -3,7 +3,7 @@
 The website is built in this repository from the canonical `docs/**` Markdown
 files. Site presentation lives in `website/site/`; Unify configuration lives in
 `website/unify.yaml`. The published template is pinned as
-`unify-docs-template@0.3.0` through native `extends:` in Unify 0.11.12.
+`unify-docs-template@0.4.0` through native `extends:` in Unify 0.11.13.
 The renderer is pinned in `website/package.json` and the repository's single
 `bun.lock`; Unify resolves the template's exact version itself.
 
