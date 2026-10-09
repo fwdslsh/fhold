@@ -21,6 +21,11 @@ Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
 Platform health follows the live SDK connection; a failed/disconnected portal
 does not stop the Assistant. Vendor WebSocket implementations are not patched.
+Portal tracks running Guardian jobs until completion, failure or explicit input
+is needed, using bounded MCP requests rather than an overall reply deadline.
+Long work receives one progress notice and its final result in the same app
+conversation; ordinary progress never exposes a job handle or requires another
+client. Failed progress delivery is logged without abandoning the running job.
 
 OpenCode owns provider discovery, models, authentication and native approvals.
 AKM owns knowledge and task formats. No parallel provider registry, proxy,

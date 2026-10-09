@@ -106,7 +106,10 @@ export class DiscordPortal {
 			if ('sendTyping' in message.channel) await message.channel.sendTyping().catch(() => {});
 			const previous = this.conversations.get('discord', key);
 			try {
-				const result = await this.chat.chat(text, credential, previous);
+				const result = await this.chat.chat(text, credential, previous, async (update) => {
+					this.conversations.set('discord', key, update.conversation);
+					await message.reply(update.text);
+				});
 				this.conversations.set('discord', key, result.conversation);
 				for (const chunk of splitMessage(result.text, 1_900)) await message.reply(chunk);
 			} catch (error) {
