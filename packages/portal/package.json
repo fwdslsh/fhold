@@ -1,11 +1,12 @@
 {
   "name": "@fhold/portal",
-  "version": "0.2.2610081-beta.1",
+  "version": "0.2.2610091-beta.2",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=node --packages=external --outfile=dist/index.mjs",
+    "start": "bun run build && node dist/index.mjs",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

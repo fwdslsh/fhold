@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
@@ -6,11 +6,11 @@ const MAX_HANDLE_LENGTH = 2_048;
 const MAX_KEY_LENGTH = 512;
 
 export class ConversationStore {
-	private readonly database: Database;
+	private readonly database: DatabaseSync;
 
-	constructor(path = Bun.env.PORTAL_STATE_PATH ?? '/var/lib/fhold/portal.db') {
+	constructor(path = process.env.PORTAL_STATE_PATH ?? '/var/lib/fhold/portal.db') {
 		mkdirSync(dirname(path), { recursive: true });
-		this.database = new Database(path, { create: true, strict: true });
+		this.database = new DatabaseSync(path);
 		this.database.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
 		this.database.exec(`
       CREATE TABLE IF NOT EXISTS conversations (
@@ -26,7 +26,7 @@ export class ConversationStore {
 	get(adapter: string, key: string): string | undefined {
 		if (!key || key.length > MAX_KEY_LENGTH) return undefined;
 		const row = this.database
-			.query('SELECT handle FROM conversations WHERE adapter = ? AND conversation_key = ?')
+			.prepare('SELECT handle FROM conversations WHERE adapter = ? AND conversation_key = ?')
 			.get(adapter, key) as { handle: string } | null;
 		return row && typeof row.handle === 'string' && row.handle.length <= MAX_HANDLE_LENGTH
 			? row.handle
@@ -38,7 +38,7 @@ export class ConversationStore {
 		if (!handle || handle.length > MAX_HANDLE_LENGTH)
 			throw new Error('invalid conversation handle');
 		this.database
-			.query(`
+			.prepare(`
       INSERT INTO conversations (adapter, conversation_key, handle, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(adapter, conversation_key) DO UPDATE SET
@@ -50,7 +50,7 @@ export class ConversationStore {
 
 	clear(adapter: string, key: string): void {
 		this.database
-			.query('DELETE FROM conversations WHERE adapter = ? AND conversation_key = ?')
+			.prepare('DELETE FROM conversations WHERE adapter = ? AND conversation_key = ?')
 			.run(adapter, key);
 	}
 

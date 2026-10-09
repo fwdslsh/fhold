@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -55,6 +56,31 @@ describe('portal core', () => {
 	it('splits platform messages without losing text', () => {
 		const text = `${'a'.repeat(12)}\n${'b'.repeat(12)}`;
 		expect(splitMessage(text, 15).join('')).toBe(text.replace('\n', ''));
+	});
+
+	it('opens existing Bun SQLite continuity without a schema migration', () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-portal-existing-'));
+		temporaryPaths.push(root);
+		const path = join(root, 'portal.db');
+		const legacy = new Database(path);
+		legacy.exec(`CREATE TABLE conversations (
+			adapter TEXT NOT NULL, conversation_key TEXT NOT NULL,
+			handle TEXT NOT NULL, updated_at INTEGER NOT NULL,
+			PRIMARY KEY (adapter, conversation_key)
+		) STRICT;`);
+		legacy
+			.query('INSERT INTO conversations VALUES (?, ?, ?, ?)')
+			.run('slack', 'credential:slack:thread:C123:1.000001', 'opaque.existing', 1);
+		legacy.close();
+		const current = new ConversationStore(path);
+		expect(current.get('slack', 'credential:slack:thread:C123:1.000001')).toBe('opaque.existing');
+		current.set('slack', 'credential:slack:thread:C123:1.000001', 'opaque.continued');
+		current.close();
+		const reopened = new Database(path, { readonly: true });
+		expect(reopened.query('SELECT handle FROM conversations').get()).toEqual({
+			handle: 'opaque.continued'
+		});
+		reopened.close();
 	});
 
 	it('bounds queued conversations and per-conversation backlog', async () => {

@@ -359,9 +359,11 @@ guardian)
 		--data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' >/dev/null
 	;;
 portal)
-	test "$(docker run --rm --entrypoint bun "$image" --version)" = "$expected_bun"
+	expected_node=$(sed -nE 's/^FROM node:([0-9.]+).*$/\1/p' containers/portal/Dockerfile)
+	test "$(docker run --rm --entrypoint node "$image" --version)" = "v$expected_node"
 	docker run --rm --entrypoint sh "$image" -c \
-		'test "$(id -u)" != 0 && test -r /app/src/index.ts && command -v bun >/dev/null && command -v curl >/dev/null'
+		'test "$(id -u)" != 0 && test -r /app/dist/index.mjs && command -v node >/dev/null && command -v curl >/dev/null'
+	docker run --rm -i --entrypoint node "$image" --input-type=module < scripts/smoke-portal.mjs
 	if docker run --name "$container" "$image" >/dev/null 2>&1; then
 		echo 'Portal image started without selecting a guarded adapter' >&2
 		exit 1

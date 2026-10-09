@@ -1,4 +1,4 @@
-import { App, type SayFn } from '@slack/bolt';
+import { App, SocketModeReceiver, type SayFn } from '@slack/bolt';
 
 import { GuardianChatClient } from './chat-client.js';
 import { ConversationStore } from './conversations.js';
@@ -31,15 +31,21 @@ export class SlackPortal {
 	private readonly credentials = new PortalCredentialRegistry('slack');
 	private readonly conversations = new ConversationStore();
 	private readonly queue = new ConversationQueue();
-	private readonly allowedChannels = parseIds(Bun.env.SLACK_ALLOWED_CHANNELS);
-	private readonly allowedUsers = parseIds(Bun.env.SLACK_ALLOWED_USERS);
-	private readonly blockedUsers = parseIds(Bun.env.SLACK_BLOCKED_USERS);
+	private readonly allowedChannels = parseIds(process.env.SLACK_ALLOWED_CHANNELS);
+	private readonly allowedUsers = parseIds(process.env.SLACK_ALLOWED_USERS);
+	private readonly blockedUsers = parseIds(process.env.SLACK_BLOCKED_USERS);
+	private readonly receiver = new SocketModeReceiver({
+		appToken: readSecret('SLACK_APP_TOKEN')
+	});
 	private readonly app = new App({
 		token: readSecret('SLACK_BOT_TOKEN'),
-		appToken: readSecret('SLACK_APP_TOKEN'),
-		socketMode: true
+		receiver: this.receiver
 	});
 	private botUserId = '';
+
+	isReady(): boolean {
+		return this.receiver.client.websocket?.isActive() ?? false;
+	}
 
 	async start(): Promise<void> {
 		await this.chat.connect(this.credentials.defaultCredential());

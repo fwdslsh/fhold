@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 
 export type Logger = ReturnType<typeof createLogger>;
 
@@ -25,7 +26,7 @@ export function createLogger(service: string) {
 }
 
 export function readSecret(name: string): string {
-	const file = Bun.env[`${name}_FILE`] ?? '';
+	const file = process.env[`${name}_FILE`] ?? '';
 	if (!file) throw new Error(`${name}_FILE is required`);
 	try {
 		const value = readFileSync(file, 'utf8').replace(/[\r\n]+$/, '');
@@ -65,24 +66,22 @@ export function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export function startHealthServer(_service: string): { ready: () => void } {
-	let ready = false;
-	const port = Number.parseInt(Bun.env.PORT ?? '8080', 10);
+export function startHealthServer(_service: string): { ready: (check: () => boolean) => void } {
+	let isReady = () => false;
+	const port = Number.parseInt(process.env.PORT ?? '8080', 10);
 	if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('PORT must be valid');
-	Bun.serve({
-		hostname: '0.0.0.0',
-		port,
-		fetch(request) {
-			const url = new URL(request.url);
-			if (request.method !== 'GET' || url.pathname !== '/health') {
-				return Response.json({ error: 'not_found' }, { status: 404 });
-			}
-			return Response.json({ ok: ready }, { status: ready ? 200 : 503 });
+	createServer((request, response) => {
+		response.setHeader('content-type', 'application/json');
+		if (request.method !== 'GET' || request.url?.split('?')[0] !== '/health') {
+			response.writeHead(404).end(JSON.stringify({ error: 'not_found' }));
+			return;
 		}
-	});
+		const ready = isReady();
+		response.writeHead(ready ? 200 : 503).end(JSON.stringify({ ok: ready }));
+	}).listen(port, '0.0.0.0');
 	return {
-		ready: () => {
-			ready = true;
+		ready: (check) => {
+			isReady = check;
 		}
 	};
 }
