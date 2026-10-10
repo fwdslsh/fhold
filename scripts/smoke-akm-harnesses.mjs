@@ -25,7 +25,7 @@ const pluginRequire = createRequire('/opt/fhold/tools/node_modules/akm-opencode/
 assert.equal(
 	JSON.parse(readFileSync(pluginRequire.resolve('akm-cli/package.json'), 'utf8')).version,
 	tools['akm-cli'],
-	'OpenCode in-process AKM must match the CLI used by Claude and Codex'
+	'OpenCode plugin dependency must match the CLI used by Claude and Codex'
 );
 const bunOptions = process.env.BUN_OPTIONS;
 assert.equal(bunOptions, '--no-env-file --config=/dev/null', 'Image Bun startup boundary missing');

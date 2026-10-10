@@ -374,7 +374,7 @@ describe('optional AKM integration failures', () => {
 });
 
 describe('published AKM scheduler compatibility', () => {
-	// Five real native CLI calls each retain their 30s subprocess deadline;
+	// Real native CLI calls each retain their 30s subprocess deadline;
 	// Bun's default 5s whole-test deadline is too short under full-suite load.
 	it('uses native host-local activation without modifying task source for pause/resume', () => {
 		const root = home();
@@ -431,6 +431,10 @@ describe('published AKM scheduler compatibility', () => {
 		);
 		expect(new TextDecoder().decode(created.stderr)).not.toContain('error');
 		expect(created.exitCode).toBe(0);
+		const listed = run('list', '--format', 'json');
+		expect(listed.stderr.toString()).not.toContain('error');
+		expect(listed.exitCode).toBe(0);
+		expect(listed.stdout.toString()).toContain('tasks/published-check');
 		const source = readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8');
 		expect(source).not.toContain('enabled:');
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toHaveLength(1);
@@ -441,9 +445,15 @@ describe('published AKM scheduler compatibility', () => {
 		expect(readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8')).toBe(source);
 		mkdirSync(join(knowledge, 'imported-tasks'));
 		const staged = join(knowledge, 'imported-tasks', 'adopted-check.yml');
-		writeFileSync(staged, source);
-		expect(run('adopt', staged).exitCode).toBe(0);
-		expect(readFileSync(join(knowledge, 'tasks', 'adopted-check.yml'), 'utf8')).toBe(source);
+		const quotedSource = source
+			.replace(/^uses:.*$/m, 'uses: "akm/command"')
+			.replace(/^engine:.*$/m, 'engine: "scheduled"');
+		writeFileSync(staged, quotedSource);
+		const adopted = run('adopt', staged);
+		expect(adopted.stderr.toString()).not.toContain('fhold-task:');
+		expect(adopted.exitCode).toBe(0);
+		expect(readFileSync(staged, 'utf8')).toBe(quotedSource);
+		expect(readFileSync(join(knowledge, 'tasks', 'adopted-check.yml'), 'utf8')).toBe(quotedSource);
 		const activated = JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled as Array<
 			string | { ref: string }
 		>;
@@ -452,6 +462,18 @@ describe('published AKM scheduler compatibility', () => {
 				(typeof entry === 'string' ? entry : entry.ref).endsWith('/adopted-check')
 			)
 		).toBe(false);
+		for (const [name, invalid] of [
+			['other-engine', source.replace(/^engine:.*$/m, 'engine: "other"')],
+			['shell-target', source.replace(/^uses:.*$/m, 'run: "echo must-not-run"')],
+			['invalid-native-source', source.replace(/^version:.*$/m, 'version: 999')]
+		]) {
+			const file = join(knowledge, 'imported-tasks', `${name}.yml`);
+			writeFileSync(file, invalid);
+			expect(run('adopt', file).exitCode).not.toBe(0);
+			expect(readFileSync(file, 'utf8')).toBe(invalid);
+			expect(existsSync(join(knowledge, 'tasks', `${name}.yml`))).toBe(false);
+			expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toHaveLength(1);
+		}
 		expect(run('remove', 'published-check').exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
