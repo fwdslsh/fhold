@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.2610101-beta.4 — richer Discord and Slack conversations
+
+Discord channel mentions now create or reuse a conversation thread, with a
+normal-channel fallback when thread permissions are unavailable. Both apps
+show tool activity, stream reply updates and keep an active working indicator
+until the agent finishes or asks for input. Discord also maintains its typing
+indicator during long-running work.
+
+Questions and permission requests use requester-only buttons in the original
+conversation. Multiple-choice, multi-select and custom-text answers are
+supported; permission approval remains explicit. Slack adds a requester-only
+Stop button for active work. No slash commands, services or configuration flags
+are added, and existing policies, allowlists and conversation history remain.
+
+Guardian MCP supplies scoped live progress and tool name/status only, without
+exposing tool arguments, outputs or private reasoning. Intermediate tool-call
+messages no longer prematurely complete a job. Automatic reply delivery still
+requires the Portal to remain running; a restart preserves native work/history
+but does not recover pending notifications or button state.
+
+Discord needs thread and reaction permissions for those optional affordances.
+Slack buttons require Interactivity to be enabled; tool reactions additionally
+use the optional `reactions:write` scope. Missing reaction permission does not
+prevent replies. See the [Discord](docs/portals/discord-setup.md) and
+[Slack](docs/portals/slack-setup.md) setup guides.
+
+AKM, native harness versions, experimental remote status and the disclosed
+dependency/platform qualification limits remain unchanged from beta.3. See the
+[release runbook](docs/operations/release.md).
+
 ## 0.2.2610093-beta.3 — automatic replies for long-running work
 
 Slack and Discord now keep tracking running Guardian jobs until they complete,
