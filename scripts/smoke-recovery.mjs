@@ -158,7 +158,11 @@ async function start(suffix, selectedImage = image) {
 	const bindings = JSON.parse(
 		await docker(['inspect', id, '--format', '{{json .NetworkSettings.Ports}}'])
 	);
-	return { id, endpoint: `http://127.0.0.1:${bindings['4096/tcp'][0].HostPort}` };
+	return {
+		id,
+		image: selectedImage,
+		endpoint: `http://127.0.0.1:${bindings['4096/tcp'][0].HostPort}`
+	};
 }
 async function api(container, route, options = {}, authenticated = true) {
 	const response = await fetch(container.endpoint + route, {
@@ -179,6 +183,26 @@ async function stop(container) {
 	await docker(['stop', '--time', '360', container.id], 380_000);
 	const status = JSON.parse(await docker(['inspect', container.id, '--format', '{{json .State}}']));
 	assert.equal(status.ExitCode, 0, 'graceful runtime exit');
+	if (container.image === image) {
+		const { stdout, stderr } = await runFile('docker', ['logs', container.id], {
+			timeout: 10_000,
+			maxBuffer: 2_000_000
+		});
+		const logs = stdout + stderr;
+		const writers = logs.indexOf('assistant: shutdown: stopping native writers');
+		const recovery = logs.indexOf(
+			'assistant: shutdown: writers stopped; finishing recovery checkpoint and owner release'
+		);
+		const released = logs.indexOf(
+			'assistant: shutdown: recovery checkpoint completed and owner released'
+		);
+		const complete = logs.indexOf('assistant: shutdown complete');
+		assert.ok(
+			writers >= 0 && recovery > writers && released > recovery && complete > released,
+			'PID 1 must observe writer shutdown, successful recovery and ownership release before exit'
+		);
+		report.checks.pid1ShutdownAndRecoveryCompletionLogged = true;
+	}
 }
 async function released() {
 	if (url !== 'file:///backup') return;
