@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.2610102-beta.5 — reliable recovery shutdown and current AKM
+
+Assistant shutdown no longer stalls when a short-lived writer exits while its
+process metadata is being read. Writers stop before the final recovery checkpoint
+and ownership release, with ordered shutdown logs and the existing grace budgets.
+A failed recovery worker is reported as a failure rather than a successful stop.
+No new service, configuration flag or automatic ownership takeover is added.
+
+Regression coverage exercises the actual container entrypoint, graceful PID 1
+shutdown, final checkpoint acceptance, owner release and cold restoration of
+sessions, SQLite databases and custom paths. Directory and Blob-emulator checks
+use the normal container lifecycle. Live ACA Stop, revision-deactivation and
+scale-to-zero qualification remain deployment-specific follow-up checks.
+
+The Assistant now ships AKM CLI 0.9.31 with the latest stable 0.9 harness plugins,
+0.9.30202610090106, for OpenCode, Claude and Codex. Standard native installation
+is unchanged. OpenCode's in-process AKM dependency is aligned with the installed
+CLI, and image verification checks that alignment and real recall in all three
+harnesses. There are no startup downloads or upstream source patches.
+
+OpenCode remains on its qualified 1.x API. Claude/Codex remote connections remain
+experimental, and the disclosed dependency/platform qualification limits remain
+unchanged. See the [release runbook](docs/operations/release.md).
+
 ## 0.2.2610101-beta.4 — richer Discord and Slack conversations
 
 Discord channel mentions now create or reuse a conversation thread, with a
