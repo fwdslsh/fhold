@@ -393,7 +393,7 @@ try {
 	report.catalog = JSON.parse(
 		await execBun(
 			first.id,
-			`import{readFile,readdir}from'node:fs/promises';const root='/opt/fhold/tools/node_modules/akm-cli/dist/core';const data={};for(const name of ['state-db.js','logs-db.js','paths.js']){const source=await readFile(root+'/'+name,'utf8');data[name]=source.split(String.fromCharCode(10)).filter(x=>/state[.]db|logs[.]db|index[.]db|function getStateDbPath|function getLogsDbPath/.test(x)).slice(0,12);}data.opencodeFiles=await readdir('/home/fhold/.local/share/opencode');data.akmFiles=await readdir('/opt/akm/data');data.versions=JSON.parse(await readFile('/opt/fhold/tools/package.json','utf8')).dependencies;console.log(JSON.stringify(data));`
+			`import{readFile,readdir}from'node:fs/promises';const data={};data.opencodeFiles=await readdir('/home/fhold/.local/share/opencode');data.akmFiles=await readdir('/opt/akm/data');data.versions=JSON.parse(await readFile('/opt/fhold/tools/package.json','utf8')).dependencies;console.log(JSON.stringify(data));`
 		)
 	);
 	report.checks.realPinnedCatalogInspected = true;

@@ -103,27 +103,19 @@ function guardedPrompt(id, prompt) {
 }
 
 function validateImportedPromptSource(source) {
-	const uses = [...source.matchAll(/^uses\s*:\s*([^\r\n#]*?)(?:\s+#.*)?$/gm)].map((match) =>
-		match[1].trim()
-	);
-	if (uses.length !== 1 || uses[0] !== 'akm/command') {
+	const task = Bun.YAML.parse(source);
+	if (
+		!task ||
+		typeof task !== 'object' ||
+		Array.isArray(task) ||
+		task.uses !== 'akm/command' ||
+		['run', 'shell', 'workflow', 'command'].some((key) => Object.hasOwn(task, key))
+	) {
 		throw new Error(
 			'only AKM prompt tasks can be adopted; command and workflow tasks require manual review'
 		);
 	}
-	const topLevelKeys = [...source.matchAll(/^([A-Za-z][A-Za-z0-9_-]*)\s*:/gm)].map(
-		(match) => match[1]
-	);
-	if (
-		topLevelKeys.some((key) => ['run', 'shell', 'workflow', 'command'].includes(key)) ||
-		/^(?:<<|\?)\s*:/m.test(source)
-	) {
-		throw new Error('command and workflow task fields cannot be adopted');
-	}
-	const engines = [...source.matchAll(/^engine\s*:\s*([^\r\n#]*?)(?:\s+#.*)?$/gm)].map((match) =>
-		match[1].trim()
-	);
-	if (engines.length > 1 || (engines.length === 1 && engines[0] !== 'scheduled')) {
+	if (task.engine !== undefined && task.engine !== 'scheduled') {
 		throw new Error('imported prompt tasks must use the scheduled engine');
 	}
 }
@@ -182,7 +174,6 @@ function adopt(path) {
 	const id = taskId(name.replace(/\.ya?ml$/, ''));
 	const destination = taskFile(id);
 	if (existsSync(destination)) fail(`task already exists: ${id}`);
-	runChecked('akm', ['task', 'validate', source, '--quiet']);
 	const original = readFileSync(source, 'utf8');
 	validateImportedPromptSource(original);
 	mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
@@ -191,7 +182,8 @@ function adopt(path) {
 		// to the periodic reconciler. disable accepts an id whose source is absent.
 		runChecked('akm', ['task', 'disable', id, '--quiet']);
 		atomicWrite(destination, original);
-		runChecked('akm', ['task', 'validate', destination, '--quiet']);
+		// Native explain validates the source without executing or scheduling it.
+		runChecked('akm', ['task', 'explain', `tasks/${id}`, '--quiet']);
 		runChecked('akm', ['task', 'sync', '--rebind', '--quiet']);
 	} catch (error) {
 		try {
@@ -209,7 +201,7 @@ try {
 			create(taskId(args[0]), args.slice(1));
 			break;
 		case 'list':
-			run('akm', ['task', 'list', ...args]);
+			run('akm', ['search', '--type', 'task', ...args]);
 			break;
 		case 'show':
 			run('akm', ['show', `tasks/${taskId(args[0])}`, ...args.slice(1)]);

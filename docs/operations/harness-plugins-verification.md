@@ -1,5 +1,47 @@
 # Native plugins and keep-alive verification
 
+## AKM 0.10 next-channel refresh — 2026-10-10
+
+The official npm `next` tags select
+[CLI 0.10.26101002-alpha](https://github.com/itlackey/akm/releases/tag/v0.10.26101002-alpha)
+and [plugins 0.10.26101001-alpha](https://github.com/itlackey/akm-plugins/tree/f1ec39c0ebae38b6567b52434d64381ddc257efc).
+All three harnesses use that plugin release and the same CLI. Its published V1
+OpenCode plugin supports the unchanged OpenCode 1.18.34 and exact-pins that CLI;
+the obsolete AKM dependency override is removed. Claude/Codex installation still
+uses the standard native marketplace managers and an immutable checksum-verified
+archive. No vendor code or plugin hooks are patched.
+
+The real native session/prompt recall smoke passed in OpenCode, Claude and Codex.
+Native managed policy passed for all three. Real Supercronic keep-alive sent two
+requests during native work and zero while idle, with user scheduling disabled.
+Directory recovery upgraded the published beta.5 image with both empty storage
+and a surviving home/receipt. Sessions, SQLite, knowledge, custom paths, newer
+surviving files and synthetic account/trust state survived; all three recalls
+passed after restore and the upgraded checkpoint survived another restart.
+
+The initial scheduler regression exposed AKM 0.10's removal of `task list` and
+`task validate`. fhold now delegates listing to `search --type task` and validates
+paused adoption through native, read-only `task explain`. Its small prompt-only
+check parses YAML through Bun instead of matching source text with regexes.
+The regression covers listing, quoted YAML, pause/resume, paused adoption,
+unsupported source/engine/target rejection, preserved source files and keep-alive
+cron preservation. Recovery evidence reads actual runtime files and versions,
+not upstream private source-module paths that changed in 0.10.
+
+The complete automated suite passed with socket tests enabled, alongside
+typechecking, documentation tests and lint (existing warnings only). CLI, Admin
+and MCPB builds passed. The separate real-engine provider check passed: native
+settings apply without restarting the container and survive a normal restart.
+The separate native history tests passed all four cases, including WAL export,
+authority stripping, preservation of target sessions and retry recovery. Those
+two opt-in image checks were run separately rather than counted as full-suite
+coverage. Fresh CLI installation and all three Compose profiles also validated.
+
+These local Linux x64 development checks use synthetic isolated data, not live
+accounts or instances. They do not qualify vendor sign-in, OpenCode V2, ARM64,
+or cloud autoscaling. Public images and downloads require the separate GitHub
+release gates. April and other user instances were not changed.
+
 ## AKM 0.9 patch refresh — 2026-10-10
 
 The latest stable 0.9 releases were checked against the official npm registry

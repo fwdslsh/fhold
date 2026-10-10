@@ -51,7 +51,6 @@
   "overrides": {
     "@discordjs/rest": "2.6.3",
     "@huggingface/transformers": "4.3.0",
-    "akm-cli": "0.9.31",
     "tmp": "0.2.7"
   }
 }
