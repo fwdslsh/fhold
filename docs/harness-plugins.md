@@ -16,6 +16,13 @@ check the installed versions and execute real session/prompt recall in all three
 harnesses, without a vendor account or model request. Guardian and Portal do not
 install AKM or native harness plugins.
 
+The workspace's standard `akm-cli` dependency override keeps OpenCode's
+in-process AKM and the installed command on the same tested patch. AKM 0.9.31
+is within the current plugins' `^0.9.30` contract; the latest OpenCode plugin
+still declares 0.9.30 internally. Update the override together with the Assistant
+CLI pin, and remove it when the published plugin dependency matches. The image
+smoke verifies the plugin's actual resolved dependency, not just `akm --version`.
+
 ## Skills and identity
 
 The skills in `packages/skeleton/system/assistant/skills` are baked into

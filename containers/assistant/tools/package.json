@@ -9,7 +9,7 @@
 		"@anthropic-ai/claude-code": "2.1.289",
 		"akm-opencode": "0.9.30202610090106",
 		"opencode-ai": "1.18.34",
-		"akm-cli": "0.9.30"
+		"akm-cli": "0.9.31"
 	},
 	"overrides": {
 		"@huggingface/transformers": "4.3.0"
