@@ -1,5 +1,33 @@
 # Native plugins and keep-alive verification
 
+## AKM 0.9 patch refresh — 2026-10-10
+
+The latest stable 0.9 releases were checked against the official npm registry
+and GitHub releases: [CLI 0.9.31](https://github.com/itlackey/akm/releases/tag/v0.9.31)
+and [plugins 0.9.30202610090106](https://github.com/itlackey/akm-plugins/releases/tag/v0.9.30202610090106).
+All three plugins were already current. The CLI pin and standard workspace
+dependency override now select 0.9.31, including OpenCode's in-process copy.
+No vendor code, hook definitions or native installation process changed.
+
+Local Linux x64 image `fhold/fhold-assistant:akm-0.9.31-test`, built from
+`21e2780`, passed the standard Assistant smoke: real OpenCode, Claude and Codex
+session/prompt recall, matching resolved AKM versions, preserved customized
+native settings and actionable optional-failure warnings. Managed-policy checks
+passed. Real cron-driven keep-alive sent two requests during native work and
+none while idle, with user scheduling disabled.
+
+The repository suite passed **742 tests, zero failures and eight opt-in skips**.
+The separately enabled image-backed native-history suite passed all four tests.
+Type checks, lint (39 existing warnings), reviewed dependency audit, CLI/Admin
+builds, disposable CLI installation, all-profile Compose and local docs links
+passed. Directory recovery upgraded the published beta.4 image into both empty
+storage and a surviving home, preserving sessions, SQLite, custom paths and
+synthetic account/trust state; all three native recalls also passed after restore.
+
+This is an unpublished local development image, not a new release, live
+vendor-account qualification or a lab-instance upgrade. AKM 0.10 prereleases and
+OpenCode V2 remain outside this dependency refresh.
+
 ## 0.2.2610081-beta.1 local candidate — 2026-10-08
 
 The local Linux x64 Assistant candidate

@@ -12,6 +12,7 @@ import {
 	readFileSync,
 	writeFileSync
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
@@ -20,6 +21,12 @@ const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
 const prompt = 'Find the lean release verification knowledge for the personal agent rollout';
 const expectedRef = 'knowledge/lean-release-verification';
 const tools = JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8')).dependencies;
+const pluginRequire = createRequire('/opt/fhold/tools/node_modules/akm-opencode/package.json');
+assert.equal(
+	JSON.parse(readFileSync(pluginRequire.resolve('akm-cli/package.json'), 'utf8')).version,
+	tools['akm-cli'],
+	'OpenCode in-process AKM must match the CLI used by Claude and Codex'
+);
 const bunOptions = process.env.BUN_OPTIONS;
 assert.equal(bunOptions, '--no-env-file --config=/dev/null', 'Image Bun startup boundary missing');
 const preloadMarker = join(root, 'untrusted-bun-preload-executed');

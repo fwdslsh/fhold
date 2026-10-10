@@ -15,7 +15,7 @@
         "@azure/identity": "4.13.3",
         "@azure/storage-blob": "12.34.0",
         "@openai/codex": "0.160.0",
-        "akm-cli": "0.9.30",
+        "akm-cli": "0.9.31",
         "akm-opencode": "0.9.30202610090106",
         "opencode-ai": "1.18.34",
       },
@@ -116,6 +116,7 @@
   "overrides": {
     "@discordjs/rest": "2.6.3",
     "@huggingface/transformers": "4.3.0",
+    "akm-cli": "0.9.31",
     "tmp": "0.2.7",
   },
   "packages": {
@@ -537,7 +538,7 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.9.30", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/transformers": "4.2.0", "@opencode-ai/sdk": "1.2.20", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^3.23.0" }, "optionalDependencies": { "better-sqlite3": "12.11.1", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-Gh7YwzvI8NizkQbdJy6MlpMvjwPO1fU2ZJ9l/QxCVWGkjU5iPBUlMpDNWm7YLGd8aAR/f2DqTd0iRxt4jhJcsg=="],
+    "akm-cli": ["akm-cli@0.9.31", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/transformers": "4.2.0", "@opencode-ai/sdk": "1.2.20", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^3.23.0" }, "optionalDependencies": { "better-sqlite3": "12.11.1", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-l2Ohvgepzex2bPKAheSVsB7hFYdjZ085AmOzNafnh6+21F5q4o2vWld0/z7XiyoKNHQc7BNj9iRWWvljbGCZCQ=="],
 
     "akm-opencode": ["akm-opencode@0.9.30202610090106", "", { "dependencies": { "@opencode-ai/plugin": "^1.18.14", "akm-cli": "0.9.30" } }, "sha512-ZIumAlUOElyUImfafcdzyEC72DpgFRZ6V3OlcA0f9/bAr7fh0sYOHLuVES/fjAwgx/nlfWruSUknBxhd+wurjg=="],
 
