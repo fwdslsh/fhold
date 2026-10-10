@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
+import { parse, type ParseError } from 'jsonc-parser/lib/esm/main.js';
 
 const MAX_PROVIDER_FILE_BYTES = 1024 * 1024;
 const MAX_PROVIDER_FILES = 128;
@@ -111,45 +112,77 @@ function readBoundedFile(home: string, relativePath: string): Buffer {
 	}
 }
 
-function nativeConfiguration(home: string): Record<string, unknown> | null {
-	const configPath = 'config/assistant/opencode.json';
+/** The same native JSONC document is used by settings, export and import. */
+export function readNativePreferences(
+	home: string,
+	configPath = `config/assistant/${nativePreferencesFile(home)}`
+): { path: string; text: string; value: Record<string, unknown> } {
 	assertSafePortablePath(home, configPath, true);
-	let bytes: Buffer;
-	try {
-		bytes = readBoundedFile(home, configPath);
-	} catch (error) {
-		try {
-			lstatSync(join(home, configPath));
-		} catch (missing) {
-			if ((missing as NodeJS.ErrnoException).code === 'ENOENT') return null;
-		}
-		throw error;
-	}
-	let config: unknown;
-	try {
-		config = JSON.parse(bytes.toString('utf8')) as unknown;
-	} catch {
+	const text = lstatSync(join(home, configPath), { throwIfNoEntry: false })
+		? readBoundedFile(home, configPath).toString('utf8')
+		: '{}\n';
+	const errors: ParseError[] = [];
+	const value: unknown = parse(text, errors, { allowTrailingComma: true });
+	if (errors.length || !value || typeof value !== 'object' || Array.isArray(value))
 		throw new Error(
-			'Native OpenCode configuration must contain valid JSON; no configuration values were logged'
+			`Fix invalid JSON/JSONC preferences in ${configPath}. No settings were changed or values logged.`
 		);
-	}
-	if (!config || typeof config !== 'object' || Array.isArray(config)) {
-		throw new Error('Native OpenCode configuration must contain a JSON object');
-	}
-	return config as Record<string, unknown>;
+	return { path: join(home, configPath), text, value: value as Record<string, unknown> };
 }
 
 /** Portable configuration is provider/model intent, never plugin or MCP runtime/credential state. */
 export function hasNonPortableNativeConfiguration(home: string): boolean {
-	const config = nativeConfiguration(home) ?? {};
-	if (Object.keys(config).some((key) => !['$schema', 'model', 'small_model', 'provider', 'disabled_providers'].includes(key))) return true;
+	const config = readNativePreferences(home).value;
+	if (
+		Object.keys(config).some(
+			(key) =>
+				![
+					'$schema',
+					'model',
+					'small_model',
+					'provider',
+					'providers',
+					'disabled_providers',
+					'experimental'
+				].includes(key)
+		)
+	)
+		return true;
+	if (config.experimental !== undefined) {
+		const experimental = config.experimental as Record<string, unknown>;
+		if (
+			!experimental ||
+			typeof experimental !== 'object' ||
+			Object.keys(experimental).some((key) => key !== 'policies') ||
+			!Array.isArray(experimental.policies) ||
+			experimental.policies.some((rule: unknown) => {
+				if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return true;
+				const item = rule as Record<string, unknown>;
+				return (
+					Object.keys(item).some((key) => !['action', 'resource', 'effect'].includes(key)) ||
+					item.action !== 'provider.use' ||
+					typeof item.resource !== 'string' ||
+					!['allow', 'deny'].includes(String(item.effect))
+				);
+			})
+		)
+			return true;
+	}
 	// A native provider SDK selector imports executable code, including file: SDKs
 	// from restored workspace files. It is not a portable model/auth preference.
-	const pending: unknown[] = [config.provider];
+	const pending: unknown[] = [config.provider, config.providers];
 	while (pending.length) {
 		const value = pending.pop();
 		if (!value || typeof value !== 'object') continue;
 		if (Object.hasOwn(value, 'npm')) return true;
+		// Built-in v2 adapters ship with OpenCode; importing an external package
+		// or local module is executable customization, not a portable preference.
+		if (
+			'package' in value &&
+			(typeof value.package !== 'string' ||
+				!/^@opencode\/ai\/providers\/[a-z][a-z0-9-]*$/.test(value.package))
+		)
+			return true;
 		pending.push(...Object.values(value));
 	}
 	return false;
@@ -157,7 +190,8 @@ export function hasNonPortableNativeConfiguration(home: string): boolean {
 
 /** Detect only recognized native provider credential fields; never rewrite arbitrary configuration. */
 export function hasInlineProviderCredentials(home: string): boolean {
-	const pending: unknown[] = [nativeConfiguration(home)?.provider];
+	const config = readNativePreferences(home).value;
+	const pending: unknown[] = [config.provider, config.providers];
 	while (pending.length) {
 		const value = pending.pop();
 		if (!value || typeof value !== 'object') continue;
@@ -180,10 +214,12 @@ export function hasInlineProviderCredentials(home: string): boolean {
 /** Only native provider references beneath the existing private /stash/secrets mount are portable. */
 export function providerSecretFiles(home: string): string[] {
 	const files = new Set<string>();
-	const config = nativeConfiguration(home);
+	const config = readNativePreferences(home).value;
 	// OpenCode substitutes the serialized config, including keys and model/schema
 	// strings. Only exact, reviewed provider value references may be portable.
-	const outsideProvider: unknown[] = Object.entries(config ?? {}).filter(([key]) => key !== 'provider');
+	const outsideProvider: unknown[] = Object.entries(config).filter(
+		([key]) => key !== 'provider' && key !== 'providers'
+	);
 	while (outsideProvider.length) {
 		const value = outsideProvider.pop();
 		if (typeof value === 'string' && /\{(?:file|env):/.test(value)) {
@@ -191,12 +227,18 @@ export function providerSecretFiles(home: string): string[] {
 		}
 		if (value && typeof value === 'object') outsideProvider.push(...Object.entries(value).flat());
 	}
-	const pending: unknown[] = [config?.provider];
+	const pending: unknown[] = [config.provider, config.providers];
 	while (pending.length) {
 		const value = pending.pop();
 		if (typeof value === 'string' && value.includes('{env:')) {
 			const match = /^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(value);
-			if (!match?.[1] || /^(?:FH_|OPENCODE_|AKM_|CODEX_|CLAUDE_|GUARDIAN_|PORTAL_|DISCORD_|SLACK_|LD_|HOME$|PATH$|NODE_OPTIONS$|BUN_)/.test(match[1])) throw new Error('Provider environment reference is not a portable user setting');
+			if (
+				!match?.[1] ||
+				/^(?:FH_|OPENCODE_|AKM_|CODEX_|CLAUDE_|GUARDIAN_|PORTAL_|DISCORD_|SLACK_|LD_|HOME$|PATH$|NODE_OPTIONS$|BUN_)/.test(
+					match[1]
+				)
+			)
+				throw new Error('Provider environment reference is not a portable user setting');
 		} else if (typeof value === 'string' && value.includes('{file:')) {
 			const match = /^\{file:\/stash\/secrets\/([^{}]+)\}$/.exec(value);
 			if (!match?.[1])

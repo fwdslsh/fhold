@@ -148,12 +148,18 @@ describe('Compose security audit', () => {
 		const home = auditHome();
 		const config = baseConfig(home);
 		expect(auditCompose(config, home)).toEqual([]);
-		const directory = config.services.assistant.volumes.find((mount) => mount.target === '/home/fhold/.config/opencode');
+		const directory = config.services.assistant.volumes.find(
+			(mount) => mount.target === '/home/fhold/.config/opencode'
+		);
 		if (!directory) throw new Error('Missing native directory fixture');
 		directory.read_only = true;
-		expect(auditCompose(config, home).join('\n')).toContain('/home/fhold/.config/opencode must be read-write');
+		expect(auditCompose(config, home).join('\n')).toContain(
+			'/home/fhold/.config/opencode must be read-write'
+		);
 		directory.read_only = false;
-		const managed = config.services.assistant.volumes.find((mount) => mount.target === '/etc/opencode');
+		const managed = config.services.assistant.volumes.find(
+			(mount) => mount.target === '/etc/opencode'
+		);
 		if (!managed) throw new Error('Missing managed plugin fixture');
 		managed.read_only = false;
 		expect(auditCompose(config, home).join('\n')).toContain('/etc/opencode must be read-only');
@@ -179,7 +185,7 @@ describe('Compose security audit', () => {
 		const home = auditHome();
 		const config = baseConfig(home);
 		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://agent.example/global/health',
+			FH_KEEPALIVE_URL: 'https://agent.example/api/info',
 			FH_KEEPALIVE_AUTH: 'opencode'
 		});
 		expect(auditCompose(config, home)).toEqual([]);

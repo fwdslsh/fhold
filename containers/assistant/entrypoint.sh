@@ -259,7 +259,7 @@ write_cron_environment() {
 }
 
 sync_tasks() {
-  if akm task sync --rebind >&2; then
+  if fhold-task sync >&2; then
     date +%s >"$RUNTIME_DIR/tasks-synced"
   else
     rm -f "$RUNTIME_DIR/tasks-synced"
@@ -371,7 +371,18 @@ for tool in codex claude; do
 done
 
 if [ -n "$recovery_pid" ]; then
-  printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
+  # Do not snapshot SQLite while the native server is opening/migrating it.
+  # Ownership renewal is already running; this gates only periodic captures,
+  # not the server or optional workers. Shutdown stops this waiter as well.
+  (
+    until curl --max-time 2 -sf -u "opencode:$OPENCODE_SERVER_PASSWORD" \
+      "http://127.0.0.1:$OPENCODE_PORT/api/info" >/dev/null; do
+      kill -0 "$assistant_pid" 2>/dev/null || exit 0
+      sleep 0.2
+    done
+    printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
+  ) &
+  writer_pids+=("$!")
 fi
 
 # Only the primary server or recovery owner may stop the container. Optional

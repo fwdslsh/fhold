@@ -4,14 +4,15 @@ import {
 	InMemoryTransport,
 	StreamableHTTPClientTransport
 } from '@modelcontextprotocol/client';
-import type { SessionStatus, SnapshotFileDiff, Todo } from '@opencode-ai/sdk/v2';
 
 import type {
 	AssistantClient,
 	AssistantMessage,
 	AssistantPermission,
 	AssistantQuestion,
-	AssistantSession
+	AssistantSession,
+	SessionStatus,
+	SnapshotFileDiff
 } from './assistant-client.js';
 import type { AuthenticatedCredential, CredentialClass } from './credentials.js';
 import { createSessionHandle } from './conversation.js';
@@ -82,10 +83,6 @@ class FakeAssistant implements AssistantClient {
 
 	async sessionStatus(sessionId: string): Promise<SessionStatus> {
 		return this.statuses.get(sessionId) ?? { type: 'idle' };
-	}
-
-	async sessionTodos(): Promise<Todo[]> {
-		return [{ content: 'verify', status: 'completed', priority: 'medium' }];
 	}
 
 	async sessionDiff(): Promise<SnapshotFileDiff[]> {
@@ -176,33 +173,29 @@ class FakeAssistant implements AssistantClient {
 		return this.permissions.get(sessionId) ?? [];
 	}
 
-	async answerQuestion(requestId: string, answers: string[][]): Promise<void> {
-		for (const [sessionId, questions] of this.questions) {
-			if (!questions.some((question) => question.id === requestId)) continue;
+	async answerQuestion(sessionId: string, requestId: string, answers: string[][]): Promise<void> {
+		if (!this.questions.get(sessionId)?.some((question) => question.id === requestId))
+			throw new Error('question not found');
+		this.questions.delete(sessionId);
+		this.complete(sessionId, `selected:${answers.flat().join(',')}`);
+	}
+
+	async rejectQuestion(sessionId: string, requestId: string): Promise<void> {
+		if (this.questions.get(sessionId)?.some((question) => question.id === requestId)) {
 			this.questions.delete(sessionId);
-			this.complete(sessionId, `selected:${answers.flat().join(',')}`);
-			return;
-		}
-		throw new Error('question not found');
-	}
-
-	async rejectQuestion(requestId: string): Promise<void> {
-		for (const [sessionId, questions] of this.questions) {
-			if (questions.some((question) => question.id === requestId)) {
-				this.questions.delete(sessionId);
-				this.complete(sessionId, 'question rejected');
-			}
+			this.complete(sessionId, 'question rejected');
 		}
 	}
 
-	async answerPermission(requestId: string, decision: 'once' | 'always' | 'reject'): Promise<void> {
-		for (const [sessionId, permissions] of this.permissions) {
-			if (!permissions.some((permission) => permission.id === requestId)) continue;
-			this.permissions.delete(sessionId);
-			this.complete(sessionId, `permission:${decision}`);
-			return;
-		}
-		throw new Error('permission not found');
+	async answerPermission(
+		sessionId: string,
+		requestId: string,
+		decision: 'once' | 'always' | 'reject'
+	): Promise<void> {
+		if (!this.permissions.get(sessionId)?.some((permission) => permission.id === requestId))
+			throw new Error('permission not found');
+		this.permissions.delete(sessionId);
+		this.complete(sessionId, `permission:${decision}`);
 	}
 
 	async findText(): Promise<Array<{ path: string; line: number; text: string }>> {
@@ -214,12 +207,6 @@ class FakeAssistant implements AssistantClient {
 
 	async findFiles(): Promise<string[]> {
 		return ['src/index.ts', '.env'];
-	}
-
-	async findSymbols(): Promise<
-		Array<{ name: string; kind: number; uri: string; line: number; character: number }>
-	> {
-		return [{ name: 'value', kind: 13, uri: 'file:///work/src/index.ts', line: 3, character: 13 }];
 	}
 }
 
@@ -380,7 +367,7 @@ describe('full fhold MCP gateway', () => {
 			);
 			expect((await client.listPrompts()).prompts).toHaveLength(4);
 			expect((await client.listResourceTemplates()).resourceTemplates.length).toBe(
-				policy === 'chat' ? 4 : 5
+				policy === 'chat' ? 3 : 4
 			);
 			await client.close();
 			await server.close();
@@ -444,7 +431,6 @@ describe('full fhold MCP gateway', () => {
 				'fhold-job',
 				'fhold-session-diff',
 				'fhold-session-messages',
-				'fhold-session-todos',
 				'fhold-workspace-file'
 			]);
 			expect(templates.every((template) => template.uriTemplate.startsWith('fhold://'))).toBe(true);
@@ -516,12 +502,11 @@ describe('full fhold MCP gateway', () => {
 		expect(body(listed).sessions).toHaveLength(1);
 		const inspected = await client.callTool({
 			name: 'fhold.session.get',
-			arguments: { session: firstBody.session, include: ['messages', 'diff', 'todos'] }
+			arguments: { session: firstBody.session, include: ['messages', 'diff'] }
 		});
 		expect(body(inspected)).toMatchObject({
 			status: 'idle',
-			diff: [{ file: 'src/index.ts', additions: 2, deletions: 1, status: 'modified' }],
-			todos: [{ content: 'verify', status: 'completed', priority: 'medium' }]
+			diff: [{ file: 'src/index.ts', additions: 2, deletions: 1, status: 'modified' }]
 		});
 		expect(Array.isArray(body(inspected).messages)).toBe(true);
 

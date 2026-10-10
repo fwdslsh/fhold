@@ -202,7 +202,7 @@ export function keepaliveConfig(env) {
 			(env.OPENCODE_SERVER_PASSWORD_FILE &&
 				readFileSync(env.OPENCODE_SERVER_PASSWORD_FILE, 'utf8').replace(/[\r\n]/g, ''));
 		if (!password) throw Error('OpenCode keep-alive authentication requires its native password');
-		authorization = `Basic ${Buffer.from(`${env.OPENCODE_SERVER_USERNAME || 'user'}:${password}`).toString('base64')}`;
+		authorization = `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`;
 	}
 	return {
 		enabled: true,

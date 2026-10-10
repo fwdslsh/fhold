@@ -107,7 +107,9 @@ verify_workspace_runtime_boundary() {
 
 verify_builtin_skills() {
 	docker exec "$container" sh -c 'test "$(id -un)" = fhold && test "$HOME" = /home/fhold && test ! -w /fhold-bundle && test ! -w /fhold-bundle/skills/fhold-admin/SKILL.md'
-	docker exec "$container" akm show fhold//fhold-admin >/dev/null
+	if [ "${1:-with-catalog}" = with-catalog ]; then
+		docker exec "$container" akm show fhold//fhold-admin >/dev/null
+	fi
 	docker exec "$container" node --input-type=module -e '
 		import {writeFileSync, chmodSync} from "node:fs";
 		for (const action of [() => writeFileSync("/fhold-bundle/forbidden", "fixture"), () => chmodSync("/fhold-bundle", 0o777), () => writeFileSync("/fhold-bundle/skills/fhold-admin/SKILL.md", "fixture")]) {
@@ -117,12 +119,18 @@ verify_builtin_skills() {
 		}'
 	# Native discovery must see the same release-owned bytes that were baked,
 	# including when the installed stack mounts its managed configuration.
-	docker exec "$container" opencode debug skill | docker exec -i "$container" bun -e '
-		const skills = await Bun.stdin.json();
+	docker exec "$container" bun -e '
+		const headers = {authorization: "Basic " + Buffer.from("opencode:assistant-smoke-password-0000000000000000").toString("base64")};
+		let skills = [];
+		for (let attempt = 0; attempt < 50; attempt++) {
+			({data: skills} = await (await fetch("http://127.0.0.1:4096/api/skill?location[directory]=/work", {headers})).json());
+			if (["claude-code-login", "codex-remote-setup", "fhold-admin"].every(name => skills.some(skill => skill.name === name))) break;
+			await Bun.sleep(100);
+		}
 		for (const name of ["claude-code-login", "codex-remote-setup", "fhold-admin"]) {
 			const skill = skills.find(item => item.name === name);
 			const target = `/etc/opencode/skills/${name}/SKILL.md`;
-			if (skill?.location !== target) throw Error(`Native ${name} skill is not discoverable`);
+			if (skill?.path !== target) throw Error(`Native ${name} skill is not discoverable: ${JSON.stringify(skills.map(({name,path}) => ({name,path})))}`);
 			const baked = `/assistant-defaults/system/assistant/skills/${name}/SKILL.md`;
 			if (await Bun.file(target).text() !== await Bun.file(baked).text()) throw Error(`Mounted and baked ${name} skills differ`);
 			console.log(`OpenCode discovered the image-baked ${name} skill`);
@@ -153,18 +161,19 @@ verify_optional_failure_isolation() {
 		const diagnostics = JSON.parse(status.stdout);
 		assert.equal(diagnostics.agentReady, true);
 		assert.ok(diagnostics.warnings.some(warning => warning.includes("Scheduled tasks")));
-		const authorization = "Basic " + Buffer.from("user:assistant-smoke-password-0000000000000000").toString("base64");
+		const authorization = "Basic " + Buffer.from("opencode:assistant-smoke-password-0000000000000000").toString("base64");
 		async function api(path, body) {
-			const response = await fetch("http://127.0.0.1:4096" + path + "?directory=%2Fwork", {
-				method:"POST", headers:{authorization,"content-type":"application/json"},
+			const response = await fetch("http://127.0.0.1:4096/api" + path, {
+				method:body ? "POST" : "GET", headers:{authorization,"content-type":"application/json"},
 				body:JSON.stringify(body), signal:AbortSignal.timeout(30000)
 			});
 			assert.ok(response.ok, `Native API failed: ${response.status}`);
-			return response.json();
+			return response.status === 204 ? undefined : (await response.json()).data;
 		}
-		const session = await api("/session", {title:"Optional-service degradation qualification"});
-		const message = await api(`/session/${session.id}/shell`, {agent:"build", command:"printf fhold-core-remains-usable"});
-		assert.ok(message.parts.some(part => part.type === "tool" && part.state?.output?.includes("fhold-core-remains-usable")), "Native tool must remain usable");
+		const session = await api("/session", {title:"Optional-service degradation qualification", location:{directory:"/work"}});
+		await api(`/session/${session.id}/shell`, {command:"printf fhold-core-remains-usable"});
+		const messages = await api(`/session/${session.id}/message`);
+		assert.ok(messages.some(message => message.type === "shell" && JSON.stringify(message.output).includes("fhold-core-remains-usable")), "Native tool must remain usable");
 		console.log("Optional scheduler/reconciliation failures: native sessions/tools stay usable and report warnings");'
 
 	# Ordinary standalone configuration errors degrade only the affected features.
@@ -225,7 +234,7 @@ assistant)
 		-v "$root/data:/home/fhold" \
 		-v "$root/system:/etc/opencode:ro" \
 		-v "$root/opencode-policy.json:/etc/opencode/opencode.json:ro" \
-		-v "$root/config:/home/fhold/.config/opencode:ro" \
+		-v "$root/config:/home/fhold/.config/opencode" \
 		-v "$root/akm.json:/etc/akm/config.json:ro" \
 		-v "$root/knowledge:/stash" \
 		-v "$root/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json" \
@@ -236,9 +245,9 @@ assistant)
 	verify_runtime_versions
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
-	docker exec "$container" curl -sf -u 'user:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/config >/dev/null
+	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null
 	docker exec "$container" sh -c \
-		'command -v akm >/dev/null && command -v opencode >/dev/null && command -v supercronic >/dev/null && codex --version && claude --version && test -x /usr/local/bin/fhold-remote && test -x /usr/local/bin/fhold-remote-setup && test -x /usr/local/bin/fhold-task && test -r /opt/fhold/tools/node_modules/akm-opencode/dist/index.js'
+		'command -v akm >/dev/null && command -v opencode >/dev/null && command -v supercronic >/dev/null && codex --version && claude --version && test -x /usr/local/bin/fhold-remote && test -x /usr/local/bin/fhold-remote-setup && test -x /usr/local/bin/fhold-task && test -r /opt/fhold/tools/node_modules/akm-opencode-v2/dist/index.js'
 	docker exec "$container" bun -e \
 		'const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); if (typeof Bun.Terminal !== "function" || setupCommands("codex", "read-only")[0][0] !== "sandbox") throw Error("Guided native setup is unavailable");'
 	docker exec "$container" bun -e \
@@ -246,10 +255,10 @@ assistant)
 	docker exec "$container" claude plugin validate /akm-marketplace/claude --strict
 	docker exec "$container" claude plugin validate /fhold-plugins/fhold --strict
 	docker exec "$container" claude plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.claude-plugin/plugin.json").json()).version; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Claude built-in plugin versions not loaded");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.claude-plugin/plugin.json").json()).version; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Claude built-in plugin versions not loaded");'
 	docker exec "$container" claude plugin details akm
 	docker exec "$container" codex plugin list --json | docker exec -i "$container" bun -e \
-		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
+		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
 	# An image upgrade refreshes only untouched native installer output. A native
@@ -314,15 +323,13 @@ CONFIG
 	docker restart "$container" >/dev/null
 	wait_for_health
 	test "$(sha256sum "$root/akm.json")" = "$before"
-	docker exec "$container" curl -sf -u 'user:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/config >/dev/null
-	docker exec "$container" opencode debug skill | docker exec -i "$container" bun -e \
-		'const skills = await Bun.stdin.json(); if (!skills.some(skill => skill.name === "fhold-admin")) throw Error("Native built-ins require the optional AKM catalog source");'
+	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null
+	verify_builtin_skills without-catalog
 	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
 	verify_optional_failure_isolation
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"
-	cp -R packages/skeleton/system/guardian "$root/system"
 	cp -R packages/skeleton/config/guardian/. "$root/config/"
 	printf '%s\n' 'guardian-smoke-password-0000000000000000' >"$root/password"
 	printf '%s\n' 'guardian-smoke-handle-key-000000000000000' >"$root/handle"
@@ -337,9 +344,7 @@ guardian)
 		-e GUARDIAN_OAUTH_CONFIG_FILE=/home/fhold/.config/opencode/oauth.json \
 		-e GUARDIAN_OAUTH_IDENTITIES_FILE=/home/fhold/.config/opencode/oauth-identities.json \
 		-v "$root/credentials:/run/fhold-credentials:ro" \
-		-v "$root/system:/opt/fhold/moderator-config:ro" \
 		-v "$root/config:/home/fhold/.config/opencode:ro" \
-		-v "$root/auth/auth.json:/home/fhold/.local/share/opencode/auth.json:ro" \
 		-v "$root/logs:/opt/fhold/logs" \
 		-v "$root/workspace:/work:ro" \
 		-v "$root/password:/run/fhold/password:ro" \

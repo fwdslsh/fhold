@@ -57,7 +57,7 @@ privileged policy.
 |---|:---:|:---:|:---:|
 | Guarded agent run and job polling/cancel | yes | yes | yes |
 | Owned session list/get | yes | yes | yes |
-| Session messages/diff/todos resources | yes | yes | yes |
+| Session messages/diff resources | yes | yes | yes |
 | Question response and permission rejection | yes | yes | yes |
 | Bounded workspace search/read | no | yes | yes |
 | Session fork/delete | no | no | yes |
@@ -122,7 +122,7 @@ The tool creates or resumes an owned session, screens the message, starts the
 policy-selected agent asynchronously, and waits for at most `waitMs`. It
 returns opaque `session` and `job` handles plus one of:
 
-- `completed` — includes `text` and may include changed files, todos, and usage;
+- `completed` — includes `text` and may include changed files and usage;
 - `running` — may include partial `text` and `tools`; poll with `fhold.job.get`;
 - `input_required` — includes opaque question or permission interactions; or
 - `failed` — includes a bounded public error.
@@ -150,7 +150,7 @@ does not finish the job while the agent is still working.
 - `fhold.session.list({ limit? })` lists only sessions cryptographically
   owned by the authenticated named credential.
 - `fhold.session.get({ session, include? })` returns status and summary
-  metadata. `include` may contain `messages`, `diff`, and/or `todos`, making
+  metadata. `include` may contain `messages` and/or `diff`, making
   those views available to tools-only clients.
 - `fhold.session.fork({ session, message? })` is `full`-only and creates a
   newly owned session. The optional value is an opaque message handle from the
@@ -166,7 +166,7 @@ OpenCode session IDs and Guardian ownership proofs are never returned.
 for `read` and `full` credentials.
 
 ```json
-{ "mode": "files | text | symbols", "query": "required", "limit": 50 }
+{ "mode": "files | text", "query": "required", "limit": 50 }
 ```
 
 ```json
@@ -210,10 +210,13 @@ Resources are additive conveniences. Tools-only clients use
 `fhold.session.get` with `include` for the same session views and
 `fhold.job.get` for job state.
 
+OpenCode v2 removed native TODO lists and symbol search. fhold no longer
+advertises those capabilities; file/text search, messages, changes and tool
+progress remain available.
+
 - `fhold://workspace/{path}` (`read`/`full` only)
 - `fhold://sessions/{session}/messages`
 - `fhold://sessions/{session}/diff`
-- `fhold://sessions/{session}/todos`
 - `fhold://jobs/{job}`
 
 The URI variables are opaque Guardian handles where applicable. Reads repeat
@@ -255,7 +258,7 @@ older handle cannot cancel a later run in the same session.
 - Browser requests require an exact configured HTTP(S) Origin. Wildcards and
   path-bearing origin entries are invalid.
 - Prompts and human-input answers pass the heuristic screen. Suspicious text
-  is classified by the separate loopback moderator.
+  is classified using OpenCode's native tool-free generation API. No agent session or second server is created.
 - `flag`, `block`, moderator failure/timeout, or malformed classifier output
   fails closed.
 - Raw shell/file-write endpoints, provider/auth/config management, session

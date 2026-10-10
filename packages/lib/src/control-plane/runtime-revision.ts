@@ -15,7 +15,10 @@ export function runtimeRevision(homeDir: string): string {
 	if (!read.ok) throw new Error(read.error);
 	const { credentials: _credentials, ...intent } = read.config;
 	assertSafePortablePath(homeDir, 'system/stack/stack.compose.yml', true);
-	const managedRecovery = readFileSync(join(homeDir, 'system/stack/stack.compose.yml'), 'utf8').includes('/run/fhold-recovery/include.json');
+	const managedRecovery = readFileSync(
+		join(homeDir, 'system/stack/stack.compose.yml'),
+		'utf8'
+	).includes('/run/fhold-recovery/include.json');
 	// Read-only management of an earlier off instance must not fabricate pending
 	// changes from newly introduced defaults or an absent optional seed file.
 	const { recovery, ...previousIntent } = intent;
@@ -33,8 +36,7 @@ export function runtimeRevision(homeDir: string): string {
 		(path) =>
 			!path.endsWith('/.gitignore') &&
 			(managedRecovery || !path.startsWith('config/recovery/')) &&
-			(read.config.gateway.enabled ||
-				(!path.startsWith('config/guardian/') && !path.startsWith('system/guardian/'))) &&
+			(read.config.gateway.enabled || !path.startsWith('config/guardian/')) &&
 			// These authorization maps are read on each request, without a restart.
 			!path.startsWith('config/portal/') &&
 			path !== 'config/assistant/opencode.json' &&
@@ -42,7 +44,12 @@ export function runtimeRevision(homeDir: string): string {
 			path !== 'config/guardian/oauth-identities.json'
 	);
 	files.push('state/secrets/fhold_opencode_password', 'state/secrets/fhold_guardian_handle_key');
-	if (read.config.recovery.enabled && read.config.recovery.destination.startsWith('azblob:') && read.config.recovery.authentication === 'connection-string') files.push('state/secrets/fhold_recovery_connection_string');
+	if (
+		read.config.recovery.enabled &&
+		read.config.recovery.destination.startsWith('azblob:') &&
+		read.config.recovery.authentication === 'connection-string'
+	)
+		files.push('state/secrets/fhold_recovery_connection_string');
 	if (read.config.portals.discord.enabled) files.push('state/secrets/discord_bot_token');
 	if (read.config.portals.slack.enabled)
 		files.push('state/secrets/slack_bot_token', 'state/secrets/slack_app_token');

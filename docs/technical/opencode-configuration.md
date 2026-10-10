@@ -1,176 +1,146 @@
 # OpenCode configuration
 
-fhold uses OpenCode directly; it does not maintain a parallel agent/session abstraction.
+fhold uses OpenCode v2 directly. It does not maintain a parallel provider,
+credential, session or plugin service.
 
-## Assistant configuration layers
+## Configuration and ownership
 
 | Layer | Host path | Purpose |
 |---|---|---|
-| managed directory | `system/assistant` | release-owned server settings, global instructions, Guardian/scheduled profiles and native AKM/fhold plugins |
-| operator policy | `config/opencode/opencode.json` | native managed settings and permissions, overriding ordinary user settings |
-| user config | `config/assistant/` | operator model/provider preferences, persona, and user profile |
-| provider auth | `knowledge/secrets/auth.json` | OpenCode credential store |
-| workspace | `workspace` | trusted local worktree |
+| Managed directory | `system/assistant` | Release-owned instructions, restricted agents and native AKM/fhold plugins; read-only in Assistant |
+| Operator policy | `config/opencode/opencode.json` | Native permission defaults and enforced resource policies; separate read-only mount |
+| User configuration | `config/assistant/` | Writable native preferences, persona and user plugins |
+| Native database | `data/assistant/.local/share/opencode/opencode.db` | OpenCode sessions and provider credentials |
+| Workspace | `workspace/` | Trusted local working files |
 
-`OPENCODE_CONFIG_DIR=/etc/opencode` points at the managed directory. Both loaded
-config directories contain a pre-seeded `.gitignore` and are mounted read-only,
-so OpenCode does not bootstrap package metadata or fetch its plugin SDK at
-startup. OpenCode discovers the image-baked local plugins at `plugins/akm.js`
-and `plugins/fhold.js`. The operator policy is a separate read-only file mount
-inside `/etc/opencode`; updates preserve host edits. See
-[managed harness configuration](../managed-harness-configuration.md) for its
-precedence, edit/restart workflow and custom deployment mounts.
+`OPENCODE_CONFIG_DIR=/etc/opencode` selects the managed directory.
+`OPENCODE_CONFIG` selects the user preferences file: `opencode.jsonc` when
+present, otherwise `opencode.json`, otherwise the existing `config.json`.
+Fresh installs seed `opencode.json`. The directory is writable so ordinary
+atomic editor saves work. Managed files and operator policy remain read-only.
+Updates preserve operator edits; see
+[managed harness configuration](../managed-harness-configuration.md).
 
-The user directory has one nested writable file: OpenCode's preferred global
-preferences (`opencode.jsonc` when present, otherwise `opencode.json`, otherwise
-`config.json`; fresh installs seed `opencode.json`). The control plane derives
-the filename, not a second configuration store or user option. Trusted native
-clients may edit its native fields. Persona/plugin files and all managed policy
-remain read-only. Standalone deployments with a writable native home already
-support the same API; no special fhold process wrapper is required.
+Project and Claude compatibility configuration discovery remain disabled in
+the hosted process. Explicitly configured native user plugins are trusted code.
+Image-baked wrappers load pinned `akm-opencode-v2` and fhold integrations from
+`/opt/fhold/tools/node_modules`; nothing is installed at startup.
 
-Project configuration, Claude compatibility discovery, external skill
-discovery, and OpenCode's embedded browser UI are disabled in the hosted
-process. This prevents a checked-out workspace from introducing startup code or
-silently widening the managed agent surface. Workspace files remain available
-to a trusted local session through normal tools.
+## AI services and live settings
 
-The plugin wrapper imports the exact package baked at:
+OpenCode v2 does not offer the old arbitrary global-config PATCH.
+Admin makes narrow, atomic JSONC-preserving edits to the selected native user
+file, then checks the effective native API result. OpenCode's built-in watcher
+applies provider/model, agent, command, permission and user-plugin changes.
+No reload endpoint, custom watcher or process restart is used. If activation
+cannot be confirmed, Admin reports saved-but-unconfirmed; it does not overwrite
+the file with an old snapshot.
 
-```text
-/opt/fhold/tools/node_modules/akm-opencode/dist/index.js
-```
+Native v2 configuration uses `providers`, `settings.baseURL` and
+`model: { "providerID": "...", "model": "..." }`. OpenCode still reads supported
+v1 configuration through its own converter; new fhold edits use native fields.
+**Use this model** changes the default only when explicitly selected.
+**Test response** waits for model activation and makes one tool-free native
+generation request. It neither creates a session nor changes the default.
+A failed billed request is not retried.
 
-## Local and custom AI servers
+**Disable endpoint** retains its definition and sign-in, using native
+`provider.use` resource policy. Saving an endpoint re-enables that ID only.
+**Remove sign-in** deletes credentials for that provider's native integration,
+not unrelated accounts or MCP OAuth tokens. A saved credential is not proof
+that the account works; only the explicit response test verifies inference.
 
-Admin's **Add AI service** presets send narrow `PATCH /global/config` requests
-to OpenCode's authenticated native API. OpenCode persists preferences and
-invalidates/reloads its own configuration; it preserves unrelated settings and
-JSONC comments. Admin never rewrites a native file or invents a reload command.
-The compatible SDK is
-bundled in the pinned OpenCode release; no SDK package or startup install is added.
-API keys use OpenCode's `/auth` API and its existing private credential store.
+Sign-in uses native integration/authentication/credential APIs. v2 owns active
+credentials in its SQLite database. The old `knowledge/secrets/auth.json` mount
+is retained solely for upstream's one-time v1 database migration.
+Portable provider exports use native credential APIs and exclude MCP credentials.
 
-The form stores the server's name, `options.baseURL` and chosen `models` entry.
-**Use this model** patches native `model: "provider/model"`. After native reload,
-Admin checks the effective `/config` result rather than assuming the write won.
-The higher-priority `config/opencode/opencode.json` remains operator policy;
-conflicting managed provider/model settings must be edited there, not bypassed.
-Neither endpoint saving nor default selection restarts the OpenCode process or
-container. Reloading native configuration can interrupt active OpenCode work.
-An unconfirmed effective result is reported honestly as saved but unconfirmed,
-not restored by overwriting the file with an old client-side copy.
+Changing container environment, mounts, ports, the selected preferences filename,
+read-only operator policy or image-baked tools requires normal managed activation.
+Editing the already-selected user file, local plugin source or plugin options
+does not. Hot updates cannot undo a tool that is already running.
 
-**Disable endpoint** patches native `disabled_providers`, retaining the endpoint
-definition and its separate sign-in. OpenCode's merge API does not delete provider
-definitions. Editing/saving a disabled endpoint explicitly re-enables only that
-ID; other disabled services stay disabled. **Remove sign-in** instead uses native
-`DELETE /auth/<provider>` without deleting endpoint settings or revoking the vendor
-account. Higher-priority operator configuration is never silently bypassed.
+### Local and custom servers
 
-Host edits that replace the preferences file's inode, or add a higher-priority
-filename, require `fhold restart` to recreate the narrow file bind. Admin's API
-writes do not require a pending-restart alert. Edit managed policy files on the
-host and restart normally; do not edit generated `state/stack.env`.
+**Load models** makes a bounded `GET <baseURL>/models` from Assistant's network.
+Any supplied key travels on stdin, not Docker arguments. The helper installs
+nothing and never prints credentials. If listing is unsupported, enter the exact
+model ID. Catalog visibility is not proof of inference or tool capability.
 
-**Load models** uses a bounded, one-shot `GET <baseURL>/models` from inside the
-running Assistant through ordinary Compose exec and Node's built-in fetch.
-An optional key travels on stdin, not Docker command arguments. The discovery
-helper installs nothing, starts no daemon and never prints raw responses or keys.
-If the server does not support listing models, use its exact documented model ID.
-The explicit readiness request subsequently goes through native OpenCode, using
-the chosen model; a model listing is not proof of inference or tool-call support.
-
-Common OpenAI-compatible base URL paths end in `/v1`. Use the address actually
-served by Ollama, LM Studio, llama-server or your custom service. A server on
-the host's loopback interface is not automatically reachable from a Linux bridge
-container. Use a deliberately configured private interface/network, or the host
-gateway address if the server listens on it. Keep firewall and authentication
-appropriate; do not expose a previously loopback-only server publicly to make
-setup pass. A `localhost` address targets Assistant itself. fhold does not change
-the model server's listener, launch it or fetch models.
+OpenAI-compatible URLs usually end in `/v1`. Use the address served by Ollama,
+LM Studio, llama-server or the custom service. Inside Assistant, `localhost`
+means Assistant, not the host. Configure a deliberate private interface/network
+or host gateway with appropriate authentication/firewall rules. fhold does not
+expose a previously private server, start it or download its models.
 
 ## Trusted native sessions
 
-A client connecting to the configured Assistant endpoint uses the native
-OpenCode server and normal Assistant configuration. OpenCode Basic
-authentication is always enabled through the file-backed server password. The
-bind defaults to `127.0.0.1:3810`; fresh setup selects a free port if defaults
-are occupied. `fhold connect opencode` reports the saved address. StackConfig
-may explicitly select another host address and port.
+The authenticated native API uses username `opencode` and the file-backed
+server password. The default bind is `127.0.0.1:3810`; fresh setup chooses a
+free port when occupied. `fhold connect opencode` reports the saved address.
+Other addresses require explicit operator choice.
 
-The [OpenCode TUI](https://opencode.ai/docs/cli/) can connect with
-`opencode attach <url>` and the `--username` and `--password` options or
-corresponding environment variables. Direct native sessions do not pass
-through Guardian moderation.
+The OpenCode client connects using `--server <url>`; use the native
+`OPENCODE_PASSWORD` setting for authentication. The browser interface remains
+available at the configured address. Native access bypasses Guardian and is
+trusted full agent access, subject to native operator policy.
 
-## Remote sessions
+## Guardian and remote policies
 
-Guardian selects one fixed agent name from the authenticated credential's
-configured policy on every message:
+Guardian chooses the native agent from the authenticated credential's policy:
 
-- `chat` -> `remote`, with `"*": deny`;
-- `read` -> `remote-read`, with wildcard denial followed by explicit read,
-  glob, list, `/stash`, and `/work` allowances, plus explicit denials for
-  managed knowledge secrets, knowledge environment files, and `.env` reads; and
-- `full` -> `remote-full`, with no profile permission override, so the global
-  Assistant permission configuration remains authoritative.
+- `chat`: `remote`, deny all tools.
+- `read`: `remote-read`, deny all except explicit non-secret reads.
+- `full`: `remote-full`, inherit native permissions.
 
-All profiles treat input and retrieved content as untrusted and forbid secret
-or unrelated-data disclosure. Wildcard denial in `chat` and `read` means a
-newly installed tool is denied without needing an fhold update.
+For chat/read, Guardian reapplies the credential ceiling as native session
+permissions on every turn, including sessions converted from v1. Remote prompts
+cannot select another policy. Workspace reads also pass through Guardian's own
+read-only filesystem boundary. Native resource policies can deny operations even
+for full access; ordinary global permission defaults are not a managed ceiling.
 
-## Guardian moderator
+Suspicious prompts and interaction answers use OpenCode's native tool-free
+generation endpoint. Guardian supplies its classification prompt and the model
+selected in `config/guardian/opencode.json`. Upstream binds generation to global
+configuration, with no agent tools, session, second server or copied provider
+credentials. Unavailable, malformed or ambiguous moderation still blocks the
+suspicious request.
 
-Guardian starts a separate OpenCode server on container loopback port 4097. It uses:
+V2 no longer has native symbol search or TODO lists. Those MCP capabilities are
+removed, not emulated. File/text search, transcripts, tool progress, changes,
+forms and permission decisions remain available.
 
-- managed config from `system/guardian`;
-- operator model selection from `config/guardian/opencode.json`; and
-- the same provider `auth.json` through a read-only file mount.
+## Scheduled work
 
-The moderator managed configuration denies every tool. It creates an ephemeral session per escalated input and deletes it after classification. Moderator unavailability blocks the suspicious message.
+Supercronic and AKM run inside Assistant. Operator task definitions live in
+`knowledge/tasks/*.yml`; host-local `scheduler.enabled` controls activation.
+The scheduled engine in `config/akm/config.json` runs
+`opencode run --server http://127.0.0.1:4096 --agent scheduled` through the
+existing password-loading helper. Provider credentials stay in OpenCode.
 
-The moderator uses the same read-only, pre-seeded config-directory contract as
-Assistant. Its process performs no package installation at boot.
+`fhold-task sync` delegates to `akm task sync --rebind` at startup and every
+60 seconds. On upgrade, it changes only the exact formerly shipped engine's
+`--attach` argument to native v2 `--server`. Custom engine definitions remain
+operator-owned and need review. Task sources and activation are preserved.
 
-## Scheduler
+The restricted scheduled agent may read non-secret knowledge/workspace files,
+fetch public content and write under `/stash/inbox/`; it cannot execute shell
+commands or modify the workspace. Results persist in AKM task history.
+Invalid tasks, sync failures or optional scheduler failure report degraded state
+without stopping the native agent. Downtime does not replay missed cron slots.
+The timezone defaults to the detected host timezone.
 
-Supercronic runs inside Assistant. AKM task source files live in
-`knowledge/tasks/*.yml`. `config/akm/config.json` defines a `scheduled` engine
-that attaches to the already-running authenticated OpenCode server and selects
-the restricted `scheduled` profile. Its image-baked command wrapper loads only
-the local native API password, which AKM's agent environment allowlist would
-otherwise strip. Provider credentials are used by OpenCode, not copied into
-AKM configuration. At startup and every 60 seconds:
+Use `fhold-task` or ordinary assistant requests to create, pause, resume and
+remove work. Removed definitions are preserved under `knowledge/disabled-tasks/`.
+Portable restore stages task sources inactive for review; full-instance and
+same-instance runtime recovery preserve the configured activation choices.
 
-```bash
-akm task sync --rebind
-```
+## Other credentials
 
-Invalid tasks are reported without preventing OpenCode from starting. fhold
-seeds no default tasks in a fresh installation. Own-backup restore stages
-allowlisted task definitions as disabled until the user reviews their
-schedule, policy, tools, secrets, and result destination.
+The entrypoint never sources `knowledge/env/user.env` into its process. Commands
+needing those secrets use explicit AKM scoped execution. Native provider accounts
+are not stored in Compose environment variables.
 
-AKM activates schedules in host-local `scheduler.enabled` configuration,
-not an `enabled` YAML field. `fhold-task pause`/`resume` use native
-`akm task disable`/`enable`; importing a source never authorizes scheduling.
-The AKM configuration directory is writable to permit those atomic registry
-updates, contains no delegated ingress credentials, and remains operator-owned.
-The first sync failure marks Assistant unhealthy until successful
-reconciliation, while its native API stays available to repair the definition.
-If the scheduler, reconciliation process, or OpenCode exits, the supervisor
-stops the service so Compose restarts the complete runtime together.
-
-`assistant.timezone` in stack intent supplies `TZ` for supercronic and defaults
-to the detected host timezone. Downtime does not replay missed cron slots.
-
-The image-baked `fhold-task` helper is the single mutation boundary for both
-Assistant-created and host-CLI task operations. It prepends hostile-content
-guidance, validates task IDs and AKM sources, reconciles the scheduler, and
-preserves removed definitions under `knowledge/disabled-tasks/`. Editing task
-files is an advanced interface, not the primary product experience.
-
-## Credentials
-
-The Assistant entrypoint never sources `knowledge/env/user.env` into its own process. User commands that need those values should explicitly use AKM's scoped environment execution. Provider credentials use OpenCode's `auth.json` rather than Compose environment variables.
+Guardian keys are private files under `state/credentials/<username>/key`.
+Each portal receives only its generated keyring for configured identities.
+Bot tokens and the native API password use private file-backed secrets.

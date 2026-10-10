@@ -108,7 +108,6 @@ const REQUIRED_DIRS = [
 	'state/portal-credentials/slack',
 	'state/secrets',
 	'system/assistant',
-	'system/guardian',
 	'system/stack',
 	'workspace'
 ] as const;

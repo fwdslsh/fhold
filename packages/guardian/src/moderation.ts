@@ -21,7 +21,6 @@ function boundedInt(value: string | undefined, fallback: number, maximum: number
 	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
 }
 
-
 export function parseModerationVerdict(
 	text: string
 ): { verdict: 'allow' | 'flag' | 'block'; reason: string } | null {
@@ -60,8 +59,10 @@ async function moderatorCall(message: string, signals: ContentSignal[]): Promise
 	if (errors.length) throw new Error('Moderator configuration is invalid');
 	const selection = typeof config?.model === 'string' ? config.model : '';
 	const separator = selection.indexOf('/');
-	if (separator < 1 || separator === selection.length - 1) throw new Error('Choose a moderator provider/model');
+	if (separator < 1 || separator === selection.length - 1)
+		throw new Error('Choose a moderator provider/model');
 	// The native generation API cannot execute tools or create an agent session.
+	// Upstream binds generation to global configuration, not workspace settings.
 	// Credentials and OAuth refresh remain in the one native OpenCode store.
 	const response = await createNativeClient({ timeoutMs: timeout }).generate.text({
 		prompt: moderationPrompt(message, signals),

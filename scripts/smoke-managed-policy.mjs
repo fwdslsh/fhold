@@ -62,51 +62,62 @@ if (process.argv[2] === '--inside') {
 	assert.ok(readFileSync('/tmp/operator-codex-hook', 'utf8').includes('operator-hook'));
 	console.log('Codex: supplied approval policy and managed hooks loaded');
 
-	const opencode = JSON.parse(
-		run('opencode', ['debug', 'config'], {
-			env: {
-				...process.env,
-				OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: { bash: 'allow', edit: 'allow' } })
-			}
-		})
+	const { OpenCode } = await import(
+		'/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js'
 	);
-	assert.equal(
-		opencode.permission.bash,
-		'deny',
-		'Managed OpenCode policy overrides inline task permissions'
-	);
-	assert.equal(opencode.permission.edit, 'deny');
-	for (const name of ['remote', 'remote-read', 'scheduled']) {
-		const agent = JSON.parse(run('opencode', ['debug', 'agent', name]));
-		assert.equal(agent.tools.bash, false, `${name}: shell restrictions must remain`);
-		assert.equal(agent.tools.task, false, `${name}: delegation restrictions must remain`);
-		if (name === 'remote') {
-			assert.equal(agent.tools.read, false);
-			assert.equal(agent.tools.edit, false);
-		} else {
-			assert.equal(agent.tools.read, true, `${name}: ordinary reads must remain usable`);
-			assert.ok(
-				agent.permission.some(
-					(rule) =>
-						rule.permission === 'read' &&
-						rule.pattern === '/stash/secrets/*' &&
-						rule.action === 'deny'
-				)
+	const client = OpenCode.make({
+		baseUrl: 'http://127.0.0.1:4096',
+		headers: {
+			authorization:
+				'Basic ' + Buffer.from('opencode:synthetic-policy-smoke-only').toString('base64')
+		}
+	});
+	const agentDeadline = Date.now() + 10000;
+	while (
+		!(await client.agent.list({ location: { directory: '/work' } })).data.some(
+			(agent) => agent.id === 'scheduled'
+		)
+	) {
+		assert.ok(Date.now() < agentDeadline, 'Native restricted agent inventory did not activate');
+		await Bun.sleep(100);
+	}
+	for (const agent of ['build', 'remote', 'remote-read', 'scheduled']) {
+		const session = await client.session.create({ agent, location: { directory: '/work' } });
+		const check = async (action, resource, expected) => {
+			const result = await client.permission.create(
+				{ sessionID: session.id, action, resources: [resource], agent },
+				{ signal: AbortSignal.timeout(5000) }
 			);
-			if (name === 'remote-read') assert.equal(agent.tools.edit, false);
-			else
-				assert.ok(
-					agent.permission.some(
-						(rule) =>
-							rule.permission === 'edit' &&
-							rule.pattern === '/stash/inbox/*' &&
-							rule.action === 'allow'
+			assert.equal(
+				result.effect,
+				expected,
+				agent +
+					': ' +
+					action +
+					' ' +
+					resource +
+					' ' +
+					JSON.stringify(
+						(await client.agent.get({ agentID: agent, location: { directory: '/work' } })).data
+							.permissions
 					)
-				);
+			);
+		};
+		try {
+			await check('shell', 'echo fixture', 'deny');
+			await check('edit', '/work/fixture.txt', 'deny');
+			if (agent !== 'build') {
+				await check('subagent', 'general', 'deny');
+				await check('read', '/work/readme.txt', agent === 'remote' ? 'deny' : 'allow');
+				await check('read', '/stash/secrets/private.key', 'deny');
+			}
+		} finally {
+			await client.session.remove({ sessionID: session.id });
 		}
 	}
-	console.log('OpenCode: managed task permissions override conflicting inline permissions');
-
+	console.log(
+		'OpenCode: native permission evaluation enforces managed policy and restricted agents'
+	);
 	const settingsFile = '/home/fhold/.claude/settings.json';
 	const settings = JSON.parse(readFileSync(settingsFile, 'utf8'));
 	settings.permissions = { defaultMode: 'bypassPermissions', allow: ['Bash'] };
@@ -176,7 +187,15 @@ if (process.argv[2] === '--inside') {
 		[
 			'opencode.json',
 			'/etc/opencode/opencode.json',
-			JSON.stringify({ permission: { '*': 'allow', bash: 'deny', edit: 'deny' } })
+			JSON.stringify({
+				permissions: [{ action: '*', resource: '*', effect: 'allow' }],
+				experimental: {
+					policies: [
+						{ action: 'tool.use', resource: 'shell:*', effect: 'deny' },
+						{ action: 'tool.use', resource: 'edit:*', effect: 'deny' }
+					]
+				}
+			})
 		]
 	];
 	const mounts = [];
@@ -204,6 +223,8 @@ if (process.argv[2] === '--inside') {
 			'FH_CLAUDE_REMOTE=0',
 			'-e',
 			'OPENCODE_SERVER_PASSWORD=synthetic-policy-smoke-only',
+			'-e',
+			'OPENCODE_CONFIG_CONTENT={"permissions":[{"action":"*","resource":"*","effect":"allow"}],"experimental":{"policies":[{"action":"tool.use","resource":"*","effect":"allow"}]}}',
 			...mounts,
 			'--mount',
 			`type=bind,source=${fileURLToPath(import.meta.url)},target=/tmp/smoke-managed-policy.mjs,readonly`,

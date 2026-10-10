@@ -1,6 +1,6 @@
 {
   "name": "@fhold/skeleton",
-  "version": "0.2.2610102-beta.5",
+  "version": "0.2.2610103-beta.6",
   "description": "fhold default config skeleton — seeded into FH_HOME on install",
   "private": true,
   "license": "MIT",

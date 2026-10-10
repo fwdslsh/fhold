@@ -21,11 +21,17 @@ import { managedComposeFile, stackConfigFile, writeFileAtomic } from './foundati
 import { classifyInstall, ensureRuntime } from './state.js';
 import { createFholdState } from './foundation.js';
 import { readSeedFile } from './seed.js';
+import {
+	importProviderCredentials,
+	legacyProviderCredentials,
+	PROVIDER_CREDENTIAL_EXPORT
+} from './provider-transfer.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
 	assertSafePortablePath,
 	hasInlineProviderCredentials,
 	hasNonPortableNativeConfiguration,
+	nativePreferencesFile,
 	providerSecretFiles,
 	readProviderSecretFile
 } from './provider-files.js';
@@ -121,9 +127,11 @@ function readRegularSource(
 	}
 }
 
-function verifyBackupManifest(
-	sourceHome: string
-): { files: Set<string>; preservation: PreservationItem[]; warnings: string[] } {
+function verifyBackupManifest(sourceHome: string): {
+	files: Set<string>;
+	preservation: PreservationItem[];
+	warnings: string[];
+} {
 	const path = join(sourceHome, 'fhold-backup.json');
 	if (!existsSync(path)) throw new Error('A required fhold-backup.json manifest is missing');
 	let value: unknown;
@@ -135,8 +143,16 @@ function verifyBackupManifest(
 		throw new Error('Backup manifest is invalid or unreadable');
 	}
 	const root = asRecord(value);
-	if (root?.product !== 'fhold' || root?.version !== 1 || root.scope !== 'portable' || !Array.isArray(root.files) || root.files.length > MAX_FILES) {
-		throw new Error('Backup manifest must identify fhold portable format version 1 with a bounded file list');
+	if (
+		root?.product !== 'fhold' ||
+		root?.version !== 1 ||
+		root.scope !== 'portable' ||
+		!Array.isArray(root.files) ||
+		root.files.length > MAX_FILES
+	) {
+		throw new Error(
+			'Backup manifest must identify fhold portable format version 1 with a bounded file list'
+		);
 	}
 	const verified = new Set<string>();
 	let totalBytes = 0;
@@ -207,7 +223,12 @@ function verifyBackupManifest(
 			});
 		}
 	}
-	if (!Array.isArray(root.warnings) || root.warnings.length > MAX_FILES || root.warnings.some((item) => typeof item !== 'string' || item.length > 4096)) throw new Error('Backup warning inventory is invalid');
+	if (
+		!Array.isArray(root.warnings) ||
+		root.warnings.length > MAX_FILES ||
+		root.warnings.some((item) => typeof item !== 'string' || item.length > 4096)
+	)
+		throw new Error('Backup warning inventory is invalid');
 	return { files: verified, preservation, warnings: root.warnings as string[] };
 }
 
@@ -263,8 +284,11 @@ function sameBytes(path: string, bytes: Buffer): boolean {
 function pristineDestination(relativePath: string, path: string): boolean {
 	if (!existsSync(path) || !lstatSync(path).isFile()) return false;
 	if (relativePath.startsWith('config/')) {
-		try { return readRegularSource(path).bytes.equals(readSeedFile(relativePath)); }
-		catch { return false; }
+		try {
+			return readRegularSource(path).bytes.equals(readSeedFile(relativePath));
+		} catch {
+			return false;
+		}
 	}
 	const text = readFileSync(path, 'utf8').trim();
 	if (relativePath === 'knowledge/secrets/auth.json') return text === '' || text === '{}';
@@ -388,7 +412,8 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 	const destinationHome = realDirectory(options.destinationHome, 'Restore destination');
 	assertDisjointHomes(sourceHome, destinationHome);
 	const verifiedBackupFiles = verifyBackupManifest(sourceHome);
-	if (classifyInstall(destinationHome) !== 'setup_incomplete') throw new Error('Restore requires a newly initialized fhold target before setup completes');
+	if (classifyInstall(destinationHome) !== 'setup_incomplete')
+		throw new Error('Restore requires a newly initialized fhold target before setup completes');
 	if (
 		!existsSync(managedComposeFile(destinationHome)) ||
 		!existsSync(stackConfigFile(destinationHome))
@@ -444,19 +469,20 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 	}
 
 	let nonPortableNativeConfiguration = false;
+	const preferencesPath = `config/assistant/${nativePreferencesFile(sourceHome)}`;
 	for (const relativePath of [
-		'config/assistant/opencode.json',
+		preferencesPath,
 		'config/assistant/persona.md',
 		'config/assistant/user-profile.md'
 	]) {
 		const source = join(sourceHome, relativePath);
 		assertSafePortablePath(sourceHome, relativePath, true);
 		if (existsSync(source) && lstatSync(source).isFile()) {
-			if (relativePath.endsWith('/opencode.json')) {
+			if (relativePath === preferencesPath) {
 				nonPortableNativeConfiguration = hasNonPortableNativeConfiguration(sourceHome);
 				if (nonPortableNativeConfiguration) {
 					warnings.push(
-						'Skipped non-portable native OpenCode configuration: only $schema, model, small_model, provider and disabled_providers preferences without executable SDK customization are portable. Review and recreate other customization separately; source preserved.'
+						'Skipped non-portable native OpenCode configuration: only model, provider and provider activation preferences using built-in adapters are portable. Review and recreate executable customization separately; source preserved.'
 					);
 					continue;
 				}
@@ -472,7 +498,12 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 					sourceHome,
 					destinationHome,
 					source,
-					join(destinationHome, relativePath),
+					join(
+						destinationHome,
+						relativePath === preferencesPath
+							? `config/assistant/${nativePreferencesFile(destinationHome)}`
+							: relativePath
+					),
 					'config'
 				)
 			);
@@ -485,7 +516,7 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 	} catch (error) {
 		if (options.includeProviderAuth) throw error;
 		for (let index = candidates.length - 1; index >= 0; index--) {
-			if (candidates[index]?.relativeSource === 'config/assistant/opencode.json') candidates.splice(index, 1);
+			if (candidates[index]?.relativeSource === preferencesPath) candidates.splice(index, 1);
 		}
 		warnings.push(
 			'Provider file references could not be safely restored; configure the provider again or review references before opting in to --include-provider-auth.'
@@ -497,6 +528,8 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 		);
 	}
 	if (options.includeProviderAuth) {
+		if (verifiedBackupFiles.files.has(PROVIDER_CREDENTIAL_EXPORT))
+			providerFiles.push(PROVIDER_CREDENTIAL_EXPORT);
 		const authPath = 'knowledge/secrets/auth.json';
 		assertSafePortablePath(sourceHome, authPath, true);
 		if (existsSync(join(sourceHome, authPath))) providerFiles.push(authPath);
@@ -600,7 +633,13 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 		entries.push({
 			...entry,
 			action,
-			...(existsSync(item.destination) && lstatSync(item.destination).isFile() ? { destinationSha256: createHash('sha256').update(readRegularSource(item.destination).bytes).digest('hex') } : {}),
+			...(existsSync(item.destination) && lstatSync(item.destination).isFile()
+				? {
+						destinationSha256: createHash('sha256')
+							.update(readRegularSource(item.destination).bytes)
+							.digest('hex')
+					}
+				: {}),
 			bytes: sourceFile.bytes.byteLength,
 			sha256: createHash('sha256').update(sourceFile.bytes).digest('hex')
 		});
@@ -637,17 +676,26 @@ export function planRestore(options: RestoreOptions): RestorePlan {
 	};
 }
 
-export function applyRestore(options: RestoreOptions, expectedDigest?: string): RestorePlan {
+export async function applyRestore(
+	options: RestoreOptions,
+	expectedDigest?: string
+): Promise<RestorePlan> {
 	const source = realDirectory(options.sourceHome, 'Restore source');
 	const destination = realDirectory(options.destinationHome, 'Restore destination');
 	assertDisjointHomes(source, destination);
 	const lock = acquireStackLock(join(destination, 'data'));
 	if (!lock) throw new Error('lifecycle_in_progress: Another stack operation is running.');
-	try { return applyRestoreLocked(options, expectedDigest); }
-	finally { releaseStackLock(lock); }
+	try {
+		return await applyRestoreLocked(options, expectedDigest);
+	} finally {
+		releaseStackLock(lock);
+	}
 }
 
-function applyRestoreLocked(options: RestoreOptions, expectedDigest?: string): RestorePlan {
+async function applyRestoreLocked(
+	options: RestoreOptions,
+	expectedDigest?: string
+): Promise<RestorePlan> {
 	const plan = planRestore(options);
 	if (expectedDigest !== undefined && plan.digest !== expectedDigest) {
 		throw new Error('The restore source or destination changed after preview. Preview it again.');
@@ -665,46 +713,76 @@ function applyRestoreLocked(options: RestoreOptions, expectedDigest?: string): R
 	const receipt = join(plan.destinationHome, 'state', 'restore-receipts', `${plan.digest}.json`);
 	ensureSafeDestinationParent(plan.destinationHome, receipt);
 	const completed: string[] = [];
-	const save = (phase: string) => writeFileAtomic(receipt, `${JSON.stringify({ ...plan, product: 'fhold', scope: 'portable-files', phase, completed, acknowledgeUnrestored: options.acknowledgeUnrestored === true }, null, 2)}\n`, 0o600);
+	const save = (phase: string) =>
+		writeFileAtomic(
+			receipt,
+			`${JSON.stringify({ ...plan, product: 'fhold', scope: 'portable-files', phase, completed, acknowledgeUnrestored: options.acknowledgeUnrestored === true }, null, 2)}\n`,
+			0o600
+		);
 	save('applying');
 	try {
-	for (const entry of plan.entries) {
-		if (entry.action === 'skip-identical') continue;
-		assertSafePortablePath(plan.sourceHome, entry.relativeSource);
-		const sourceReal = realpathSync(entry.source);
-		if (!contained(plan.sourceHome, sourceReal)) {
-			throw new Error(`Restore source changed or escaped its home: ${entry.source}`);
+		for (const entry of plan.entries) {
+			if (entry.action === 'skip-identical') continue;
+			assertSafePortablePath(plan.sourceHome, entry.relativeSource);
+			const sourceReal = realpathSync(entry.source);
+			if (!contained(plan.sourceHome, sourceReal)) {
+				throw new Error(`Restore source changed or escaped its home: ${entry.source}`);
+			}
+			const sourceFile =
+				entry.category === 'secret' && entry.relativeSource.startsWith('knowledge/secrets/')
+					? { bytes: readProviderSecretFile(plan.sourceHome, entry.relativeSource), mode: 0o600 }
+					: readRegularSource(entry.source);
+			const digest = createHash('sha256').update(sourceFile.bytes).digest('hex');
+			if (digest !== entry.sha256) {
+				throw new Error(`Restore source changed after preview: ${entry.relativeSource}`);
+			}
+			const mode = entry.category !== 'secret' && (sourceFile.mode & 0o111) !== 0 ? 0o700 : 0o600;
+			ensureSafeDestinationParent(plan.destinationHome, entry.destination);
+			const destinationStat = lstatSync(entry.destination, { throwIfNoEntry: false });
+			if (
+				entry.destinationSha256 === undefined
+					? destinationStat !== undefined
+					: !destinationStat?.isFile() ||
+						createHash('sha256')
+							.update(readRegularSource(entry.destination).bytes)
+							.digest('hex') !== entry.destinationSha256
+			) {
+				throw new Error(`Restore destination changed during apply: ${entry.relativeDestination}`);
+			}
+			writeFileAtomic(entry.destination, sourceFile.bytes, mode);
+			if (
+				createHash('sha256').update(readRegularSource(entry.destination).bytes).digest('hex') !==
+				entry.sha256
+			) {
+				throw new Error(`Restored file verification failed: ${entry.relativeDestination}`);
+			}
+			completed.push(entry.relativeDestination);
+			save('applying');
 		}
-		const sourceFile =
-			entry.category === 'secret' && entry.relativeSource.startsWith('knowledge/secrets/')
-				? { bytes: readProviderSecretFile(plan.sourceHome, entry.relativeSource), mode: 0o600 }
-				: readRegularSource(entry.source);
-		const digest = createHash('sha256').update(sourceFile.bytes).digest('hex');
-		if (digest !== entry.sha256) {
-			throw new Error(`Restore source changed after preview: ${entry.relativeSource}`);
-		}
-		const mode = entry.category !== 'secret' && (sourceFile.mode & 0o111) !== 0 ? 0o700 : 0o600;
-		ensureSafeDestinationParent(plan.destinationHome, entry.destination);
-		const destinationStat = lstatSync(entry.destination, { throwIfNoEntry: false });
-		if (entry.destinationSha256 === undefined ? destinationStat !== undefined :
-			!destinationStat?.isFile() || createHash('sha256').update(readRegularSource(entry.destination).bytes).digest('hex') !== entry.destinationSha256) {
-			throw new Error(`Restore destination changed during apply: ${entry.relativeDestination}`);
-		}
-		writeFileAtomic(entry.destination, sourceFile.bytes, mode);
+		ensureRuntime(createFholdState(plan.destinationHome));
 		if (
-			createHash('sha256').update(readRegularSource(entry.destination).bytes).digest('hex') !==
-			entry.sha256
+			options.includeProviderAuth &&
+			plan.entries.some((entry) => entry.relativeSource === PROVIDER_CREDENTIAL_EXPORT)
 		) {
-			throw new Error(`Restored file verification failed: ${entry.relativeDestination}`);
+			await importProviderCredentials(
+				plan.destinationHome,
+				readProviderSecretFile(plan.destinationHome, PROVIDER_CREDENTIAL_EXPORT)
+			);
+		} else if (
+			options.includeProviderAuth &&
+			plan.entries.some((entry) => entry.relativeSource === 'knowledge/secrets/auth.json')
+		) {
+			const credentials = legacyProviderCredentials(
+				readProviderSecretFile(plan.destinationHome, 'knowledge/secrets/auth.json')
+			);
+			if (credentials) await importProviderCredentials(plan.destinationHome, credentials);
 		}
-		completed.push(entry.relativeDestination);
-		save('applying');
-	}
-	ensureRuntime(createFholdState(plan.destinationHome));
-	save('completed');
+		save('completed');
 	} catch (error) {
 		save('partial-failure');
-		throw new Error(`Restore partially completed (${completed.length} file(s)); private receipt: ${receipt}. Re-preview to retry. ${error instanceof Error ? error.message : String(error)}`);
+		throw new Error(
+			`Restore partially completed (${completed.length} file(s)); private receipt: ${receipt}. Re-preview to retry. ${error instanceof Error ? error.message : String(error)}`
+		);
 	}
 	return plan;
 }

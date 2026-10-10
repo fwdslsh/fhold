@@ -37,7 +37,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync } from 'node:fs';
 import { activityStatus } from '/fhold-plugins/fhold/scripts/activity.mjs';
-const authorization = 'Basic ' + Buffer.from('user:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
 let count = 0;
 const sink = createServer((request, response) => {
   assert.equal(request.url, '/tick');
@@ -56,36 +56,36 @@ async function until(check, seconds = 90) {
   }
 }
 async function api(path, body) {
-  const response = await fetch('http://127.0.0.1:4096' + path, {
+  const response = await fetch('http://127.0.0.1:4096' + '/api' + path, {
     method: body ? 'POST' : 'GET',
     headers: { authorization, 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(body?.command ? 90000 : 3000)
   });
   assert.ok(response.ok, 'Native API request failed: ' + response.status);
-  return response.json();
+  return response.status === 204 ? undefined : (await response.json()).data;
 }
 try {
-  await until(async () => { try { await api('/global/health'); return true; } catch { return false; } });
-  await api('/config?directory=%2Fwork');
+  await until(async () => { try { await api('/info'); return true; } catch { return false; } });
+  await api('/config?location[directory]=/work');
   await until(() => ['claude', 'codex'].every(tool => {
     try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
     catch { return false; }
   }), 30);
   try { await until(() => activityStatus('/tmp/fhold-runtime') === 'idle', 15); }
   catch { throw Error('Initial activity was ' + activityStatus('/tmp/fhold-runtime') + ': ' + readdirSync('/tmp/fhold-runtime/activity').join(',')); }
-  for (const username of ['', 'opencode']) {
-    const response = await fetch('http://127.0.0.1:4096/global/health', {headers:{authorization:'Basic ' + Buffer.from(username + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64')}});
+  for (const username of ['', 'user']) {
+    const response = await fetch('http://127.0.0.1:4096/api/info', {headers:{authorization:'Basic ' + Buffer.from(username + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64')}});
     assert.equal(response.status, 401, 'Only the configured username should authenticate');
   }
   const quiet = count;
   await pause(22000);
   assert.equal(count, quiet, 'Idle native sessions must not send keep-alive');
-  const session = await api('/session?directory=%2Fwork', {title:'Disposable keep-alive qualification'});
-  await api('/session/' + session.id + '/message?directory=%2Fwork', {noReply:true, parts:[{type:'text', text:'Append-only history fixture; do not execute.'}]});
+  const session = await api('/session', {title:'Disposable keep-alive qualification', location:{directory:'/work'}});
+  await api('/session/' + session.id + '/synthetic', {resume:false, text:'Append-only history fixture; do not execute.'});
   await pause(500);
   assert.equal(activityStatus('/tmp/fhold-runtime'), 'idle', 'Append-only history is not active work');
-  const task = api('/session/' + session.id + '/shell?directory=%2Fwork', {agent:'build', command:'sleep 45; printf fhold-keepalive-complete'});
+  const task = api('/session/' + session.id + '/shell', {command:'sleep 45; printf fhold-keepalive-complete'});
   await until(() => activityStatus('/tmp/fhold-runtime') === 'busy', 10);
   console.log('Native OpenCode work was observed; waiting for real scheduler ticks.');
   await task;

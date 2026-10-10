@@ -17,6 +17,8 @@ import { composeConfigJson, composePs, parseComposePsRows, runDocker } from './d
 import { createFholdState, writeFileAtomic } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { nativeHistoryJob } from './history-native.js';
+import { nativeWorker } from './native-worker.js';
 
 export type HistoryExportOptions = {
 	sourceHome: string;
@@ -150,22 +152,6 @@ export async function historyWorker(): Promise<void> {
 			throw new Error('History file must be a bounded regular private file.');
 		return JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
 	};
-	const canonical = (value: unknown): unknown =>
-		Array.isArray(value)
-			? value.map(canonical)
-			: value && typeof value === 'object'
-				? Object.fromEntries(
-						Object.entries(value)
-							.filter(([, entry]) => entry !== undefined)
-							.sort(([a], [b]) => a.localeCompare(b))
-							.map(([key, entry]) => [key, canonical(entry)])
-					)
-				: value;
-	const hash = (value: unknown) =>
-		crypto
-			.createHash('sha256')
-			.update(JSON.stringify(canonical(value)))
-			.digest('hex');
 	const write = (file: string, value: unknown) => {
 		const temporary = `${file}.${crypto.randomUUID()}.tmp`;
 		const descriptor = fs.openSync(temporary, 'wx', 0o600);
@@ -181,111 +167,6 @@ export async function historyWorker(): Promise<void> {
 		if (typeof value !== 'string' || !new RegExp(`^${prefix}_[A-Za-z0-9]{1,128}$`).test(value))
 			throw new Error('Invalid native history ID.');
 		return value;
-	};
-	const interruptedCalls: Array<{
-		session: string;
-		message: string;
-		part: string;
-		previousStatus: string;
-	}> = [];
-	const archiveInterrupted = process.env.FH_HISTORY_ARCHIVE_INTERRUPTED === '1';
-	const sanitize = (
-		value: unknown,
-		rejectInterrupted = true,
-		closeInterrupted = false
-	): { info: Obj; messages: Array<{ info: Obj; parts: Obj[] }> } => {
-		const data = object(value);
-		const info = object(data.info);
-		const session = id(info.id, 'ses');
-		const clean: Obj = {};
-		for (const key of ['id', 'slug', 'version', 'title', 'time', 'directory', 'projectID'])
-			if (info[key] !== undefined) clean[key] = info[key];
-		if (
-			typeof info.directory !== 'string' ||
-			!Array.isArray(data.messages) ||
-			data.messages.length > 100_000
-		)
-			throw new Error('Invalid native history messages.');
-		const seen = new Set<string>();
-		const messages = data.messages.map((raw) => {
-			const message = object(raw);
-			const original = object(message.info);
-			const messageID = id(original.id, 'msg');
-			if (original.sessionID !== session || seen.has(messageID) || !Array.isArray(message.parts))
-				throw new Error('History message ownership or ID is invalid.');
-			seen.add(messageID);
-			const messageInfo = { ...original };
-			for (const key of ['tools', 'permission', 'permissions', 'metadata', 'system'])
-				delete messageInfo[key];
-			const parts = message.parts.map((rawPart) => {
-				const part = { ...object(rawPart) };
-				const partID = id(part.id, 'prt');
-				if (part.sessionID !== session || part.messageID !== messageID || seen.has(partID))
-					throw new Error('History part ownership or ID is invalid.');
-				seen.add(partID);
-				// An interrupted tool call must not become pending work in a new runtime.
-				if (rejectInterrupted && part.type === 'tool') {
-					const state = object(part.state);
-					if (['pending', 'running'].includes(String(state.status))) {
-						if (!closeInterrupted)
-							throw new Error(
-								'Interrupted tool calls require manual review or explicit --archive-interrupted; private source snapshot retained.'
-							);
-						// Use the native terminal error shape, never replay unfinished work.
-						// A deterministic time keeps identical recovery retries identical.
-						const times = [
-							object(info.time).updated,
-							object(original.time).created,
-							state.time && object(state.time).start
-						].filter(
-							(time): time is number =>
-								typeof time === 'number' && Number.isSafeInteger(time) && time >= 0
-						);
-						if (!times.length)
-							throw new Error('Interrupted call has no valid historical timestamp.');
-						const start =
-							state.time &&
-							Number.isSafeInteger(object(state.time).start) &&
-							Number(object(state.time).start) >= 0
-								? Number(object(state.time).start)
-								: Math.min(...times);
-						part.state = {
-							status: 'error',
-							input: state.input,
-							error: 'Tool call interrupted before history recovery; not executed or replayed.',
-							time: { start, end: Math.max(...times) },
-							...(state.metadata ? { metadata: state.metadata } : {})
-						};
-						interruptedCalls.push({
-							session,
-							message: messageID,
-							part: partID,
-							previousStatus: String(state.status)
-						});
-					}
-				}
-				return part;
-			});
-			return { info: messageInfo, parts };
-		});
-		return { info: clean, messages };
-	};
-	const equalMessages = (
-		expected: ReturnType<typeof sanitize>,
-		actual: ReturnType<typeof sanitize>,
-		partial = false
-	): boolean => {
-		for (const message of partial ? actual.messages : expected.messages) {
-			const counterpart = (partial ? expected.messages : actual.messages).find(
-				(item) => item.info.id === message.info.id
-			);
-			if (!counterpart || hash(message.info) !== hash(counterpart.info)) return false;
-			for (const part of message.parts) {
-				const other = counterpart.parts.find((item) => item.id === part.id);
-				if (!other || hash(part) !== hash(other)) return false;
-			}
-		}
-		return true;
 	};
 	fs.mkdirSync('/tmp/native/.local/share/opencode', { recursive: true, mode: 0o700 });
 	fs.mkdirSync('/tmp/config', { recursive: true, mode: 0o700 });
@@ -381,15 +262,17 @@ export async function historyWorker(): Promise<void> {
 			const file = `/recovery/${session}.json`;
 			native(['export', session], '/tmp', file);
 			// Preservation must retain unfinished calls too; only activation is blocked.
-			const data = sanitize(read(file), false);
+			const data = object(read(file));
+			const info = object(data.info);
+			const messages = data.messages as Array<{ parts: unknown[] }>;
 			bytes += fs.statSync(file).size;
 			if (bytes > 20 * 1024 ** 3) throw new Error('History exports exceed 20 GiB.');
 			entries.push({
 				id: session,
-				directory: data.info.directory,
+				directory: info.directory,
 				sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
-				messages: data.messages.length,
-				parts: data.messages.reduce((sum, message) => sum + message.parts.length, 0)
+				messages: messages.length,
+				parts: messages.reduce((sum, message) => sum + message.parts.length, 0)
 			});
 		}
 		write('/recovery/history.json', {
@@ -402,189 +285,7 @@ export async function historyWorker(): Promise<void> {
 		});
 		return;
 	}
-	if (mode !== 'preview' && mode !== 'restore') throw new Error('Invalid history operation.');
-	const manifest = object(read('/archive/history.json'));
-	if (
-		manifest.product !== 'fhold' ||
-		manifest.version !== 1 ||
-		manifest.scope !== 'native-history' ||
-		!Array.isArray(manifest.sessions) ||
-		manifest.sessions.length > 10_000
-	)
-		throw new Error('Invalid history archive.');
-	const directories = object(read('/recovery/directories.json'));
-	const apply = mode === 'restore';
-	// Preview uses only a snapshot. Apply uses the stopped target's native database.
-	if (fs.existsSync('/target/opencode.db')) {
-		snapshot('/target/opencode.db', '/recovery/target-before.sqlite');
-		fs.copyFileSync('/recovery/target-before.sqlite', dbPath);
-	}
-	native(['db', 'SELECT id FROM session LIMIT 0']);
-	const staged = new Database(dbPath, { readonly: true });
-	const targetIDs = staged.query('SELECT id FROM session').all() as Array<{ id: string }>;
-	if (targetIDs.length > 10_000)
-		throw new Error('Target exceeds 10,000 sessions; split recovery with an operator.');
-	const targetMessages = new Set(
-		(staged.query('SELECT id FROM message').all() as Array<{ id: string }>).map((row) => row.id)
-	);
-	const targetParts = new Set(
-		(staged.query('SELECT id FROM part').all() as Array<{ id: string }>).map((row) => row.id)
-	);
-	staged.close();
-	const journalFile = '/target/fhold-history-journal.json';
-	const journal = fs.existsSync(journalFile) ? object(read(journalFile)) : {};
-	const old = new Map<string, unknown>();
-	for (const row of targetIDs) {
-		const file = `/recovery/before-${id(row.id, 'ses')}.json`;
-		native(['export', row.id], '/tmp', file);
-		old.set(row.id, read(file));
-	}
-	const selected: Array<{
-		data: ReturnType<typeof sanitize>;
-		target: string;
-		fingerprint: string;
-		complete: boolean;
-	}> = [];
-	const sessionIDs = new Set<string>();
-	const messageIDs = new Set<string>();
-	const partIDs = new Set<string>();
-	let totalBytes = 0;
-	for (const raw of manifest.sessions) {
-		const entry = object(raw);
-		const session = id(entry.id, 'ses');
-		if (sessionIDs.has(session)) throw new Error('Duplicate archive session ID.');
-		sessionIDs.add(session);
-		const file = `/archive/${session}.json`;
-		const rawData = read(file);
-		totalBytes += fs.statSync(file).size;
-		if (
-			totalBytes > 20 * 1024 ** 3 ||
-			crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') !== entry.sha256
-		)
-			throw new Error('History archive checksum/size mismatch.');
-		const data = sanitize(rawData, true, archiveInterrupted);
-		if (
-			data.info.id !== session ||
-			data.info.directory !== entry.directory ||
-			data.messages.length !== entry.messages ||
-			data.messages.reduce((sum, message) => sum + message.parts.length, 0) !== entry.parts
-		)
-			throw new Error('History inventory does not match its transcript.');
-		const target = directories[String(data.info.directory)];
-		if (
-			typeof target !== 'string' ||
-			!(target === '/work' || target.startsWith('/work/')) ||
-			target.split('/').some((part) => part === '..' || part === '.')
-		)
-			throw new Error('Every old project directory needs an exact reviewed /work mapping.');
-		if (!fs.lstatSync(target).isDirectory() || fs.realpathSync(target) !== target)
-			throw new Error(
-				'Mapped workspace directory must exist and contain no symlink. Restore its authored files first.'
-			);
-		data.info.directory = target;
-		const fingerprint = hash(data);
-		const previous =
-			journal[session] && typeof journal[session] === 'object' ? object(journal[session]) : {};
-		const resume = previous.fingerprint === fingerprint;
-		const complete = resume && previous.complete === true;
-		const existing = old.get(session);
-		if (
-			existing &&
-			(!resume ||
-				object(object(existing).info).directory !== target ||
-				!equalMessages(data, sanitize(existing), !complete))
-		)
-			throw new Error('Destination session ID collision; nothing will be overwritten.');
-		if (complete && !existing)
-			throw new Error(
-				'A previously recovered session is missing; review rather than resurrecting deleted history.'
-			);
-		for (const message of data.messages) {
-			const mid = String(message.info.id);
-			if (messageIDs.has(mid) || (!resume && targetMessages.has(mid)))
-				throw new Error('Destination or archive message ID collision.');
-			messageIDs.add(mid);
-			for (const part of message.parts) {
-				const pid = String(part.id);
-				if (partIDs.has(pid) || (!resume && targetParts.has(pid)))
-					throw new Error('Destination or archive part ID collision.');
-				partIDs.add(pid);
-			}
-		}
-		selected.push({ data, target, fingerprint, complete });
-	}
-	// Preflight the whole batch with the TARGET native engine before any target write.
-	for (const item of selected) {
-		if (item.complete) continue;
-		const session = String(item.data.info.id);
-		const file = `/recovery/import-${session}.json`;
-		write(file, item.data);
-		native(['import', file], item.target);
-		const exported = `/recovery/check-${session}.json`;
-		native(['export', session], item.target, exported);
-		const actual = sanitize(read(exported));
-		if (
-			actual.info.directory !== item.target ||
-			!equalMessages(item.data, actual) ||
-			actual.messages.length !== item.data.messages.length ||
-			actual.messages.reduce((sum, message) => sum + message.parts.length, 0) !==
-				item.data.messages.reduce((sum, message) => sum + message.parts.length, 0)
-		)
-			throw new Error('Native round-trip content verification failed; target unchanged.');
-	}
-	for (const [session, data] of old) {
-		if (selected.some((item) => item.data.info.id === session && !item.complete)) continue;
-		const file = `/recovery/unchanged-${session}.json`;
-		native(['export', session], '/tmp', file);
-		if (hash(read(file)) !== hash(data))
-			throw new Error('Existing target history changed during preflight; target unchanged.');
-	}
-	if (apply) {
-		// Restartable per-session imports; journal intent is durable before native writes.
-		env.XDG_DATA_HOME = '/native-data';
-		for (const item of selected) {
-			if (item.complete) continue;
-			const session = String(item.data.info.id);
-			journal[session] = { fingerprint: item.fingerprint, complete: false };
-			write(journalFile, journal);
-			native(['import', `/recovery/import-${session}.json`], item.target);
-			const file = `/recovery/verified-${session}.json`;
-			native(['export', session], item.target, file);
-			const actual = sanitize(read(file));
-			if (actual.info.directory !== item.target || !equalMessages(item.data, actual))
-				throw new Error(
-					'History verification failed; retain the recovery backup and rerun the same plan while stopped.'
-				);
-			journal[session] = { fingerprint: item.fingerprint, complete: true };
-			write(journalFile, journal);
-		}
-		for (const [session, data] of old) {
-			if (selected.some((item) => item.data.info.id === session && !item.complete)) continue;
-			const file = `/recovery/retained-${session}.json`;
-			native(['export', session], '/tmp', file);
-			if (hash(read(file)) !== hash(data))
-				throw new Error('Existing target session preservation check failed.');
-		}
-	}
-	write('/recovery/receipt.json', {
-		scope: 'native-history',
-		sessions: selected.length,
-		messages: messageIDs.size,
-		parts: partIDs.size,
-		applied: apply,
-		interruptedTools: interruptedCalls.length,
-		interruptedCalls,
-		existingSessionsPreserved: old.size,
-		targetSnapshot: fs.existsSync('/recovery/target-before.sqlite')
-			? await fileIntegrity('/recovery/target-before.sqlite')
-			: null,
-		directories,
-		engineVersion: native(['--version']).trim(),
-		limitations: [
-			'Native history only, not portal handles or old access authority',
-			'Referenced files, tools, snapshots, external roots and project dependencies require separate acceptance'
-		]
-	});
+	throw new Error('Use an OpenCode v2 Assistant image to restore native history.');
 }
 
 async function worker(
@@ -623,7 +324,7 @@ async function worker(
 			'bun',
 			image,
 			'-e',
-			`(${historyWorker.toString()})().catch((error) => { console.error(error.message); process.exit(1); });`
+			`(async () => { const { execFileSync } = await import('node:child_process'); const version = String(execFileSync('opencode', ['--version'])).trim(); if (version.startsWith('2.') || version.startsWith('opencode v2.')) await (${nativeWorker.toString()})(${nativeHistoryJob.toString()}); else await (${historyWorker.toString()})(); })().catch((error) => { console.error(error.message); process.exit(1); });`
 		],
 		{ timeoutMs: 30 * 60_000 }
 	);
@@ -686,12 +387,12 @@ export async function restoreHistory(options: HistoryRestoreOptions): Promise<Hi
 		};
 		if (
 			manifest.product !== 'fhold' ||
-			manifest.version !== 1 ||
+			![1, 2].includes(Number(manifest.version)) ||
 			manifest.scope !== 'native-history' ||
 			!Array.isArray(manifest.sessions) ||
 			manifest.sessions.length > 10_000
 		)
-			throw new Error('History archive must identify fhold native-history format version 1');
+			throw new Error('History archive must identify fhold native-history format version 1 or 2');
 	} finally {
 		closeSync(manifestFd);
 	}

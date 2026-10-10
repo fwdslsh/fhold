@@ -1,10 +1,11 @@
 # OpenCode 2 migration: fhold agent handoff
 
-Status: implementation and qualification in progress on `codex/opencode-v2`.
-Updated 2026-10-10. Native live settings and plugin watching are qualified on
-Linux x64; the complete migration is not yet qualified or released. Published
-AKM 0.10 prerelease artifacts are now available; the upstream dependency is no
-longer waiting for publication.
+Status: implemented on `codex/opencode-v2`; local Linux x64 qualification is
+recorded in the [v2 qualification report](../operations/opencode-v2-qualification.md).
+Updated 2026-10-10. Public publication and native ARM64 gates run separately in
+GitHub Actions. AKM 0.10 prerelease artifacts are available; its upstream stable
+real-model compatibility matrix remains open. This beta uses the requested
+prerelease packages without claiming stable qualification.
 
 ## Objective and starting point
 
@@ -18,7 +19,8 @@ The published baseline is fhold `0.2.2610102-beta.5`, still on OpenCode V1,
 with `akm-cli@0.10.26101002-alpha` and native harness plugins
 `0.10.26101001-alpha`. The implementation candidate pins `2.0.26` for
 `@opencode/cli`, `@opencode/client` and `@opencode/plugin`, with
-`akm-opencode-v2@0.10.26101001-alpha`. Refresh upstream versions, release status
+`akm-opencode-v2@0.10.26101002-alpha`. All three native harness plugins now use
+that newer `next` release. Refresh upstream versions, release status
 and contracts before changing those pins.
 The existing `@opencode-ai/sdk/v2` import is a namespace in the old SDK, not proof
 of OpenCode 2 compatibility.

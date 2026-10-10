@@ -2,17 +2,40 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
 import { createAssistantClient } from './assistant-client.js';
 
 const temporary: string[] = [];
-
 afterEach(async () => {
 	for (const path of temporary.splice(0)) await rm(path, { recursive: true, force: true });
 });
 
 describe('OpenCode Assistant adapter', () => {
-	it('sends an exact async message ID with fresh file-backed Basic auth', async () => {
+	it('paginates the native 200-session limit instead of truncating the Guardian ownership scan', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'fhold-assistant-pagination-'));
+		temporary.push(root);
+		const passwordFile = join(root, 'password');
+		await writeFile(passwordFile, 'synthetic');
+		let calls = 0;
+		const client = createAssistantClient({
+			passwordFile,
+			fetch: (async (input, init) => {
+				const url = new URL(new Request(input, init).url);
+				const offset = calls++ * 200;
+				expect(url.searchParams.get('limit')).toBe(offset === 400 ? '100' : '200');
+				expect(url.searchParams.get('cursor')).toBe(offset ? `page-${offset}` : null);
+				return Response.json({
+					data: Array.from({ length: Math.min(200, 405 - offset) }, (_, index) => ({
+						id: `ses_${offset + index}`,
+						time: { created: 1, updated: 2 }
+					})),
+					cursor: { next: offset < 400 ? `page-${offset + 200}` : null }
+				});
+			}) as typeof fetch
+		});
+		expect(await client.listSessions(500, AbortSignal.timeout(1000))).toHaveLength(405);
+		expect(calls).toBe(3);
+	});
+	it('applies policy before queuing the exact message ID, rotates native auth, and only exposes public activity', async () => {
 		const root = await mkdtemp(join(tmpdir(), 'fhold-assistant-client-'));
 		temporary.push(root);
 		const passwordFile = join(root, 'password');
@@ -22,64 +45,39 @@ describe('OpenCode Assistant adapter', () => {
 			const request = new Request(input, init);
 			requests.push(request.clone());
 			const url = new URL(request.url);
-			if (url.pathname === '/session/ses_1/prompt_async') {
-				return new Response(null, { status: 204 });
-			}
-			if (url.pathname === '/session/ses_1/message') {
-				return Response.json([
-					{
-						info: {
+			if (url.pathname.endsWith('/prompt')) return Response.json({ data: {} });
+			if (request.method !== 'GET') return new Response(null, { status: 204 });
+			if (url.pathname === '/api/session/ses_1/message')
+				return Response.json({
+					data: [
+						{ type: 'user', id: 'msg_request', text: 'do the work', time: { created: 10 } },
+						{
+							type: 'assistant',
 							id: 'msg_answer',
-							sessionID: 'ses_1',
-							role: 'assistant',
-							parentID: 'msg_request',
+							agent: 'remote-full',
 							finish: 'tool-calls',
 							time: { created: 20, completed: 30 },
-							modelID: 'model',
-							providerID: 'provider',
-							mode: 'remote-full',
-							agent: 'remote-full',
-							path: { cwd: '/work', root: '/work' },
 							cost: 0.01,
-							tokens: {
-								input: 2,
-								output: 3,
-								reasoning: 0,
-								cache: { read: 0, write: 0 }
-							}
-						},
-						parts: [
-							{ type: 'reasoning', text: 'private reasoning' },
-							{
-								type: 'tool',
-								tool: 'bash',
-								callID: 'raw-call-id',
-								state: {
-									status: 'completed',
-									input: { command: 'private command' },
-									output: 'private output'
-								}
-							},
-							{ type: 'tool', tool: 'invalid/name', state: { status: 'running' } },
-							{
-								id: 'prt_text',
-								sessionID: 'ses_1',
-								messageID: 'msg_answer',
-								type: 'text',
-								text: 'done'
-							},
-							{
-								id: 'prt_patch',
-								sessionID: 'ses_1',
-								messageID: 'msg_answer',
-								type: 'patch',
-								hash: 'hash',
-								files: ['src/index.ts']
-							}
-						]
-					}
-				]);
-			}
+							snapshot: { files: ['src/index.ts'] },
+							content: [
+								{ type: 'reasoning', text: 'private reasoning' },
+								{
+									type: 'tool',
+									name: 'shell',
+									id: 'private-id',
+									state: {
+										status: 'completed',
+										input: { command: 'private command' },
+										content: [{ type: 'text', text: 'private output' }]
+									}
+								},
+								{ type: 'tool', name: 'invalid/name', state: { status: 'running' } },
+								{ type: 'text', text: 'done' }
+							]
+						}
+					],
+					cursor: {}
+				});
 			return Response.json({ error: 'unexpected request' }, { status: 500 });
 		};
 		const client = createAssistantClient({
@@ -88,7 +86,6 @@ describe('OpenCode Assistant adapter', () => {
 			passwordFile,
 			fetch: fakeFetch
 		});
-
 		await client.runAsync(
 			'ses_1',
 			'msg_request',
@@ -96,32 +93,42 @@ describe('OpenCode Assistant adapter', () => {
 			'remote-full',
 			AbortSignal.timeout(1_000)
 		);
-		const submitted = requests[0];
-		expect(submitted.headers.get('x-opencode-directory')).toBe('%2Fwork');
-		expect(submitted.headers.get('authorization')).toBe(
-			`Basic ${Buffer.from('user:first-password').toString('base64')}`
-		);
-		expect(await submitted.json()).toMatchObject({
-			messageID: 'msg_request',
-			agent: 'remote-full',
-			parts: [{ type: 'text', text: 'do the work' }]
+		expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
+			['PATCH', '/api/session/ses_1'],
+			['POST', '/api/session/ses_1/agent'],
+			['POST', '/api/session/ses_1/prompt']
+		]);
+		expect(await requests[0]!.json()).toEqual({ permissions: [] });
+		expect(await requests[1]!.json()).toEqual({ agent: 'remote-full' });
+		expect(await requests[2]!.json()).toEqual({
+			id: 'msg_request',
+			text: 'do the work',
+			delivery: 'queue'
 		});
-
+		expect(
+			requests.every(
+				(request) =>
+					request.headers.get('authorization') ===
+					`Basic ${Buffer.from('opencode:first-password').toString('base64')}`
+			)
+		).toBe(true);
 		await writeFile(passwordFile, 'rotated-password');
-		expect(await client.listMessages('ses_1', 20, AbortSignal.timeout(1_000))).toEqual([
+		const messages = await client.listMessages('ses_1', 20, AbortSignal.timeout(1_000));
+		expect(messages).toEqual([
+			expect.objectContaining({ id: 'msg_request', role: 'user' }),
 			expect.objectContaining({
 				id: 'msg_answer',
 				parentId: 'msg_request',
 				role: 'assistant',
 				finish: 'tool-calls',
-				tools: [{ name: 'bash', status: 'completed' }],
+				tools: [{ name: 'shell', status: 'completed' }],
 				text: 'done',
 				files: ['src/index.ts']
 			})
 		]);
-		expect(requests[1]?.headers.get('authorization')).toBe(
-			`Basic ${Buffer.from('user:rotated-password').toString('base64')}`
+		expect(JSON.stringify(messages)).not.toContain('private');
+		expect(requests[3]!.headers.get('authorization')).toBe(
+			`Basic ${Buffer.from('opencode:rotated-password').toString('base64')}`
 		);
-		expect(new URL(requests[1]?.url ?? '').searchParams.get('directory')).toBe('/work');
 	});
 });

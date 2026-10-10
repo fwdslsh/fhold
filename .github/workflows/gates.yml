@@ -167,8 +167,21 @@ jobs:
       - name: Verify native history recovery with the built Assistant engine
         if: matrix.image == 'assistant'
         env:
-          FH_HISTORY_TEST_IMAGE: fhold/assistant:ci
-        run: bun test packages/lib/src/control-plane/history.test.ts
+          FH_NATIVE_TEST_IMAGE: fhold/fhold-assistant:ci
+          FH_HISTORY_SOURCE_IMAGE: fwdslsh/fhold-assistant:0.1.2610081904-beta.2
+        run: |
+          docker tag fhold/assistant:ci fhold/fhold-assistant:ci
+          docker pull "$FH_HISTORY_SOURCE_IMAGE"
+          bun test scripts/native-transfer.test.ts
+      - name: Verify native settings, Guardian interactions and scheduled execution
+        if: matrix.image == 'assistant'
+        env:
+          FH_NATIVE_PROVIDER_TESTS: '1'
+          FH_NATIVE_PROVIDER_CLI: ${{ github.workspace }}/packages/cli/dist/fhold-cli
+          FH_NATIVE_PROVIDER_IMAGE: fhold/fhold-assistant:ci
+        run: |
+          bun run --cwd packages/cli build
+          bun test scripts/provider-settings-native.test.ts
       - name: Verify runtime recovery with real independent directory mounts
         if: matrix.image == 'assistant'
         env:

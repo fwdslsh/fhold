@@ -99,12 +99,18 @@ const runFile = promisify(execFile);
 async function command(executable, args, timeout = 120_000) {
 	const redact = (text) => String(text ?? '').replaceAll(password, '[synthetic-password]');
 	try {
-		const { stdout, stderr } = await runFile(executable, args, { timeout, killSignal: 'SIGKILL', maxBuffer: 2_000_000 });
+		const { stdout, stderr } = await runFile(executable, args, {
+			timeout,
+			killSignal: 'SIGKILL',
+			maxBuffer: 2_000_000
+		});
 		// JSON belongs on stdout; degraded-state diagnostics stay on stderr.
 		if (stderr) process.stderr.write(redact(stderr));
 		return redact(stdout).trim();
 	} catch (error) {
-		throw new Error(`${executable} ${args[0]} failed (${error.code ?? error.signal}): ${redact(`${error.stdout ?? ''}${error.stderr ?? ''}`).slice(-6000)}`);
+		throw new Error(
+			`${executable} ${args[0]} failed (${error.code ?? error.signal}): ${redact(`${error.stdout ?? ''}${error.stderr ?? ''}`).slice(-6000)}`
+		);
 	}
 }
 const docker = (args, timeout) => command('docker', args, timeout);
@@ -149,7 +155,16 @@ async function poll(probe, label, timeout = 120_000) {
 }
 async function start(suffix, selectedImage = image) {
 	const name = `fhold-recovery-smoke-${instance}-${suffix}`;
-	const id = await docker(['run', '-d', '--name', name, ...common, '-p', '127.0.0.1::4096', selectedImage]);
+	const id = await docker([
+		'run',
+		'-d',
+		'--name',
+		name,
+		...common,
+		'-p',
+		'127.0.0.1::4096',
+		selectedImage
+	]);
 	created.add(id);
 	await poll(async () => {
 		await docker(['exec', id, 'fhold-healthcheck'], 15_000);
@@ -161,16 +176,19 @@ async function start(suffix, selectedImage = image) {
 	return {
 		id,
 		image: selectedImage,
+		v2: /(?:^|\s)v?2\./.test(await docker(['exec', id, 'opencode', '--version'])),
 		endpoint: `http://127.0.0.1:${bindings['4096/tcp'][0].HostPort}`
 	};
 }
 async function api(container, route, options = {}, authenticated = true) {
-	const response = await fetch(container.endpoint + route, {
+	const response = await fetch(container.endpoint + (container.v2 ? '/api' : '') + route, {
 		...options,
 		headers: {
 			'Content-Type': 'application/json',
 			...(authenticated
-				? { Authorization: `Basic ${Buffer.from(`user:${password}`).toString('base64')}` }
+				? {
+						Authorization: `Basic ${Buffer.from(`${container.v2 ? 'opencode' : 'user'}:${password}`).toString('base64')}`
+					}
 				: {})
 		},
 		signal: AbortSignal.timeout(10_000)
@@ -232,8 +250,9 @@ async function released() {
 		false
 	);
 	assert.equal(
-		manifest.members.filter((member) => member.kind === 'sqlite' && member.id?.startsWith('custom-'))
-			.length,
+		manifest.members.filter(
+			(member) => member.kind === 'sqlite' && member.id?.startsWith('custom-')
+		).length,
 		3
 	);
 	assert.equal(
@@ -302,36 +321,45 @@ try {
 		false
 	);
 	report.checks.realMountNamespaceInspected = true;
-	assert.equal((await api(first, '/global/health', {}, false)).status, 401);
+	assert.equal((await api(first, first.v2 ? '/info' : '/global/health', {}, false)).status, 401);
 	report.checks.authenticationRejectsAnonymous = true;
 	const createdSession = await api(first, '/session', {
 		method: 'POST',
-		body: JSON.stringify({ title: 'synthetic recovery fixture' })
+		body: JSON.stringify({
+			title: 'synthetic recovery fixture',
+			...(first.v2 ? { location: { directory: '/work' } } : {})
+		})
 	});
 	assert.equal(createdSession.ok, true, 'native session creation');
-	const session = await createdSession.json();
+	const sessionResponse = await createdSession.json();
+	const session = first.v2 ? sessionResponse.data : sessionResponse;
 	assert.equal(typeof session.id, 'string');
 	report.sessionId = session.id;
-	const toolsResponse = await api(first, '/experimental/tool/ids');
-	assert.equal(toolsResponse.ok, true, 'native tool inventory');
-	const toolIds = await toolsResponse.json();
-	assert.ok(Array.isArray(toolIds) && toolIds.every((value) => typeof value === 'string'));
-	assert.ok(toolIds.includes('bash'), 'native shell tool available');
 	const apiMarker = `synthetic-native-api-${randomUUID()}`;
 	const shellResponse = await api(first, `/session/${session.id}/shell`, {
 		method: 'POST',
 		body: JSON.stringify({
-			agent: 'build',
+			...(!first.v2 ? { agent: 'build' } : {}),
 			command: `mkdir -p /stash/knowledge; printf '%s' '${apiMarker}' > /work/recovery-api-fixture.txt; printf '%s' '${apiMarker}' > /stash/knowledge/recovery-api-fixture.txt`
 		})
 	});
 	assert.equal(shellResponse.ok, true, 'native shell writes synthetic markers without a provider');
 	async function verifyNativeFiles(container) {
 		for (const directory of ['/work', '/stash/knowledge']) {
-			const query = new URLSearchParams({ directory, path: 'recovery-api-fixture.txt' });
-			const response = await api(container, `/file/content?${query}`);
+			const query = new URLSearchParams(
+				container.v2
+					? { 'location[directory]': directory }
+					: { directory, path: 'recovery-api-fixture.txt' }
+			);
+			const response = await api(
+				container,
+				`${container.v2 ? '/fs/read/recovery-api-fixture.txt' : '/file/content'}?${query}`
+			);
 			assert.equal(response.ok, true, `native file API for ${directory}`);
-			assert.equal((await response.json()).content, apiMarker);
+			assert.equal(
+				container.v2 ? await response.text() : (await response.json()).content,
+				apiMarker
+			);
 		}
 	}
 	await verifyNativeFiles(first);
@@ -400,13 +428,20 @@ try {
 	await stop(first);
 	await released();
 	if (survivingHome)
-		await writeFile(join(nativeHome, '.custom-client/newer-local-note'), 'newer-surviving-native-state', { mode: 0o600 });
+		await writeFile(
+			join(nativeHome, '.custom-client/newer-local-note'),
+			'newer-surviving-native-state',
+			{ mode: 0o600 }
+		);
 	for (const [name, directory] of Object.entries(external))
 		await writeFile(join(directory, 'external.txt'), `newer-${name}`, { mode: 0o644 });
 	report.checks.gracefulFinalCheckpointAndRelease = true;
 	const second = await start('replacement');
 	if (survivingHome) {
-		await execBun(second.id, `import assert from'node:assert/strict';import{readFile}from'node:fs/promises';assert.equal(await readFile('/home/fhold/.custom-client/newer-local-note','utf8'),'newer-surviving-native-state');`);
+		await execBun(
+			second.id,
+			`import assert from'node:assert/strict';import{readFile}from'node:fs/promises';assert.equal(await readFile('/home/fhold/.custom-client/newer-local-note','utf8'),'newer-surviving-native-state');`
+		);
 		report.checks.survivingReceiptAndNewerLocalStatePreserved = true;
 	}
 	report.checks.imageUpgradeRestored = sourceImage !== image;
@@ -421,7 +456,8 @@ try {
 	report.checks.independentReadOnlyAndWritableMountsPreserved = true;
 	const sessionsResponse = await api(second, '/session');
 	assert.equal(sessionsResponse.ok, true);
-	const sessions = await sessionsResponse.json();
+	const sessionsBody = await sessionsResponse.json();
+	const sessions = second.v2 ? sessionsBody.data : sessionsBody;
 	assert.ok(
 		sessions.some((value) => value.id === session.id),
 		'native session recovered into empty writable layer'
@@ -462,8 +498,12 @@ try {
 	await stop(second);
 	await released();
 	const restarted = await start('candidate-restart');
-	const restartedSessions = await (await api(restarted, '/session')).json();
-	assert.ok(restartedSessions.some((value) => value.id === session.id), 'new candidate checkpoint restores on the next restart');
+	const restartedBody = await (await api(restarted, '/session')).json();
+	const restartedSessions = restarted.v2 ? restartedBody.data : restartedBody;
+	assert.ok(
+		restartedSessions.some((value) => value.id === session.id),
+		'new candidate checkpoint restores on the next restart'
+	);
 	await verifyNativeFiles(restarted);
 	await stop(restarted);
 	await released();

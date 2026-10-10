@@ -110,7 +110,12 @@ export interface AssistantClient {
 	abortSession(sessionId: string, signal: AbortSignal): Promise<void>;
 	pendingQuestions(sessionId: string, signal: AbortSignal): Promise<AssistantQuestion[]>;
 	pendingPermissions(sessionId: string, signal: AbortSignal): Promise<AssistantPermission[]>;
-	answerQuestion(sessionId: string, requestId: string, answers: string[][], signal: AbortSignal): Promise<void>;
+	answerQuestion(
+		sessionId: string,
+		requestId: string,
+		answers: string[][],
+		signal: AbortSignal
+	): Promise<void>;
 	rejectQuestion(sessionId: string, requestId: string, signal: AbortSignal): Promise<void>;
 	answerPermission(
 		sessionId: string,
@@ -181,35 +186,71 @@ function messageText(parts: Array<{ type: string; text?: string; ignored?: boole
 
 function normalizedMessages(messages: SessionMessageInfo[]): AssistantMessage[] {
 	let parentId: string | undefined;
-	return [...messages].sort((a, b) => a.time.created - b.time.created).flatMap<AssistantMessage>((message) => {
-		if (message.type === 'user') {
-			parentId = message.id;
-			return [{ id: message.id, role: 'user' as const, createdAt: message.time.created, text: message.text.slice(0, MAX_MESSAGE_TEXT), files: [] }];
-		}
-		if (message.type !== 'assistant') return [];
-		return [{
-			id: message.id, role: 'assistant' as const, parentId, createdAt: message.time.created,
-			...(message.time.completed ? { completedAt: message.time.completed } : {}),
-			...(message.finish ? { finish: message.finish } : {}),
-			text: messageText(message.content),
-			files: [...new Set(message.snapshot?.files ?? [])].slice(0, MAX_MESSAGE_FILES),
-			tools: message.content.flatMap((part) => part.type === 'tool' && /^[A-Za-z0-9_.:-]{1,128}$/.test(part.name)
-				? [{ name: part.name, status: part.state.status === 'streaming' ? 'pending' as const : part.state.status }] : []),
-			...(message.error ? { error: `${message.error.type}: ${message.error.message.slice(0, 500)}` } : {}),
-			cost: message.cost, tokens: message.tokens
-		}];
-	});
+	return [...messages]
+		.sort((a, b) => a.time.created - b.time.created)
+		.flatMap<AssistantMessage>((message) => {
+			if (message.type === 'user') {
+				parentId = message.id;
+				return [
+					{
+						id: message.id,
+						role: 'user' as const,
+						createdAt: message.time.created,
+						text: message.text.slice(0, MAX_MESSAGE_TEXT),
+						files: []
+					}
+				];
+			}
+			if (message.type !== 'assistant') return [];
+			return [
+				{
+					id: message.id,
+					role: 'assistant' as const,
+					parentId,
+					createdAt: message.time.created,
+					...(message.time.completed ? { completedAt: message.time.completed } : {}),
+					...(message.finish ? { finish: message.finish } : {}),
+					text: messageText(message.content),
+					files: [...new Set(message.snapshot?.files ?? [])].slice(0, MAX_MESSAGE_FILES),
+					tools: message.content.flatMap((part) =>
+						part.type === 'tool' && /^[A-Za-z0-9_.:-]{1,128}$/.test(part.name)
+							? [
+									{
+										name: part.name,
+										status:
+											part.state.status === 'streaming' ? ('pending' as const) : part.state.status
+									}
+								]
+							: []
+					),
+					...(message.error
+						? { error: `${message.error.type}: ${message.error.message.slice(0, 500)}` }
+						: {}),
+					cost: message.cost,
+					tokens: message.tokens
+				}
+			];
+		});
 }
 
 function formQuestion(field: FormField): AssistantQuestion['questions'][number] {
-	const options = field.type === 'string' || field.type === 'multiselect' ? field.options ?? [] : [];
+	const options =
+		field.type === 'string' || field.type === 'multiselect' ? (field.options ?? []) : [];
 	return {
 		header: field.title ?? field.key,
 		question: field.description ?? field.title ?? field.key,
-		options: field.type === 'boolean' ? [{ label: 'Yes', description: '' }, { label: 'No', description: '' }]
-			: options.map((item) => ({ label: item.label, description: item.description ?? '' })),
+		options:
+			field.type === 'boolean'
+				? [
+						{ label: 'Yes', description: '' },
+						{ label: 'No', description: '' }
+					]
+				: options.map((item) => ({ label: item.label, description: item.description ?? '' })),
 		multiple: field.type === 'multiselect',
-		custom: (field.type === 'string' || field.type === 'multiselect') ? field.custom ?? !options.length : field.type !== 'boolean'
+		custom:
+			field.type === 'string' || field.type === 'multiselect'
+				? (field.custom ?? !options.length)
+				: field.type !== 'boolean'
 	};
 }
 
@@ -218,14 +259,20 @@ function policyPermissions(agent: string): PermissionRuleset {
 	if (agent !== 'remote-read') return [];
 	return [
 		{ action: '*', resource: '*', effect: 'deny' },
-		...['read', 'glob', 'list'].map((action) => ({ action, resource: '*', effect: 'allow' as const })),
+		...['read', 'glob', 'list'].map((action) => ({
+			action,
+			resource: '*',
+			effect: 'allow' as const
+		})),
 		{ action: 'external_directory', resource: '/work/*', effect: 'allow' },
 		{ action: 'external_directory', resource: '/stash/*', effect: 'allow' },
 		{ action: 'read', resource: '*.env', effect: 'deny' },
 		{ action: 'read', resource: '*.env.*', effect: 'deny' },
 		{ action: 'read', resource: '*.env.example', effect: 'allow' },
-		...['/stash/secrets/*', '/stash/env/*'].flatMap((resource) =>
-			[{ action: 'read', resource, effect: 'deny' as const }, { action: 'external_directory', resource, effect: 'deny' as const }])
+		...['/stash/secrets/*', '/stash/env/*'].flatMap((resource) => [
+			{ action: 'read', resource, effect: 'deny' as const },
+			{ action: 'external_directory', resource, effect: 'deny' as const }
+		])
 	];
 }
 
@@ -236,12 +283,16 @@ function formAnswer(field: FormField, values: string[]): string | string[] | num
 	}
 	if (field.type === 'number' || field.type === 'integer') {
 		const value = Number(values[0]);
-		if (!Number.isFinite(value) || (field.type === 'integer' && !Number.isInteger(value))) throw new Error('Provide a valid number.');
+		if (!Number.isFinite(value) || (field.type === 'integer' && !Number.isInteger(value)))
+			throw new Error('Provide a valid number.');
 		return value;
 	}
-	if (field.type === 'external') throw new Error('Complete this form using the native OpenCode client.');
-	const answer = values.map((value) => field.options?.find((option) => option.label === value)?.value ?? value);
-	return field.type === 'multiselect' ? answer : answer[0] ?? '';
+	if (field.type === 'external')
+		throw new Error('Complete this form using the native OpenCode client.');
+	const answer = values.map(
+		(value) => field.options?.find((option) => option.label === value)?.value ?? value
+	);
+	return field.type === 'multiselect' ? answer : (answer[0] ?? '');
 }
 
 function authenticatedFetch(
@@ -291,21 +342,40 @@ export function createNativeClient(options: AssistantClientOptions = {}) {
 
 export function createAssistantClient(options: AssistantClientOptions = {}): AssistantClient {
 	const directory = options.directory ?? Bun.env.FH_ASSISTANT_DIRECTORY ?? '/work';
-	const timeoutMs = options.timeoutMs ?? boundedInt(Bun.env.GUARDIAN_ASSISTANT_TIMEOUT_MS, 120_000, 300_000);
+	const timeoutMs =
+		options.timeoutMs ?? boundedInt(Bun.env.GUARDIAN_ASSISTANT_TIMEOUT_MS, 120_000, 300_000);
 	const client = createNativeClient(options);
 	const callOptions = (signal: AbortSignal) => ({ signal });
 	const location = { directory };
 
 	return {
 		async listSessions(limit, signal) {
-			const response = await client.session.list({ directory, limit }, callOptions(signal));
-			return response.data.map(normalizedSession);
+			const sessions: AssistantSession[] = [];
+			let cursor: string | undefined;
+			do {
+				const response = await client.session.list(
+					{
+						directory,
+						limit: Math.min(200, limit - sessions.length),
+						...(cursor ? { cursor } : {})
+					},
+					callOptions(signal)
+				);
+				sessions.push(...response.data.map(normalizedSession));
+				cursor = response.data.length ? (response.cursor.next ?? undefined) : undefined;
+			} while (cursor && sessions.length < limit);
+			return sessions;
 		},
 
 		async createSession(title, agent, signal) {
 			// A credential's upper bound is session-owned, independent of editable
 			// agent preferences and v1 permission state discarded by native migration.
-			return normalizedSession(await client.session.create({ title, agent, location, permissions: policyPermissions(agent) }, callOptions(signal)));
+			return normalizedSession(
+				await client.session.create(
+					{ title, agent, location, permissions: policyPermissions(agent) },
+					callOptions(signal)
+				)
+			);
 		},
 
 		async getSession(sessionId, signal) {
@@ -320,7 +390,9 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 				{ sessionID: sessionId, metadata: metadata as Record<string, JsonValue> },
 				callOptions(signal)
 			);
-			return normalizedSession(await client.session.get({ sessionID: sessionId }, callOptions(signal)));
+			return normalizedSession(
+				await client.session.get({ sessionID: sessionId }, callOptions(signal))
+			);
 		},
 
 		async deleteSession(sessionId, signal) {
@@ -340,7 +412,7 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 		async listMessages(sessionId, limit, signal) {
 			requireSessionId(sessionId);
 			const response = await client.message.list(
-				{ sessionID: sessionId, limit },
+				{ sessionID: sessionId, limit: Math.min(limit, 200), order: 'desc' },
 				callOptions(signal)
 			);
 			return normalizedMessages(response.data);
@@ -362,7 +434,10 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 			requireSessionId(sessionId);
 			// Reapply the credential's current ceiling on every turn, including
 			// sessions whose v1 permissions were reset by native database migration.
-			await client.session.update({ sessionID: sessionId, permissions: policyPermissions(agent) }, callOptions(signal));
+			await client.session.update(
+				{ sessionID: sessionId, permissions: policyPermissions(agent) },
+				callOptions(signal)
+			);
 			await client.session.switchAgent({ sessionID: sessionId, agent }, callOptions(signal));
 			await client.session.prompt(
 				{
@@ -382,35 +457,49 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 
 		async pendingQuestions(sessionId, signal) {
 			requireSessionId(sessionId);
-			const response = await client.session.form.list({ sessionID: sessionId }, callOptions(signal));
+			const response = await client.session.form.list(
+				{ sessionID: sessionId },
+				callOptions(signal)
+			);
 			return response.map((item) => ({
-					id: item.id,
-					sessionId: item.sessionID,
-					questions: item.fields.map(formQuestion)
-				}));
+				id: item.id,
+				sessionId: item.sessionID,
+				questions: item.fields.map(formQuestion)
+			}));
 		},
 
 		async pendingPermissions(sessionId, signal) {
 			requireSessionId(sessionId);
 			const response = await client.permission.list({ sessionID: sessionId }, callOptions(signal));
 			return response.map((item) => ({
-					id: item.id,
-					sessionId: item.sessionID,
-					...(item.source?.messageID ? { messageId: item.source.messageID } : {}),
-					permission: item.action,
-					patterns: item.resources,
-					always: item.save ?? []
-				}));
+				id: item.id,
+				sessionId: item.sessionID,
+				...(item.source?.messageID ? { messageId: item.source.messageID } : {}),
+				permission: item.action,
+				patterns: item.resources,
+				always: item.save ?? []
+			}));
 		},
 
 		async answerQuestion(sessionId, requestId, answers, signal) {
-			const form = await client.session.form.get({ sessionID: sessionId, formID: requestId }, callOptions(signal));
-			const answer = Object.fromEntries(form.fields.map((field, index) => [field.key, formAnswer(field, answers[index] ?? [])]));
-			await client.session.form.reply({ sessionID: sessionId, formID: requestId, answer }, callOptions(signal));
+			const form = await client.session.form.get(
+				{ sessionID: sessionId, formID: requestId },
+				callOptions(signal)
+			);
+			const answer = Object.fromEntries(
+				form.fields.map((field, index) => [field.key, formAnswer(field, answers[index] ?? [])])
+			);
+			await client.session.form.reply(
+				{ sessionID: sessionId, formID: requestId, answer },
+				callOptions(signal)
+			);
 		},
 
 		async rejectQuestion(sessionId, requestId, signal) {
-			await client.session.form.cancel({ sessionID: sessionId, formID: requestId }, callOptions(signal));
+			await client.session.form.cancel(
+				{ sessionID: sessionId, formID: requestId },
+				callOptions(signal)
+			);
 		},
 
 		async answerPermission(sessionId, requestId, decision, message, signal) {
@@ -425,19 +514,40 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 			// Gateway still validates every result through its file boundary.
 			let stdout: string;
 			try {
-				({ stdout } = await promisify(execFile)('rg', ['--json', '--max-count', '20', '--max-filesize', '1M', '--', pattern, directory], { signal, timeout: timeoutMs, maxBuffer: MAX_UPSTREAM_RESPONSE_BYTES }));
+				({ stdout } = await promisify(execFile)(
+					'rg',
+					['--json', '--max-count', '20', '--max-filesize', '1M', '--', pattern, directory],
+					{ signal, timeout: timeoutMs, maxBuffer: MAX_UPSTREAM_RESPONSE_BYTES }
+				));
 			} catch (error) {
 				if (error && typeof error === 'object' && 'code' in error && error.code === 1) return [];
 				throw error;
 			}
-			return stdout.split('\n').filter(Boolean).flatMap((line) => {
-				const value = JSON.parse(line) as { type: string; data: { path: { text: string }; line_number: number; lines: { text: string } } };
-				return value.type === 'match' ? [{ path: value.data.path.text, line: value.data.line_number, text: value.data.lines.text.slice(0, 2_000) }] : [];
-			});
+			return stdout
+				.split('\n')
+				.filter(Boolean)
+				.flatMap((line) => {
+					const value = JSON.parse(line) as {
+						type: string;
+						data: { path: { text: string }; line_number: number; lines: { text: string } };
+					};
+					return value.type === 'match'
+						? [
+								{
+									path: value.data.path.text,
+									line: value.data.line_number,
+									text: value.data.lines.text.slice(0, 2_000)
+								}
+							]
+						: [];
+				});
 		},
 
 		async findFiles(query, limit, signal) {
-			const response = await client.file.find({ query, limit, type: 'file', location }, callOptions(signal));
+			const response = await client.file.find(
+				{ query, limit, type: 'file', location },
+				callOptions(signal)
+			);
 			return response.data.map((entry) => entry.path);
 		}
 	};

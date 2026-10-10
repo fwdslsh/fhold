@@ -27,17 +27,35 @@ function root(): string {
 	return value;
 }
 
-describe('portable backup', () => {
+describe('portable backup', async () => {
+	it('uses the active JSONC document and preserves native provider declarations and comments', async () => {
+		const source = join(root(), 'home');
+		const destination = join(root(), 'backup');
+		writeStackConfig(source, defaultStackConfig());
+		mkdirSync(join(source, 'config/assistant'), { recursive: true });
+		writeFileSync(join(source, 'config/assistant/opencode.json'), '{"model":"stale/model"}');
+		const contents =
+			'// User preferences\n{"model":{"providerID":"local","model":"text"},"providers":{"local":{"package":"@opencode/ai/providers/openai-compatible","settings":{"baseURL":"http://192.0.2.10:1234/v1"},"models":{"text":{}}}},"experimental":{"policies":[{"action":"provider.use","resource":"unused","effect":"deny"}]},}\n';
+		writeFileSync(join(source, 'config/assistant/opencode.jsonc'), contents);
+		const manifest = await createBackup({ sourceHome: source, destination });
+		expect(manifest.files.map((entry) => entry.path)).toEqual(['config/assistant/opencode.jsonc']);
+		expect(readFileSync(join(destination, 'config/assistant/opencode.jsonc'), 'utf8')).toBe(
+			contents
+		);
+	});
 	it('preserves native disabled-endpoint preferences without importing runtime authority', async () => {
 		const source = join(root(), 'home');
 		const destination = join(root(), 'backup');
 		writeStackConfig(source, defaultStackConfig());
 		mkdirSync(join(source, 'config/assistant'), { recursive: true });
-		const contents = '{"model":"available/text-model","disabled_providers":["old-endpoint"],"provider":{"old-endpoint":{"options":{"baseURL":"http://192.0.2.10:1234/v1"},"models":{"text-model":{}}}}}\n';
+		const contents =
+			'{"model":"available/text-model","disabled_providers":["old-endpoint"],"provider":{"old-endpoint":{"options":{"baseURL":"http://192.0.2.10:1234/v1"},"models":{"text-model":{}}}}}\n';
 		writeFileSync(join(source, 'config/assistant/opencode.json'), contents);
 		const manifest = await createBackup({ sourceHome: source, destination });
 		expect(manifest.files.map((file) => file.path)).toEqual(['config/assistant/opencode.json']);
-		expect(readFileSync(join(destination, 'config/assistant/opencode.json'), 'utf8')).toBe(contents);
+		expect(readFileSync(join(destination, 'config/assistant/opencode.json'), 'utf8')).toBe(
+			contents
+		);
 	});
 	it('copies only portable data by default and writes an integrity manifest', async () => {
 		const source = join(root(), 'home');
@@ -53,7 +71,10 @@ describe('portable backup', () => {
 		writeFileSync(join(source, 'workspace', 'project.txt'), 'workspace');
 		writeFileSync(join(source, 'config', 'assistant', 'persona.md'), 'concise');
 		mkdirSync(join(source, 'config/codex'), { recursive: true });
-		writeFileSync(join(source, 'config/codex/requirements.toml'), 'allowed_approval_policies = ["never"]\n');
+		writeFileSync(
+			join(source, 'config/codex/requirements.toml'),
+			'allowed_approval_policies = ["never"]\n'
+		);
 
 		const manifest = await createBackup({ sourceHome: source, destination });
 
@@ -79,11 +100,16 @@ describe('portable backup', () => {
 		const destination = join(root(), 'backup');
 		mkdirSync(join(source, 'knowledge', 'secrets'), { recursive: true });
 		writeStackConfig(source, defaultStackConfig());
-		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), '{"provider":{}}');
-		await createBackup({ sourceHome: source, destination, includeProviderAuth: true });
-		expect(readFileSync(join(destination, 'knowledge', 'secrets', 'auth.json'), 'utf8')).toBe(
-			'{"provider":{}}'
+		writeFileSync(
+			join(source, 'knowledge', 'secrets', 'auth.json'),
+			'{"provider":{"type":"api","key":"synthetic-backup-key"}}'
 		);
+		await createBackup({ sourceHome: source, destination, includeProviderAuth: true });
+		expect(
+			JSON.parse(
+				readFileSync(join(destination, 'knowledge/secrets/opencode-credentials.json'), 'utf8')
+			)[0].value
+		).toEqual({ type: 'key', key: 'synthetic-backup-key' });
 		await expect(createBackup({ sourceHome: source, destination })).rejects.toThrow(
 			'Backup destination must be empty'
 		);
@@ -106,7 +132,6 @@ describe('portable backup', () => {
 			createBackup({ sourceHome: source, destination: join(link, 'existing-backup') })
 		).rejects.toThrow('must not resolve inside FH_HOME');
 	});
-
 
 	it('prunes dependency trees before reading their files and keeps authored project files', async () => {
 		const source = join(root(), 'home');
@@ -270,7 +295,7 @@ describe('portable backup', () => {
 		mkdirSync(join(restored, 'system/stack'), { recursive: true });
 		writeFileSync(join(restored, 'system/stack/stack.compose.yml'), 'services: {}');
 		const { applyRestore } = await import('./restore.js');
-		const plan = applyRestore({
+		const plan = await applyRestore({
 			sourceHome: destination,
 			destinationHome: restored,
 			includeProviderAuth: true

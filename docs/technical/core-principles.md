@@ -5,10 +5,10 @@ implementation that changes a boundary. fhold is a single-install personal
 OpenCode agent: native provider sign-in, real readiness, persistent knowledge,
 ordinary-language recurring work and standards-based client access.
 
-The `codex/opencode-v2` implementation branch targets OpenCode 2.0.26. Its live
-settings contract is verified; complete release qualification remains tracked
-in the [migration handoff](opencode-v2-migration-handoff.md). This does not claim
-that the published V1 beta has migrated.
+This implementation uses OpenCode 2.0.26 with AKM 0.10 prerelease integrations.
+Native live settings, permissions and persistence checks are recorded in the
+[qualification report](../operations/opencode-v2-qualification.md). Public
+artifacts must additionally pass the GitHub release gates.
 
 ## Product and ownership
 
@@ -238,8 +238,10 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
   Session ownership is independently bound in native metadata.
 - Guardian reads through its own read-only workspace mount and rejects both
   canonical-path and opened-descriptor escapes.
-- Suspicious prompts and interaction answers escalate to a separate loopback
-  moderator; failed or ambiguous verdicts block the request.
+- Suspicious prompts and interaction answers use OpenCode's native tool-free
+  generation API with Guardian's separate moderation prompt/model selection.
+  No second server, provider credential copy or agent session is needed;
+  failed or ambiguous verdicts block the request.
 - Portal allowlists default-deny. Operator-owned per-adapter maps select only
   explicit identities; each adapter receives just its generated keyring.
 - Native remote workers bypass Guardian and use operator-supplied native task

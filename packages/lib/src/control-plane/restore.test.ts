@@ -14,7 +14,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createBackup, createBackupSync } from './backup.js';
-import { applyRestore as restoreBackup, planRestore as inspectBackup, type RestoreOptions } from './restore.js';
+import {
+	applyRestore as restoreBackup,
+	planRestore as inspectBackup,
+	type RestoreOptions
+} from './restore.js';
 import { managedComposeFile } from './foundation.js';
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
 
@@ -26,14 +30,21 @@ function prepareBackupFixture(options: RestoreOptions, reseal = false): void {
 	if (!reseal && existsSync(join(options.sourceHome, 'fhold-backup.json'))) return;
 	writeStackConfig(options.sourceHome, defaultStackConfig(options.sourceHome));
 	const archive = `${options.sourceHome}-backup-${crypto.randomUUID()}`;
-	const manifest = createBackupSync({ sourceHome: options.sourceHome, destination: archive, includeProviderAuth: true, includeUserEnv: true, includePortalMaps: true, includeOAuth: true });
+	const manifest = createBackupSync({
+		sourceHome: options.sourceHome,
+		destination: archive,
+		includeProviderAuth: true,
+		includeUserEnv: true,
+		includePortalMaps: true,
+		includeOAuth: true
+	});
 	writeFileSync(join(options.sourceHome, 'fhold-backup.json'), JSON.stringify(manifest));
 }
 function planRestore(options: RestoreOptions) {
 	prepareBackupFixture(options);
 	return inspectBackup(options);
 }
-function applyRestore(options: RestoreOptions, digest?: string) {
+async function applyRestore(options: RestoreOptions, digest?: string) {
 	prepareBackupFixture(options);
 	return restoreBackup(options, digest);
 }
@@ -64,18 +75,24 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe('fhold own-backup restore', () => {
-	it('refuses missing, foreign and unsupported manifests before target writes', () => {
+describe('fhold own-backup restore', async () => {
+	it('refuses missing, foreign and unsupported manifests before target writes', async () => {
 		const { source, destination } = fixture();
 		const options = { sourceHome: source, destinationHome: destination };
 		expect(() => inspectBackup(options)).toThrow('required fhold-backup.json');
-		for (const [product, version] of [['foreign', 1], ['fhold', 2]]) {
-			writeFileSync(join(source, 'fhold-backup.json'), JSON.stringify({ product, version, scope: 'portable', files: [], totalBytes: 0 }));
+		for (const [product, version] of [
+			['foreign', 1],
+			['fhold', 2]
+		]) {
+			writeFileSync(
+				join(source, 'fhold-backup.json'),
+				JSON.stringify({ product, version, scope: 'portable', files: [], totalBytes: 0 })
+			);
 			expect(() => inspectBackup(options)).toThrow('must identify fhold');
 		}
 		expect(existsSync(join(destination, 'knowledge'))).toBe(false);
 	});
-	it('accounts for omitted runtime data and external links before any portable write', () => {
+	it('accounts for omitted runtime data and external links before any portable write', async () => {
 		const { source, destination, root } = fixture();
 		mkdirSync(join(source, 'data'), { recursive: true });
 		mkdirSync(join(root, 'external-runtime'));
@@ -90,9 +107,9 @@ describe('fhold own-backup restore', () => {
 				(item) => item.paths.includes('data/assistant') && item.note.includes('Link only')
 			)
 		).toBe(true);
-		expect(() => applyRestore(options)).toThrow('--acknowledge-unrestored');
+		await expect(applyRestore(options)).rejects.toThrow('--acknowledge-unrestored');
 		expect(existsSync(join(destination, 'knowledge/note.md'))).toBe(false);
-		const applied = applyRestore({ ...options, acknowledgeUnrestored: true }, preview.digest);
+		const applied = await applyRestore({ ...options, acknowledgeUnrestored: true }, preview.digest);
 		expect(readFileSync(join(destination, 'knowledge/note.md'), 'utf8')).toBe('keep this');
 		const receipt = JSON.parse(
 			readFileSync(join(destination, 'state/restore-receipts', `${applied.digest}.json`), 'utf8')
@@ -113,12 +130,12 @@ describe('fhold own-backup restore', () => {
 		expect(manifest.excludedCategories).toContain('Native OpenCode conversations and databases');
 		const plan = planRestore({ sourceHome: backup, destinationHome: destination });
 		expect(plan.reviewRequired).toBe(true);
-		expect(() => applyRestore({ sourceHome: backup, destinationHome: destination })).toThrow(
-			'Some source data'
-		);
+		await expect(
+			applyRestore({ sourceHome: backup, destinationHome: destination })
+		).rejects.toThrow('Some source data');
 	});
 
-	it('prunes generated dependency trees before traversal while preserving authored files', () => {
+	it('prunes generated dependency trees before traversal while preserving authored files', async () => {
 		const { source, destination } = fixture();
 		for (const base of ['workspace/project', 'knowledge/projects/project']) {
 			mkdirSync(join(source, base, 'node_modules', 'dependency'), { recursive: true });
@@ -130,7 +147,7 @@ describe('fhold own-backup restore', () => {
 			if (process.platform !== 'win32')
 				symlinkSync('/outside', join(source, base, 'node_modules', 'link'));
 		}
-		const plan = applyRestore({ sourceHome: source, destinationHome: destination });
+		const plan = await applyRestore({ sourceHome: source, destinationHome: destination });
 		expect(plan.entries).toHaveLength(2);
 		expect(
 			plan.warnings.filter((warning) => warning.includes('generated dependencies'))
@@ -142,12 +159,12 @@ describe('fhold own-backup restore', () => {
 		).toBe(true);
 	});
 
-	it('regenerates known AKM metadata rather than importing old indexes or runtime state', () => {
+	it('regenerates known AKM metadata rather than importing old indexes or runtime state', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'knowledge', '.akm'), { recursive: true });
 		writeFileSync(join(source, 'knowledge', '.akm', 'state.db'), 'stale private runtime state');
 		writeFileSync(join(source, 'knowledge', 'authored.md'), 'keep authored knowledge');
-		const plan = applyRestore({ sourceHome: source, destinationHome: destination });
+		const plan = await applyRestore({ sourceHome: source, destinationHome: destination });
 		expect(plan.entries.map((entry) => entry.relativeDestination)).toEqual([
 			'knowledge/authored.md'
 		]);
@@ -156,7 +173,7 @@ describe('fhold own-backup restore', () => {
 		expect(existsSync(join(destination, 'knowledge', '.akm'))).toBe(false);
 	});
 
-	it('imports native referenced provider files only with explicit opt-in and private permissions', () => {
+	it('imports native referenced provider files only with explicit opt-in and private permissions', async () => {
 		const { source, destination } = fixture();
 		providerConfiguration(source, '{file:/stash/secrets/providers/personal.key}');
 		mkdirSync(join(source, 'knowledge', 'secrets', 'providers'), { recursive: true });
@@ -165,15 +182,12 @@ describe('fhold own-backup restore', () => {
 			'private-provider-key'
 		);
 		chmodSync(join(source, 'knowledge', 'secrets', 'providers', 'personal.key'), 0o755);
-		writeFileSync(
-			join(source, 'knowledge', 'secrets', 'auth.json'),
-			'{"personal":{"type":"api","key":"auth-key"}}'
-		);
+		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), '{}');
 		writeFileSync(join(source, 'knowledge', 'secrets', 'unrelated.key'), 'not-approved');
 		const excluded = planRestore({ sourceHome: source, destinationHome: destination });
 		expect(excluded.entries.some((entry) => entry.category === 'secret')).toBe(false);
 		expect(excluded.warnings.join('\n')).toContain('--include-provider-auth');
-		const plan = applyRestore({
+		const plan = await applyRestore({
 			sourceHome: source,
 			destinationHome: destination,
 			includeProviderAuth: true
@@ -187,12 +201,12 @@ describe('fhold own-backup restore', () => {
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'unrelated.key'))).toBe(false);
 	});
 
-	it('imports explicitly approved user environment files as private non-executable data', () => {
+	it('imports explicitly approved user environment files as private non-executable data', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'knowledge', 'env'), { recursive: true });
 		writeFileSync(join(source, 'knowledge', 'env', 'user.env'), 'PRIVATE_USER_VALUE=do-not-log\n');
 		chmodSync(join(source, 'knowledge', 'env', 'user.env'), 0o755);
-		const plan = applyRestore({
+		const plan = await applyRestore({
 			sourceHome: source,
 			destinationHome: destination,
 			includeUserEnv: true
@@ -204,7 +218,7 @@ describe('fhold own-backup restore', () => {
 
 	it.each(['remote-mcp', 'local-mcp', 'plugin'])(
 		'never imports non-portable %s configuration, with or without provider opt-in',
-		(kind) => {
+		async (kind) => {
 			for (const includeProviderAuth of [false, true]) {
 				const { source, destination } = fixture();
 				mkdirSync(join(source, 'config', 'assistant'), { recursive: true });
@@ -236,7 +250,7 @@ describe('fhold own-backup restore', () => {
 					...setting
 				});
 				writeFileSync(join(source, 'config', 'assistant', 'opencode.json'), original);
-				const plan = applyRestore({
+				const plan = await applyRestore({
 					sourceHome: source,
 					destinationHome: destination,
 					includeProviderAuth
@@ -248,7 +262,11 @@ describe('fhold own-backup restore', () => {
 				expect(JSON.stringify(plan)).not.toContain('private-plugin-package');
 				// Runtime reconciliation seeds only an empty native API preferences file,
 				// never the skipped source's plugins, MCP configuration or authority.
-				expect(JSON.parse(readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8'))).toEqual({});
+				expect(
+					JSON.parse(
+						readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8')
+					)
+				).toEqual({});
 				expect(readFileSync(join(source, 'config', 'assistant', 'opencode.json'), 'utf8')).toBe(
 					original
 				);
@@ -256,13 +274,13 @@ describe('fhold own-backup restore', () => {
 		}
 	);
 
-	it('copies only explicitly portable native model/provider intent without rewriting bytes', () => {
+	it('copies only explicitly portable native model/provider intent without rewriting bytes', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'config', 'assistant'), { recursive: true });
 		const original =
 			'{"$schema":"https://opencode.ai/config.json","model":"personal/model","small_model":"personal/small","disabled_providers":["old-endpoint"],"provider":{"personal":{"options":{"apiKey":"{env:PERSONAL_API_KEY}"}}}}\n';
 		writeFileSync(join(source, 'config', 'assistant', 'opencode.json'), original);
-		const plan = applyRestore({ sourceHome: source, destinationHome: destination });
+		const plan = await applyRestore({ sourceHome: source, destinationHome: destination });
 		expect(plan.entries.map((entry) => entry.relativeDestination)).toEqual([
 			'config/assistant/opencode.json'
 		]);
@@ -271,7 +289,7 @@ describe('fhold own-backup restore', () => {
 		);
 	});
 
-	it('does not transfer unused referenced secrets or require missing files from skipped native config', () => {
+	it('does not transfer unused referenced secrets or require missing files from skipped native config', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'config', 'assistant'), { recursive: true });
 		mkdirSync(join(source, 'knowledge', 'secrets'), { recursive: true });
@@ -291,7 +309,7 @@ describe('fhold own-backup restore', () => {
 		);
 		writeFileSync(join(source, 'knowledge', 'secrets', 'unused.key'), 'unused-provider-secret');
 		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), '{}');
-		const plan = applyRestore({
+		const plan = await applyRestore({
 			sourceHome: source,
 			destinationHome: destination,
 			includeProviderAuth: true
@@ -301,10 +319,12 @@ describe('fhold own-backup restore', () => {
 		]);
 		expect(JSON.stringify(plan)).not.toContain('unused-provider-secret');
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'unused.key'))).toBe(false);
-		expect(JSON.parse(readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8'))).toEqual({});
+		expect(
+			JSON.parse(readFileSync(join(destination, 'config', 'assistant', 'opencode.json'), 'utf8'))
+		).toEqual({});
 	});
 
-	it('skips native config with inline credentials without opt-in, preserving declarations', () => {
+	it('skips native config with inline credentials without opt-in, preserving declarations', async () => {
 		const { source, destination } = fixture();
 		providerConfiguration(source, 'literal-private-key');
 		const excluded = planRestore({ sourceHome: source, destinationHome: destination });
@@ -331,27 +351,27 @@ describe('fhold own-backup restore', () => {
 		'/stash/secrets/../../outside',
 		'/stash/secrets/nested/../key',
 		'/stash/secrets/key\\escape'
-	])('rejects unsafe provider reference %s without writing', (reference) => {
+	])('rejects unsafe provider reference %s without writing', async (reference) => {
 		const { source, destination } = fixture();
 		providerConfiguration(source, `{file:${reference}}`);
-		expect(() =>
+		await expect(
 			applyRestore({ sourceHome: source, destinationHome: destination, includeProviderAuth: true })
-		).toThrow('Provider file reference');
+		).rejects.toThrow('Provider file reference');
 		expect(existsSync(join(destination, 'config', 'assistant', 'opencode.json'))).toBe(false);
 	});
 
-	it('rejects missing provider files before any writes', () => {
+	it('rejects missing provider files before any writes', async () => {
 		const { source, destination } = fixture();
 		providerConfiguration(source, '{file:/stash/secrets/missing.key}');
-		expect(() =>
+		await expect(
 			applyRestore({ sourceHome: source, destinationHome: destination, includeProviderAuth: true })
-		).toThrow('missing or unreadable');
+		).rejects.toThrow('missing or unreadable');
 		expect(existsSync(join(destination, 'config', 'assistant', 'opencode.json'))).toBe(false);
 	});
 
 	it.each(['leaf', 'parent', 'config-parent', 'destination-parent', 'dangling-leaf'])(
 		'rejects provider %s symlinks before any writes',
-		(kind) => {
+		async (kind) => {
 			if (process.platform === 'win32') return;
 			const { root, source, destination } = fixture();
 			providerConfiguration(source, '{file:/stash/secrets/private.key}');
@@ -374,9 +394,13 @@ describe('fhold own-backup restore', () => {
 				mkdirSync(join(destination, 'knowledge'), { recursive: true });
 				symlinkSync(join(root, 'outside'), join(destination, 'knowledge', 'secrets'));
 			}
-			expect(() =>
-				applyRestore({ sourceHome: source, destinationHome: destination, includeProviderAuth: true })
-			).toThrow('unsafe component');
+			await expect(
+				applyRestore({
+					sourceHome: source,
+					destinationHome: destination,
+					includeProviderAuth: true
+				})
+			).rejects.toThrow('unsafe component');
 			expect(existsSync(join(destination, 'config', 'assistant', 'opencode.json'))).toBe(false);
 			expect(readFileSync(join(root, 'outside', 'private.key'), 'utf8')).toBe(
 				'outside-private-key'
@@ -384,14 +408,14 @@ describe('fhold own-backup restore', () => {
 		}
 	);
 
-	it('rejects oversized provider files and redacts malformed native config diagnostics', () => {
+	it('rejects oversized provider files and redacts malformed native config diagnostics', async () => {
 		const { source, destination } = fixture();
 		providerConfiguration(source, '{file:/stash/secrets/huge.key}');
 		mkdirSync(join(source, 'knowledge', 'secrets'), { recursive: true });
 		writeFileSync(join(source, 'knowledge', 'secrets', 'huge.key'), Buffer.alloc(1024 * 1024 + 1));
-		expect(() =>
+		await expect(
 			applyRestore({ sourceHome: source, destinationHome: destination, includeProviderAuth: true })
-		).toThrow('1 MiB');
+		).rejects.toThrow('1 MiB');
 		writeFileSync(
 			join(source, 'config', 'assistant', 'opencode.json'),
 			'{"key":literal-private-key}'
@@ -405,7 +429,7 @@ describe('fhold own-backup restore', () => {
 		}
 	});
 
-	it('copies knowledge and binary workspace files while staging tasks disabled', () => {
+	it('copies knowledge and binary workspace files while staging tasks disabled', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'knowledge', 'notes'), { recursive: true });
 		mkdirSync(join(source, 'knowledge', 'tasks'), { recursive: true });
@@ -433,7 +457,7 @@ describe('fhold own-backup restore', () => {
 			false
 		);
 
-		applyRestore({ sourceHome: source, destinationHome: destination });
+		await applyRestore({ sourceHome: source, destinationHome: destination });
 		expect(readFileSync(join(destination, 'knowledge', 'notes', 'person.md'), 'utf8')).toBe(
 			'remember me\n'
 		);
@@ -445,7 +469,7 @@ describe('fhold own-backup restore', () => {
 		expect(existsSync(join(destination, 'knowledge', 'imported-tasks', 'news.yml'))).toBe(true);
 	});
 
-	it('binds apply to the exact source content reviewed in a preview', () => {
+	it('binds apply to the exact source content reviewed in a preview', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'knowledge'), { recursive: true });
 		const path = join(source, 'knowledge', 'memory.md');
@@ -453,13 +477,13 @@ describe('fhold own-backup restore', () => {
 		const preview = planRestore({ sourceHome: source, destinationHome: destination });
 		writeFileSync(path, 'changed! value\n');
 
-		expect(() =>
+		await expect(
 			applyRestore({ sourceHome: source, destinationHome: destination }, preview.digest)
-		).toThrow('Backup checksum mismatch');
+		).rejects.toThrow('Backup checksum mismatch');
 		expect(existsSync(join(destination, 'knowledge', 'memory.md'))).toBe(false);
 	});
 
-	it('refuses conflicts and never follows source symlinks', () => {
+	it('refuses conflicts and never follows source symlinks', async () => {
 		if (process.platform === 'win32') return;
 		const { root, source, destination } = fixture();
 		mkdirSync(join(source, 'knowledge'), { recursive: true });
@@ -472,13 +496,13 @@ describe('fhold own-backup restore', () => {
 		const plan = planRestore({ sourceHome: source, destinationHome: destination });
 		expect(plan.conflicts).toBe(1);
 		expect(plan.warnings.some((warning) => warning.includes('escape.md'))).toBe(true);
-		expect(() => applyRestore({ sourceHome: source, destinationHome: destination })).toThrow(
-			'destination conflict'
-		);
+		await expect(
+			applyRestore({ sourceHome: source, destinationHome: destination })
+		).rejects.toThrow('destination conflict');
 		expect(readFileSync(join(destination, 'knowledge', 'conflict.md'), 'utf8')).toBe('new\n');
 	});
 
-	it('validates imported portal identities against the new credential registry', () => {
+	it('validates imported portal identities against the new credential registry', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'config', 'portal', 'discord'), { recursive: true });
 		writeFileSync(
@@ -494,7 +518,7 @@ describe('fhold own-backup restore', () => {
 		).toThrow('recreate it before restore');
 	});
 
-	it('keeps malformed mapped configuration values out of error messages', () => {
+	it('keeps malformed mapped configuration values out of error messages', async () => {
 		const { source, destination } = fixture();
 		mkdirSync(join(source, 'config', 'portal', 'discord'), { recursive: true });
 		writeFileSync(
@@ -510,7 +534,7 @@ describe('fhold own-backup restore', () => {
 		}
 	});
 
-	it('rejects backup manifest parent symlinks before reading outside its source', () => {
+	it('rejects backup manifest parent symlinks before reading outside its source', async () => {
 		if (process.platform === 'win32') return;
 		const { root, source, destination } = fixture();
 		mkdirSync(join(root, 'outside'), { recursive: true });
@@ -519,7 +543,10 @@ describe('fhold own-backup restore', () => {
 		writeFileSync(
 			join(source, 'fhold-backup.json'),
 			JSON.stringify({
-				product: 'fhold', scope: 'portable', warnings: [], version: 1,
+				product: 'fhold',
+				scope: 'portable',
+				warnings: [],
+				version: 1,
 				totalBytes: 7,
 				files: [{ path: 'knowledge/memory.md', bytes: 7, sha256: 'a'.repeat(64) }]
 			})

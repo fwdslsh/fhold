@@ -29,6 +29,7 @@ import {
 	restartStatus
 } from '../packages/lib/src/index.js';
 import { readAssistantConfig } from '../packages/lib/src/control-plane/opencode.js';
+import { verifyNativeGuardian } from '../packages/guardian/src/native-test-helper.js';
 
 const MODEL_SERVER = String.raw`
 const http = require('node:http');
@@ -41,12 +42,14 @@ http.createServer(async (req,res) => {
   if(path.endsWith('/v1/chat/completions')) {
     let input='';for await(const chunk of req)input+=chunk;
     const body=JSON.parse(input);
+    const supplied=JSON.stringify(body.messages);
+    const text=supplied.includes('Classify the following untrusted JSON string') ? JSON.stringify({verdict:'block',reason:'Controlled native moderator verdict'}) : supplied.includes('internal memory extraction') ? JSON.stringify({facts:[{fact:'The user prefers jasmine tea.',evidence:'I prefer jasmine tea.',confidence:0.95}]}) : 'FH_READY';
     requests.push({path,method:req.method,model:body.model,tools:body.tools?.length||0,stream:body.stream===true});
     const usage={prompt_tokens:1,completion_tokens:1,total_tokens:2};
-    if(!body.stream)return json({id:'qa',object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:'FH_READY'},finish_reason:'stop'}],usage});
+    if(!body.stream)return json({id:'qa',object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:text},finish_reason:'stop'}],usage});
     const chunk=(delta,finish_reason)=>({id:'qa',object:'chat.completion.chunk',created:Math.floor(Date.now()/1000),model:body.model,choices:[{index:0,delta,finish_reason}]});
     res.writeHead(200,{'content-type':'text/event-stream'});
-    return res.end('data: '+JSON.stringify(chunk({role:'assistant',content:'FH_READY'},null))+'\n\ndata: '+JSON.stringify({...chunk({},'stop'),usage})+'\n\ndata: [DONE]\n\n');
+    return res.end('data: '+JSON.stringify(chunk({role:'assistant',content:text},null))+'\n\ndata: '+JSON.stringify({...chunk({},'stop'),usage})+'\n\ndata: [DONE]\n\n');
   }
   requests.push({path,method:req.method});json({error:{message:'Unexpected controlled fixture request'}},404);
 }).listen(8080,'0.0.0.0');
@@ -124,12 +127,19 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			return result;
 		};
 		const authIds = async () => {
-			const password = readFileSync(join(home, 'state/secrets/fhold_opencode_password'), 'utf8').trim();
+			const password = readFileSync(
+				join(home, 'state/secrets/fhold_opencode_password'),
+				'utf8'
+			).trim();
 			const response = await fetch(`http://127.0.0.1:${config.assistant.port}/api/credential`, {
-				headers: { authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
+				headers: {
+					authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`
+				}
 			});
 			assert(response.ok);
-			return ((await response.json()) as { data: Array<{ integrationID: string }> }).data.map(entry => entry.integrationID).sort();
+			return ((await response.json()) as { data: Array<{ integrationID: string }> }).data
+				.map((entry) => entry.integrationID)
+				.sort();
 		};
 		const posts = () => requests.filter((item) => item.method === 'POST');
 		let started = false;
@@ -180,9 +190,17 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				return result;
 			};
 			const initialIdentity = await identity('before provider settings');
-			await execute('docker', ['exec', cid, 'node', '--input-type=module', '-e',
-				readFileSync(join(import.meta.dir, 'smoke-opencode-v2-live.mjs'), 'utf8')]);
-			stages.push('native watcher applies providers, models, shell, agents, commands, existing-session permissions and plugin add/edit/remove on managed mounts without reload or restart');
+			await execute('docker', [
+				'exec',
+				cid,
+				'node',
+				'--input-type=module',
+				'-e',
+				readFileSync(join(import.meta.dir, 'smoke-opencode-v2-live.mjs'), 'utf8')
+			]);
+			stages.push(
+				'native watcher applies providers, models, shell, agents, commands, existing-session permissions and plugin add/edit/remove on managed mounts without reload or restart'
+			);
 			const liveImage = (
 				await execute('docker', ['inspect', '--format', '{{.Config.Image}}', cid])
 			).stdout.trim();
@@ -259,7 +277,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				false
 			);
 			const writableConfig = mounts.filter(
-					(item) => item.Destination === '/home/fhold/.config/opencode' && item.RW
+				(item) => item.Destination === '/home/fhold/.config/opencode' && item.RW
 			);
 			assert.equal(writableConfig.length, 1);
 			assert.equal(writableConfig[0].Destination, '/home/fhold/.config/opencode');
@@ -309,7 +327,10 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			assert.equal((await readAssistantConfig(home)).model, before.model);
 			const used = await useProviderModel(home, 'qa-ollama', 'team/qa-model');
 			assert.deepEqual(used.currentModel, { provider: 'qa-ollama', model: 'team/qa-model' });
-			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
+			assert.deepEqual((await readAssistantConfig(home)).model, {
+				providerID: 'qa-ollama',
+				model: 'team/qa-model'
+			});
 			await syncRequests();
 			assert.equal(posts().length, 1);
 			const usedIdentity = await identity('after explicit Use');
@@ -325,7 +346,10 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				url: editedUrl,
 				model: 'team/edited-model'
 			});
-			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
+			assert.deepEqual((await readAssistantConfig(home)).model, {
+				providerID: 'qa-ollama',
+				model: 'team/qa-model'
+			});
 			const edited = await testAssistantReadiness(home, {
 				provider: 'qa-ollama',
 				model: 'team/edited-model',
@@ -334,14 +358,29 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			assert.equal(edited.ok, true, JSON.stringify(edited));
 			await syncRequests();
 			assert.equal(posts().at(-1)?.path, '/edited/v1/chat/completions');
-			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
+			assert.deepEqual((await readAssistantConfig(home)).model, {
+				providerID: 'qa-ollama',
+				model: 'team/qa-model'
+			});
 			stages.push(
 				'endpoint URL/model edit applied immediately and preserved old default; explicit test used edited transport'
 			);
 			const userConfigBeforeRestart = digest(preferencesPath);
 			const authBeforeRestart = await authIds();
+			// Model the prior release's persisted, operator-owned AKM config.
+			const akmPath = join(home, 'config/akm/config.json');
+			const oldAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+			oldAkm.engines.scheduled.args[1] = '--attach';
+			writeFileSync(akmPath, JSON.stringify(oldAkm));
 			await run(['restart']);
 			await waitForAssistant(home);
+			const upgradedAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+			oldAkm.engines.scheduled.args[1] = '--server';
+			assert.deepEqual(
+				upgradedAkm,
+				oldAkm,
+				'Normal startup upgrades the exact shipped scheduler arguments and preserves all other settings'
+			);
 			await identity('after explicit CLI restart');
 			const afterRestart = await listProviderSettings(home);
 			assert.deepEqual(afterRestart.currentModel, {
@@ -393,7 +432,10 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				removeProviderSetup(home, 'qa-ollama', { endpoint: true }),
 				/another model/i
 			);
-			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
+			assert.deepEqual((await readAssistantConfig(home)).model, {
+				providerID: 'qa-ollama',
+				model: 'team/qa-model'
+			});
 			await syncRequests();
 			assert.equal(posts().length, 2);
 			assert(posts().every((item) => item.tools === 0));
@@ -407,6 +449,59 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			);
 			stages.push(
 				'endpoint disabled non-destructively; auth-only removal exact; separate auth preserved; re-enable works; current default protected; managed policy bytes unchanged'
+			);
+			await verifyNativeGuardian(home, `http://127.0.0.1:${config.assistant.port}`, root);
+			stages.push(
+				'real native Guardian MCP two-turn completion, cross-credential denial, chat/read permissions, question/approval replies and tool-free moderation'
+			);
+			const currentContainer = (
+				await execute('docker', [...composeArgs, 'ps', '--quiet', 'assistant'])
+			).stdout.trim();
+			await execute('docker', [
+				'exec',
+				currentContainer,
+				'fhold-task',
+				'create',
+				'native-qa',
+				'--schedule',
+				'0 0 1 1 *',
+				'--prompt',
+				'Return the readiness marker.'
+			]);
+			await execute('docker', ['exec', currentContainer, 'fhold-task', 'run', 'native-qa'], {
+				timeout: 60000
+			});
+			const history = await execute('docker', [
+				'exec',
+				currentContainer,
+				'fhold-task',
+				'history',
+				'native-qa'
+			]);
+			const runRecord = JSON.parse(history.stdout).rows[0];
+			assert.equal(runRecord.status, 'completed');
+			assert.match(runRecord.log, /^\/opt\/akm\/cache\/tasks\/logs\/native-qa\//);
+			assert.match(
+				(await execute('docker', ['exec', currentContainer, 'cat', runRecord.log])).stdout,
+				/FH_READY/
+			);
+			stages.push(
+				'scheduled profile attached to the native server and retained a real task result in AKM history'
+			);
+			await syncRequests();
+			const finalAuthIds = await authIds();
+			await run(['stop']);
+			const portable = join(root, 'compiled-portable');
+			await run(['backup', '--to', portable, '--include-provider-auth']);
+			assert(
+				existsSync(join(portable, 'knowledge/secrets/opencode-credentials.json')),
+				'Compiled CLI must execute the native credential worker'
+			);
+			const archive = join(root, 'compiled-history');
+			await run(['history', 'export', '--from', home, '--image', image, '--to', archive]);
+			assert.equal(JSON.parse(readFileSync(join(archive, 'history.json'), 'utf8')).version, 2);
+			stages.push(
+				'compiled CLI successfully exported native credentials and v2 history through isolated workers'
 			);
 			writeFileSync(
 				join(root, 'report.json'),
@@ -424,7 +519,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 						mounts,
 						identities,
 						currentModel: afterRestart.currentModel,
-						authIds: await authIds(),
+						authIds: finalAuthIds,
 						managedHashes: beforeHashes,
 						evidence:
 							'Published shipped Assistant native API+SDK with controlled OpenAI-compatible responses. Actual Ollama/LM Studio/llama.cpp products and vendor entitlement are not claimed.'

@@ -120,7 +120,9 @@ fhold doctor --readiness
 ```
 
 Use `--key-file -` for standard input. Do not paste keys into command arguments.
-Native auth persists under `knowledge/secrets/auth.json`.
+Native v2 credentials persist in the OpenCode database under
+`data/assistant/.local/share/opencode/`. Portable exports include them only
+with the explicit provider-auth option.
 
 ## Optional local Admin
 

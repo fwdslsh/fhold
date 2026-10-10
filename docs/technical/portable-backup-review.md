@@ -35,7 +35,7 @@ The writer's selection and limits are in [backup.ts](../../packages/lib/src/cont
 | Workspace regular files | Default, including dotfiles and `.git` regular files | Same relative paths |
 | `config/assistant/persona.md`, `user-profile.md` | Default | Missing or pristine seeded files only; edited target files conflict |
 | `config/assistant/opencode.json` | Only portable native preferences | Byte-preserved; no automatic filtering/rewrite of an otherwise nonportable configuration |
-| Native provider `auth.json` and approved referenced key files | `--include-provider-auth` | Requires the same restore opt-in; unrelated files in `knowledge/secrets/` are not swept in |
+| Native provider credential export and approved referenced key files | `--include-provider-auth` | Requires the same restore opt-in; unrelated files in `knowledge/secrets/` are not swept in |
 | `knowledge/env/user.env` | `--include-user-env` | Explicit opt-in, private non-executable file |
 | Discord/Slack `config/portal/<adapter>/credentials.json` | `--include-portal-maps` | Parsed and checked against target named identities |
 | Guardian `oauth.json`, `oauth-identities.json` | `--include-oauth` | Parsed; identity-map usernames must exist in target |

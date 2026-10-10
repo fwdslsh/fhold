@@ -19,7 +19,7 @@ import {
 	nativeEvent,
 	tick
 } from '../plugins/fhold/scripts/activity.mjs';
-import { FholdPlugin } from '../plugins/fhold/opencode.js';
+import { observeOpenCode } from '../plugins/fhold/opencode.js';
 
 const roots: string[] = [];
 function fixture() {
@@ -27,7 +27,7 @@ function fixture() {
 	roots.push(root);
 	initialize(
 		{
-			FH_KEEPALIVE_URL: 'https://instance.example/global/health',
+			FH_KEEPALIVE_URL: 'https://instance.example/api/info',
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0'
 		},
@@ -150,24 +150,30 @@ test('unknown startup, unobserved native workers and consent waits fail awake', 
 test('unsigned-in remotes are inactive, but observed work and unknown activated coverage stay awake', async () => {
 	const root = fixture();
 	mkdirSync(join(root, 'remote'));
-	initialize({FH_KEEPALIVE_URL:'https://instance.example/'}, root);
+	initialize({ FH_KEEPALIVE_URL: 'https://instance.example/' }, root);
 	coverage('opencode', true, root);
-	for (const tool of ['claude','codex'])
-		writeFileSync(join(root, 'remote', `${tool}.json`), JSON.stringify({state:'sign-in-needed'}));
+	for (const tool of ['claude', 'codex'])
+		writeFileSync(
+			join(root, 'remote', `${tool}.json`),
+			JSON.stringify({ state: 'sign-in-needed' })
+		);
 	let requests = 0;
-	const fetch = async () => { requests++; return new Response(null); };
-	expect((await tick({root,fetch})).activity).toBe('idle');
+	const fetch = async () => {
+		requests++;
+		return new Response(null);
+	};
+	expect((await tick({ root, fetch })).activity).toBe('idle');
 	expect(requests).toBe(0);
 	// Genuine native work takes precedence even if a supervisor is waiting.
 	event(root, 'UserPromptSubmit');
-	expect((await tick({root,fetch})).activity).toBe('busy');
+	expect((await tick({ root, fetch })).activity).toBe('busy');
 	event(root, 'Stop');
-	writeFileSync(join(root, 'remote/codex.json'), JSON.stringify({state:'process-running'}));
-	expect((await tick({root,fetch})).activity).toBe('unknown');
+	writeFileSync(join(root, 'remote/codex.json'), JSON.stringify({ state: 'process-running' }));
+	expect((await tick({ root, fetch })).activity).toBe('unknown');
 	event(root, 'SessionStart');
-	expect((await tick({root,fetch})).activity).toBe('idle');
-	writeFileSync(join(root, 'remote/claude.json'), JSON.stringify({state:'approval-needed'}));
-	expect((await tick({root,fetch})).activity).toBe('unknown');
+	expect((await tick({ root, fetch })).activity).toBe('idle');
+	writeFileSync(join(root, 'remote/claude.json'), JSON.stringify({ state: 'approval-needed' }));
+	expect((await tick({ root, fetch })).activity).toBe('unknown');
 	expect(requests).toBe(3);
 });
 
@@ -201,14 +207,12 @@ test('a new boot clears old keep-alive failures; status reports failures without
 	expect(() => readFileSync(join(root, 'keepalive-status.json'))).toThrow();
 });
 
-async function withOpenCode(
-	run: (plugin: Awaited<ReturnType<typeof FholdPlugin>>, root: string) => Promise<void>
-) {
+async function withOpenCode(run: (observe: typeof observeOpenCode, root: string) => void) {
 	const root = fixture();
 	const previous = process.env.FH_RUNTIME_DIR;
 	process.env.FH_RUNTIME_DIR = root;
 	try {
-		await run(await FholdPlugin(), root);
+		run(observeOpenCode, root);
 	} finally {
 		if (previous === undefined) delete process.env.FH_RUNTIME_DIR;
 		else process.env.FH_RUNTIME_DIR = previous;
@@ -216,54 +220,51 @@ async function withOpenCode(
 }
 
 test('an OpenCode observation failure does not reject a native event', async () => {
-	await withOpenCode(async (plugin, root) => {
-		await plugin.event({
-			event: { type: 'session.status', properties: { status: { type: 'busy' } } }
-		});
+	await withOpenCode((observe, root) => {
+		observe({ type: 'session.shell.started', data: { sessionID: 'a' } });
 		expect(activityStatus(root, [])).toBe('unknown');
-		await plugin.event({
-			event: { type: 'session.idle', properties: { sessionID: 'still-works' } }
-		});
+		observe({ type: 'session.idle', data: { sessionID: 'still-works' } });
 		expect(activityStatus(root, [])).toBe('unknown');
 	});
 });
 
 test('OpenCode append-only messages do not invent active work', async () => {
-	await withOpenCode(async (plugin, root) => {
-		// The native noReply path runs chat.message, but never starts a turn.
-		if ('chat.message' in plugin) await plugin['chat.message']({ sessionID: 'append-only' });
-		await plugin.event({
-			event: {
-				type: 'message.updated',
-				properties: { info: { sessionID: 'append-only', role: 'user' } }
-			}
+	await withOpenCode((observe, root) => {
+		observe({
+			type: 'session.message.created',
+			data: { sessionID: 'append-only', message: { type: 'user' } }
 		});
 		expect(activityStatus(root, [])).toBe('idle');
 	});
 });
 
-test('OpenCode tool terminal events release errors and preserve overlapping work', async () => {
-	await withOpenCode(async (plugin, root) => {
-		const part = async (id: string, type: string, sessionID = 'a') =>
-			plugin.event({
-				event: {
-					type: 'message.part.updated',
-					properties: { part: { type: 'tool', id, sessionID, state: { status: type } } }
-				}
-			});
-		await part('one', 'running');
-		await part('two', 'pending');
+test('OpenCode tools, shells and terminal events preserve overlapping work', async () => {
+	await withOpenCode((observe, root) => {
+		const tool = (id: string, type: string, sessionID = 'a') =>
+			observe({ type, data: { id, sessionID } });
+		tool('one', 'session.tool.called');
+		tool('two', 'session.tool.called');
 		expect(activityStatus(root, [])).toBe('busy');
-		await part('one', 'error');
+		tool('one', 'session.tool.failed');
 		expect(activityStatus(root, [])).toBe('busy');
-		await part('two', 'completed');
+		tool('two', 'session.tool.success');
 		expect(activityStatus(root, [])).toBe('idle');
-		await part('one', 'running');
-		await part('other', 'running', 'b');
-		await plugin.event({ event: { type: 'session.deleted', properties: { info: { id: 'a' } } } });
+		observe({ type: 'session.execution.started', data: { sessionID: 'a' } });
+		observe({ type: 'session.shell.started', data: { sessionID: 'b', shell: { id: 'shell' } } });
+		observe({ type: 'session.execution.interrupted', data: { sessionID: 'a' } });
 		expect(activityStatus(root, [])).toBe('busy');
-		await part('other', 'error', 'b');
+		observe({ type: 'session.shell.ended', data: { sessionID: 'b', shell: { id: 'shell' } } });
 		expect(activityStatus(root, [])).toBe('idle');
+		for (const type of [
+			'session.execution.succeeded',
+			'session.execution.failed',
+			'session.idle',
+			'session.deleted'
+		]) {
+			observe({ type: 'session.execution.started', data: { sessionID: 'a' } });
+			observe({ type, data: { sessionID: 'a' } });
+			expect(activityStatus(root, [])).toBe('idle');
+		}
 	});
 });
 
@@ -315,11 +316,11 @@ test('keep-alive is opt-in and never implicitly forwards the native password', (
 	).toBeUndefined();
 	expect(
 		keepaliveConfig({
-			FH_KEEPALIVE_URL: 'https://instance.example/global/health',
+			FH_KEEPALIVE_URL: 'https://instance.example/api/info',
 			FH_KEEPALIVE_AUTH: 'opencode',
 			OPENCODE_SERVER_PASSWORD: 'synthetic'
 		}).authorization
-	).toBe(`Basic ${Buffer.from('user:synthetic').toString('base64')}`);
+	).toBe(`Basic ${Buffer.from('opencode:synthetic').toString('base64')}`);
 	for (const url of [
 		'ftp://host/',
 		'https://user:secret@host/',

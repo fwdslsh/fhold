@@ -153,8 +153,8 @@ export function createMemoryCapture(options = {}) {
 		// Bound the process-local debounce map; durable checkpoints contain hashes only.
 		if (recentlyTried.size > 256) recentlyTried.delete(recentlyTried.keys().next().value);
 		try {
-			const info = await request(`/session/${encodeURIComponent(session)}`);
-			if (info?.metadata?.fholdGuardian) return;
+			const info = (await request(`/session/${encodeURIComponent(session)}`))?.data;
+			if (!info || info.metadata?.fholdGuardian) return;
 			const listing = await request(`/session/${encodeURIComponent(session)}/message?limit=200&order=desc`);
 			if (!Array.isArray(listing?.data)) return;
 			const messages = listing.data.sort((a, b) => a.time.created - b.time.created);

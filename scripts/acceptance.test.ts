@@ -61,16 +61,22 @@ function fakeReadinessFetch() {
 	return (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const request = new Request(input, init);
 		const path = new URL(request.url).pathname;
-		if (path === '/config') return Response.json({});
-		if (path === '/session' && request.method === 'POST')
-			return Response.json({ id: 'acceptance' });
-		if (path === '/session/acceptance/message') {
-			return Response.json({
-				info: { providerID: 'test-provider', modelID: 'test-model' },
-				parts: [{ type: 'text', text: 'FH_READY' }]
-			});
-		}
-		if (path === '/session/acceptance' && request.method === 'DELETE') return Response.json(true);
+		const data = (value: unknown) => Response.json({ data: value });
+		if (path === '/api/info') return Response.json({ version: '2.0.26' });
+		if (path === '/api/provider') return data([{ id: 'test-provider', name: 'Test' }]);
+		if (path === '/api/integration')
+			return data([{ id: 'test-provider', connections: [{ type: 'credential' }] }]);
+		if (path === '/api/model')
+			return data([
+				{
+					id: 'test-model',
+					providerID: 'test-provider',
+					capabilities: { tools: true, input: ['text'], output: ['text'] }
+				}
+			]);
+		if (path === '/api/model/default')
+			return data({ providerID: 'test-provider', id: 'test-model' });
+		if (path === '/api/experimental/generate') return data({ text: 'FH_READY' });
 		throw new Error(`Unexpected acceptance request: ${request.method} ${path}`);
 	}) as typeof fetch;
 }
@@ -112,6 +118,7 @@ function task(home: string, bin: string, args: string[]) {
 		env: {
 			...process.env,
 			PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+			AKM_CONFIG_DIR: join(home, 'config/akm'),
 			FH_KNOWLEDGE_DIR: join(home, 'knowledge')
 		},
 		stdout: 'pipe',
@@ -120,6 +127,44 @@ function task(home: string, bin: string, args: string[]) {
 }
 
 describe('fhold deterministic control-plane integration', () => {
+	it('upgrades only the shipped scheduled engine once and preserves custom engines and task activation', () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-task-upgrade-'));
+		roots.push(root);
+		const bin = installFakeAkm(root);
+		const directory = join(root, 'config/akm');
+		mkdirSync(directory, { recursive: true });
+		const path = join(directory, 'config.json');
+		const config = {
+			engines: {
+				scheduled: {
+					bin: 'fhold-opencode-run',
+					args: ['run', '--attach', 'http://127.0.0.1:4096', '--agent', 'scheduled']
+				}
+			},
+			scheduler: { enabled: ['tasks/news'] },
+			other: { preserved: true }
+		};
+		writeFileSync(path, JSON.stringify(config));
+		const before = readFileSync(path, 'utf8');
+		expect(task(root, bin, ['list']).exitCode).toBe(0);
+		expect(readFileSync(path, 'utf8')).toBe(before);
+		expect(task(root, bin, ['sync']).exitCode).toBe(0);
+		config.engines.scheduled.args[1] = '--server';
+		expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(config);
+		const upgraded = readFileSync(path, 'utf8');
+		expect(task(root, bin, ['sync']).exitCode).toBe(0);
+		expect(readFileSync(path, 'utf8')).toBe(upgraded);
+		config.engines.scheduled.args = [
+			'run',
+			'--attach',
+			'http://operator-custom:4096',
+			'--agent',
+			'scheduled'
+		];
+		writeFileSync(path, JSON.stringify(config));
+		expect(task(root, bin, ['sync']).exitCode).toBe(0);
+		expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(config);
+	});
 	it('wires installation, fixture readiness/tasks, file persistence, and safe restore', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-acceptance-'));
 		roots.push(root);

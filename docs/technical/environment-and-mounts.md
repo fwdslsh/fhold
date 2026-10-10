@@ -127,10 +127,11 @@ their portal is enabled.
 Other secrets are mounted through Compose `secrets`; no secret value belongs
 in an environment variable.
 
-Provider credentials are the deliberate exception to the `state/secrets`
-location. OpenCode owns `knowledge/secrets/auth.json`; Assistant reads it
-through its normal knowledge tree and OpenCode auth path, while Guardian receives
-only a read-only file mount for moderation.
+OpenCode v2 owns provider credentials in its native SQLite database under
+`data/assistant/.local/share/opencode/`. Guardian uses Assistant's tool-free
+native generation API and receives no provider credentials. The old
+`knowledge/secrets/auth.json` mount remains only as input to upstream's one-time
+v1 database migration; it is not the active v2 credential store.
 
 ## Assistant
 
@@ -144,13 +145,13 @@ bypasses Guardian.
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
 | `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
-| `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
+| `knowledge/secrets/auth.json` | Legacy OpenCode auth path | v1 migration input only |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
 | `config/codex/config.toml` | `/etc/codex/config.toml` | read-only |
 | `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only |
 | `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | read-only |
-| `config/akm` | `/etc/akm` | read-write; AKM's native scheduler activation only, no delegated ingress credentials |
+| `config/akm` | `/etc/akm` | read-write; native AKM settings and task activation, no delegated ingress credentials |
 | `knowledge` | `/stash` | read/write |
 | `data/akm/cache` | `/opt/akm/cache` | read/write |
 | `data/akm/data` | `/opt/akm/data` | read/write |
@@ -224,9 +225,7 @@ when an ingress profile is enabled.
 | Host source | Container target | Mode |
 |---|---|---|
 | `data/logs` | `/opt/fhold/logs` | read/write |
-| `system/guardian` | `/opt/fhold/moderator-config` | read-only |
-| `config/guardian` | Guardian OpenCode user config | read-only |
-| `knowledge/secrets/auth.json` | Guardian OpenCode auth path | read-only |
+| `config/guardian` | Guardian settings and moderator model selection | read-only |
 | `workspace` | `/work` | read-only |
 | `state/credentials` | `/run/fhold-credentials` | read-only |
 
