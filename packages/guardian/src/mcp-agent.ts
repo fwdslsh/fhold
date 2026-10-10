@@ -13,7 +13,12 @@ import {
 	type AuthenticatedCredential,
 	type CredentialClass
 } from './credentials.js';
-import { GatewayError, GatewayService, type GatewayServiceOptions } from './gateway-service.js';
+import {
+	GatewayError,
+	GatewayService,
+	type AgentProgress,
+	type GatewayServiceOptions
+} from './gateway-service.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('guardian:mcp');
@@ -100,6 +105,16 @@ const AGENT_RESULT = z
 		session: z.string(),
 		job: z.string(),
 		text: z.string().optional(),
+		tools: z
+			.array(
+				z
+					.object({
+						name: z.string(),
+						status: z.enum(['pending', 'running', 'completed', 'error'])
+					})
+					.strict()
+			)
+			.optional(),
 		error: z.string().optional(),
 		interactions: z.array(INTERACTION).optional(),
 		changedFiles: z.array(z.string()).optional(),
@@ -166,15 +181,23 @@ function guarded<Args>(
 	};
 }
 
-async function progress(context: ServerContext, value: number, message: string): Promise<void> {
-	const progressToken = context.mcpReq._meta?.progressToken;
-	if (progressToken === undefined) return;
-	await context.mcpReq
-		.notify({
-			method: 'notifications/progress',
-			params: { progressToken, progress: value, total: 1, message }
-		})
-		.catch(() => {});
+function progress(context: ServerContext): AgentProgress {
+	let sequence = 0;
+	return async (_value, message, output) => {
+		const progressToken = context.mcpReq._meta?.progressToken;
+		if (progressToken === undefined) return;
+		await context.mcpReq
+			.notify({
+				method: 'notifications/progress',
+				params: {
+					progressToken,
+					progress: ++sequence,
+					message,
+					...(output ? { _meta: { 'io.fwdslsh.fhold/agent': output } } : {})
+				}
+			})
+			.catch(() => {});
+	};
 }
 
 function variable(value: string | string[] | undefined): string {
@@ -228,9 +251,7 @@ function registerTools(server: McpServer, service: GatewayService): void {
 			}
 		},
 		guarded(async (input, context) => {
-			const output = await service.run(input, context.mcpReq.signal, (value, message) =>
-				progress(context, value, message)
-			);
+			const output = await service.run(input, context.mcpReq.signal, progress(context));
 			return result(output, output.text ?? `Agent status: ${output.status}`);
 		})
 	);
@@ -255,7 +276,12 @@ function registerTools(server: McpServer, service: GatewayService): void {
 			}
 		},
 		guarded(async (input, context) => {
-			const output = await service.getJob(input.job, input.waitMs, context.mcpReq.signal);
+			const output = await service.getJob(
+				input.job,
+				input.waitMs,
+				context.mcpReq.signal,
+				progress(context)
+			);
 			return result(output, output.text ?? `Agent status: ${output.status}`);
 		})
 	);

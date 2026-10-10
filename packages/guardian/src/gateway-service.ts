@@ -74,6 +74,7 @@ export type AgentRunResult = {
 	session: string;
 	job: string;
 	text?: string;
+	tools?: NonNullable<AssistantMessage['tools']>;
 	error?: string;
 	interactions?: PublicInteraction[];
 	changedFiles?: string[];
@@ -87,6 +88,12 @@ export type AgentRunResult = {
 		cacheWriteTokens: number;
 	};
 };
+
+export type AgentProgress = (
+	progress: number,
+	message: string,
+	output?: AgentRunResult
+) => Promise<void>;
 
 export type PublicSession = {
 	handle: string;
@@ -470,6 +477,24 @@ export class GatewayService {
 			this.assistant.listMessages(session.id, MAX_MESSAGES, signal)
 		]);
 		const sessionHandle = this.sessionHandle(session.id);
+		// Only this turn's public text and tool names/statuses cross MCP. Never
+		// expose reasoning, tool inputs/outputs or unrelated session history.
+		const turn = messages
+			.filter((message) => message.role === 'assistant' && message.parentId === job.messageId)
+			.sort((a, b) => a.createdAt - b.createdAt);
+		const tools = new Map<string, NonNullable<AssistantMessage['tools']>[number]>();
+		for (const message of turn) {
+			for (const tool of message.tools ?? []) tools.set(tool.name, tool);
+		}
+		const text = turn
+			.map((message) => message.text)
+			.filter(Boolean)
+			.join('\n\n')
+			.slice(0, 100_000);
+		const live = {
+			...(text ? { text } : {}),
+			...(tools.size ? { tools: [...tools.values()].slice(0, 128) } : {})
+		};
 		const interactions = this.publicInteractions(
 			session.id,
 			questions.filter((question) => interactionBelongsToJob(question, job, messages)),
@@ -480,6 +505,7 @@ export class GatewayService {
 				status: 'input_required',
 				session: sessionHandle,
 				job: jobHandle,
+				...live,
 				interactions
 			};
 		}
@@ -487,7 +513,7 @@ export class GatewayService {
 		const result = resultMessage(messages, job);
 		const resultIsComplete =
 			result &&
-			(result.completedAt !== undefined ||
+			((result.completedAt !== undefined && result.finish !== 'tool-calls') ||
 				result.error !== undefined ||
 				status.type === 'idle' ||
 				latestUserMessage(messages)?.id !== job.messageId);
@@ -502,7 +528,7 @@ export class GatewayService {
 					error: 'Agent job is no longer active.'
 				};
 			}
-			return { status: 'running', session: sessionHandle, job: jobHandle };
+			return { status: 'running', session: sessionHandle, job: jobHandle, ...live };
 		}
 		this.startingSessions.delete(session.id);
 		if (result.error) {
@@ -510,6 +536,7 @@ export class GatewayService {
 				status: 'failed',
 				session: sessionHandle,
 				job: jobHandle,
+				...live,
 				error: result.error
 			};
 		}
@@ -526,7 +553,8 @@ export class GatewayService {
 			status: 'completed',
 			session: sessionHandle,
 			job: jobHandle,
-			text: result.text || '(agent completed without a text response)',
+			...live,
+			text: text || '(agent completed without a text response)',
 			...(changedFiles.length ? { changedFiles } : {}),
 			...(todos.length
 				? {
@@ -561,17 +589,28 @@ export class GatewayService {
 		jobHandle: string,
 		waitMs: number,
 		signal: AbortSignal,
-		progress?: (progress: number, message: string) => Promise<void>
+		progress?: AgentProgress
 	): Promise<AgentRunResult> {
 		const stopAt = this.now() + bounded(waitMs, DEFAULT_WAIT_MS, MAX_WAIT_MS);
 		let result = await this.inspectJob(job, jobHandle, signal);
+		let previous = '';
+		const report = async () => {
+			// Refreshed opaque handles differ even when the work has not changed.
+			const snapshot = JSON.stringify({
+				status: result.status,
+				text: result.text,
+				tools: result.tools,
+				interactions: result.interactions?.map(({ handle: _handle, ...interaction }) => interaction)
+			});
+			if (snapshot === previous) return;
+			previous = snapshot;
+			await progress?.(0.5, `Agent status: ${result.status}`, result);
+		};
+		await report();
 		while (result.status === 'running' && this.now() < stopAt) {
-			await progress?.(
-				Math.min(0.95, 0.25 + (1 - (stopAt - this.now()) / Math.max(waitMs, 1)) * 0.7),
-				'Agent is working'
-			);
 			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), signal);
 			result = await this.inspectJob(job, jobHandle, signal);
+			await report();
 		}
 		return result;
 	}
@@ -579,7 +618,7 @@ export class GatewayService {
 	async run(
 		input: { message: string; session?: string; title?: string; waitMs?: number },
 		signal: AbortSignal,
-		progress?: (progress: number, message: string) => Promise<void>
+		progress?: AgentProgress
 	): Promise<AgentRunResult> {
 		this.requireReady();
 		const message = input.message.trim();
@@ -644,12 +683,19 @@ export class GatewayService {
 	async getJob(
 		jobHandle: string,
 		waitMs: number | undefined,
-		signal: AbortSignal
+		signal: AbortSignal,
+		progress?: AgentProgress
 	): Promise<AgentRunResult> {
 		this.requireReady();
 		const decoded = readJobHandle(jobHandle, this.principal, this.handleKey, this.now());
 		if (!decoded.ok) throw new GatewayError('Invalid or expired job handle.', 'invalid_handle');
-		return this.waitForJob(decoded.value, jobHandle, bounded(waitMs, 0, MAX_WAIT_MS), signal);
+		return this.waitForJob(
+			decoded.value,
+			jobHandle,
+			bounded(waitMs, 0, MAX_WAIT_MS),
+			signal,
+			progress
+		);
 	}
 
 	async cancelJob(
@@ -668,7 +714,8 @@ export class GatewayService {
 			this.assistant.sessionStatus(session.id, signal)
 		]);
 		const current = latestUserMessage(messages)?.id === decoded.value.messageId;
-		const completed = resultMessage(messages, decoded.value)?.completedAt !== undefined;
+		const last = resultMessage(messages, decoded.value);
+		const completed = last?.completedAt !== undefined && last.finish !== 'tool-calls';
 		if (!current || completed || status.type === 'idle') {
 			throw new GatewayError('Agent job is no longer active.', 'not_found');
 		}

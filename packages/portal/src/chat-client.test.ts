@@ -29,7 +29,63 @@ afterEach(async () => {
 });
 
 describe('Guardian portal job tracking', () => {
-	it('delivers completion beyond the old three-minute cutoff with only one progress notice', async () => {
+	it('returns actionable input, records an explicit response and resumes the existing job', async () => {
+		const { chat, callTool } = fixture();
+		const prompt = {
+			kind: 'question',
+			handle: 'interaction.handle',
+			questions: [
+				{
+					question: 'Target?',
+					options: [{ label: 'API', description: 'API service' }],
+					multiple: false,
+					custom: true
+				}
+			]
+		};
+		callTool
+			.mockResolvedValueOnce(response('input_required', { interactions: [prompt] }))
+			.mockResolvedValueOnce({ content: [] })
+			.mockResolvedValueOnce(response('completed', { text: 'Done' }));
+		const result = await chat.chat('Work', credential);
+		expect(result.pending).toEqual({ job: 'test.job', interactions: [prompt] });
+		await chat.respond(credential, { interaction: 'interaction.handle', answers: [['API']] });
+		expect((await chat.resume('test.job', credential)).text).toBe('Done');
+		expect(callTool.mock.calls.map(([request]) => request.name)).toEqual([
+			'fhold.agent.run',
+			'fhold.interaction.respond',
+			'fhold.job.get'
+		]);
+	});
+
+	it('delivers standard progress metadata and final snapshots in order, tolerating delivery failures', async () => {
+		const { chat, callTool } = fixture();
+		spyOn(console, 'error').mockImplementation(() => {});
+		callTool.mockImplementation(async (_request, options) => {
+			const notification = {
+				progress: 1,
+				message: 'Working',
+				_meta: {
+					'io.fwdslsh.fhold/agent': response('running', {
+						text: 'Partial',
+						tools: [{ name: 'bash', status: 'running' }]
+					}).structuredContent
+				}
+			};
+			options?.onprogress?.(notification);
+			return response('completed', { text: 'Final' });
+		});
+		const updates: string[] = [];
+		const onUpdate = mock(async (update: { text: string }) => {
+			updates.push(update.text);
+			if (update.text === 'Partial') throw new Error('temporary platform failure');
+		});
+		expect((await chat.chat('Work', credential, undefined, onUpdate)).text).toBe('Final');
+		expect(updates).toEqual(['Partial', 'Final']);
+		expect(callTool).toHaveBeenCalledTimes(1);
+	});
+
+	it('delivers live snapshots and completion beyond the old three-minute cutoff', async () => {
 		const { chat, callTool } = fixture();
 		let elapsed = 0;
 		spyOn(Date, 'now').mockImplementation(() => elapsed);
@@ -44,19 +100,21 @@ describe('Guardian portal job tracking', () => {
 			if (!result) throw new Error('Unexpected extra tool request');
 			return result;
 		});
-		const onWorking = mock(async (_update: { conversation: string; text: string }) => {});
+		const onUpdate = mock(
+			async (_update: { conversation: string; text: string; status: string }) => {}
+		);
 
-		const result = await chat.chat('Do the work', credential, undefined, onWorking);
+		const result = await chat.chat('Do the work', credential, undefined, onUpdate);
 
 		expect(result).toEqual({
 			conversation: 'test.session',
 			text: 'Finished the requested work.'
 		});
 		expect(elapsed).toBeGreaterThan(180_000);
-		expect(onWorking).toHaveBeenCalledTimes(1);
-		expect(onWorking.mock.calls[0][0]).toEqual({
+		expect(onUpdate).toHaveBeenCalledTimes(9);
+		expect(onUpdate.mock.calls[0][0]).toMatchObject({
 			conversation: 'test.session',
-			text: "I'm still working on this. I'll post the result here when it's ready."
+			status: 'running'
 		});
 		expect(callTool).toHaveBeenCalledTimes(9);
 		expect(callTool.mock.calls.map(([request]) => request.name)).toEqual([
@@ -70,16 +128,16 @@ describe('Guardian portal job tracking', () => {
 		}
 	});
 
-	it('keeps fast replies silent and continues the existing conversation', async () => {
+	it('delivers fast replies once and continues the existing conversation', async () => {
 		const { chat, callTool } = fixture();
 		callTool.mockResolvedValue(response('completed', { text: 'Quick answer' }));
-		const onWorking = mock(async () => {});
+		const onUpdate = mock(async () => {});
 
-		expect(await chat.chat('Next question', credential, 'test.previous', onWorking)).toEqual({
+		expect(await chat.chat('Next question', credential, 'test.previous', onUpdate)).toEqual({
 			conversation: 'test.session',
 			text: 'Quick answer'
 		});
-		expect(onWorking).not.toHaveBeenCalled();
+		expect(onUpdate).toHaveBeenCalledTimes(1);
 		expect(callTool).toHaveBeenCalledTimes(1);
 		expect(callTool.mock.calls[0][0]).toEqual({
 			name: 'fhold.agent.run',
@@ -87,22 +145,22 @@ describe('Guardian portal job tracking', () => {
 		});
 	});
 
-	it('continues polling and delivers the result when the progress notice cannot be sent', async () => {
+	it('continues polling and delivers the result when progress delivery fails', async () => {
 		const { chat, callTool } = fixture();
 		const warnings = spyOn(console, 'error').mockImplementation(() => {});
 		callTool
 			.mockResolvedValueOnce(response('running'))
 			.mockResolvedValueOnce(response('completed', { text: 'The actual result' }));
-		const onWorking = mock(async () => {
+		const onUpdate = mock(async () => {
 			throw new Error('Temporary platform delivery failure');
 		});
 
-		expect((await chat.chat('Work', credential, undefined, onWorking)).text).toBe(
+		expect((await chat.chat('Work', credential, undefined, onUpdate)).text).toBe(
 			'The actual result'
 		);
 		expect(callTool).toHaveBeenCalledTimes(2);
-		expect(onWorking).toHaveBeenCalledTimes(1);
-		expect(warnings).toHaveBeenCalledTimes(1);
+		expect(onUpdate).toHaveBeenCalledTimes(2);
+		expect(warnings).toHaveBeenCalledTimes(2);
 		expect(JSON.parse(String(warnings.mock.calls[0][0]))).toMatchObject({
 			level: 'warn',
 			event: 'progress_delivery_failed'

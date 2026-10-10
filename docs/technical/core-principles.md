@@ -21,11 +21,19 @@ Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
 Platform health follows the live SDK connection; a failed/disconnected portal
 does not stop the Assistant. Vendor WebSocket implementations are not patched.
-Portal tracks running Guardian jobs until completion, failure or explicit input
-is needed, using bounded MCP requests rather than an overall reply deadline.
-Long work receives one progress notice and its final result in the same app
-conversation; ordinary progress never exposes a job handle or requires another
-client. Failed progress delivery is logged without abandoning the running job.
+Portal tracks running Guardian jobs through completion, failure and explicit
+input, using bounded MCP requests rather than an overall reply deadline.
+Discord channel mentions start threads; Slack answers stay in the message's
+thread. Public answer text streams as throttled message edits, with continuous
+Discord typing and lightweight tool feedback. Standard MCP progress carries
+current-turn text and tool names/statuses, never reasoning or tool inputs/outputs.
+Question and permission controls are requester-only, including when users share
+a credential. Decisions go through Guardian's existing interaction API; ordinary
+chat text never approves a permission. Slack Stop controls cancel the same job.
+No slash commands or direct Assistant connection are required. Missing optional
+thread/reaction permissions or failed progress delivery are logged without
+abandoning valid work. Automatic delivery and pending controls are not recovered
+across a Portal restart; native sessions remain accessible in OpenCode.
 
 OpenCode owns provider discovery, models, authentication and native approvals.
 AKM owns knowledge and task formats. No parallel provider registry, proxy,

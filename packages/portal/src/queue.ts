@@ -7,6 +7,10 @@ export class ConversationQueue {
 		private readonly maxPendingPerKey = 8
 	) {}
 
+	isActive(key: string): boolean {
+		return this.pending.has(key);
+	}
+
 	async run(key: string, task: () => Promise<void>): Promise<void> {
 		const depth = this.depths.get(key) ?? 0;
 		if (depth >= this.maxPendingPerKey) throw new Error('conversation queue is busy');

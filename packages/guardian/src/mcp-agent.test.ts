@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
 	Client,
 	InMemoryTransport,
@@ -258,6 +258,103 @@ function body(result: { structuredContent?: unknown }): Record<string, unknown> 
 }
 
 describe('full fhold MCP gateway', () => {
+	it('streams only current-turn public text and tool activity over standard MCP progress, including job polling', async () => {
+		const assistant = new FakeAssistant();
+		assistant.runMode = 'running';
+		let poll = 0;
+		const original = assistant.listMessages.bind(assistant);
+		const list = spyOn(assistant, 'listMessages').mockImplementation(async (sessionId, limit) => {
+			const entries = await original(sessionId, limit);
+			const request = entries.findLast((entry) => entry.role === 'user');
+			if (!request) return entries;
+			poll += 1;
+			const partial: AssistantMessage = {
+				id: 'step',
+				role: 'assistant',
+				parentId: request.id,
+				createdAt: 20,
+				completedAt: 30,
+				finish: 'tool-calls',
+				text: 'Investigating',
+				files: [],
+				tools: [{ name: 'bash', status: 'completed' }]
+			};
+			const foreign: AssistantMessage = {
+				...partial,
+				id: 'foreign',
+				parentId: 'other-turn',
+				text: 'HIDDEN OTHER TURN',
+				tools: [{ name: 'hidden-tool', status: 'running' }]
+			};
+			if (poll <= 2) return [...entries, foreign, partial];
+			assistant.statuses.set(sessionId, { type: 'idle' });
+			return [
+				...entries,
+				foreign,
+				partial,
+				{
+					...partial,
+					id: 'final',
+					createdAt: 40,
+					completedAt: 50,
+					finish: 'stop',
+					text: 'Task done',
+					tools: [{ name: 'edit', status: 'completed' }]
+				}
+			];
+		});
+		const { client, server } = await connect({
+			assistant,
+			handleKey: 'k'.repeat(64),
+			policy: 'full',
+			moderate: allow
+		});
+		const progress: Array<{ progress: number; message?: string; _meta?: Record<string, unknown> }> =
+			[];
+		try {
+			const running = await client.callTool(
+				{ name: 'fhold.agent.run', arguments: { message: 'Work', waitMs: 0 } },
+				{ onprogress: (value) => progress.push(value) }
+			);
+			expect(body(running)).toMatchObject({
+				status: 'running',
+				text: 'Investigating',
+				tools: [{ name: 'bash', status: 'completed' }]
+			});
+			expect(progress.some((value) => value._meta?.['io.fwdslsh.fhold/agent'])).toBe(true);
+			expect(
+				progress.every(
+					(value, index) => index === 0 || value.progress > progress[index - 1].progress
+				)
+			).toBe(true);
+			progress.length = 0;
+			const completed = await client.callTool(
+				{ name: 'fhold.job.get', arguments: { job: body(running).job, waitMs: 2_000 } },
+				{ onprogress: (value) => progress.push(value) }
+			);
+			expect(body(completed)).toMatchObject({
+				status: 'completed',
+				text: 'Investigating\n\nTask done',
+				tools: [
+					{ name: 'bash', status: 'completed' },
+					{ name: 'edit', status: 'completed' }
+				]
+			});
+			expect(progress.filter((value) => value._meta)).toHaveLength(2);
+			expect(
+				progress.every(
+					(value, index) => index === 0 || value.progress > progress[index - 1].progress
+				)
+			).toBe(true);
+			expect(JSON.stringify([progress, completed])).not.toContain('HIDDEN OTHER TURN');
+			expect(JSON.stringify([progress, completed])).not.toContain('hidden-tool');
+		} finally {
+			list.mockRestore();
+			await client.close();
+			await server.close();
+		}
+	});
+
 	it('filters the advertised capability catalog by credential policy', async () => {
 		for (const [policy, expected] of [
 			['chat', 7],

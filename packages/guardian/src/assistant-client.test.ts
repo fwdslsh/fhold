@@ -33,6 +33,7 @@ describe('OpenCode Assistant adapter', () => {
 							sessionID: 'ses_1',
 							role: 'assistant',
 							parentID: 'msg_request',
+							finish: 'tool-calls',
 							time: { created: 20, completed: 30 },
 							modelID: 'model',
 							providerID: 'provider',
@@ -48,6 +49,18 @@ describe('OpenCode Assistant adapter', () => {
 							}
 						},
 						parts: [
+							{ type: 'reasoning', text: 'private reasoning' },
+							{
+								type: 'tool',
+								tool: 'bash',
+								callID: 'raw-call-id',
+								state: {
+									status: 'completed',
+									input: { command: 'private command' },
+									output: 'private output'
+								}
+							},
+							{ type: 'tool', tool: 'invalid/name', state: { status: 'running' } },
 							{
 								id: 'prt_text',
 								sessionID: 'ses_1',
@@ -100,6 +113,8 @@ describe('OpenCode Assistant adapter', () => {
 				id: 'msg_answer',
 				parentId: 'msg_request',
 				role: 'assistant',
+				finish: 'tool-calls',
+				tools: [{ name: 'bash', status: 'completed' }],
 				text: 'done',
 				files: ['src/index.ts']
 			})

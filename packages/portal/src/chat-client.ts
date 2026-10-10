@@ -3,13 +3,111 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import type { PortalCredential } from './credential-registry.js';
 import { createLogger, errorMessage } from './runtime.js';
 
-type ChatResult = { conversation: string; text: string };
+export type PortalQuestion = {
+	question: string;
+	options: Array<{ label: string; description: string }>;
+	multiple?: boolean;
+	custom?: boolean;
+};
+export type PortalInteraction =
+	| { kind: 'question'; handle: string; questions: PortalQuestion[] }
+	| {
+			kind: 'permission';
+			handle: string;
+			permission: string;
+			patterns: string[];
+			allowedDecisions: Array<'once' | 'always' | 'reject'>;
+	  };
+export type ChatUpdate = {
+	conversation: string;
+	job: string;
+	status: string;
+	text: string;
+	tools: Array<{ name: string; status: string }>;
+};
+export type ChatResult = {
+	conversation: string;
+	text: string;
+	pending?: { job: string; interactions: PortalInteraction[] };
+};
 const log = createLogger('portal:chat');
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
 		? (value as Record<string, unknown>)
 		: null;
+}
+
+function update(value: unknown): ChatUpdate | undefined {
+	const data = asRecord(value);
+	if (!data || typeof data.session !== 'string' || typeof data.job !== 'string') return;
+	return {
+		conversation: data.session,
+		job: data.job,
+		status: typeof data.status === 'string' ? data.status : 'running',
+		text: typeof data.text === 'string' ? data.text.slice(0, 100_000) : '',
+		tools: Array.isArray(data.tools)
+			? data.tools.flatMap((entry) => {
+					const tool = asRecord(entry);
+					return typeof tool?.name === 'string' && typeof tool.status === 'string'
+						? [{ name: tool.name.slice(0, 128), status: tool.status }]
+						: [];
+				})
+			: []
+	};
+}
+
+function interactions(value: unknown): PortalInteraction[] {
+	if (!Array.isArray(value)) return [];
+	return value.flatMap((entry): PortalInteraction[] => {
+		const data = asRecord(entry);
+		if (!data || typeof data.handle !== 'string') return [];
+		if (data.kind === 'permission') {
+			return [
+				{
+					kind: 'permission',
+					handle: data.handle,
+					permission: typeof data.permission === 'string' ? data.permission : 'action',
+					patterns: Array.isArray(data.patterns)
+						? data.patterns.filter((v): v is string => typeof v === 'string')
+						: [],
+					allowedDecisions: Array.isArray(data.allowedDecisions)
+						? data.allowedDecisions.filter(
+								(v): v is 'once' | 'always' | 'reject' =>
+									v === 'once' || v === 'always' || v === 'reject'
+							)
+						: ['reject']
+				}
+			];
+		}
+		if (data.kind !== 'question' || !Array.isArray(data.questions)) return [];
+		const questions = data.questions.flatMap((entry): PortalQuestion[] => {
+			const question = asRecord(entry);
+			if (typeof question?.question !== 'string') return [];
+			return [
+				{
+					question: question.question,
+					options: Array.isArray(question.options)
+						? question.options.flatMap((entry) => {
+								const option = asRecord(entry);
+								return typeof option?.label === 'string'
+									? [
+											{
+												label: option.label,
+												description:
+													typeof option.description === 'string' ? option.description : ''
+											}
+										]
+									: [];
+							})
+						: [],
+					multiple: question.multiple === true,
+					custom: question.custom !== false
+				}
+			];
+		});
+		return questions.length ? [{ kind: 'question', handle: data.handle, questions }] : [];
+	});
 }
 
 function contentText(content: unknown): string {
@@ -104,16 +202,33 @@ export class GuardianChatClient {
 		await this.clientFor(credential);
 	}
 
-	private async call(name: string, args: Record<string, unknown>, credential: PortalCredential) {
+	private async call(
+		name: string,
+		args: Record<string, unknown>,
+		credential: PortalCredential,
+		onUpdate?: (update: ChatUpdate) => Promise<unknown>
+	) {
 		const client = await this.clientFor(credential);
-		return client
+		let delivery = Promise.resolve();
+		const result = await client
 			.callTool(
 				{ name, arguments: args },
 				{
 					timeout: 45_000,
 					maxTotalTimeout: 45_000,
 					resetTimeoutOnProgress: true,
-					onprogress: () => {}
+					onprogress: (notification) => {
+						const meta = asRecord(asRecord(notification)?._meta);
+						const snapshot = update(meta?.['io.fwdslsh.fhold/agent']);
+						if (!snapshot || !onUpdate) return;
+						delivery = delivery
+							.then(async () => {
+								await onUpdate(snapshot);
+							})
+							.catch((error) => {
+								log.warn('progress_delivery_failed', { error: errorMessage(error) });
+							});
+					}
 				}
 			)
 			.catch(async (error: unknown) => {
@@ -122,38 +237,66 @@ export class GuardianChatClient {
 				await client.close().catch(() => {});
 				throw error;
 			});
+		await delivery;
+		const snapshot = !result.isError ? update(result.structuredContent) : undefined;
+		if (snapshot && onUpdate) {
+			await onUpdate(snapshot).catch((error) => {
+				log.warn('progress_delivery_failed', { error: errorMessage(error) });
+			});
+		}
+		return result;
 	}
 
 	async chat(
 		message: string,
 		credential: PortalCredential,
 		conversation?: string,
-		onWorking?: (update: ChatResult) => Promise<unknown>
+		onUpdate?: (update: ChatUpdate) => Promise<unknown>
 	): Promise<ChatResult> {
-		let result = await this.call(
+		const result = await this.call(
 			'fhold.agent.run',
 			{
 				message,
 				...(conversation ? { session: conversation } : {}),
 				waitMs: 30_000
 			},
-			credential
+			credential,
+			onUpdate
 		);
+		return this.track(result, credential, onUpdate);
+	}
+
+	async resume(
+		job: string,
+		credential: PortalCredential,
+		onUpdate?: (update: ChatUpdate) => Promise<unknown>
+	): Promise<ChatResult> {
+		const result = await this.call('fhold.job.get', { job, waitMs: 30_000 }, credential, onUpdate);
+		return this.track(result, credential, onUpdate);
+	}
+
+	async respond(
+		credential: PortalCredential,
+		input: { interaction: string; decision?: 'once' | 'always' | 'reject'; answers?: string[][] }
+	): Promise<void> {
+		const result = await this.call('fhold.interaction.respond', input, credential);
+		if (result.isError)
+			throw new Error(contentText(result.content) || 'The response could not be recorded.');
+	}
+
+	async cancel(job: string, credential: PortalCredential): Promise<void> {
+		const result = await this.call('fhold.job.cancel', { job }, credential);
+		if (result.isError)
+			throw new Error(contentText(result.content) || 'The job could not be stopped.');
+	}
+
+	private async track(
+		initial: Awaited<ReturnType<GuardianChatClient['call']>>,
+		credential: PortalCredential,
+		onUpdate?: (update: ChatUpdate) => Promise<unknown>
+	): Promise<ChatResult> {
+		let result = initial;
 		let structured = asRecord(result.structuredContent);
-		if (
-			!result.isError &&
-			structured?.status === 'running' &&
-			typeof structured.session === 'string'
-		) {
-			try {
-				await onWorking?.({
-					conversation: structured.session,
-					text: "I'm still working on this. I'll post the result here when it's ready."
-				});
-			} catch (error) {
-				log.warn('progress_delivery_failed', { error: errorMessage(error) });
-			}
-		}
 		while (!result.isError && structured?.status === 'running') {
 			if (typeof structured.job !== 'string') {
 				throw new Error('Guardian did not provide a handle for the running job.');
@@ -164,7 +307,8 @@ export class GuardianChatClient {
 					job: structured.job,
 					waitMs: 30_000
 				},
-				credential
+				credential,
+				onUpdate
 			);
 			structured = asRecord(result.structuredContent);
 		}
@@ -175,9 +319,13 @@ export class GuardianChatClient {
 			);
 		}
 		if (structured.status === 'input_required') {
+			const pending = interactions(structured.interactions);
 			return {
 				conversation: structured.session,
-				text: interactionText(structured).slice(0, 100_000)
+				text: interactionText(structured).slice(0, 100_000),
+				...(typeof structured.job === 'string' && pending.length
+					? { pending: { job: structured.job, interactions: pending } }
+					: {})
 			};
 		}
 		if (structured.status === 'failed') {

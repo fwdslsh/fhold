@@ -123,13 +123,27 @@ policy-selected agent asynchronously, and waits for at most `waitMs`. It
 returns opaque `session` and `job` handles plus one of:
 
 - `completed` — includes `text` and may include changed files, todos, and usage;
-- `running` — poll with `fhold.job.get`;
+- `running` — may include partial `text` and `tools`; poll with `fhold.job.get`;
 - `input_required` — includes opaque question or permission interactions; or
 - `failed` — includes a bounded public error.
 
 `fhold.job.get` accepts `{ "job": handle, "waitMs"?: 0..30000 }` and
 returns the same status shape. `fhold.job.cancel` accepts `{ "job": handle }`
 and aborts the associated active OpenCode run.
+
+Both waiting tools support standard MCP `notifications/progress` when the caller
+provides a progress token. Values increase monotonically per request; `message`
+is a human-readable status. Optional notification `_meta` at
+`io.fwdslsh.fhold/agent` contains the current result snapshot. Only changed public
+activity is reported, not a notification per token. Clients that ignore this
+metadata continue to receive ordinary progress and the final tool result.
+
+`tools`, when present, is an array of `{ "name": string, "status":
+"pending" | "running" | "completed" | "error" }`, showing the latest state per
+tool name in this turn. Snapshots include only answer text and tool activity
+belonging to the submitted user message. Reasoning, raw tool call IDs, inputs,
+outputs and unrelated conversation history are omitted. A completed tool step
+does not finish the job while the agent is still working.
 
 ### Sessions
 
