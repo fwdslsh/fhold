@@ -85,16 +85,16 @@ test('native policy files and enabled portal tokens require apply, but live auth
 	);
 });
 
-test('native preferences edited in place need no container restart; replacing their bind does', async () => {
+test('native preferences accept ordinary atomic saves without restart; changing the selected filename needs activation', async () => {
 	const { home } = await fixture();
 	const path = join(home, 'config/assistant/opencode.json');
 	recordAppliedRuntime(home, runtimeRevision(home));
-	// OpenCode's native API writes this file in place and invalidates its own cache.
+	// OpenCode watches the settings directory; both editing styles are supported.
 	writeFileSync(path, '{"model":"native/model","provider":{"native":{"models":{"model":{}}}}}\n');
 	expect(restartStatus(home)).toEqual({ required: false });
 	const contents = readFileSync(path, 'utf8');
 	writeFileAtomic(path, contents);
-	expect(restartStatus(home)).toEqual({ required: true });
+	expect(restartStatus(home)).toEqual({ required: false });
 	recordAppliedRuntime(home, runtimeRevision(home));
 	writeFileSync(join(home, 'config/assistant/opencode.jsonc'), '// preferred native file\n{}\n');
 	expect(restartStatus(home)).toEqual({ required: true });

@@ -5,6 +5,11 @@ implementation that changes a boundary. fhold is a single-install personal
 OpenCode agent: native provider sign-in, real readiness, persistent knowledge,
 ordinary-language recurring work and standards-based client access.
 
+The `codex/opencode-v2` implementation branch targets OpenCode 2.0.26. Its live
+settings contract is verified; complete release qualification remains tracked
+in the [migration handoff](opencode-v2-migration-handoff.md). This does not claim
+that the published V1 beta has migrated.
+
 ## Product and ownership
 
 The wordmark is **f/hold**; plain text, commands and persisted names use lowercase
@@ -49,7 +54,7 @@ the built-in skills remain available through native harness integrations.
 AKM and fhold plugins are preinstalled in all three native harnesses. Their
 existing handlers are registered as native managed hooks at image build time;
 no personal approval records are fabricated. Agents run as `fhold`, with home `/home/fhold`; the native
-OpenCode HTTP username is `user`. Claude and Codex sign-in guidance preserve native login processes
+OpenCode 2 HTTP username is `opencode`. Claude and Codex sign-in guidance preserve native login processes
 across tool calls without implementing token exchange or accepting user consent.
 The image-baked `fhold-admin` skill provides redacted current-container diagnostics
 and routes to versioned Claude/Codex setup scripts. It has no host/cloud management
@@ -194,13 +199,14 @@ attempts remain provider/method/instance bound until completed or cancelled.
 Tests stay on the page and never change the default model; only explicit Use
 changes it. The model picker uses native text-input/text-output/tool-capable,
 non-deprecated models. A model list alone is not verification of tool execution.
-Targeted `PATCH /global/config` calls let OpenCode persist and reload its own
-preferences, preserving unrelated settings and JSONC comments. Only its preferred
-user settings file is writable; native trusted clients can edit that file too.
-Config directories, plugins and operator policy remain read-only. Native reloads
-can interrupt active OpenCode work, but do not restart its process or container.
-Confirm the effective native result after reload; never roll back a native file
-from a client-side snapshot. Disable endpoint uses native `disabled_providers`,
+OpenCode 2's settings-write API supports shell selection, not a general config
+patch. Admin makes narrow edits to the selected native user preference file,
+preserving unrelated settings and JSONC comments, and OpenCode's native watcher
+applies them without an explicit reload. The ordinary user-config directory is
+writable so atomic editor saves and local user-plugin updates work normally.
+Image-baked plugins and operator policy remain read-only. Confirm the effective
+native result; never roll back a native file from a client-side snapshot.
+Disable endpoint uses native `experimental.policies` for `provider.use`,
 preserving its definition and credentials; saving it again explicitly re-enables
 only that endpoint. Sign-in removal is exact and separate from endpoint disabling
 or vendor-side revocation. Never

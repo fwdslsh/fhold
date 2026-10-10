@@ -40,7 +40,7 @@ const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 		{
 			source: 'config/assistant',
 			target: '/home/fhold/.config/opencode',
-			readOnly: true
+			readOnly: false
 		},
 		{
 			source: 'knowledge/secrets/auth.json',
@@ -73,18 +73,8 @@ const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 	guardian: [
 		{ source: 'data/logs', target: '/opt/fhold/logs', readOnly: false },
 		{
-			source: 'system/guardian',
-			target: '/opt/fhold/moderator-config',
-			readOnly: true
-		},
-		{
 			source: 'config/guardian',
 			target: '/home/fhold/.config/opencode',
-			readOnly: true
-		},
-		{
-			source: 'knowledge/secrets/auth.json',
-			target: '/home/fhold/.local/share/opencode/auth.json',
 			readOnly: true
 		},
 		{ source: 'workspace', target: '/work', readOnly: true },
@@ -150,7 +140,6 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		OPENCODE_API_URL: 'http://127.0.0.1:4096',
 		OPENCODE_PORT: '4096',
-		OPENCODE_SERVER_USERNAME: 'user',
 		OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 		TERM: 'xterm-256color'
 	},
@@ -158,21 +147,13 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		GUARDIAN_AUDIT_PATH: '/opt/fhold/logs/guardian-audit.log',
 		HOME: '/home/fhold',
 		PORT: '8080',
-		OPENCODE_CONFIG_DIR: '/opt/fhold/moderator-config',
-		OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
-		OPENCODE_DISABLE_CLAUDE_CODE: 'true',
-		OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
-		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		FH_ASSISTANT_DIRECTORY: '/work',
 		FH_ASSISTANT_URL: 'http://assistant:4096',
-		OPENCODE_SERVER_USERNAME: 'user',
 		OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 		GUARDIAN_AUTH_DIR: '/run/fhold-credentials',
 		GUARDIAN_HANDLE_KEY_FILE: '/run/secrets/guardian_handle_key',
 		GUARDIAN_OAUTH_CONFIG_FILE: '/home/fhold/.config/opencode/oauth.json',
 		GUARDIAN_OAUTH_IDENTITIES_FILE: '/home/fhold/.config/opencode/oauth-identities.json',
-		GUARDIAN_MODERATION_URL: 'http://127.0.0.1:4097',
-		GUARDIAN_MODERATION_PORT: '4097',
 		GUARDIAN_MODERATION_THRESHOLD: '3'
 	},
 	discord: {
@@ -196,6 +177,7 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 
 const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 	assistant: new Set([
+		'OPENCODE_CONFIG',
 		'TZ',
 		'FH_AUTOMATIC_MEMORY',
 		'FH_CODEX_REMOTE',
@@ -221,7 +203,6 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 };
 
 const FORBIDDEN_CORE_ENVIRONMENT = new Set([
-	'OPENCODE_CONFIG',
 	'OPENCODE_CONFIG_CONTENT',
 	'OPENCODE_PERMISSION'
 ]);
@@ -322,18 +303,6 @@ function auditCoreMounts(
 	expected: readonly MountGrant[] = CORE_MOUNTS[name] ?? [],
 	recoveryMounts: readonly MountGrant[] = []
 ): void {
-	if (name === 'assistant') {
-		try {
-			const file = nativePreferencesFile(homeDir);
-			expected = [...expected, {
-				source: `config/assistant/${file}`,
-				target: `/home/fhold/.config/opencode/${file}`,
-				readOnly: false
-			}];
-		} catch {
-			issues.push('Assistant native preferences file is invalid.');
-		}
-	}
 	// This optional native file makes Claude's MCP catalog exclusive. Operators
 	// add it explicitly; an empty default would suppress plugin-provided servers.
 	const optional: MountGrant[] =
@@ -411,7 +380,8 @@ function auditCoreSecrets(name: string, value: unknown, issues: string[], recove
 function auditCoreEnvironment(
 	name: string,
 	environment: Record<string, unknown>,
-	issues: string[]
+	issues: string[],
+	homeDir: string
 ): void {
 	const fixed = FIXED_ENVIRONMENT[name] ?? {};
 	const dynamic = DYNAMIC_ENVIRONMENT[name] ?? new Set<string>();
@@ -429,6 +399,8 @@ function auditCoreEnvironment(
 		}
 	}
 	if (name === 'assistant') {
+		if (environment.OPENCODE_CONFIG !== `/home/fhold/.config/opencode/${nativePreferencesFile(homeDir)}`)
+			issues.push('Assistant must select its mounted native preferences file.');
 		if (environment.FH_KEEPALIVE_URL) {
 			try {
 				const url = new URL(String(environment.FH_KEEPALIVE_URL));
@@ -585,7 +557,7 @@ export function auditCompose(
 			issues.push(`service ${name} may not mount a container runtime`);
 		}
 		const environment = record(service.environment) ?? {};
-		if (isCore) auditCoreEnvironment(name, environment, issues);
+		if (isCore) auditCoreEnvironment(name, environment, issues, homeDir);
 		const granted = isCore
 			? auditCoreSecrets(name, service.secrets, issues, stackConfig.ok && stackConfig.config.recovery.enabled)
 			: new Set(secretNames(service.secrets));

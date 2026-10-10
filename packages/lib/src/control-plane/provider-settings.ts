@@ -109,13 +109,14 @@ function configurations(home: string): { users: ConfigFile[]; policy: ConfigFile
 	return { users, policy: readConfig(home, POLICY_FILE) };
 }
 function definition(file: ConfigFile, provider: string): Record<string, unknown> | undefined {
-	return record(record(file.value.provider)?.[provider]);
+	return record(record(file.value.providers)?.[provider]) ?? record(record(file.value.provider)?.[provider]);
 }
 function editableEndpoint(value: Record<string, unknown> | undefined, managed: boolean): boolean {
-	const options = record(value?.options);
+	const options = record(value?.settings) ?? record(value?.options);
 	return (
 		Boolean(value) &&
 		!managed &&
+		(!value?.package || value.package === '@opencode/ai/providers/openai-compatible') &&
 		(!value?.npm || value.npm === '@ai-sdk/openai-compatible') &&
 		!Object.hasOwn(options ?? {}, 'apiKey') &&
 		typeof options?.baseURL === 'string' &&
@@ -132,12 +133,12 @@ export async function listProviderSettings(
 		listProviders(home, options),
 		readAssistantConfig(home, options)
 	]);
-	const disabled = new Set(providerIds(resolved.disabled_providers));
+	const disabled = new Map(providerPolicies(resolved).map((rule) => [rule.resource, rule.effect]));
 	let configurationIssue: string | undefined;
 	try {
 		const { users, policy } = configurations(home);
 		for (const file of [...users, policy]) {
-			for (const [provider, raw] of Object.entries(record(file.value.provider) ?? {})) {
+			for (const [provider, raw] of Object.entries({ ...record(file.value.provider), ...record(file.value.providers) })) {
 				const value = record(raw);
 				if (!value) continue;
 				try {
@@ -161,7 +162,7 @@ export async function listProviderSettings(
 					providers.push(summary);
 				}
 				summary.configured = true;
-				const baseURL = record(value.options)?.baseURL;
+				const baseURL = (record(value.settings) ?? record(value.options))?.baseURL;
 				if (typeof baseURL !== 'string' || /[{}]/.test(baseURL)) continue;
 				// Never return inline credential fields or URLs with embedded secrets.
 				try {
@@ -184,14 +185,16 @@ export async function listProviderSettings(
 		configurationIssue = error instanceof Error ? error.message : 'Cannot read saved AI settings.';
 	}
 	for (const provider of providers) {
-		provider.disabled = disabled.has(provider.id);
+		provider.disabled = disabled.get(provider.id) === 'deny';
 		if (provider.disabled) {
 			provider.connected = false;
 			provider.models = [];
 			provider.modelCount = 0;
 		}
 	}
-	const selection = typeof resolved.model === 'string' ? resolved.model : '';
+	const model = record(resolved.model);
+	const selection = typeof resolved.model === 'string' ? resolved.model :
+		typeof model?.providerID === 'string' && typeof model.model === 'string' ? `${model.providerID}/${model.model}` : '';
 	const separator = selection.indexOf('/');
 	return {
 		providers: providers.sort((left, right) => left.name.localeCompare(right.name)),
@@ -207,8 +210,21 @@ export async function listProviderSettings(
 	};
 }
 
-function providerIds(value: unknown): string[] {
-	return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+function providerPolicies(config: Record<string, unknown>): Array<{ action: string; resource: string; effect: 'allow' | 'deny' }> {
+	const policies = record(config.experimental)?.policies;
+	return Array.isArray(policies) ? policies.flatMap((item) => {
+		const rule = record(item);
+		return rule?.action === 'provider.use' && typeof rule.resource === 'string' && (rule.effect === 'deny' || rule.effect === 'allow')
+			? [{ action: rule.action, resource: rule.resource, effect: rule.effect }] : [];
+	}) : [];
+}
+function activation(config: Record<string, unknown>, provider: string, enabled: boolean): Record<string, unknown> {
+	const policies = record(config.experimental)?.policies;
+	const remaining = Array.isArray(policies) ? policies.filter((item) => {
+		const rule = record(item);
+		return rule?.action !== 'provider.use' || rule.resource !== provider;
+	}) : [];
+	return { experimental: { policies: [...remaining, { action: 'provider.use', resource: provider, effect: enabled ? 'allow' : 'deny' }] } };
 }
 async function withSettingsLock<T>(home: string, run: () => Promise<T>): Promise<T> {
 	const lock = acquireStackLock(join(home, 'data'));
@@ -226,14 +242,14 @@ async function applyConfigChange(
 	matches: (value: Record<string, unknown>) => boolean
 ): Promise<void> {
 	await updateAssistantGlobalConfig(home, patch, options);
-	// Native global updates invalidate the cache and asynchronously dispose instances.
-	// Read back the resolved result, tolerating that short native reload window.
+	// Native watchers apply the file asynchronously. Read back normalization;
+	// no reload API or process restart is involved.
 	const deadline = Date.now() + 5_000;
 	do {
 		try {
 			if (matches(await readAssistantConfig(home, options))) return;
 		} catch {
-			/* the native instance may still be reloading */
+			/* the native watcher may still be applying this edit */
 		}
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	} while (Date.now() < deadline);
@@ -242,7 +258,7 @@ async function applyConfigChange(
 	);
 }
 
-/** Patch native user preferences through OpenCode, never managed policy. */
+/** Edit watched native user preferences, never managed policy. */
 export async function saveProviderEndpoint(
 	home: string,
 	input: ProviderEndpointInput,
@@ -274,24 +290,24 @@ export async function saveProviderEndpoint(
 				'Choose a new service identifier. This existing native or advanced service cannot be replaced by an endpoint form.'
 			);
 		const global = await readAssistantGlobalConfig(home, options);
-		const previous = record(record(record(global.provider)?.[provider])?.models)?.[model];
+		const effective = await readAssistantConfig(home, options);
+		const previous = record(record(record(effective.providers)?.[provider])?.models)?.[model];
 		const patch = {
-			provider: {
+			providers: {
 				[provider]: {
 					name: input.name.trim(),
-					options: { baseURL: url },
-					models: { [model]: record(previous) ?? { name: model } }
+					package: '@opencode/ai/providers/openai-compatible',
+					settings: { baseURL: url },
+					models: { [model]: record(previous) ?? { name: model, capabilities: { tools: true, input: ['text'], output: ['text'] } } }
 				}
 			},
-			...(providerIds(global.disabled_providers).includes(provider)
-				? { disabled_providers: providerIds(global.disabled_providers).filter((item) => item !== provider) }
-				: {})
+			...activation(global, provider, true)
 		};
 		await applyConfigChange(home, patch, options, (value) => {
-			const effective = record(record(value.provider)?.[provider]);
+			const effective = record(record(value.providers)?.[provider]);
 			return (
-				record(effective?.options)?.baseURL === url && Boolean(record(effective?.models)?.[model]) &&
-				!providerIds(value.disabled_providers).includes(provider)
+				record(effective?.settings)?.baseURL === url && Boolean(record(effective?.models)?.[model]) &&
+				providerPolicies(value).slice().reverse().find((rule) => rule.resource === provider)?.effect !== 'deny'
 			);
 		});
 		if (input.key !== undefined) await setProviderApiKey(home, provider, input.key, options);
@@ -313,11 +329,14 @@ export async function useProviderModel(
 			throw new Error('Choose an available model that supports text and agent tools.');
 		const { policy } = configurations(home);
 		const selection = `${provider}/${model}`;
-		if (policy.value.model !== undefined && policy.value.model !== selection)
+		const managedModel = record(policy.value.model);
+		if (policy.value.model !== undefined && policy.value.model !== selection &&
+			!(managedModel?.providerID === provider && managedModel.model === model))
 			throw new Error(
 				'The default model is controlled by config/opencode/opencode.json. Edit its managed model setting there.'
 			);
-		await applyConfigChange(home, { model: selection }, options, (value) => value.model === selection);
+		await applyConfigChange(home, { model: selection }, options, (value) => value.model === selection ||
+			(record(value.model)?.providerID === provider && record(value.model)?.model === model));
 		return listProviderSettings(home, options);
 	});
 }
@@ -345,10 +364,8 @@ export async function removeProviderSetup(
 			)
 				throw new Error('This advanced endpoint cannot be disabled by the simple service form.');
 			const global = await readAssistantGlobalConfig(home, options);
-			const disabled = [...new Set([...providerIds(global.disabled_providers), provider])];
-			await applyConfigChange(home, { disabled_providers: disabled }, options, (value) =>
-				providerIds(value.disabled_providers).includes(provider)
-			);
+			await applyConfigChange(home, activation(global, provider, false), options, (value) =>
+				providerPolicies(value).slice().reverse().find((rule) => rule.resource === provider)?.effect === 'deny');
 		}
 		if (!options.endpoint) await removeProviderAuth(home, provider, options);
 		return listProviderSettings(home, options);

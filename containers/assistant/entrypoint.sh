@@ -187,14 +187,6 @@ prepare_filesystem() {
     /home/fhold/.local/state/opencode \
     /opt/akm/cache /opt/akm/data/state /stash/tasks /stash/inbox /stash/disabled-tasks /work
 
-  # Native generated SDK dependencies are baked, not installed at boot. Respect
-  # mounted read-only configuration and every existing operator cache/package.
-  for config in /home/fhold/.config/opencode "${OPENCODE_CONFIG_DIR:-/etc/opencode}"; do
-    if [ -w "$config" ] && [ -d /native-defaults/opencode-sdk ]; then
-      cp -R -n /native-defaults/opencode-sdk/. "$config/"
-    fi
-  done
-
   if ! prepare_native_defaults; then
     mark_degraded native-defaults 'Native remote defaults could not be prepared. Check home permissions and recent logs, then restart; OpenCode remains available.'
   fi
@@ -356,7 +348,7 @@ setsid env "${writer_env[@]}" opencode serve \
   --hostname 0.0.0.0 \
   --port "$OPENCODE_PORT" \
   --print-logs \
-  --log-level "${OPENCODE_LOG_LEVEL:-INFO}" &
+  --log-level "${OPENCODE_LOG_LEVEL:-info}" &
 assistant_pid=$!
 writer_pids+=("$assistant_pid")
 essential_pids+=("$assistant_pid")

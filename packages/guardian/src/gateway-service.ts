@@ -78,7 +78,6 @@ export type AgentRunResult = {
 	error?: string;
 	interactions?: PublicInteraction[];
 	changedFiles?: string[];
-	todos?: Array<{ content: string; status: string; priority: string }>;
 	usage?: {
 		cost?: number;
 		inputTokens: number;
@@ -117,7 +116,7 @@ export type PublicMessage = {
 	tokens?: AssistantMessage['tokens'];
 };
 
-export type SessionInclude = 'messages' | 'diff' | 'todos';
+export type SessionInclude = 'messages' | 'diff';
 
 export type PublicDiff = {
 	file: string;
@@ -126,27 +125,14 @@ export type PublicDiff = {
 	status?: 'added' | 'deleted' | 'modified';
 };
 
-export type PublicTodo = { content: string; status: string; priority: string };
-
 export type PublicSessionDetail = PublicSession & {
 	messages?: PublicMessage[];
 	diff?: PublicDiff[];
-	todos?: PublicTodo[];
 };
 
 export type WorkspaceSearchResult =
 	| { mode: 'files'; files: string[] }
-	| { mode: 'text'; matches: Array<{ path: string; line: number; text: string }> }
-	| {
-			mode: 'symbols';
-			symbols: Array<{
-				name: string;
-				kind: number;
-				path: string;
-				line: number;
-				character: number;
-			}>;
-	  };
+	| { mode: 'text'; matches: Array<{ path: string; line: number; text: string }> };
 
 export type GatewayServiceOptions = {
 	assistant?: AssistantClient;
@@ -384,14 +370,6 @@ export class GatewayService {
 		});
 	}
 
-	private publicTodos(todos: Awaited<ReturnType<AssistantClient['sessionTodos']>>): PublicTodo[] {
-		return todos.slice(0, 200).map((todo) => ({
-			content: todo.content.slice(0, 2_000),
-			status: todo.status.slice(0, 100),
-			priority: todo.priority.slice(0, 100)
-		}));
-	}
-
 	private async statusFor(session: AssistantSession, signal: AbortSignal): Promise<PublicSession> {
 		const status = await this.assistant.sessionStatus(session.id, signal);
 		return {
@@ -400,16 +378,7 @@ export class GatewayService {
 			createdAt: session.createdAt,
 			updatedAt: session.updatedAt,
 			status: status.type,
-			...(session.parentId ? { parent: this.sessionHandle(session.parentId) } : {}),
-			...(session.summary
-				? {
-						summary: {
-							additions: session.summary.additions,
-							deletions: session.summary.deletions,
-							files: session.summary.files
-						}
-					}
-				: {})
+			...(session.parentId ? { parent: this.sessionHandle(session.parentId) } : {})
 		};
 	}
 
@@ -541,10 +510,7 @@ export class GatewayService {
 			};
 		}
 
-		const [diff, todos] = await Promise.all([
-			this.assistant.sessionDiff(session.id, signal).catch(() => []),
-			this.assistant.sessionTodos(session.id, signal).catch(() => [])
-		]);
+		const diff = await this.assistant.sessionDiff(session.id, signal).catch(() => []);
 		const changedFiles = filterWorkspacePaths(
 			[...new Set([...result.files, ...diff.flatMap((entry) => (entry.file ? [entry.file] : []))])],
 			MAX_SEARCH_RESULTS
@@ -556,15 +522,6 @@ export class GatewayService {
 			...live,
 			text: text || '(agent completed without a text response)',
 			...(changedFiles.length ? { changedFiles } : {}),
-			...(todos.length
-				? {
-						todos: todos.slice(0, 200).map((todo) => ({
-							content: todo.content.slice(0, 2_000),
-							status: todo.status.slice(0, 100),
-							priority: todo.priority.slice(0, 100)
-						}))
-					}
-				: {}),
 			...(result.tokens
 				? {
 						usage: {
@@ -743,19 +700,17 @@ export class GatewayService {
 	): Promise<PublicSessionDetail> {
 		const session = await this.ownedSession(handle, signal);
 		const requested = new Set(include);
-		const [detail, messages, diff, todos] = await Promise.all([
+		const [detail, messages, diff] = await Promise.all([
 			this.statusFor(session, signal),
 			requested.has('messages')
 				? this.assistant.listMessages(session.id, MAX_MESSAGES, signal)
 				: undefined,
-			requested.has('diff') ? this.assistant.sessionDiff(session.id, signal) : undefined,
-			requested.has('todos') ? this.assistant.sessionTodos(session.id, signal) : undefined
+			requested.has('diff') ? this.assistant.sessionDiff(session.id, signal) : undefined
 		]);
 		return {
 			...detail,
 			...(messages ? { messages: this.publicMessages(session.id, messages) } : {}),
-			...(diff ? { diff: this.publicDiff(diff) } : {}),
-			...(todos ? { todos: this.publicTodos(todos) } : {})
+			...(diff ? { diff: this.publicDiff(diff) } : {})
 		};
 	}
 
@@ -803,7 +758,7 @@ export class GatewayService {
 	}
 
 	async workspaceSearch(
-		mode: 'text' | 'files' | 'symbols',
+		mode: 'text' | 'files',
 		query: string,
 		limit: number | undefined,
 		signal: AbortSignal
@@ -853,22 +808,7 @@ export class GatewayService {
 				matches: safeMatches
 			};
 		}
-		const symbols = await this.assistant.findSymbols(safeQuery, signal);
-		const allowed = new Set(
-			await this.allowedWorkspacePaths(
-				symbols.slice(0, MAX_SEARCH_SCAN).map((symbol) => uriPath(symbol.uri)),
-				MAX_SEARCH_SCAN,
-				signal
-			)
-		);
-		return {
-			mode,
-			symbols: symbols
-				.map((symbol) => ({ ...symbol, path: uriPath(symbol.uri) }))
-				.filter((symbol) => allowed.has(symbol.path))
-				.slice(0, maximum)
-				.map(({ uri: _uri, ...symbol }) => symbol)
-		};
+		throw new GatewayError('Choose files or text search.', 'invalid_input');
 	}
 
 	async workspaceRead(
@@ -949,7 +889,7 @@ export class GatewayService {
 				throw new GatewayError('Interaction is no longer pending.', 'not_found');
 			}
 			if (input.decision === 'reject') {
-				await this.assistant.rejectQuestion(decoded.value.requestId, signal);
+				await this.assistant.rejectQuestion(session.id, decoded.value.requestId, signal);
 				return { accepted: true, kind: 'question' };
 			}
 			if (!input.answers?.length || input.answers.some((answer) => !answer.length)) {
@@ -966,7 +906,7 @@ export class GatewayService {
 				throw new GatewayError('answers are too long.', 'invalid_input');
 			}
 			await this.screen(answerText);
-			await this.assistant.answerQuestion(decoded.value.requestId, input.answers, signal);
+			await this.assistant.answerQuestion(session.id, decoded.value.requestId, input.answers, signal);
 			return { accepted: true, kind: 'question' };
 		}
 
@@ -980,6 +920,7 @@ export class GatewayService {
 			throw new GatewayError('Interaction is no longer pending.', 'not_found');
 		}
 		await this.assistant.answerPermission(
+			session.id,
 			decoded.value.requestId,
 			decision,
 			input.message?.slice(0, 1_000),
@@ -997,11 +938,6 @@ export class GatewayService {
 	async sessionDiff(handle: string, signal: AbortSignal) {
 		const session = await this.ownedSession(handle, signal);
 		return this.publicDiff(await this.assistant.sessionDiff(session.id, signal));
-	}
-
-	async sessionTodos(handle: string, signal: AbortSignal) {
-		const session = await this.ownedSession(handle, signal);
-		return this.publicTodos(await this.assistant.sessionTodos(session.id, signal));
 	}
 
 	catalog() {
@@ -1028,7 +964,6 @@ export class GatewayService {
 			resources: [
 				'fhold://sessions/{session}/messages',
 				'fhold://sessions/{session}/diff',
-				'fhold://sessions/{session}/todos',
 				'fhold://jobs/{job}',
 				...(this.policy === 'read' || this.policy === 'full' ? ['fhold://workspace/{path}'] : [])
 			],

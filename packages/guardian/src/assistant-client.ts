@@ -1,15 +1,16 @@
 import { readFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 import {
-	createOpencodeClient,
-	type AssistantMessage as OpenCodeAssistantMessage,
-	type PermissionRequest,
-	type QuestionRequest,
-	type Session,
-	type SessionStatus,
-	type SnapshotFileDiff,
-	type Todo
-} from '@opencode-ai/sdk/v2';
+	OpenCode,
+	type SessionInfo,
+	type SessionMessageInfo,
+	type FormField,
+	type TokenUsageInfo,
+	type JsonValue,
+	type PermissionRuleset
+} from '@opencode/client';
 
 import { readTextBounded } from './http-util.js';
 
@@ -27,8 +28,7 @@ export type AssistantSession = {
 	createdAt: number;
 	updatedAt: number;
 	cost?: number;
-	tokens?: Session['tokens'];
-	summary?: Session['summary'];
+	tokens?: TokenUsageInfo;
 };
 
 export type AssistantMessage = {
@@ -43,14 +43,20 @@ export type AssistantMessage = {
 	tools?: Array<{ name: string; status: 'pending' | 'running' | 'completed' | 'error' }>;
 	error?: string;
 	cost?: number;
-	tokens?: OpenCodeAssistantMessage['tokens'];
+	tokens?: TokenUsageInfo;
 };
 
 export type AssistantQuestion = {
 	id: string;
 	sessionId: string;
 	messageId?: string;
-	questions: QuestionRequest['questions'];
+	questions: Array<{
+		header: string;
+		question: string;
+		options: Array<{ label: string; description: string }>;
+		multiple?: boolean;
+		custom?: boolean;
+	}>;
 };
 
 export type AssistantPermission = {
@@ -68,12 +74,12 @@ export type WorkspaceTextMatch = {
 	text: string;
 };
 
-export type WorkspaceSymbol = {
-	name: string;
-	kind: number;
-	uri: string;
-	line: number;
-	character: number;
+export type SessionStatus = { type: 'idle' | 'busy' | 'retry' };
+export type SnapshotFileDiff = {
+	file: string;
+	additions: number;
+	deletions: number;
+	status?: 'added' | 'deleted' | 'modified';
 };
 
 export interface AssistantClient {
@@ -93,7 +99,6 @@ export interface AssistantClient {
 	): Promise<AssistantSession>;
 	listMessages(sessionId: string, limit: number, signal: AbortSignal): Promise<AssistantMessage[]>;
 	sessionStatus(sessionId: string, signal: AbortSignal): Promise<SessionStatus>;
-	sessionTodos(sessionId: string, signal: AbortSignal): Promise<Todo[]>;
 	sessionDiff(sessionId: string, signal: AbortSignal): Promise<SnapshotFileDiff[]>;
 	runAsync(
 		sessionId: string,
@@ -105,9 +110,10 @@ export interface AssistantClient {
 	abortSession(sessionId: string, signal: AbortSignal): Promise<void>;
 	pendingQuestions(sessionId: string, signal: AbortSignal): Promise<AssistantQuestion[]>;
 	pendingPermissions(sessionId: string, signal: AbortSignal): Promise<AssistantPermission[]>;
-	answerQuestion(requestId: string, answers: string[][], signal: AbortSignal): Promise<void>;
-	rejectQuestion(requestId: string, signal: AbortSignal): Promise<void>;
+	answerQuestion(sessionId: string, requestId: string, answers: string[][], signal: AbortSignal): Promise<void>;
+	rejectQuestion(sessionId: string, requestId: string, signal: AbortSignal): Promise<void>;
 	answerPermission(
+		sessionId: string,
 		requestId: string,
 		decision: 'once' | 'always' | 'reject',
 		message: string | undefined,
@@ -115,7 +121,6 @@ export interface AssistantClient {
 	): Promise<void>;
 	findText(pattern: string, signal: AbortSignal): Promise<WorkspaceTextMatch[]>;
 	findFiles(query: string, limit: number, signal: AbortSignal): Promise<string[]>;
-	findSymbols(query: string, signal: AbortSignal): Promise<WorkspaceSymbol[]>;
 }
 
 export type AssistantClientOptions = {
@@ -148,18 +153,17 @@ function readPassword(path: string): string {
 	return password;
 }
 
-function normalizedSession(session: Session): AssistantSession {
+function normalizedSession(session: SessionInfo): AssistantSession {
 	return {
 		id: session.id,
-		title: session.title.slice(0, 160),
+		title: (session.title ?? 'Untitled session').slice(0, 160),
 		...(session.parentID ? { parentId: session.parentID } : {}),
 		...(session.agent ? { agent: session.agent } : {}),
 		...(session.metadata ? { metadata: session.metadata } : {}),
 		createdAt: session.time.created,
 		updatedAt: session.time.updated,
 		...(session.cost === undefined ? {} : { cost: session.cost }),
-		...(session.tokens ? { tokens: session.tokens } : {}),
-		...(session.summary ? { summary: session.summary } : {})
+		...(session.tokens ? { tokens: session.tokens } : {})
 	};
 }
 
@@ -175,11 +179,69 @@ function messageText(parts: Array<{ type: string; text?: string; ignored?: boole
 	return output;
 }
 
-function messageError(info: OpenCodeAssistantMessage): string | undefined {
-	if (!info.error) return undefined;
-	const data = info.error.data as { message?: unknown };
-	const detail = typeof data?.message === 'string' ? data.message.slice(0, 500) : '';
-	return detail ? `${info.error.name}: ${detail}` : info.error.name;
+function normalizedMessages(messages: SessionMessageInfo[]): AssistantMessage[] {
+	let parentId: string | undefined;
+	return [...messages].sort((a, b) => a.time.created - b.time.created).flatMap<AssistantMessage>((message) => {
+		if (message.type === 'user') {
+			parentId = message.id;
+			return [{ id: message.id, role: 'user' as const, createdAt: message.time.created, text: message.text.slice(0, MAX_MESSAGE_TEXT), files: [] }];
+		}
+		if (message.type !== 'assistant') return [];
+		return [{
+			id: message.id, role: 'assistant' as const, parentId, createdAt: message.time.created,
+			...(message.time.completed ? { completedAt: message.time.completed } : {}),
+			...(message.finish ? { finish: message.finish } : {}),
+			text: messageText(message.content),
+			files: [...new Set(message.snapshot?.files ?? [])].slice(0, MAX_MESSAGE_FILES),
+			tools: message.content.flatMap((part) => part.type === 'tool' && /^[A-Za-z0-9_.:-]{1,128}$/.test(part.name)
+				? [{ name: part.name, status: part.state.status === 'streaming' ? 'pending' as const : part.state.status }] : []),
+			...(message.error ? { error: `${message.error.type}: ${message.error.message.slice(0, 500)}` } : {}),
+			cost: message.cost, tokens: message.tokens
+		}];
+	});
+}
+
+function formQuestion(field: FormField): AssistantQuestion['questions'][number] {
+	const options = field.type === 'string' || field.type === 'multiselect' ? field.options ?? [] : [];
+	return {
+		header: field.title ?? field.key,
+		question: field.description ?? field.title ?? field.key,
+		options: field.type === 'boolean' ? [{ label: 'Yes', description: '' }, { label: 'No', description: '' }]
+			: options.map((item) => ({ label: item.label, description: item.description ?? '' })),
+		multiple: field.type === 'multiselect',
+		custom: (field.type === 'string' || field.type === 'multiselect') ? field.custom ?? !options.length : field.type !== 'boolean'
+	};
+}
+
+function policyPermissions(agent: string): PermissionRuleset {
+	if (agent === 'remote') return [{ action: '*', resource: '*', effect: 'deny' }];
+	if (agent !== 'remote-read') return [];
+	return [
+		{ action: '*', resource: '*', effect: 'deny' },
+		...['read', 'glob', 'list'].map((action) => ({ action, resource: '*', effect: 'allow' as const })),
+		{ action: 'external_directory', resource: '/work/*', effect: 'allow' },
+		{ action: 'external_directory', resource: '/stash/*', effect: 'allow' },
+		{ action: 'read', resource: '*.env', effect: 'deny' },
+		{ action: 'read', resource: '*.env.*', effect: 'deny' },
+		{ action: 'read', resource: '*.env.example', effect: 'allow' },
+		...['/stash/secrets/*', '/stash/env/*'].flatMap((resource) =>
+			[{ action: 'read', resource, effect: 'deny' as const }, { action: 'external_directory', resource, effect: 'deny' as const }])
+	];
+}
+
+function formAnswer(field: FormField, values: string[]): string | string[] | number | boolean {
+	if (field.type === 'boolean') {
+		if (!['Yes', 'No'].includes(values[0] ?? '')) throw new Error('Choose Yes or No.');
+		return values[0] === 'Yes';
+	}
+	if (field.type === 'number' || field.type === 'integer') {
+		const value = Number(values[0]);
+		if (!Number.isFinite(value) || (field.type === 'integer' && !Number.isInteger(value))) throw new Error('Provide a valid number.');
+		return value;
+	}
+	if (field.type === 'external') throw new Error('Complete this form using the native OpenCode client.');
+	const answer = values.map((value) => field.options?.find((option) => option.label === value)?.value ?? value);
+	return field.type === 'multiselect' ? answer : answer[0] ?? '';
 }
 
 function authenticatedFetch(
@@ -212,124 +274,102 @@ function authenticatedFetch(
 	return wrapped as typeof fetch;
 }
 
-export function createAssistantClient(options: AssistantClientOptions = {}): AssistantClient {
+export function createNativeClient(options: AssistantClientOptions = {}) {
 	const baseUrl = (options.baseUrl ?? Bun.env.FH_ASSISTANT_URL ?? 'http://assistant:4096').replace(
 		/\/+$/,
 		''
 	);
-	const directory = options.directory ?? Bun.env.FH_ASSISTANT_DIRECTORY ?? '/work';
 	const passwordFile = options.passwordFile ?? Bun.env.OPENCODE_SERVER_PASSWORD_FILE ?? '';
-	const username = options.username ?? Bun.env.OPENCODE_SERVER_USERNAME ?? 'user';
+	const username = options.username ?? 'opencode';
 	const timeoutMs =
 		options.timeoutMs ?? boundedInt(Bun.env.GUARDIAN_ASSISTANT_TIMEOUT_MS, 120_000, 300_000);
-	const client = createOpencodeClient({
+	return OpenCode.make({
 		baseUrl,
-		directory,
 		fetch: authenticatedFetch(options.fetch ?? fetch, username, passwordFile, timeoutMs)
 	});
-	const callOptions = (signal: AbortSignal) => ({ throwOnError: true as const, signal });
+}
+
+export function createAssistantClient(options: AssistantClientOptions = {}): AssistantClient {
+	const directory = options.directory ?? Bun.env.FH_ASSISTANT_DIRECTORY ?? '/work';
+	const timeoutMs = options.timeoutMs ?? boundedInt(Bun.env.GUARDIAN_ASSISTANT_TIMEOUT_MS, 120_000, 300_000);
+	const client = createNativeClient(options);
+	const callOptions = (signal: AbortSignal) => ({ signal });
+	const location = { directory };
 
 	return {
 		async listSessions(limit, signal) {
-			const response = await client.session.list({ scope: 'project', limit }, callOptions(signal));
+			const response = await client.session.list({ directory, limit }, callOptions(signal));
 			return response.data.map(normalizedSession);
 		},
 
 		async createSession(title, agent, signal) {
-			const response = await client.session.create({ title, agent }, callOptions(signal));
-			return normalizedSession(response.data);
+			// A credential's upper bound is session-owned, independent of editable
+			// agent preferences and v1 permission state discarded by native migration.
+			return normalizedSession(await client.session.create({ title, agent, location, permissions: policyPermissions(agent) }, callOptions(signal)));
 		},
 
 		async getSession(sessionId, signal) {
 			requireSessionId(sessionId);
 			const response = await client.session.get({ sessionID: sessionId }, callOptions(signal));
-			return normalizedSession(response.data);
+			return normalizedSession(response);
 		},
 
 		async setSessionMetadata(sessionId, metadata, signal) {
 			requireSessionId(sessionId);
-			const response = await client.session.update(
-				{ sessionID: sessionId, metadata },
+			await client.session.update(
+				{ sessionID: sessionId, metadata: metadata as Record<string, JsonValue> },
 				callOptions(signal)
 			);
-			return normalizedSession(response.data);
+			return normalizedSession(await client.session.get({ sessionID: sessionId }, callOptions(signal)));
 		},
 
 		async deleteSession(sessionId, signal) {
 			requireSessionId(sessionId);
-			await client.session.delete({ sessionID: sessionId }, callOptions(signal));
+			await client.session.remove({ sessionID: sessionId }, callOptions(signal));
 		},
 
 		async forkSession(sessionId, messageId, signal) {
 			requireSessionId(sessionId);
 			const response = await client.session.fork(
-				{ sessionID: sessionId, ...(messageId ? { messageID: messageId } : {}) },
+				{ sessionID: sessionId, ...(messageId ? { before: messageId } : {}) },
 				callOptions(signal)
 			);
-			return normalizedSession(response.data);
+			return normalizedSession(response);
 		},
 
 		async listMessages(sessionId, limit, signal) {
 			requireSessionId(sessionId);
-			const response = await client.session.messages(
+			const response = await client.message.list(
 				{ sessionID: sessionId, limit },
 				callOptions(signal)
 			);
-			return response.data.map(({ info, parts }) => {
-				const text = messageText(parts);
-				const files = [
-					...new Set(parts.flatMap((part) => (part.type === 'patch' ? part.files : [])))
-				].slice(0, MAX_MESSAGE_FILES);
-				if (info.role === 'assistant') {
-					return {
-						id: info.id,
-						role: info.role,
-						parentId: info.parentID,
-						createdAt: info.time.created,
-						...(info.time.completed ? { completedAt: info.time.completed } : {}),
-						...(info.finish ? { finish: info.finish } : {}),
-						text,
-						files,
-						tools: parts.flatMap((part) =>
-							part.type === 'tool' && /^[A-Za-z0-9_.:-]{1,128}$/.test(part.tool)
-								? [{ name: part.tool, status: part.state.status }]
-								: []
-						),
-						...(messageError(info) ? { error: messageError(info) } : {}),
-						cost: info.cost,
-						tokens: info.tokens
-					};
-				}
-				return { id: info.id, role: info.role, createdAt: info.time.created, text, files };
-			});
+			return normalizedMessages(response.data);
 		},
 
 		async sessionStatus(sessionId, signal) {
 			requireSessionId(sessionId);
-			const response = await client.session.status(undefined, callOptions(signal));
-			return response.data[sessionId] ?? { type: 'idle' };
-		},
-
-		async sessionTodos(sessionId, signal) {
-			requireSessionId(sessionId);
-			const response = await client.session.todo({ sessionID: sessionId }, callOptions(signal));
-			return response.data;
+			const response = await client.session.active(callOptions(signal));
+			return { type: response[sessionId] ? 'busy' : 'idle' };
 		},
 
 		async sessionDiff(sessionId, signal) {
 			requireSessionId(sessionId);
 			const response = await client.session.diff({ sessionID: sessionId }, callOptions(signal));
-			return response.data;
+			return response;
 		},
 
 		async runAsync(sessionId, messageId, message, agent, signal) {
 			requireSessionId(sessionId);
-			await client.session.promptAsync(
+			// Reapply the credential's current ceiling on every turn, including
+			// sessions whose v1 permissions were reset by native database migration.
+			await client.session.update({ sessionID: sessionId, permissions: policyPermissions(agent) }, callOptions(signal));
+			await client.session.switchAgent({ sessionID: sessionId, agent }, callOptions(signal));
+			await client.session.prompt(
 				{
 					sessionID: sessionId,
-					messageID: messageId,
-					agent,
-					parts: [{ type: 'text', text: message }]
+					id: messageId,
+					text: message,
+					delivery: 'queue'
 				},
 				callOptions(signal)
 			);
@@ -337,75 +377,68 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 
 		async abortSession(sessionId, signal) {
 			requireSessionId(sessionId);
-			await client.session.abort({ sessionID: sessionId }, callOptions(signal));
+			await client.session.interrupt({ sessionID: sessionId }, callOptions(signal));
 		},
 
 		async pendingQuestions(sessionId, signal) {
 			requireSessionId(sessionId);
-			const response = await client.question.list(undefined, callOptions(signal));
-			return response.data
-				.filter((item: QuestionRequest) => item.sessionID === sessionId)
-				.map((item: QuestionRequest) => ({
+			const response = await client.session.form.list({ sessionID: sessionId }, callOptions(signal));
+			return response.map((item) => ({
 					id: item.id,
 					sessionId: item.sessionID,
-					...(item.tool?.messageID ? { messageId: item.tool.messageID } : {}),
-					questions: item.questions
+					questions: item.fields.map(formQuestion)
 				}));
 		},
 
 		async pendingPermissions(sessionId, signal) {
 			requireSessionId(sessionId);
-			const response = await client.permission.list(undefined, callOptions(signal));
-			return response.data
-				.filter((item: PermissionRequest) => item.sessionID === sessionId)
-				.map((item: PermissionRequest) => ({
+			const response = await client.permission.list({ sessionID: sessionId }, callOptions(signal));
+			return response.map((item) => ({
 					id: item.id,
 					sessionId: item.sessionID,
-					...(item.tool?.messageID ? { messageId: item.tool.messageID } : {}),
-					permission: item.permission,
-					patterns: item.patterns,
-					always: item.always
+					...(item.source?.messageID ? { messageId: item.source.messageID } : {}),
+					permission: item.action,
+					patterns: item.resources,
+					always: item.save ?? []
 				}));
 		},
 
-		async answerQuestion(requestId, answers, signal) {
-			await client.question.reply({ requestID: requestId, answers }, callOptions(signal));
+		async answerQuestion(sessionId, requestId, answers, signal) {
+			const form = await client.session.form.get({ sessionID: sessionId, formID: requestId }, callOptions(signal));
+			const answer = Object.fromEntries(form.fields.map((field, index) => [field.key, formAnswer(field, answers[index] ?? [])]));
+			await client.session.form.reply({ sessionID: sessionId, formID: requestId, answer }, callOptions(signal));
 		},
 
-		async rejectQuestion(requestId, signal) {
-			await client.question.reject({ requestID: requestId }, callOptions(signal));
+		async rejectQuestion(sessionId, requestId, signal) {
+			await client.session.form.cancel({ sessionID: sessionId, formID: requestId }, callOptions(signal));
 		},
 
-		async answerPermission(requestId, decision, message, signal) {
+		async answerPermission(sessionId, requestId, decision, message, signal) {
 			await client.permission.reply(
-				{ requestID: requestId, reply: decision, ...(message ? { message } : {}) },
+				{ sessionID: sessionId, requestID: requestId, decision, ...(message ? { message } : {}) },
 				callOptions(signal)
 			);
 		},
 
 		async findText(pattern, signal) {
-			const response = await client.find.text({ pattern }, callOptions(signal));
-			return response.data.map((match) => ({
-				path: match.path.text,
-				line: match.line_number,
-				text: match.lines.text.slice(0, 2_000)
-			}));
+			// V2 has no text-search route. Search Guardian's read-only workspace;
+			// Gateway still validates every result through its file boundary.
+			let stdout: string;
+			try {
+				({ stdout } = await promisify(execFile)('rg', ['--json', '--max-count', '20', '--max-filesize', '1M', '--', pattern, directory], { signal, timeout: timeoutMs, maxBuffer: MAX_UPSTREAM_RESPONSE_BYTES }));
+			} catch (error) {
+				if (error && typeof error === 'object' && 'code' in error && error.code === 1) return [];
+				throw error;
+			}
+			return stdout.split('\n').filter(Boolean).flatMap((line) => {
+				const value = JSON.parse(line) as { type: string; data: { path: { text: string }; line_number: number; lines: { text: string } } };
+				return value.type === 'match' ? [{ path: value.data.path.text, line: value.data.line_number, text: value.data.lines.text.slice(0, 2_000) }] : [];
+			});
 		},
 
 		async findFiles(query, limit, signal) {
-			const response = await client.find.files({ query, limit, type: 'file' }, callOptions(signal));
-			return response.data;
-		},
-
-		async findSymbols(query, signal) {
-			const response = await client.find.symbols({ query }, callOptions(signal));
-			return response.data.map((symbol) => ({
-				name: symbol.name,
-				kind: symbol.kind,
-				uri: symbol.location.uri,
-				line: symbol.location.range.start.line,
-				character: symbol.location.range.start.character
-			}));
+			const response = await client.file.find({ query, limit, type: 'file', location }, callOptions(signal));
+			return response.data.map((entry) => entry.path);
 		}
 	};
 }

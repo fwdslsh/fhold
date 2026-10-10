@@ -16,14 +16,15 @@ bun run --cwd packages/electron test:providers:browser
 bun run --cwd packages/electron test
 ```
 
-The library tests use native-shaped OpenCode responses and a cached global
-configuration fixture. Only a native global PATCH invalidates that fixture's
-cache: a host file edit followed by instance disposal cannot falsely pass as a
-settings reload. Tests cover narrow patches, managed-policy precedence, JSONC
-preservation, disabled endpoints, private auth inventory, API/OAuth operations,
-temporary session cleanup and honest saved-but-unconfirmed failures without
-client-side rollback. Readiness rejects audio-only, embedding-only, non-tool
-and deprecated models before creating a session; slash-containing IDs are exact.
+The library tests use native-shaped OpenCode 2 responses and watched
+configuration fixtures. They reject unexpected API requests, including generic
+settings PATCH/reload calls; unit fixtures alone do not prove file watching.
+Tests cover narrow native file edits, managed-policy precedence, JSONC
+preservation, non-destructive endpoint disabling, private native credential
+inventory, API/OAuth attempt binding and honest saved-but-unconfirmed failures
+without client-side rollback. Readiness rejects audio-only, embedding-only,
+non-tool and deprecated models before inference; slash-containing IDs are exact.
+Explicit readiness uses native tool-free generation, not a temporary session.
 
 Renderer tests exercise the actual account module. The browser test loads the
 actual HTML, styles and ES modules in headless Chromium, mocking only desktop
@@ -41,6 +42,32 @@ compatible HTTP server. It needs Docker and a freshly compiled CLI; it does not
 patch the image, repair mounts or copy credentials from an existing home.
 
 ## Native test evidence
+
+### OpenCode 2 candidate: 2026-10-10
+
+The native regression passed against the image built from `codex/opencode-v2`
+using OpenCode CLI/client/plugin `2.0.26` and AKM's published 0.10 prerelease
+artifacts. This is candidate evidence, not a published-release qualification.
+It used an ordinary fresh CLI install and standard managed mounts. All endpoint
+save/edit/disable/re-enable, exact credential removal, explicit Test/Use and
+restart-persistence checks passed. Only the two explicit response tests invoked
+the controlled model endpoint; neither used tools or created an agent session.
+Native transport streaming is normal even though the generation result is
+assembled text.
+
+The same regression exercises native watching with atomic file replacements:
+provider/model changes in both global and workspace scopes, shell/agent/command
+edits, permission changes enforced on an existing session, and plugin
+addition/source replacement/options edits/removal with cleanup. OpenCode's PID
+and container remain unchanged; no location reload or instance-disposal API is called. The
+user-config directory is writable; managed plugins and operator policy remain
+read-only. An ordinary atomic editor save does not create a pending restart.
+
+See the [migration handoff](../technical/opencode-v2-migration-handoff.md#qualified-live-settings-and-plugin-behavior)
+for the exact scope, repeatable command and remaining release gates. These tests
+do not certify every plugin package, provider entitlement or the entire V2 port.
+
+### Earlier V1 releases
 
 On 2026-10-06 the reusable regression passed against the published alpha.6
 Assistant and a fresh CLI install. Four endpoint setups became effective
@@ -109,14 +136,15 @@ Start the selected instance normally and open it in the preview AppImage.
    A consumed callback must not be reused after a failed response test.
 7. In new setup, test and explicitly use a model, then choose the separate
    continuation action. Testing must not navigate away or restart a container.
-   An untouched Guardian moderator placeholder may produce the normal pending
-   restart alert; native preference changes alone must not produce that alert.
+   Native preference changes must not produce a pending-restart alert.
 8. Restart the disposable stack normally and reopen Admin. Confirm the exact
    default, endpoint and sign-in remain saved, without a stale verification
    badge. Repeat search and actions with Tab/Shift+Tab/Enter, narrow layout and
    enlarged text. Product navigation must not resize the window.
 
-Native configuration reload may interrupt active OpenCode work, even though
-the process/container stay running. Verification does not change native agent
-permissions. Leave the disposable stack stopped and preserve any credential-
-bearing evidence privately.
+For the V2 candidate, normal watched preference edits need no explicit reload.
+Container settings, the selected config filename and read-only policy mounts
+still require managed activation. The isolated watcher fixture changes only
+synthetic permission rules; it does not alter operator policy or live accounts.
+Leave the disposable stack stopped and preserve credential-bearing evidence
+privately.

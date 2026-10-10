@@ -68,13 +68,9 @@ const PUBLIC_DIFF = z
 		status: z.enum(['added', 'deleted', 'modified']).optional()
 	})
 	.strict();
-const PUBLIC_TODO = z
-	.object({ content: z.string(), status: z.string(), priority: z.string() })
-	.strict();
 const PUBLIC_SESSION_DETAIL = PUBLIC_SESSION.extend({
 	messages: z.array(PUBLIC_MESSAGE).optional(),
-	diff: z.array(PUBLIC_DIFF).optional(),
-	todos: z.array(PUBLIC_TODO).optional()
+	diff: z.array(PUBLIC_DIFF).optional()
 }).strict();
 const QUESTION = z
 	.object({
@@ -118,9 +114,6 @@ const AGENT_RESULT = z
 		error: z.string().optional(),
 		interactions: z.array(INTERACTION).optional(),
 		changedFiles: z.array(z.string()).optional(),
-		todos: z
-			.array(z.object({ content: z.string(), status: z.string(), priority: z.string() }).strict())
-			.optional(),
 		usage: z
 			.object({
 				cost: z.number().optional(),
@@ -331,12 +324,12 @@ function registerTools(server: McpServer, service: GatewayService): void {
 		{
 			title: 'Get agent session',
 			description:
-				'Get status and summary metadata for an owned session, optionally including history, changed-file summaries, and todos.',
+				'Get status and metadata for an owned session, optionally including history and changed-file summaries.',
 			inputSchema: z
 				.object({
 					session: HANDLE,
 					include: z
-						.array(z.enum(['messages', 'diff', 'todos']))
+						.array(z.enum(['messages', 'diff']))
 						.max(3)
 						.optional()
 				})
@@ -408,10 +401,10 @@ function registerTools(server: McpServer, service: GatewayService): void {
 			{
 				title: 'Search workspace',
 				description:
-					'Search non-secret workspace files by file name, text pattern, or language symbol.',
+					'Search non-secret workspace files by file name or text pattern.',
 				inputSchema: z
 					.object({
-						mode: z.enum(['files', 'text', 'symbols']),
+						mode: z.enum(['files', 'text']),
 						query: z.string().min(1).max(500),
 						limit: z.number().int().min(1).max(100).optional()
 					})
@@ -423,22 +416,6 @@ function registerTools(server: McpServer, service: GatewayService): void {
 							mode: z.literal('text'),
 							matches: z.array(
 								z.object({ path: z.string(), line: z.number(), text: z.string() }).strict()
-							)
-						})
-						.strict(),
-					z
-						.object({
-							mode: z.literal('symbols'),
-							symbols: z.array(
-								z
-									.object({
-										name: z.string(),
-										kind: z.number(),
-										path: z.string(),
-										line: z.number(),
-										character: z.number()
-									})
-									.strict()
 							)
 						})
 						.strict()
@@ -581,23 +558,6 @@ function registerResources(server: McpServer, service: GatewayService): void {
 				uri,
 				await resourceValue(() =>
 					service.sessionDiff(variable(variables.session), context.mcpReq.signal)
-				)
-			)
-	);
-
-	server.registerResource(
-		'fhold-session-todos',
-		new ResourceTemplate('fhold://sessions/{session}/todos', { list: undefined }),
-		{
-			title: 'fhold session tasks',
-			description: 'Current agent todo state for an owned session.',
-			mimeType: 'application/json'
-		},
-		async (uri, variables, context) =>
-			jsonResource(
-				uri,
-				await resourceValue(() =>
-					service.sessionTodos(variable(variables.session), context.mcpReq.signal)
 				)
 			)
 	);

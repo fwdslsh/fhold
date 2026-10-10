@@ -25,12 +25,12 @@ services:
     environment:
       HOME: /home/fhold
       OPENCODE_CONFIG_DIR: /etc/opencode
+      OPENCODE_CONFIG: /home/fhold/.config/opencode/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}
       OPENCODE_DISABLE_PROJECT_CONFIG: "true"
       OPENCODE_DISABLE_CLAUDE_CODE: "true"
       OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
       OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true"
       OPENCODE_PORT: "4096"
-      OPENCODE_SERVER_USERNAME: user
       OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
       AKM_BUNDLE_DIR: /stash
       AKM_CONFIG_DIR: /etc/akm
@@ -67,10 +67,9 @@ services:
         protocol: tcp
     volumes:
       - ${FH_HOME:?}/data/assistant:/home/fhold
-      - ${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode:ro
-      # Native settings API writes only its preferred preferences file; persona,
-      # plugin discovery and managed policy directories remain read-only.
-      - ${FH_HOME:?}/config/assistant/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}:/home/fhold/.config/opencode/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}
+      # Native user settings/plugins can be edited normally, including atomic
+      # editor saves. Image-baked plugins and system policy remain read-only.
+      - ${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode
       # OpenCode owns this credential file. Mount only the file rather than
       # exposing the delegated Guardian/portal secret directory to the agent.
       - ${FH_HOME:?}/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json
@@ -112,15 +111,9 @@ services:
       - no-new-privileges:true
     environment:
       HOME: /home/fhold
-      OPENCODE_CONFIG_DIR: /opt/fhold/moderator-config
-      OPENCODE_DISABLE_PROJECT_CONFIG: "true"
-      OPENCODE_DISABLE_CLAUDE_CODE: "true"
-      OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
-      OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true"
       PORT: "8080"
       FH_ASSISTANT_URL: http://assistant:4096
       FH_ASSISTANT_DIRECTORY: /work
-      OPENCODE_SERVER_USERNAME: user
       OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
       GUARDIAN_AUTH_DIR: /run/fhold-credentials
       GUARDIAN_HANDLE_KEY_FILE: /run/secrets/guardian_handle_key
@@ -128,8 +121,6 @@ services:
       GUARDIAN_OAUTH_IDENTITIES_FILE: /home/fhold/.config/opencode/oauth-identities.json
       GUARDIAN_AUDIT_PATH: /opt/fhold/logs/guardian-audit.log
       GUARDIAN_ALLOWED_ORIGINS: ${GUARDIAN_ALLOWED_ORIGINS:-}
-      GUARDIAN_MODERATION_URL: http://127.0.0.1:4097
-      GUARDIAN_MODERATION_PORT: "4097"
       GUARDIAN_MODERATION_TIMEOUT_MS: ${GUARDIAN_MODERATION_TIMEOUT_MS:-4000}
       GUARDIAN_ASSISTANT_TIMEOUT_MS: ${GUARDIAN_ASSISTANT_TIMEOUT_MS:-120000}
       GUARDIAN_MODERATION_THRESHOLD: "3"
@@ -141,9 +132,7 @@ services:
         protocol: tcp
     volumes:
       - ${FH_HOME:?}/data/logs:/opt/fhold/logs
-      - ${FH_HOME:?}/system/guardian:/opt/fhold/moderator-config:ro
       - ${FH_HOME:?}/config/guardian:/home/fhold/.config/opencode:ro
-      - ${FH_HOME:?}/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json:ro
       # Guardian reads this mount itself so workspace resources cannot escape
       # through OpenCode's intentionally broad native file API.
       - ${FH_HOME:?}/workspace:/work:ro

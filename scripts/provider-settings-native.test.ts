@@ -123,8 +123,14 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			commands.push({ command: cli, args: ['--name', home, ...args], stdout: result.stdout });
 			return result;
 		};
-		const authPath = join(home, 'knowledge/secrets/auth.json');
-		const authIds = () => Object.keys(JSON.parse(readFileSync(authPath, 'utf8'))).sort();
+		const authIds = async () => {
+			const password = readFileSync(join(home, 'state/secrets/fhold_opencode_password'), 'utf8').trim();
+			const response = await fetch(`http://127.0.0.1:${config.assistant.port}/api/credential`, {
+				headers: { authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
+			});
+			assert(response.ok);
+			return ((await response.json()) as { data: Array<{ integrationID: string }> }).data.map(entry => entry.integrationID).sort();
+		};
 		const posts = () => requests.filter((item) => item.method === 'POST');
 		let started = false;
 		let primaryError: unknown;
@@ -174,6 +180,9 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				return result;
 			};
 			const initialIdentity = await identity('before provider settings');
+			await execute('docker', ['exec', cid, 'node', '--input-type=module', '-e',
+				readFileSync(join(import.meta.dir, 'smoke-opencode-v2-live.mjs'), 'utf8')]);
+			stages.push('native watcher applies providers, models, shell, agents, commands, existing-session permissions and plugin add/edit/remove on managed mounts without reload or restart');
 			const liveImage = (
 				await execute('docker', ['inspect', '--format', '{{.Config.Image}}', cid])
 			).stdout.trim();
@@ -242,7 +251,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			);
 			assert.equal(
 				mounts.find((item) => item.Destination === '/home/fhold/.config/opencode')?.RW,
-				false
+				true
 			);
 			assert.equal(mounts.find((item) => item.Destination === '/etc/opencode')?.RW, false);
 			assert.equal(
@@ -250,18 +259,16 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				false
 			);
 			const writableConfig = mounts.filter(
-				(item) => item.Destination.startsWith('/home/fhold/.config/opencode/') && item.RW
+					(item) => item.Destination === '/home/fhold/.config/opencode' && item.RW
 			);
 			assert.equal(writableConfig.length, 1);
-			assert.match(
-				writableConfig[0].Destination,
-				/\/(?:config\.json|opencode\.json|opencode\.jsonc)$/
-			);
+			assert.equal(writableConfig[0].Destination, '/home/fhold/.config/opencode');
+			const preferencesPath = join(writableConfig[0].Source, 'opencode.json');
 			stages.push(
-				'normal CLI install/start; exactly one writable native user-preference file, parent and managed policy read-only'
+				'normal CLI install/start; writable native user settings directory, managed plugins and system policy read-only'
 			);
 			const before = await readAssistantConfig(home);
-			await setProviderApiKey(home, 'qa-unrelated-auth', 'synthetic-unrelated-key');
+			await setProviderApiKey(home, 'anthropic', 'synthetic-unrelated-key');
 			await syncRequests();
 			assert.equal(posts().length, 0);
 			for (const provider of ['qa-ollama', 'qa-lmstudio', 'qa-llama-cpp', 'qa-custom']) {
@@ -302,7 +309,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			assert.equal((await readAssistantConfig(home)).model, before.model);
 			const used = await useProviderModel(home, 'qa-ollama', 'team/qa-model');
 			assert.deepEqual(used.currentModel, { provider: 'qa-ollama', model: 'team/qa-model' });
-			assert.equal((await readAssistantConfig(home)).model, 'qa-ollama/team/qa-model');
+			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
 			await syncRequests();
 			assert.equal(posts().length, 1);
 			const usedIdentity = await identity('after explicit Use');
@@ -318,7 +325,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				url: editedUrl,
 				model: 'team/edited-model'
 			});
-			assert.equal((await readAssistantConfig(home)).model, 'qa-ollama/team/qa-model');
+			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
 			const edited = await testAssistantReadiness(home, {
 				provider: 'qa-ollama',
 				model: 'team/edited-model',
@@ -327,12 +334,12 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			assert.equal(edited.ok, true, JSON.stringify(edited));
 			await syncRequests();
 			assert.equal(posts().at(-1)?.path, '/edited/v1/chat/completions');
-			assert.equal((await readAssistantConfig(home)).model, 'qa-ollama/team/qa-model');
+			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
 			stages.push(
 				'endpoint URL/model edit applied immediately and preserved old default; explicit test used edited transport'
 			);
-			const userConfigBeforeRestart = digest(writableConfig[0].Source);
-			const authBeforeRestart = digest(authPath);
+			const userConfigBeforeRestart = digest(preferencesPath);
+			const authBeforeRestart = await authIds();
 			await run(['restart']);
 			await waitForAssistant(home);
 			await identity('after explicit CLI restart');
@@ -345,8 +352,8 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				afterRestart.providers.find((item) => item.id === 'qa-ollama')?.endpoint?.url,
 				editedUrl
 			);
-			assert.equal(digest(writableConfig[0].Source), userConfigBeforeRestart);
-			assert.equal(digest(authPath), authBeforeRestart);
+			assert.equal(digest(preferencesPath), userConfigBeforeRestart);
+			assert.deepEqual(await authIds(), authBeforeRestart);
 			stages.push(
 				'normal CLI restart retained exact default, endpoint edit, native preferences and auth bytes'
 			);
@@ -360,7 +367,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				disabled.providers.find((item) => item.id === 'qa-llama-cpp')?.endpoint?.url,
 				url
 			);
-			assert(authIds().includes('qa-unrelated-auth'));
+			assert((await authIds()).includes('anthropic'));
 			const removedAuth = await removeProviderSetup(home, 'qa-llama-cpp');
 			assert.equal(
 				removedAuth.providers.find((item) => item.id === 'qa-llama-cpp')?.authenticated,
@@ -370,7 +377,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				removedAuth.providers.find((item) => item.id === 'qa-llama-cpp')?.disabled,
 				true
 			);
-			assert(authIds().includes('qa-unrelated-auth'));
+			assert((await authIds()).includes('anthropic'));
 			await saveProviderEndpoint(home, {
 				provider: 'qa-llama-cpp',
 				name: 'QA llama.cpp enabled again',
@@ -386,13 +393,13 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				removeProviderSetup(home, 'qa-ollama', { endpoint: true }),
 				/another model/i
 			);
-			assert.equal((await readAssistantConfig(home)).model, 'qa-ollama/team/qa-model');
+			assert.deepEqual((await readAssistantConfig(home)).model, { providerID: 'qa-ollama', model: 'team/qa-model' });
 			await syncRequests();
 			assert.equal(posts().length, 2);
 			assert(posts().every((item) => item.tools === 0));
 			assert(
 				posts().every((item) => item.stream === true),
-				'Native response tests must exercise real SSE streaming'
+				'Native generation must exercise the provider streaming transport'
 			);
 			assert.deepEqual(
 				Object.fromEntries(managedPaths.map((path) => [path, digest(path)])),
@@ -417,7 +424,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 						mounts,
 						identities,
 						currentModel: afterRestart.currentModel,
-						authIds: authIds(),
+						authIds: await authIds(),
 						managedHashes: beforeHashes,
 						evidence:
 							'Published shipped Assistant native API+SDK with controlled OpenAI-compatible responses. Actual Ollama/LM Studio/llama.cpp products and vendor entitlement are not claimed.'

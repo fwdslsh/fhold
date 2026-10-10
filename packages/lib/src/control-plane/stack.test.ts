@@ -25,7 +25,12 @@ describe('release surface', () => {
 		expect(compose.match(/cap_drop: \[ALL\]/g)).toHaveLength(4);
 		expect(compose.match(/no-new-privileges:true/g)).toHaveLength(4);
 		expect(compose.match(/init: true/g)).toHaveLength(4);
-		expect(compose.match(/OPENCODE_DISABLE_PROJECT_CONFIG: "true"/g)).toHaveLength(2);
+		expect(compose.match(/OPENCODE_DISABLE_PROJECT_CONFIG: "true"/g)).toHaveLength(1);
+		expect(compose).toContain('${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode');
+		expect(compose).toContain('${FH_HOME:?}/system/assistant:/etc/opencode:ro');
+		expect(compose).toContain('${FH_HOME:?}/config/opencode/opencode.json:/etc/opencode/opencode.json:ro');
+		expect(compose).not.toContain('FH_OPENCODE_PREFERENCES_FILE:-opencode.json}:/');
+		expect(compose).not.toContain('GUARDIAN_MODERATOR_URL');
 		expect(compose).toContain('fhold-healthcheck');
 		expect(compose).toContain('host_ip: "${FH_ASSISTANT_BIND_ADDRESS:-127.0.0.1}"');
 		expect(compose).toContain('GUARDIAN_AUTH_DIR: /run/fhold-credentials');

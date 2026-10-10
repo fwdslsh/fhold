@@ -7,8 +7,6 @@ import {
 	ensureDockerReady,
 	listProviders,
 	markInstalled,
-	readStackConfig,
-	refreshAssistantInstance,
 	removeProviderAuth,
 	requireInstall,
 	runComposeStreaming,
@@ -18,7 +16,7 @@ import {
 } from '@fhold/lib';
 
 import { defineAction } from '../lib/action.js';
-import { runRestartAction, runStartAction } from './lifecycle.js';
+import { runStartAction } from './lifecycle.js';
 
 function readKey(path: string): string {
 	const value = readFileSync(path === '-' ? 0 : path, 'utf8').replace(/[\r\n]+$/, '');
@@ -39,24 +37,21 @@ export async function runNativeProviderLogin(options: {
 	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
 	const args = [...buildComposeCliArgs(state), 'exec', 'assistant', 'opencode', 'auth', 'login'];
-	if (options.provider) args.push('--provider', options.provider);
+	if (options.provider) args.push(options.provider);
+	args.push('--server', 'http://127.0.0.1:4096');
 	if (options.method) args.push('--method', options.method);
 	await runComposeStreaming(args, { envFiles: [`${state.homeDir}/state/stack.env`] });
-	await refreshAssistantInstance(state.homeDir);
 }
 
 async function verifyAndComplete(homeDir: string, provider?: string): Promise<void> {
 	const readiness = await testAssistantReadiness(homeDir, provider ? { provider } : {});
 	if (!readiness.ok) throw new Error(`Provider readiness failed: ${readiness.error}`);
-	const moderatorUpdated = configureGuardianModeratorModel(
+	configureGuardianModeratorModel(
 		homeDir,
 		readiness.provider,
 		readiness.model
 	);
 	markInstalled(homeDir);
-	const config = readStackConfig(homeDir);
-	if (!config.ok) throw new Error(config.error);
-	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction();
 	console.log(
 		`Provider ready${readiness.provider ? `: ${readiness.provider}` : ''}${readiness.model ? `/${readiness.model}` : ''}.`
 	);
@@ -93,7 +88,7 @@ const loginCommand = defineCommand({
 	meta: { name: 'login', description: "Run OpenCode's native provider sign-in flow" },
 	args: {
 		provider: { type: 'positional', required: false, description: 'Provider id or name' },
-		method: { type: 'string', description: 'OpenCode login method label' }
+		method: { type: 'string', description: 'Native OpenCode login method ID' }
 	},
 	run: defineAction(async ({ args }) => {
 		await runNativeProviderLogin({

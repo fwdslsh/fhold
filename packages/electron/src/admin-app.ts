@@ -86,7 +86,7 @@ const adminIndexUrl = pathToFileURL(adminIndexPath).href;
 let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
 let remoteStarting = false;
 let instances: AdminInstances;
-let pendingOAuth: { homeDir: string; provider: string; method: number } | undefined;
+let pendingOAuth: { homeDir: string; provider: string; method: number; attemptID: string } | undefined;
 let verifiedModel:
 	| { homeDir: string; readiness: Extract<AssistantReadiness, { ok: true }> }
 	| undefined;
@@ -536,7 +536,7 @@ export function registerAdminIpc(): void {
 			input.method,
 			input.inputs
 		);
-		pendingOAuth = { homeDir: current.homeDir, provider: input.provider, method: input.method };
+		pendingOAuth = { homeDir: current.homeDir, provider: input.provider, method: input.method, attemptID: authorization.attemptID };
 		await shell.openExternal(externalAdminUrl(authorization.url));
 		return authorization;
 	});
@@ -554,7 +554,7 @@ export function registerAdminIpc(): void {
 			pendingOAuth.method !== input.method
 		)
 			throw new Error('Start provider sign-in for this instance first.');
-		await completeProviderOAuth(current.homeDir, input.provider, input.method, rawCode);
+		await completeProviderOAuth(current.homeDir, input.provider, pendingOAuth.attemptID, rawCode);
 		pendingOAuth = undefined;
 		verifiedModel = undefined;
 	});

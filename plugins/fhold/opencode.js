@@ -1,27 +1,34 @@
+import { Plugin } from '@opencode/plugin';
 import { activity, coverage, endSession, report } from './scripts/activity.mjs';
 
-export const FholdPlugin = async () => {
-	const mark = (session, token, busy) => report(() => activity('opencode', session, token, busy));
-	// Native plugin loading precedes work in each workspace. Calling back into
-	// the server here would deadlock that workspace's own initialization.
-	report(() => coverage('opencode', true));
-	return {
-		event: async ({ event }) =>
-			report(() => {
-				const p = event.properties;
-				// Native lifecycle events cover API shells and failed/cancelled tools,
-				// and do not mistake noReply message inserts for running turns.
-				if (event.type === 'session.status') mark(p.sessionID, 'turn', p.status.type !== 'idle');
-				if (event.type === 'session.idle') mark(p.sessionID, 'turn', false);
-				if (event.type === 'session.deleted') endSession('opencode', p.info.id);
-				if (event.type === 'message.part.updated' && p.part.type === 'tool') {
-					const part = p.part;
-					mark(
-						part.sessionID,
-						`tool:${part.id}`,
-						!['completed', 'error'].includes(part.state.status)
-					);
-				}
-			})
-	};
-};
+export function observeOpenCode(event) {
+  const data = event.data ?? {};
+  const session = data.sessionID;
+  const mark = (token, busy) => activity('opencode', session, token, busy);
+  report(() => {
+    if (event.type === 'session.execution.started') mark('turn', true);
+    if (['session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted', 'session.idle', 'session.deleted'].includes(event.type)) endSession('opencode', session);
+    if (event.type === 'session.tool.called') mark(`tool:${data.id}`, true);
+    if (event.type === 'session.tool.success' || event.type === 'session.tool.failed') mark(`tool:${data.id}`, false);
+  });
+}
+
+export default Plugin.define({
+  id: 'fhold.activity',
+  setup(context) {
+    // Loading occurs before workspace initialization completes. No HTTP callback.
+    report(() => coverage('opencode', true));
+    const abort = new AbortController();
+    void (async () => {
+      try {
+        for await (const event of context.event.subscribe({ signal: abort.signal })) {
+          if (event.location?.directory && event.location.directory !== context.location.directory) continue;
+          observeOpenCode(event);
+        }
+      } catch {
+        if (!abort.signal.aborted) report(() => coverage('opencode', false));
+      }
+    })();
+    return () => { abort.abort(); report(() => coverage('opencode', false)); };
+  }
+});

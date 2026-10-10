@@ -4,6 +4,13 @@
   "private": true,
   "license": "MIT",
   "packageManager": "bun@1.4.2",
+  "trustedDependencies": [
+    "@anthropic-ai/claude-code",
+    "@opencode/cli",
+    "electron",
+    "esbuild",
+    "sharp"
+  ],
   "workspaces": [
     "packages/lib",
     "packages/skeleton",
@@ -13,7 +20,7 @@
     "packages/electron",
     "packages/claude-desktop",
     "containers/assistant/tools",
-    "containers/guardian/tools",
+    "plugins/fhold",
     "website"
   ],
   "scripts": {

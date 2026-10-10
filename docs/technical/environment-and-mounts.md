@@ -3,6 +3,11 @@
 This document describes the active runtime. The executable source is
 `packages/skeleton/system/stack/stack.compose.yml`.
 
+On `codex/opencode-v2`, user-config directory watching and the OpenCode 2 native
+API are under qualification. See the [migration handoff](opencode-v2-migration-handoff.md)
+for verified live settings behavior and outstanding history/credential gates;
+this branch is not yet a released V2 migration.
+
 ## Host layout
 
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
@@ -138,8 +143,7 @@ bypasses Guardian.
 | Host source | Container target | Mode |
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
-| `config/assistant` | `/home/fhold/.config/opencode` | read-only |
-| `config/assistant/<preferred native file>` | `/home/fhold/.config/opencode/<same filename>` | read/write nested file mount for OpenCode's native settings API |
+| `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
 | `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
@@ -157,17 +161,18 @@ no Guardian, portal, bot, Docker, or host-admin credential. Optional recovery us
 a separate storage-only connection-string file; it is not an ingress credential
 and its value never appears in environment settings.
 
-Admin changes native provider/model preferences through OpenCode's authenticated
-global configuration API. OpenCode updates its preferred file in place and reloads
-its own cache; no process/container restart is needed. The remaining user config
-directory and managed/operator policy stay read-only. Trusted native clients can
-also edit the writable preferences file. Replacing its inode with an atomic host
-editor, or changing the preferred filename, requires `fhold restart` to refresh
-the file bind. Admin tracks that mount change, not in-place preference content,
-as pending restart. Native reloads can interrupt active OpenCode work.
+Admin makes narrow native provider/model preference edits and verifies the
+effective result through OpenCode's authenticated API. Native file watching
+applies ordinary and atomic saves; no explicit reload or process/container
+restart is needed. Managed plugins and operator policy remain read-only.
+`OPENCODE_CONFIG` selects the derived preferred filename inside the writable
+user-config directory. Selecting a different filename requires `fhold restart`
+to change that startup environment value; editing the selected file or a local
+user plugin does not. Container changes and read-only policy replacement still
+use the normal persistent pending-restart/apply workflow.
 
 The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
-authentication uses username `user`. `/fhold-bundle` is an image-baked,
+authentication uses username `opencode`. `/fhold-bundle` is an image-baked,
 root-owned read-only AKM skills source, shared with the native fhold plugins.
 Custom AKM configuration is preserved; it does not prevent the built-in skills
 from being available through the native harness integrations.
