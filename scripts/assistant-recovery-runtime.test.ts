@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { type ChildProcess, spawn } from 'node:child_process';
 import {
 	chmodSync,
 	existsSync,
@@ -9,7 +10,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
 
 const source = readFileSync(
 	new URL('../containers/assistant/entrypoint.sh', import.meta.url),
@@ -37,15 +37,16 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 		)
 		.replace('readonly TASK_BIN_DIR=/tmp/fhold-bin', `readonly TASK_BIN_DIR="${root}/cronbin"`);
 	if (extra.FIXTURE_PROC_EXIT_RACE === '1') {
-		// Reap the real writer after its /proc readability check, before the
-		// production read. This makes an ordinary process-exit race deterministic.
+		// Exit a real writer descendant after its /proc readability check,
+		// before the production read. Its owning writer reaps it normally.
 		isolated = isolated.replace(
-			'children=$(<"/proc/$parent/task/$parent/children")',
-			`if [ "$parent" = "\${assistant_pid:-}" ]; then
+			'IFS= read -r children <"/proc/$parent/task/$parent/children"',
+			`if [ "$parent" = "$(<"$FIXTURE_ROOT/proc-race.pid")" ]; then
       kill -KILL "$parent" 2>/dev/null || true
-      wait "$parent" 2>/dev/null || true
+      while [ -e "/proc/$parent" ]; do sleep 0.01; done
+      printf 'proc-race-reaped\\n' >>"$EVENTS"
     fi
-    children=$(<"/proc/$parent/task/$parent/children")`
+    IFS= read -r children <"/proc/$parent/task/$parent/children"`
 		);
 	}
 	writeFileSync(script, isolated);
@@ -85,11 +86,19 @@ fi
 	stub(
 		'opencode',
 		`
-printf 'native\n' >>"$EVENTS"
 if [ "\${FIXTURE_DESCENDANT:-0}" = 1 ]; then
   setsid fixture-descendant &
 fi
 trap 'printf "native-stopped\\n" >>"$EVENTS"; exit 0' TERM
+if [ "\${FIXTURE_PROC_EXIT_RACE:-0}" = 1 ]; then
+  sleep 30 &
+  race_pid=$!
+  printf '%s\\n' "$race_pid" >"$FIXTURE_ROOT/proc-race.pid"
+  printf 'native\\n' >>"$EVENTS"
+  wait "$race_pid" 2>/dev/null || true
+else
+  printf 'native\\n' >>"$EVENTS"
+fi
 while sleep 0.1; do :; done`
 	);
 	stub(
@@ -208,6 +217,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await until(() => run.events().includes('native'));
 			run.child.kill('SIGTERM');
 			expect(await finished(run.child)).toBe(0);
+			expect(run.events()).toContain('proc-race-reaped');
 			expect(run.events()).toContain('final-complete');
 			expect(run.events()).toContain('released');
 			expect(run.stderr()).not.toContain('/proc/');

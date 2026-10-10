@@ -70,8 +70,9 @@ signal_descendants() {
   local parent="$1" signal="$2" child children=""
   if [ -r "/proc/$parent/task/$parent/children" ]; then
     # A child may exit/reap after the check. A vanished /proc entry must not
-    # make errexit abandon shutdown before the recovery owner is released.
-    { children=$(<"/proc/$parent/task/$parent/children"); } 2>/dev/null || children=""
+    # interrupt shutdown before recovery releases ownership. Use a builtin
+    # read, not a command substitution that inherits our EXIT trap.
+    { IFS= read -r children <"/proc/$parent/task/$parent/children"; } 2>/dev/null || true
   fi
   for child in $children; do signal_descendants "$child" "$signal"; done
   if [ "$signal" = TERM ]; then descendant_pids+=("$parent"); fi
@@ -114,9 +115,10 @@ stop_children() {
     alive=0
     for pid in "${descendant_pids[@]}"; do
       if [ -r "/proc/$pid/stat" ]; then
-        local stat="$(<"/proc/$pid/stat")"
+        local stat=""
+        { IFS= read -r stat <"/proc/$pid/stat"; } 2>/dev/null || true
         stat="${stat##*) }"
-        case "$stat" in Z\ *|X\ *) ;; *) alive=1 ;; esac
+        case "$stat" in ""|Z\ *|X\ *) ;; *) alive=1 ;; esac
       fi
     done
     [ "$alive" = 1 ] || break
