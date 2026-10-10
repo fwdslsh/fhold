@@ -69,7 +69,9 @@ mark_degraded() {
 signal_descendants() {
   local parent="$1" signal="$2" child children=""
   if [ -r "/proc/$parent/task/$parent/children" ]; then
-    children=$(<"/proc/$parent/task/$parent/children")
+    # A child may exit/reap after the check. A vanished /proc entry must not
+    # make errexit abandon shutdown before the recovery owner is released.
+    { children=$(<"/proc/$parent/task/$parent/children"); } 2>/dev/null || children=""
   fi
   for child in $children; do signal_descendants "$child" "$signal"; done
   if [ "$signal" = TERM ]; then descendant_pids+=("$parent"); fi
@@ -80,7 +82,8 @@ stop_children() {
   [ "$stopping" = 0 ] || return 0
   stopping=1
   trap '' TERM INT
-  local pid deadline=$((SECONDS + SHUTDOWN_SECONDS)) alive
+  local pid deadline=$((SECONDS + SHUTDOWN_SECONDS)) alive recovery_status=0
+  echo 'assistant: shutdown: stopping native writers' >&2
   # Groups catch orphaned grandchildren; /proc traversal also catches native
   # workers that started their own session. Recovery stays alive until last.
   for pid in "${writer_pids[@]}"; do
@@ -125,6 +128,7 @@ stop_children() {
     sleep 0.1
   done
   if [ -n "$recovery_pid" ]; then
+    echo 'assistant: shutdown: writers stopped; finishing recovery checkpoint and owner release' >&2
     kill -TERM "$recovery_pid" 2>/dev/null || true
     deadline=$((SECONDS + RECOVERY_SHUTDOWN_SECONDS))
     while kill -0 "$recovery_pid" 2>/dev/null && [ "$SECONDS" -lt "$deadline" ]; do sleep 0.1; done
@@ -133,10 +137,16 @@ stop_children() {
       signal_descendants "$recovery_pid" KILL
       kill -KILL -- "-$recovery_pid" 2>/dev/null || true
     fi
-    wait "$recovery_pid" 2>/dev/null || true
+    wait "$recovery_pid" 2>/dev/null || recovery_status=$?
+    if [ "$recovery_status" -ne 0 ]; then
+      echo 'assistant: shutdown: recovery failed; retain logs and verify checkpoint and ownership before restarting' >&2
+      return "$recovery_status"
+    fi
+    echo 'assistant: shutdown: recovery checkpoint completed and owner released' >&2
   fi
+  echo 'assistant: shutdown complete' >&2
 }
-trap 'stop_children; exit 0' TERM INT
+trap 'status=0; stop_children || status=$?; exit "$status"' TERM INT
 trap stop_children EXIT
 
 prepare_identity() {

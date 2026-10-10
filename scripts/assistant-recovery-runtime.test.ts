@@ -24,7 +24,7 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 	const script = join(root, 'entrypoint.sh');
 	// Substitute only physical image filesystem preparation in this host fixture.
 	// Real command stubs and the production restore/supervision code still run.
-	const isolated = source
+	let isolated = source
 		.replace('prepare_identity\numask', 'printf "identity\\n" >>"$EVENTS"\numask')
 		.replace(
 			'prepare_filesystem\nload_opencode_password',
@@ -36,6 +36,18 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 			`readonly TASK_SPOOL_DIR="${root}/crontabs"`
 		)
 		.replace('readonly TASK_BIN_DIR=/tmp/fhold-bin', `readonly TASK_BIN_DIR="${root}/cronbin"`);
+	if (extra.FIXTURE_PROC_EXIT_RACE === '1') {
+		// Reap the real writer after its /proc readability check, before the
+		// production read. This makes an ordinary process-exit race deterministic.
+		isolated = isolated.replace(
+			'children=$(<"/proc/$parent/task/$parent/children")',
+			`if [ "$parent" = "\${assistant_pid:-}" ]; then
+      kill -KILL "$parent" 2>/dev/null || true
+      wait "$parent" 2>/dev/null || true
+    fi
+    children=$(<"/proc/$parent/task/$parent/children")`
+		);
+	}
 	writeFileSync(script, isolated);
 	const writerCheck = `
 if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
@@ -95,7 +107,7 @@ if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
 fi
 test ! -e "$FH_RUNTIME_DIR/recovery-writers-started"
 if [ "\${FIXTURE_BLOCKED_STATUS:-0}" != 1 ]; then test ! -e "$FH_RUNTIME_DIR/recovery-status.json"; fi
-trap 'printf "final-checkpoint\\n" >>"$EVENTS"; sleep "\${FIXTURE_FINAL_SECONDS:-0}"; printf "final-complete\\n" >>"$EVENTS"; printf "released\\n" >>"$EVENTS"; exit 0' TERM
+trap 'printf "final-checkpoint\\n" >>"$EVENTS"; sleep "\${FIXTURE_FINAL_SECONDS:-0}"; if [ "\${FIXTURE_FINAL_EXIT:-0}" != 0 ]; then exit "$FIXTURE_FINAL_EXIT"; fi; printf "final-complete\\n" >>"$EVENTS"; printf "released\\n" >>"$EVENTS"; exit 0' TERM
 if [ "\${FIXTURE_RESTORE_FAIL:-0}" = 1 ]; then exit 1; fi
 sleep 0.3
 printf 'restored\n' >>"$EVENTS"
@@ -128,11 +140,16 @@ while sleep 0.1; do :; done`
 			OPENCODE_SERVER_PASSWORD: 'fixture-only',
 			...extra
 		},
-		stdio: 'ignore'
+		stdio: ['ignore', 'ignore', 'pipe']
+	});
+	let stderr = '';
+	child.stderr?.on('data', (chunk) => {
+		stderr += chunk.toString();
 	});
 	return {
 		child,
 		root,
+		stderr: () => stderr,
 		events: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [])
 	};
 }
@@ -140,7 +157,7 @@ while sleep 0.1; do :; done`
 const finished = (child: ChildProcess) =>
 	new Promise<number | null>((resolve) => {
 		if (child.exitCode !== null) resolve(child.exitCode);
-		else child.once('exit', resolve);
+		else child.once('close', resolve);
 	});
 
 async function until(check: () => boolean) {
@@ -183,6 +200,41 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events).toContain('released');
 		expect(events.indexOf('native-stopped')).toBeLessThan(events.indexOf('final-checkpoint'));
 		expect(events.indexOf('final-complete')).toBeLessThan(events.indexOf('released'));
+		expect(run.stderr()).toContain('recovery checkpoint completed and owner released');
+	});
+	it('finishes recovery when a writer exits between its /proc check and read', async () => {
+		const run = fixture({ FH_RECOVERY_URL: 'file:///fixture', FIXTURE_PROC_EXIT_RACE: '1' });
+		try {
+			await until(() => run.events().includes('native'));
+			run.child.kill('SIGTERM');
+			expect(await finished(run.child)).toBe(0);
+			expect(run.events()).toContain('final-complete');
+			expect(run.events()).toContain('released');
+			expect(run.stderr()).not.toContain('/proc/');
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+			// A failing regression must not leave its isolated recovery stub alive.
+			const pidFile = join(run.root, 'runtime/recovery.pid');
+			if (existsSync(pidFile)) {
+				try {
+					process.kill(-Number(readFileSync(pidFile, 'utf8')), 'SIGKILL');
+				} catch {
+					// The successful production shutdown already reaped this group.
+				}
+			}
+		}
+	});
+	it('reports recovery shutdown failure instead of claiming a successful stop', async () => {
+		const run = fixture({ FH_RECOVERY_URL: 'file:///fixture', FIXTURE_FINAL_EXIT: '1' });
+		await until(() => run.events().includes('native'));
+		run.child.kill('SIGTERM');
+		expect(await finished(run.child)).toBe(1);
+		expect(run.events()).toContain('final-checkpoint');
+		expect(run.events()).not.toContain('released');
+		expect(run.stderr()).toContain('shutdown: recovery failed');
+		expect(run.stderr()).not.toContain('recovery checkpoint completed and owner released');
+		expect(run.stderr()).not.toContain('shutdown complete');
 	});
 	it('disables malformed scheduling intent without preventing native startup', async () => {
 		const run = fixture({ FH_SCHEDULER_ENABLED: 'false' });
@@ -388,7 +440,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			});
 			try {
 				await until(() => run.events().includes('native'));
-				await new Promise(resolve => setTimeout(resolve, 100));
+				await new Promise((resolve) => setTimeout(resolve, 100));
 				expect(run.child.exitCode).toBeNull();
 			} finally {
 				run.child.kill('SIGTERM');

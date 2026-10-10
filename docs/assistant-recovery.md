@@ -294,6 +294,49 @@ hung filesystem operation on a network mount. Use external host deadlines and
 health/routing controls; an unresponsive mount must never justify lock takeover
 while the previous writer may still exist.
 
+### Controlled shutdown and restart
+
+Use the runtime's normal stop operation, which sends SIGTERM to the image's
+PID 1. Do not stop just OpenCode or signal the recovery worker directly. The
+entrypoint stops writers and descendants first, then waits for the recovery
+worker's final checkpoint and exact-owner release. No pre-stop command,
+automatic unlock, sidecar or hosting-specific runtime is needed.
+
+1. Finish or explicitly interrupt the current work, stop sending new requests,
+   and retain console/system logs outside the disposable container.
+2. Request normal termination with the full grace period above. Managed installs
+   use `fhold --name my-agent stop`; a standalone Docker deployment can use
+   `docker stop --time 360 EXACT_CONTAINER`. Supply at least the actual derived
+   budget if settings differ; these examples do not override a hosting platform's
+   deadline.
+3. Check the retained entrypoint logs, in order: `shutdown: stopping native
+   writers`, `shutdown: writers stopped; finishing recovery checkpoint and owner
+   release`, `shutdown: recovery checkpoint completed and owner released`, then
+   `shutdown complete`. A vanished `/proc` entry during child exit is harmless,
+   not a reason to abandon final recovery. A failed recovery worker produces a
+   nonzero exit and a shutdown failure message, not a success claim.
+4. Wait for the old container and all revision replicas/descendants to be gone.
+   Inspect the private checkpoint namespace: the accepted generation must remain
+   readable; Blob's descriptor `owner` must be `null`, or the directory
+   `owner/nonce` must be absent. A stop request, zero replicas or lease expiry
+   alone does not prove this. Keep non-owner descriptor fields and artifacts intact.
+5. Start the same instance using the same destination, identity and policy.
+   Verify the saved native session and an accepted new checkpoint. Never
+   reinitialize an established namespace.
+
+Failed final uploads may leave the previous accepted generation and still release
+the owner; a killed worker or failed release may leave ownership recorded. Retain
+the failure logs and follow the externally confirmed exact-owner procedure only
+when necessary. It is not part of the routine stop/start path.
+
+[ACA lifecycle guidance](https://learn.microsoft.com/en-us/azure/container-apps/application-lifecycle-management)
+describes SIGTERM during scale-in and revision deactivation. Its
+[ARM Stop API](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps/stop?view=rest-resource-manager-containerapps-2026-07-01)
+is an asynchronous resource operation, not a recovery receipt. Qualify ARM Stop,
+revision deactivation and scale-to-zero separately using the sequence above and
+the real configured termination grace. Container/platform management remains
+outside fhold.
+
 The fixed default engine limits are 10,000 files, 64 MiB per ordinary file,
 256 MiB per database (including live main/WAL/SHM preflight), 1 GiB total member
 bytes, 4 MiB manifest and configured 120-second whole-operation/SQLite budgets.
@@ -593,11 +636,16 @@ workspace/Git/modes/deletions, all registered Codex databases, initialized-prese
 enforcement, corruption/deadline/ownership refusal, safe errors and accepted
 publication clocks, upgrades with changed dependency versions, surviving receipts
 and backup warnings without stopping the agent. Entrypoint tests cover scheduler independence and separate
-writer/final-checkpoint budgets. Exact-image directory and Blob-emulator smokes
+writer/final-checkpoint budgets, deterministic process exit between `/proc`
+check/read, and visible nonzero final-recovery failures. Exact-image directory and Blob-emulator smokes
 exercise native session/shell/file APIs, restored state and all three offline
 AKM harnesses without copying host accounts or repairing image behavior. Upgrade
 smokes replace a published image in cold-storage and surviving-home modes, then
 restore a checkpoint produced by the replacement image on its next restart.
+Candidate-image stops also verify PID 1's ordered shutdown/completion logs;
+the Blob smoke verifies the final accepted generation and cleared owner.
+These local fixtures do not qualify ACA's ARM Stop or establish the exact cause
+of a past hosted shutdown without matching retained platform logs.
 
 See [Linux product qualification](operations/alpha-qualification.md) for exact
 candidate evidence and remaining product gates. Host-specific deployment,

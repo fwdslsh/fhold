@@ -388,6 +388,11 @@ bounded final checkpoint; forced termination can lose unpublished changes.
 Writer shutdown and recovery have separate bounded waits so an in-flight capture
 cannot consume the stopped-writer final checkpoint's budget. External host grace
 must cover both phases and be tested in that environment.
+Process exit races in `/proc` traversal must not abandon final recovery. The
+entrypoint logs writer stop, successful checkpoint/owner release and completion;
+failed recovery is a visible nonzero shutdown, never a successful-stop claim.
+Normal termination uses the image PID 1, with no pre-stop repair or automatic
+ownership takeover. See the supported shutdown sequence in the recovery guide.
 
 Directory ownership has no automatic timeout takeover. External tooling must
 confirm the previous writer is stopped before explicitly clearing a stale owner.
