@@ -17,7 +17,8 @@ Only a small script surface remains active.
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
 | `live-acceptance.ts` | Opt-in real-provider runtime acceptance after a retained Admin E2E run |
-| `provider-settings-native.test.ts` | Opt-in shipped-image native provider settings, live reload and controlled compatible-transport regression |
+| `provider-settings-native.test.ts` | Opt-in shipped-image native provider settings, live file watching and controlled compatible-transport regression |
+| `smoke-opencode-v2-live.mjs` | Image-internal native settings and plugin hot-update checks, including atomic saves and existing-session permission changes |
 
 ## Local development
 
@@ -49,9 +50,14 @@ FH_NATIVE_PROVIDER_IMAGE=namespace/fhold-assistant:locked-tag \
 
 It creates a disposable home and a non-root controlled HTTP fixture container on
 the normal isolated Assistant network. It checks endpoint add/edit, Assistant-network
-model discovery, exact no-tool responses, explicit default selection, live native
-cache invalidation without container/process restart, no pending restart, normal
+model discovery, exact no-tool responses, explicit default selection, native file
+watching without reload or container/process restart, no pending restart, normal
 restart persistence, non-destructive disabling and exact credential removal.
+For the OpenCode 2 candidate it also checks provider/model changes in global and
+workspace scopes, shell/agent/command edits, native permission evaluation on an
+existing session, and plugin addition/source replacement/options/removal with
+cleanup.
+File replacements use ordinary atomic saves; no test-only mount repair occurs.
 Managed policy and unrelated credentials must remain intact. It stops the generated
 stack normally and removes only its own HTTP fixture container; generated homes
 and evidence remain under the printed temporary path. This qualifies the shipped

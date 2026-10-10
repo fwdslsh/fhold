@@ -35,13 +35,13 @@ const assistantEnvironment = {
 	TZ: defaultStackConfig().assistant.timezone,
 	HOME: '/home/fhold',
 	OPENCODE_CONFIG_DIR: '/etc/opencode',
+	OPENCODE_CONFIG: '/home/fhold/.config/opencode/opencode.json',
 	OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
 	OPENCODE_DISABLE_CLAUDE_CODE: 'true',
 	OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
 	OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 	OPENCODE_API_URL: 'http://127.0.0.1:4096',
 	OPENCODE_PORT: '4096',
-	OPENCODE_SERVER_USERNAME: 'user',
 	OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 	TERM: 'xterm-256color'
 };
@@ -89,12 +89,7 @@ function assistantService(homeDir = '/tmp/home') {
 				type: 'bind',
 				source: `${homeDir}/config/assistant`,
 				target: '/home/fhold/.config/opencode',
-				read_only: true
-			},
-			{
-				type: 'bind',
-				source: `${homeDir}/config/assistant/opencode.json`,
-				target: '/home/fhold/.config/opencode/opencode.json'
+				read_only: false
 			},
 			{
 				type: 'bind',
@@ -149,19 +144,25 @@ function auditHome(): string {
 }
 
 describe('Compose security audit', () => {
-	it('grants native preference writes without granting writable persona, plugins or policy', () => {
+	it('grants native user configuration writes while keeping managed plugins and policy read-only', () => {
 		const home = auditHome();
 		const config = baseConfig(home);
 		expect(auditCompose(config, home)).toEqual([]);
-		const preference = config.services.assistant.volumes.find((mount) => mount.target === '/home/fhold/.config/opencode/opencode.json');
-		if (!preference) throw new Error('Missing native preference fixture');
-		Object.assign(preference, { read_only: true });
-		expect(auditCompose(config, home).join('\n')).toContain('opencode.json must be read-write');
-		Object.assign(preference, { read_only: false });
-		const directory = config.services.assistant.volumes.find((mount) => mount.target === '/home/fhold/.config/opencode');
+		const directory = config.services.assistant.volumes.find(
+			(mount) => mount.target === '/home/fhold/.config/opencode'
+		);
 		if (!directory) throw new Error('Missing native directory fixture');
+		directory.read_only = true;
+		expect(auditCompose(config, home).join('\n')).toContain(
+			'/home/fhold/.config/opencode must be read-write'
+		);
 		directory.read_only = false;
-		expect(auditCompose(config, home).join('\n')).toContain('/home/fhold/.config/opencode must be read-only');
+		const managed = config.services.assistant.volumes.find(
+			(mount) => mount.target === '/etc/opencode'
+		);
+		if (!managed) throw new Error('Missing managed plugin fixture');
+		managed.read_only = false;
+		expect(auditCompose(config, home).join('\n')).toContain('/etc/opencode must be read-only');
 	});
 	it('allows only the exact read-only optional Claude managed MCP mount', () => {
 		const home = auditHome();
@@ -184,7 +185,7 @@ describe('Compose security audit', () => {
 		const home = auditHome();
 		const config = baseConfig(home);
 		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://agent.example/global/health',
+			FH_KEEPALIVE_URL: 'https://agent.example/api/info',
 			FH_KEEPALIVE_AUTH: 'opencode'
 		});
 		expect(auditCompose(config, home)).toEqual([]);

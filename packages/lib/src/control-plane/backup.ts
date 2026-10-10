@@ -15,6 +15,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { readStackConfig } from './stack-config.js';
+import { exportProviderCredentials, PROVIDER_CREDENTIAL_EXPORT } from './provider-transfer.js';
 import {
 	inspectUnrestoredData,
 	PORTABLE_BACKUP_EXCLUSIONS,
@@ -25,6 +26,7 @@ import {
 	assertSafePortablePath,
 	hasInlineProviderCredentials,
 	hasNonPortableNativeConfiguration,
+	nativePreferencesFile,
 	providerSecretFiles,
 	readProviderSecretFile
 } from './provider-files.js';
@@ -193,12 +195,25 @@ function addIfFile(files: Set<string>, source: string, relativePath: string): vo
 }
 
 export async function createBackup(options: BackupOptions): Promise<BackupManifest> {
-	return createBackupSync(options);
+	const credentials = options.includeProviderAuth
+		? await exportProviderCredentials(sourceRoot(options.sourceHome))
+		: undefined;
+	return createBackupSync(options, credentials);
 }
 
-/** Synchronous core for local filesystem callers; async frontend API remains unchanged. */
-export function createBackupSync(options: BackupOptions): BackupManifest {
+/** Filesystem-only implementation used by unit fixtures. Public callers use
+ * createBackup so SQLite-backed native credentials are included consistently. */
+export function createBackupSync(
+	options: BackupOptions,
+	nativeCredentials?: Buffer
+): BackupManifest {
 	const source = sourceRoot(options.sourceHome);
+	if (
+		options.includeProviderAuth &&
+		!nativeCredentials &&
+		existsSync(join(source, 'data/assistant/.local/share/opencode/opencode.db'))
+	)
+		throw new Error('SQLite-backed provider export requires async createBackup.');
 	const stack = readStackConfig(source);
 	if (!stack.ok) throw new Error(stack.error);
 	const warnings: string[] = [];
@@ -215,17 +230,18 @@ export function createBackupSync(options: BackupOptions): BackupManifest {
 		);
 	}
 	const nonPortableNativeConfiguration = hasNonPortableNativeConfiguration(source);
+	const preferencesPath = `config/assistant/${nativePreferencesFile(source)}`;
 	for (const relativePath of [
-		'config/assistant/opencode.json',
+		preferencesPath,
 		'config/assistant/persona.md',
 		'config/assistant/user-profile.md'
 	])
-		if (relativePath === 'config/assistant/opencode.json' && nonPortableNativeConfiguration) {
+		if (relativePath === preferencesPath && nonPortableNativeConfiguration) {
 			warnings.push(
 				'Native OpenCode configuration with non-portable settings or executable provider SDK customization was omitted; review and reintroduce custom configuration manually from a private full-home backup.'
 			);
 		} else if (
-			relativePath === 'config/assistant/opencode.json' &&
+			relativePath === preferencesPath &&
 			hasInlineProviderCredentials(source) &&
 			!options.includeProviderAuth
 		) {
@@ -239,13 +255,13 @@ export function createBackupSync(options: BackupOptions): BackupManifest {
 	} catch (error) {
 		if (options.includeProviderAuth) throw error;
 		// Invalid references must not bind to new installation authority.
-		files.delete(join(source, 'config/assistant/opencode.json'));
+		files.delete(join(source, preferencesPath));
 		warnings.push(
 			'Provider file references could not be safely backed up; configure the provider again or review references before opting in to --include-provider-auth.'
 		);
 	}
 	if (options.includeProviderAuth) {
-		addIfFile(files, source, 'knowledge/secrets/auth.json');
+		if (!nativeCredentials) addIfFile(files, source, 'knowledge/secrets/auth.json');
 		if (files.has(join(source, 'knowledge/secrets/auth.json'))) {
 			readProviderSecretFile(source, 'knowledge/secrets/auth.json');
 		}
@@ -306,6 +322,16 @@ export function createBackupSync(options: BackupOptions): BackupManifest {
 		entries.push({ path: relativePath, bytes: sourceFile.bytes.byteLength, sha256 });
 	}
 
+	if (nativeCredentials) {
+		mkdirSync(join(destination, 'knowledge/secrets'), { recursive: true, mode: 0o700 });
+		writeFileAtomic(join(destination, PROVIDER_CREDENTIAL_EXPORT), nativeCredentials, 0o600);
+		entries.push({
+			path: PROVIDER_CREDENTIAL_EXPORT,
+			bytes: nativeCredentials.length,
+			sha256: createHash('sha256').update(nativeCredentials).digest('hex')
+		});
+		totalBytes += nativeCredentials.length;
+	}
 	const manifest: BackupManifest = {
 		product: 'fhold',
 		version: 1,

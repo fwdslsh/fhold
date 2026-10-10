@@ -16,7 +16,7 @@ edits. Managed Compose mounts each file read-only into Assistant:
 
 | Instance file | Container path | Purpose |
 | --- | --- | --- |
-| `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | Managed OpenCode configuration, `permission`, agents and MCP servers |
+| `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | Native OpenCode permissions, resource policies, agents and MCP servers |
 | `config/codex/config.toml` | `/etc/codex/config.toml` | Codex defaults, including `approval_policy`, plugins and MCP servers |
 | `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | Enforced Codex constraints and managed-only hooks |
 | `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | Claude managed settings, including `permissions` and managed-only hooks |
@@ -97,24 +97,37 @@ example, preserve `allowManagedHooksOnly` and add reviewed command permissions:
 }
 ```
 
-OpenCode uses singular `permission`, with native `allow`, `ask` and `deny`
-values. For example, merge the following into its managed file:
+OpenCode v2 distinguishes permission defaults from enforced resource denials.
+Use native `permissions` for allow/ask/deny defaults, and native
+`experimental.policies` for operator restrictions that must also constrain
+project settings, agent defaults and session approvals:
 
 ```json
 {
-  "permission": {
-    "bash": { "*": "ask", "git status *": "allow", "sudo *": "deny" },
-    "edit": "ask"
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" }
+  ],
+  "experimental": {
+    "policies": [
+      { "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }
+    ]
   }
 }
 ```
 
-OpenCode's managed tier wins over conflicting user/project/inline settings.
-Native per-agent permission rules still apply. Scheduled work continues to use
-the restricted `scheduled` agent; global permissions do not remove Guardian's
-separate request authorization, moderation or path boundaries. Operators needing
-different scheduled-agent permissions supply native `agent.scheduled.permission`
-settings and must qualify that deliberate change.
+The read-only global resource policy has native precedence over conflicting
+user/project/inline resource policies. Ordinary `permissions` are defaults,
+not a managed ceiling; agent/session rules may override them. This differs from
+v1. Existing operator files are preserved: review any v1 `permission` rules
+that were intended as mandatory denials and express them as resource policies.
+Native action names include `shell` (formerly `bash`) and `subagent`
+(formerly `task`). Resource policies have allow/deny, not ask.
+
+Scheduled work keeps its restricted `scheduled` agent. Guardian reapplies the
+credential's chat/read ceiling as native session permissions on every turn;
+global defaults cannot grant a credential more access. Native resource denials
+also constrain full access. No custom policy interpreter is added.
 
 The native launchers do not force Codex's approval policy or Claude's permission
 mode on the command line. No new permission store, per-command wrapper or

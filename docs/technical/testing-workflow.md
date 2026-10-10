@@ -56,7 +56,9 @@ A passing bundle/static suite does not prove rendered or packaged startup.
 See [Admin verification](../operations/admin-setup-verification.md).
 
 Image-backed history tests require the newly built Assistant image:
-`FH_HISTORY_TEST_IMAGE=fhold/assistant:<frozen-version>`.
+`FH_NATIVE_TEST_IMAGE=fhold/fhold-assistant:<frozen-version> bun test scripts/native-transfer.test.ts`.
+Set `FH_HISTORY_SOURCE_IMAGE` to a cached v1 Assistant image to additionally
+verify upstream v1-to-v2 history and credential migration on private copies.
 Release gates must run image cases, not silently skip them. Real provider,
 MCP/portal, scheduling and all three AKM harness checks are separate integration
 evidence; mocked tests cannot certify them. Record exact commands/results,

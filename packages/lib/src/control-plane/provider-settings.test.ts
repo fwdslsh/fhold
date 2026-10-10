@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyEdits, modify, parse } from 'jsonc-parser';
+import { parse } from 'jsonc-parser';
 
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
 import {
@@ -31,19 +31,19 @@ function fixture() {
 	);
 	writeStackConfig(home, defaultStackConfig());
 	writeFileSync(join(home, 'state', 'secrets', 'fhold_opencode_password'), 'synthetic-password\n');
-	writeFileSync(join(home, 'knowledge', 'secrets', 'auth.json'), '{}\n');
+	writeFileSync(join(home, 'synthetic-native-credentials.json'), '{}\n');
 	const configPath = join(home, 'config', 'assistant', 'opencode.json');
 	const configuration = {
 		$schema: 'https://opencode.ai/config.json',
 		model: 'existing/team/model',
 		small_model: 'existing/small',
-		permission: { '*': 'ask', read: 'allow' },
-		plugin: ['operator-plugin'],
-		provider: {
+		permissions: [{ action: '*', resource: '*', effect: 'ask' }],
+		plugins: ['operator-plugin'],
+		providers: {
 			existing: {
-				npm: '@ai-sdk/openai-compatible',
+				package: '@opencode/ai/providers/openai-compatible',
 				name: 'Existing operator provider',
-				options: { baseURL: 'http://192.0.2.20:8080/v1', headers: { 'X-Operator': 'preserve' } },
+				settings: { baseURL: 'http://192.0.2.20:8080/v1', headers: { 'X-Operator': 'preserve' } },
 				models: { 'team/model': { name: 'Existing model' }, small: {} }
 			}
 		}
@@ -56,7 +56,7 @@ function fixture() {
 const textModel = {
 	id: 'text-model',
 	name: 'Native text model',
-	capabilities: { toolcall: true, input: { text: true }, output: { text: true } }
+	capabilities: { tools: true, input: ['text'], output: ['text'] }
 };
 
 function readConfiguration(path: string): Record<string, unknown> {
@@ -65,97 +65,72 @@ function readConfiguration(path: string): Record<string, unknown> {
 
 function nativeFixture(home: string, configPath: string, override: Record<string, unknown> = {}) {
 	const calls: Array<{ path: string; method: string; body?: unknown }> = [];
-	const modelRequests: Array<{ model?: { providerID: string; modelID: string } }> = [];
-	const authPath = join(home, 'knowledge', 'secrets', 'auth.json');
-	// Match the native infinite global cache: host edits do not refresh it.
-	// Only its settings API owns writing, invalidation and reloading.
-	let cachedGlobal = readConfiguration(configPath);
-	function patchJsonc(text: string, patch: Record<string, unknown>, path: string[] = []): string {
-		for (const [key, value] of Object.entries(patch)) {
-			if (value && typeof value === 'object' && !Array.isArray(value))
-				text = patchJsonc(text, value as Record<string, unknown>, [...path, key]);
-			else text = applyEdits(text, modify(text, [...path, key], value, {}));
-		}
-		return text;
-	}
+	const modelRequests: Array<{ model?: { providerID: string; id: string } }> = [];
+	const authPath = join(home, 'synthetic-native-credentials.json');
 	const fetchNative = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const request = new Request(input, init);
 		const path = new URL(request.url).pathname;
-		const body: unknown = init?.body ? await request.json() : undefined;
+		const body: unknown = request.body ? await request.json() : undefined;
 		calls.push({ path, method: request.method, ...(body === undefined ? {} : { body }) });
-		if (path === '/global/config') {
-			if (request.method === 'PATCH') {
-				const text = patchJsonc(readFileSync(configPath, 'utf8'), body as Record<string, unknown>);
-				writeFileSync(configPath, text);
-				cachedGlobal = readConfiguration(configPath);
-			}
-			return Response.json(cachedGlobal);
-		}
+		// Simulate the public watcher contract, not a made-up writable settings API.
 		const configuration = {
-			...cachedGlobal,
-			...readConfiguration(join(home, 'config', 'opencode', 'opencode.json')),
+			...readConfiguration(configPath),
+			...readConfiguration(join(home, 'config/opencode/opencode.json')),
 			...override
 		};
-		if (path === '/config') return Response.json(configuration);
-		if (path === '/provider/auth') return Response.json({});
-		if (path === '/provider') {
-			const providers = configuration.provider as Record<
-				string,
-				{ name?: string; models?: Record<string, { name?: string }> }
-			>;
-			const disabled = configuration.disabled_providers as string[] | undefined;
-			return Response.json({
-				all: [
-					{
-						id: 'native-catalog',
-						name: 'Native catalog',
-						source: 'custom',
-						models: {
-							'text-model': textModel,
-							whisper: {
-								...textModel,
-								capabilities: { ...textModel.capabilities, input: { audio: true } }
-							},
-							'deprecated-text': { ...textModel, status: 'deprecated' }
-						}
-					},
-					...Object.entries(providers ?? {}).map(([id, provider]) => ({
-						id,
-						name: provider.name ?? id,
-						source: 'config',
-						models: Object.fromEntries(
-							Object.entries(provider.models ?? {}).map(([model, value]) => [
-								model,
-								{ ...textModel, id: model, name: value.name ?? model }
-							])
-						)
-					}))
-				].filter((provider) => !disabled?.includes(provider.id)),
-				connected: ['native-catalog', ...Object.keys(providers ?? {})].filter((id) => !disabled?.includes(id)),
-				default: { 'native-catalog': 'whisper' }
-			});
-		}
-		if (path.startsWith('/auth/')) {
-			const id = decodeURIComponent(path.slice('/auth/'.length));
-			const auth = readConfiguration(authPath);
-			if (request.method === 'PUT') auth[id] = body;
-			else if (request.method === 'DELETE') delete auth[id];
-			else throw new Error(`Unexpected auth method ${request.method}`);
+		const definitions = configuration.providers as Record<string, {
+			name?: string; models?: Record<string, { name?: string }>;
+		}>;
+		const auth = readConfiguration(authPath);
+		const policy = (configuration.experimental as { policies?: Array<{ action: string; resource: string; effect: string }> } | undefined)?.policies ?? [];
+		const disabled = (provider: string) => policy.filter(rule => rule.action === 'provider.use' && rule.resource === provider).at(-1)?.effect === 'deny';
+		const providerIds = ['native-catalog', ...Object.keys(definitions ?? {})];
+		const nativeModel = configuration.model as { providerID?: string; model?: string } | undefined;
+		const selection = typeof configuration.model === 'string' ? configuration.model :
+			nativeModel?.providerID && nativeModel.model ? `${nativeModel.providerID}/${nativeModel.model}` : '';
+		const separator = selection.indexOf('/');
+		const preferred = separator > 0 ? { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) } : null;
+		const data = (value: unknown) => Response.json({ data: value });
+		if (path === '/api/info') return Response.json({ version: '2.0.26' });
+		if (path === '/api/config') return Response.json([{ type: 'document', info: {
+			...configuration,
+			...(preferred ? { model: { providerID: preferred.providerID, model: preferred.id } } : {})
+		} }]);
+		if (path === '/api/model/default') return data(preferred);
+		if (path === '/api/provider') return data(providerIds.map(id => ({
+			id, name: definitions?.[id]?.name ?? id,
+			activation: disabled(id) ? 'disabled' : 'enabled'
+		})));
+		if (path === '/api/integration') return data([...new Set([...providerIds, ...Object.keys(auth)])].map(id => ({
+			id, name: id, methods: [{ type: 'key', label: 'API key' }],
+			connections: auth[id] ? [{ type: 'credential', id: 'cred-' + id, method: 'key' }]
+				: id === 'native-catalog' ? [{ type: 'env', name: 'FREE_NATIVE_FIXTURE' }] : []
+		})));
+		if (path === '/api/model') return data([
+			{ ...textModel, providerID: 'native-catalog' },
+			{ ...textModel, id: 'whisper', providerID: 'native-catalog', capabilities: { tools: false, input: ['audio'], output: ['text'] } },
+			{ ...textModel, id: 'deprecated-text', providerID: 'native-catalog', status: 'deprecated' },
+			...Object.entries(definitions ?? {}).flatMap(([id, provider]) => Object.entries(provider.models ?? {}).map(([model, value]) => ({
+				...textModel, id: model, providerID: id, name: value.name ?? model
+			})))
+		].filter(model => !disabled(model.providerID)));
+		if (path === '/api/credential') return data(Object.entries(auth).map(([integrationID, value]) => ({ id: 'cred-' + integrationID, integrationID, value })));
+		const connect = /^\/api\/integration\/([^/]+)\/connect\/key$/.exec(path);
+		if (connect && request.method === 'POST') {
+			auth[decodeURIComponent(connect[1])] = { type: 'key', key: (body as { key: string }).key };
 			writeFileSync(authPath, JSON.stringify(auth));
-			return Response.json(true);
+			return new Response(null, { status: 204 });
 		}
-		if (path === '/instance/dispose' && request.method === 'POST') return Response.json(true);
-		if (path === '/session' && request.method === 'POST') return Response.json({ id: 'qa-check' });
-		if (path === '/session/qa-check/message' && request.method === 'POST') {
-			const message = body as { model?: { providerID: string; modelID: string } };
-			modelRequests.push(message);
-			return Response.json({
-				info: { providerID: message.model?.providerID, modelID: message.model?.modelID },
-				parts: [{ type: 'text', text: 'FH_READY' }]
-			});
+		if (path.startsWith('/api/credential/cred-') && request.method === 'DELETE') {
+			delete auth[decodeURIComponent(path.slice('/api/credential/cred-'.length))];
+			writeFileSync(authPath, JSON.stringify(auth));
+			return new Response(null, { status: 204 });
 		}
-		if (path === '/session/qa-check' && request.method === 'DELETE') return Response.json(true);
-		throw new Error(`Unexpected native API request ${request.method} ${path}`);
+		if (path === '/api/experimental/generate' && request.method === 'POST') {
+			modelRequests.push(body as { model?: { providerID: string; id: string } });
+			return data({ text: 'FH_READY' });
+		}
+		throw new Error('Unexpected native API request ' + request.method + ' ' + path);
 	}) as typeof fetch;
 	return { calls, modelRequests, fetch: fetchNative };
 }
@@ -164,9 +139,9 @@ describe('Native provider manager settings', () => {
 	it('reports the effective default and orphan saved credentials without calling models', async () => {
 		const current = fixture();
 		writeFileSync(
-			join(current.home, 'knowledge', 'secrets', 'auth.json'),
+			join(current.home, 'synthetic-native-credentials.json'),
 			JSON.stringify({
-				orphan: { type: 'api', key: 'synthetic-orphan-key' }
+				orphan: { type: 'key', key: 'synthetic-orphan-key' }
 			})
 		);
 		const native = nativeFixture(current.home, current.configPath);
@@ -204,13 +179,13 @@ describe('Native provider manager settings', () => {
 			);
 			const config = readConfiguration(current.configPath);
 			expect(config.model).toBe(current.configuration.model);
-			expect(config.permission).toEqual(current.configuration.permission);
-			expect(config.plugin).toEqual(current.configuration.plugin);
-			expect((config.provider as Record<string, unknown>).existing).toEqual(
-				current.configuration.provider.existing
+			expect(config.permissions).toEqual(current.configuration.permissions);
+			expect(config.plugins).toEqual(current.configuration.plugins);
+			expect((config.providers as Record<string, unknown>).existing).toEqual(
+				current.configuration.providers.existing
 			);
-			expect((config.provider as Record<string, unknown>)[provider]).toMatchObject({
-				options: { baseURL: 'http://192.0.2.30:1234/v1' },
+			expect((config.providers as Record<string, unknown>)[provider]).toMatchObject({
+				settings: { baseURL: 'http://192.0.2.30:1234/v1' },
 				models: { 'team/selected-model': {} }
 			});
 			expect(
@@ -218,7 +193,7 @@ describe('Native provider manager settings', () => {
 			).toContain('team/selected-model');
 			expect(native.modelRequests).toHaveLength(0);
 			expect(native.calls.some((call) => call.path === '/session')).toBe(false);
-			expect(native.calls.filter((call) => call.path === '/global/config' && call.method === 'PATCH')).toHaveLength(1);
+			expect(native.calls.every((call) => call.method === 'GET')).toBe(true);
 			expect(native.calls.some((call) => call.path.includes('/dispose'))).toBe(false);
 		});
 	}
@@ -237,9 +212,9 @@ describe('Native provider manager settings', () => {
 			native
 		);
 		const provider = (
-			readConfiguration(current.configPath).provider as Record<string, Record<string, unknown>>
+			readConfiguration(current.configPath).providers as Record<string, Record<string, unknown>>
 		).existing;
-		expect(provider.options).toEqual({
+		expect(provider.settings).toEqual({
 			baseURL: 'http://192.0.2.21:8090/v1',
 			headers: { 'X-Operator': 'preserve' }
 		});
@@ -268,10 +243,10 @@ describe('Native provider manager settings', () => {
 		);
 		expect(readFileSync(current.configPath, 'utf8')).not.toContain('synthetic-endpoint-key');
 		expect(
-			readConfiguration(join(current.home, 'knowledge', 'secrets', 'auth.json'))['keyed-custom']
-		).toEqual({ type: 'api', key: 'synthetic-endpoint-key' });
-		expect(native.calls.find((call) => call.path === '/auth/keyed-custom')).toMatchObject({
-			method: 'PUT'
+			readConfiguration(join(current.home, 'synthetic-native-credentials.json'))['keyed-custom']
+		).toEqual({ type: 'key', key: 'synthetic-endpoint-key' });
+		expect(native.calls.find((call) => call.path === '/api/integration/keyed-custom/connect/key')).toMatchObject({
+			method: 'POST'
 		});
 		expect(native.modelRequests).toHaveLength(0);
 	});
@@ -288,6 +263,21 @@ describe('Native provider manager settings', () => {
 		expect(native.modelRequests).toHaveLength(0);
 	});
 
+	it('accepts the same native structured managed model without bypassing a different managed choice', async () => {
+		const current = fixture();
+		const policyPath = join(current.home, 'config/opencode/opencode.json');
+		const policy = { model: { providerID: 'native-catalog', model: 'text-model' } };
+		writeFileSync(policyPath, JSON.stringify(policy));
+		const native = nativeFixture(current.home, current.configPath);
+		expect((await useProviderModel(current.home, 'native-catalog', 'text-model', native)).currentModel)
+			.toEqual({ provider: 'native-catalog', model: 'text-model' });
+		expect(readConfiguration(policyPath)).toEqual(policy);
+		await expect(useProviderModel(current.home, 'existing', 'team/model', native))
+			.rejects.toThrow('default model is controlled');
+		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');
+		expect(native.modelRequests).toHaveLength(0);
+	});
+
 	it('tests the exact chosen model without changing the active default', async () => {
 		const current = fixture();
 		const native = nativeFixture(current.home, current.configPath);
@@ -299,17 +289,17 @@ describe('Native provider manager settings', () => {
 			})
 		).toMatchObject({ ok: true, provider: 'existing', model: 'small' });
 		expect(native.modelRequests.map((request) => request.model)).toEqual([
-			{ providerID: 'existing', modelID: 'small' }
+			{ providerID: 'existing', id: 'small' }
 		]);
 		expect(readConfiguration(current.configPath)).toEqual(current.configuration);
-		expect(native.calls.at(-1)).toMatchObject({ path: '/session/qa-check', method: 'DELETE' });
+		expect(native.calls.filter(call => call.method === 'POST')).toHaveLength(1);
 	});
 
 	it('removes only selected saved auth, preserving endpoint, default, and another account', async () => {
 		const current = fixture();
 		current.configuration.model = 'native-catalog/text-model';
 		writeFileSync(current.configPath, JSON.stringify(current.configuration));
-		const authPath = join(current.home, 'knowledge', 'secrets', 'auth.json');
+		const authPath = join(current.home, 'synthetic-native-credentials.json');
 		const other = {
 			type: 'oauth',
 			access: 'synthetic-other-access',
@@ -317,7 +307,7 @@ describe('Native provider manager settings', () => {
 		};
 		writeFileSync(
 			authPath,
-			JSON.stringify({ existing: { type: 'api', key: 'synthetic-existing' }, other })
+			JSON.stringify({ existing: { type: 'key', key: 'synthetic-existing' }, other })
 		);
 		const native = nativeFixture(current.home, current.configPath);
 		await removeProviderSetup(current.home, 'existing', native);
@@ -325,7 +315,7 @@ describe('Native provider manager settings', () => {
 		expect(readConfiguration(current.configPath)).toEqual(current.configuration);
 		expect(
 			native.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)
-		).toEqual(['/auth/existing']);
+		).toEqual(['/api/credential/cred-existing']);
 		expect(native.modelRequests).toHaveLength(0);
 	});
 
@@ -344,7 +334,7 @@ describe('Native provider manager settings', () => {
 		);
 		const saved = readConfiguration(current.configPath);
 		const settings = await removeProviderSetup(current.home, 'remove-me', { ...native, endpoint: true });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, disabled_providers: ['remove-me'] });
+		expect(readConfiguration(current.configPath)).toEqual({ ...saved, experimental: { policies: [{ action: 'provider.use', resource: 'remove-me', effect: 'deny' }] } });
 		expect(settings.providers.find((provider) => provider.id === 'remove-me')).toMatchObject({
 			disabled: true, connected: false, models: [], endpoint: { editable: true }
 		});
@@ -364,7 +354,7 @@ describe('Native provider manager settings', () => {
 	it('disabling an endpoint preserves its definition and separate saved sign-in', async () => {
 		const current = fixture();
 		const native = nativeFixture(current.home, current.configPath);
-		const authPath = join(current.home, 'knowledge', 'secrets', 'auth.json');
+		const authPath = join(current.home, 'synthetic-native-credentials.json');
 		await saveProviderEndpoint(
 			current.home,
 			{
@@ -375,12 +365,12 @@ describe('Native provider manager settings', () => {
 			},
 			native
 		);
-		const account = { type: 'api', key: 'synthetic-preserved-account' };
+		const account = { type: 'key', key: 'synthetic-preserved-account' };
 		writeFileSync(authPath, JSON.stringify({ 'endpoint-only': account }));
 		const saved = readConfiguration(current.configPath);
 		await removeProviderSetup(current.home, 'endpoint-only', { ...native, endpoint: true });
 		expect(readConfiguration(authPath)).toEqual({ 'endpoint-only': account });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, disabled_providers: ['endpoint-only'] });
+		expect(readConfiguration(current.configPath)).toEqual({ ...saved, experimental: { policies: [{ action: 'provider.use', resource: 'endpoint-only', effect: 'deny' }] } });
 	});
 
 	it('refuses an incompatible explicit default before writing or invoking a model', async () => {
@@ -432,7 +422,7 @@ describe('Native provider manager settings', () => {
 		).rejects.toThrow(/saved.*could not be confirmed/i);
 		expect(readFileSync(current.configPath, 'utf8')).not.toBe(original);
 		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');
-		expect(native.calls.filter((call) => call.path === '/global/config' && call.method === 'PATCH')).toHaveLength(1);
+		expect(native.calls.every((call) => call.method === 'GET')).toBe(true);
 		expect(native.calls.some((call) => call.path.includes('/dispose'))).toBe(false);
 		expect(native.modelRequests).toHaveLength(0);
 	}, 15_000);
@@ -441,7 +431,7 @@ describe('Native provider manager settings', () => {
 		const current = fixture();
 		const original = readFileSync(current.configPath, 'utf8');
 		const native = nativeFixture(current.home, current.configPath, {
-			provider: current.configuration.provider
+			providers: current.configuration.providers
 		});
 		await expect(
 			saveProviderEndpoint(
@@ -461,16 +451,16 @@ describe('Native provider manager settings', () => {
 
 	it('re-enables exactly the chosen endpoint and preserves other disabled IDs and auth', async () => {
 		const current = fixture();
-		writeFileSync(current.configPath, JSON.stringify({ ...current.configuration, disabled_providers: ['existing', 'another'] }));
-		const authPath = join(current.home, 'knowledge/secrets/auth.json');
-		writeFileSync(authPath, JSON.stringify({ existing: { type: 'api', key: 'synthetic-preserved' } }));
+		writeFileSync(current.configPath, JSON.stringify({ ...current.configuration, experimental: { policies: [{ action: 'provider.use', resource: 'existing', effect: 'deny' }, { action: 'provider.use', resource: 'another', effect: 'deny' }] } }));
+		const authPath = join(current.home, 'synthetic-native-credentials.json');
+		writeFileSync(authPath, JSON.stringify({ existing: { type: 'key', key: 'synthetic-preserved' } }));
 		const native = nativeFixture(current.home, current.configPath);
 		const settings = await saveProviderEndpoint(current.home, {
 			provider: 'existing', name: 'Existing operator provider', url: 'http://192.0.2.20:8080/v1', model: 'team/model'
 		}, native);
-		expect(readConfiguration(current.configPath).disabled_providers).toEqual(['another']);
+		expect(readConfiguration(current.configPath).experimental).toEqual({ policies: [{ action: 'provider.use', resource: 'another', effect: 'deny' }, { action: 'provider.use', resource: 'existing', effect: 'allow' }] });
 		expect(settings.providers.find((provider) => provider.id === 'existing')?.disabled).toBe(false);
-		expect(readConfiguration(authPath)).toEqual({ existing: { type: 'api', key: 'synthetic-preserved' } });
+		expect(readConfiguration(authPath)).toEqual({ existing: { type: 'key', key: 'synthetic-preserved' } });
 		expect(native.modelRequests).toHaveLength(0);
 	});
 

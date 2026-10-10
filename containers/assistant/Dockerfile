@@ -25,12 +25,12 @@ COPY packages/portal/package.json ./packages/portal/package.json
 COPY packages/electron/package.json ./packages/electron/package.json
 COPY packages/claude-desktop/package.json ./packages/claude-desktop/package.json
 COPY containers/assistant/tools/package.json ./containers/assistant/tools/package.json
-COPY containers/guardian/tools/package.json ./containers/guardian/tools/package.json
+COPY plugins/fhold/package.json ./plugins/fhold/package.json
 RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/assistant-tools \
-    && rm -rf node_modules/opencode-linux-x64-musl \
-              node_modules/opencode-linux-x64-baseline \
-              node_modules/opencode-linux-x64-baseline-musl \
-              node_modules/opencode-linux-arm64-musl \
+    && rm -rf node_modules/@opencode/cli-linux-x64-musl \
+              node_modules/@opencode/cli-linux-x64-baseline \
+              node_modules/@opencode/cli-linux-x64-baseline-musl \
+              node_modules/@opencode/cli-linux-arm64-musl \
               node_modules/onnxruntime-node/bin/napi-v6/darwin \
               node_modules/onnxruntime-node/bin/napi-v6/win32 \
     && case "${TARGETARCH}" in \
@@ -63,36 +63,21 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:83958f73b00b6707f509d8f84fd4d1717136e76874057975c38a45eb0b8ddd72 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/f1ec39c0ebae38b6567b52434d64381ddc257efc /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:ded41c05b543017fdb3166b326a0d541f018299f9b535349ec5002293c2eea67 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/ce90781946050d123d345d2aaf5ce053a31cd9b5 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-f1ec39c0ebae38b6567b52434d64381ddc257efc/claude \
+    && plugin_root=akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-f1ec39c0ebae38b6567b52434d64381ddc257efc/.agents/plugins/marketplace.json \
-      akm-plugins-f1ec39c0ebae38b6567b52434d64381ddc257efc/.claude-plugin/marketplace.json \
-      akm-plugins-f1ec39c0ebae38b6567b52434d64381ddc257efc/LICENSE
+      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/.agents/plugins/marketplace.json \
+      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/.claude-plugin/marketplace.json \
+      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
-# Let the pinned native CLI generate its SDK dependency cache at build time.
-# Copy only its generated package/lock/modules, never the blank build home's
-# native databases, configuration, accounts, trust, or registration state.
-RUN mkdir -p /etc/opencode /opt/fhold/tools /native-defaults/opencode-sdk \
-    && cp -R /assistant-defaults/system/assistant/. /etc/opencode/ \
-    && ln -s /repo/node_modules /opt/fhold/tools/node_modules \
-    && HOME=/opencode-build-home OPENCODE_CONFIG_DIR=/etc/opencode \
-      OPENCODE_DISABLE_PROJECT_CONFIG=true OPENCODE_DISABLE_CLAUDE_CODE=true \
-      OPENCODE_DISABLE_EXTERNAL_SKILLS=true BUN_OPTIONS="--no-env-file --config=/dev/null" \
-      opencode debug config >/dev/null \
-    && cp /opencode-build-home/.config/opencode/package.json \
-      /opencode-build-home/.config/opencode/package-lock.json /native-defaults/opencode-sdk/ \
-    && cp -R /opencode-build-home/.config/opencode/node_modules /native-defaults/opencode-sdk/ \
-    && bun --no-env-file --config=/dev/null -e \
-      'const p=require("/native-defaults/opencode-sdk/node_modules/@opencode-ai/plugin/package.json"); const v=require("/repo/containers/assistant/tools/package.json").dependencies["opencode-ai"]; if(p.version!==v)throw new Error("Native SDK cache pin mismatch")'
 RUN mkdir -p /native-defaults/codex \
     && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /akm-marketplace \
     && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install akm@akm-plugins \
@@ -131,6 +116,7 @@ COPY containers/assistant/fhold-remote-setup.mjs /usr/local/bin/fhold-remote-set
 COPY containers/assistant/fhold-codex-recall.mjs /usr/local/bin/fhold-codex-recall.mjs
 COPY --from=tools /akm-marketplace /akm-marketplace
 COPY --from=tools /fhold-plugins /fhold-plugins
+COPY plugins/fhold /opt/fhold/tools/plugins/fhold
 COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
 COPY --from=tools /managed-defaults/ /
@@ -139,7 +125,6 @@ COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
 COPY --from=tools /assistant-defaults/config/opencode/ /etc/opencode/
 COPY --from=tools /assistant-defaults/config/codex/ /etc/codex/
 COPY --from=tools /assistant-defaults/config/claude/ /etc/claude-code/
-COPY --from=tools /native-defaults/opencode-sdk/ /etc/opencode/
 
 ARG PLATFORM_VERSION
 ARG VCS_REF
@@ -177,12 +162,12 @@ RUN test -n "$PLATFORM_VERSION" \
 
 ENV HOME=/home/fhold \
     OPENCODE_CONFIG_DIR=/etc/opencode \
+    OPENCODE_CONFIG=/home/fhold/.config/opencode/opencode.json \
     OPENCODE_DISABLE_PROJECT_CONFIG=true \
     OPENCODE_DISABLE_CLAUDE_CODE=true \
     OPENCODE_DISABLE_EXTERNAL_SKILLS=true \
     OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \
     OPENCODE_PORT=4096 \
-    OPENCODE_SERVER_USERNAME=user \
     AKM_BUNDLE_DIR=/stash \
     AKM_CONFIG_DIR=/etc/akm \
     AKM_CACHE_DIR=/opt/akm/cache \

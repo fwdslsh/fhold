@@ -21,7 +21,7 @@ const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
 const prompt = 'Find the lean release verification knowledge for the personal agent rollout';
 const expectedRef = 'knowledge/lean-release-verification';
 const tools = JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8')).dependencies;
-const pluginRequire = createRequire('/opt/fhold/tools/node_modules/akm-opencode/package.json');
+const pluginRequire = createRequire('/opt/fhold/tools/node_modules/akm-opencode-v2/package.json');
 assert.equal(
 	JSON.parse(readFileSync(pluginRequire.resolve('akm-cli/package.json'), 'utf8')).version,
 	tools['akm-cli'],
@@ -35,13 +35,6 @@ function fixture(harness) {
 	const dir = join(root, harness);
 	for (const name of ['home', 'project', 'bundle/knowledge', 'config', 'state', 'cache', 'data'])
 		mkdirSync(join(dir, name), { recursive: true });
-	// The exact native-generated SDK cache is image-baked. These isolated XDG
-	// homes need the same missing-cache seeding as standalone startup, without
-	// permitting an offline harness to download packages or changing its loader.
-	cpSync('/native-defaults/opencode-sdk', join(dir, 'config/opencode'), {
-		recursive: true,
-		force: false
-	});
 	writeFileSync(join(dir, 'project/.env'), 'FH_PLUGIN_ENV_SENTINEL=must-not-load\n');
 	writeFileSync(join(dir, 'project/bunfig.toml'), 'preload = ["./preload-probe.mjs"]\n');
 	writeFileSync(
@@ -112,7 +105,7 @@ async function waitFor(probe, label, diagnostics = []) {
 	const deadline = Date.now() + 60_000;
 	while (Date.now() < deadline) {
 		try {
-			const result = probe();
+			const result = await probe();
 			if (result) return result;
 		} catch {
 			/* file not ready */
@@ -162,7 +155,8 @@ function recalled(file, harness) {
 	return true;
 }
 
-// Exercise the managed OpenCode wrapper through the native CLI, not direct hooks.
+// A loopback OpenAI-compatible fixture drives the real engine and plugin tools.
+// It incurs no provider usage and proves the context/tool results, not telemetry.
 {
 	const f = fixture('opencode');
 	const config = join(f.dir, 'opencode');
@@ -171,18 +165,91 @@ function recalled(file, harness) {
 	f.env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
 	f.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true';
 	f.env.OPENCODE_DISABLE_EXTERNAL_SKILLS = 'true';
-	f.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-		provider: {
-			openai: {
-				options: { baseURL: 'http://127.0.0.1:9/v1', apiKey: 'offline-fixture' }
+	const plan = [
+		['akm_search', { query: prompt, source: 'local' }],
+		['akm_show', { ref: expectedRef }],
+		['akm_curate', { query: prompt, source: 'local' }],
+		[
+			'akm_remember',
+			{
+				content: 'Synthetic harness verification used all five AKM tools.',
+				name: 'harness-verification'
 			}
+		],
+		['akm_feedback', { ref: expectedRef, sentiment: 'positive' }]
+	];
+	const requests = [];
+	const model = Bun.serve({
+		hostname: '127.0.0.1',
+		port: 0,
+		async fetch(request) {
+			const body = await request.json();
+			const agent = Array.isArray(body.tools) && body.tools.length > 0;
+			if (agent) requests.push(body);
+			const toolResults = (body.messages ?? []).filter((message) => message.role === 'tool');
+			const call = agent ? plan[toolResults.length] : undefined;
+			const delta = call
+				? {
+						role: 'assistant',
+						tool_calls: [
+							{
+								index: 0,
+								id: 'fixture-' + toolResults.length,
+								type: 'function',
+								function: { name: call[0], arguments: JSON.stringify(call[1]) }
+							}
+						]
+					}
+				: { role: 'assistant', content: 'FH_HARNESS_COMPLETE' };
+			const chunk = (delta, finish) => ({
+				id: 'fixture-completion',
+				object: 'chat.completion.chunk',
+				created: 1780000000,
+				model: 'fixture',
+				choices: [{ index: 0, delta, finish_reason: finish }]
+			});
+			if (body.stream)
+				return new Response(
+					'data: ' +
+						JSON.stringify(chunk(delta, null)) +
+						'\n\ndata: ' +
+						JSON.stringify(chunk({}, call ? 'tool_calls' : 'stop')) +
+						'\n\ndata: [DONE]\n\n',
+					{ headers: { 'content-type': 'text/event-stream' } }
+				);
+			return Response.json({
+				id: 'fixture-completion',
+				object: 'chat.completion',
+				created: 1780000000,
+				model: 'fixture',
+				choices: [
+					{
+						index: 0,
+						message: { role: 'assistant', content: 'FH_HARNESS_COMPLETE' },
+						finish_reason: 'stop'
+					}
+				],
+				usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+			});
 		}
+	});
+	f.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+		model: 'fixture/model',
+		providers: {
+			fixture: {
+				package: '@opencode/ai/providers/openai-compatible',
+				settings: { baseURL: 'http://127.0.0.1:' + model.port + '/v1', apiKey: 'synthetic' },
+				models: { model: { capabilities: { tools: true, input: ['text'], output: ['text'] } } }
+			}
+		},
+		permissions: [{ action: '*', resource: '*', effect: 'allow' }]
 	});
 	const { proc, log, close } = launch(f, [
 		'opencode',
 		'run',
+		'--standalone',
 		'--model',
-		'openai/gpt-5-nano',
+		'fixture/model',
 		'--agent',
 		'build',
 		'--format',
@@ -191,14 +258,46 @@ function recalled(file, harness) {
 	]);
 	try {
 		await waitFor(
-			() => recalled(join(f.dir, 'state/akm-opencode/events.jsonl'), 'opencode'),
-			'OpenCode recall',
-			[log, join(f.dir, 'state/akm-opencode/events.jsonl')]
+			() =>
+				requests.some(
+					(body) =>
+						body.messages.filter((message) => message.role === 'tool').length === plan.length
+				),
+			'OpenCode native recall and five tools',
+			[log]
 		);
+		const first = requests[0];
+		assert.ok(
+			first.messages.some(
+				(message) =>
+					message.role === 'system' && JSON.stringify(message.content).includes(expectedRef)
+			),
+			'Automatic recall must reach actual model context'
+		);
+		const advertised = first.tools.map((tool) => tool.function.name);
+		for (const [name] of plan) assert.ok(advertised.includes(name), 'Missing native tool: ' + name);
+		const last = requests.at(-1);
+		const results = last.messages.filter((message) => message.role === 'tool');
+		assert.equal(results.length, 5);
+		for (const [index, result] of results.entries()) {
+			assert.doesNotMatch(
+				JSON.stringify(result.content),
+				/"ok"\\s*:\\s*false|Tool execution failed|not found/i,
+				'Native ' + plan[index][0] + ' failed'
+			);
+		}
+		assert.match(JSON.stringify(results[0].content), /lean-release-verification/);
+		assert.match(JSON.stringify(results[1].content), /Verify the personal agent rollout/);
+		assert.match(
+			f.run(['akm', 'show', 'memories/harness-verification']),
+			/Synthetic harness verification/
+		);
+		console.log('opencode: automatic recall reached the model; all five real AKM tools completed.');
 	} finally {
 		proc.kill();
 		await proc.exited;
 		close();
+		model.stop(true);
 	}
 }
 
@@ -215,7 +314,7 @@ function recalled(file, harness) {
 	assert.ok(plugins.some((p) => p.id === 'fhold@fhold-plugins' && p.enabled));
 	assert.ok(
 		plugins.some(
-			(p) => p.id === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode']
+			(p) => p.id === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode-v2']
 		)
 	);
 	const debug = join(f.dir, 'debug.log');
@@ -262,7 +361,7 @@ function recalled(file, harness) {
 	assert.ok(plugins.installed.some((p) => p.pluginId === 'fhold@fhold-plugins' && p.enabled));
 	assert.ok(
 		plugins.installed.some(
-			(p) => p.pluginId === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode']
+			(p) => p.pluginId === 'akm@akm-plugins' && p.enabled && p.version === tools['akm-opencode-v2']
 		)
 	);
 	const options = { env: f.env, workdir: f.cwd };
@@ -355,5 +454,5 @@ assert.ok(
 	'A native harness or AKM hook executed workspace Bun preload'
 );
 console.log(
-	`All three harnesses use AKM ${tools['akm-cli']} / plugin ${tools['akm-opencode']}. Fixtures: ${root}`
+	`All three harnesses use AKM ${tools['akm-cli']} / plugin ${tools['akm-opencode-v2']}. Fixtures: ${root}`
 );

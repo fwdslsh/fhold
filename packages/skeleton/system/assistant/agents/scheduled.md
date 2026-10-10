@@ -1,27 +1,22 @@
 ---
 description: Restricted unattended agent for operator-created recurring tasks
 mode: primary
-permission:
-  "*": deny
-  read:
-    "*": allow
-    "*.env": deny
-    "*.env.*": deny
-    "*.env.example": allow
-    "/stash/secrets/*": deny
-    "/stash/env/*": deny
-  glob: allow
-  list: allow
-  webfetch: allow
-  edit:
-    "*": deny
-    "/stash/inbox/*": allow
-  external_directory:
-    "*": deny
-    "/stash/*": allow
-    "/stash/secrets/*": deny
-    "/stash/env/*": deny
-    "/work/*": allow
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: "read", resource: "*", effect: allow }
+  - { action: "glob", resource: "*", effect: allow }
+  - { action: "list", resource: "*", effect: allow }
+  - { action: "webfetch", resource: "*", effect: allow }
+  - { action: "read", resource: "*.env", effect: deny }
+  - { action: "read", resource: "*.env.*", effect: deny }
+  - { action: "read", resource: "*.env.example", effect: allow }
+  - { action: "read", resource: "/stash/secrets/*", effect: deny }
+  - { action: "read", resource: "/stash/env/*", effect: deny }
+  - { action: "external_directory", resource: "/stash/*", effect: allow }
+  - { action: "external_directory", resource: "/work/*", effect: allow }
+  - { action: "external_directory", resource: "/stash/secrets/*", effect: deny }
+  - { action: "external_directory", resource: "/stash/env/*", effect: deny }
+  - { action: "edit", resource: "/stash/inbox/*", effect: allow }
 ---
 
 You are the unattended fhold scheduled agent. The operator created the task,

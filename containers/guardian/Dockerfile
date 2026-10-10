@@ -10,28 +10,18 @@ COPY packages/portal/package.json ./packages/portal/package.json
 COPY packages/electron/package.json ./packages/electron/package.json
 COPY packages/claude-desktop/package.json ./packages/claude-desktop/package.json
 COPY containers/assistant/tools/package.json ./containers/assistant/tools/package.json
-COPY containers/guardian/tools/package.json ./containers/guardian/tools/package.json
-RUN bun install --frozen-lockfile --production --linker hoisted \
-        --filter @fhold/guardian --filter @fhold/guardian-tools \
-    && rm -rf node_modules/opencode-linux-x64-musl \
-              node_modules/opencode-linux-x64-baseline \
-              node_modules/opencode-linux-x64-baseline-musl \
-              node_modules/opencode-linux-arm64-musl
+COPY plugins/fhold/package.json ./plugins/fhold/package.json
+RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/guardian
 
 FROM oven/bun:1.4.2-slim
 
 ENV HOME=/home/fhold \
     PORT=8080 \
-    OPENCODE_CONFIG_DIR=/opt/fhold/moderator-config \
-    OPENCODE_DISABLE_PROJECT_CONFIG=true \
-    OPENCODE_DISABLE_CLAUDE_CODE=true \
-    OPENCODE_DISABLE_EXTERNAL_SKILLS=true \
-    OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \
     PATH="/opt/fhold/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dependencies /repo/node_modules /opt/fhold/node_modules

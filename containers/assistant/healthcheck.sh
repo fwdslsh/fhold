@@ -19,8 +19,8 @@ if [ -z "$password" ]; then
   password="$(tr -d '\r\n' <"$password_file")"
 fi
 test -n "$password"
-curl --max-time 5 -sf -u "${OPENCODE_SERVER_USERNAME:-user}:$password" \
-  "http://127.0.0.1:${OPENCODE_PORT:-4096}/config" >/dev/null
+curl --max-time 5 -sf -u "opencode:$password" \
+  "http://127.0.0.1:${OPENCODE_PORT:-4096}/api/info" >/dev/null
 
 # A usable authenticated agent is live even when optional work is degraded.
 # Docker retains this output in its health log; CLI/Admin display the warnings.

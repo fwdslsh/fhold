@@ -62,7 +62,7 @@ fi
 `;
 	const stub = (name: string, body: string) => {
 		const path = join(bin, name);
-		const check = ['akm', 'supercronic', 'opencode', 'fhold-remote'].includes(name)
+		const check = ['akm', 'fhold-task', 'supercronic', 'opencode', 'fhold-remote'].includes(name)
 			? writerCheck
 			: '';
 		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${body}\n`);
@@ -72,8 +72,15 @@ fi
 		'akm',
 		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
 	);
-	stub('fhold-task', ':');
+	stub(
+		'fhold-task',
+		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
+	);
 	stub('fhold-keepalive', 'exit "${FIXTURE_KEEPALIVE_EXIT:-0}"');
+	stub(
+		'curl',
+		'if [ "${FIXTURE_DELAY_READY:-0}" = 1 ]; then test -e "$FIXTURE_ROOT/native-ready"; fi'
+	);
 	stub('supercronic', "trap 'exit 0' TERM; while sleep 0.1; do :; done");
 	stub(
 		'fhold-remote',
@@ -194,6 +201,20 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		}
 	});
 
+	it('defers periodic snapshots until native database startup has finished', async () => {
+		const run = fixture({ FH_RECOVERY_URL: 'file:///fixture', FIXTURE_DELAY_READY: '1' });
+		try {
+			await until(() => run.events().includes('native'));
+			await Bun.sleep(300);
+			expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(false);
+			expect(run.child.exitCode).toBeNull();
+			writeFileSync(join(run.root, 'native-ready'), 'ready');
+			await until(() => existsSync(join(run.root, 'runtime/recovery-writers-started')));
+		} finally {
+			run.child.kill('SIGTERM');
+			expect(await finished(run.child)).toBe(0);
+		}
+	});
 	it('allows final recovery to outlast the independent writer shutdown budget', async () => {
 		const run = fixture({
 			FH_RECOVERY_URL: 'file:///fixture',

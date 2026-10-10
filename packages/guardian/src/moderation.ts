@@ -1,10 +1,12 @@
-import { asRecord, readJsonBounded } from './http-util.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parse, type ParseError } from 'jsonc-parser/lib/esm/main.js';
+import { asRecord } from './http-util.js';
+import { createNativeClient } from './assistant-client.js';
 import { screenContent, type ContentSignal } from './content-screen.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('guardian:moderation');
-const SESSION_ID = /^[A-Za-z0-9_-]{1,256}$/;
-const MAX_MODERATOR_RESPONSE_BYTES = 64 * 1024;
 
 export type ModerationResult = {
 	verdict: 'allow' | 'flag' | 'block';
@@ -17,18 +19,6 @@ export type ModerationResult = {
 function boundedInt(value: string | undefined, fallback: number, maximum: number): number {
 	const parsed = Number.parseInt(value ?? '', 10);
 	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
-}
-
-function responseText(value: unknown): string {
-	const body = asRecord(value);
-	if (!Array.isArray(body?.parts)) return '';
-	return body.parts
-		.map((part) => {
-			const item = asRecord(part);
-			return item?.type === 'text' && typeof item.text === 'string' ? item.text : '';
-		})
-		.filter(Boolean)
-		.join('\n');
 }
 
 export function parseModerationVerdict(
@@ -60,34 +50,25 @@ function moderationPrompt(message: string, signals: ContentSignal[]): string {
 }
 
 async function moderatorCall(message: string, signals: ContentSignal[]): Promise<string> {
-	const baseUrl = (Bun.env.GUARDIAN_MODERATION_URL ?? 'http://127.0.0.1:4097').replace(/\/+$/, '');
 	const timeout = boundedInt(Bun.env.GUARDIAN_MODERATION_TIMEOUT_MS, 4_000, 30_000);
-	const headers = { 'content-type': 'application/json' };
-	const create = await fetch(`${baseUrl}/session`, {
-		method: 'POST',
-		headers,
-		body: JSON.stringify({ title: 'moderation' }),
-		signal: AbortSignal.timeout(timeout)
+	const path = join(Bun.env.HOME ?? '/home/fhold', '.config/opencode/opencode.json');
+	const text = readFileSync(path, 'utf8');
+	if (Buffer.byteLength(text) > 64 * 1024) throw new Error('Moderator configuration is too large');
+	const errors: ParseError[] = [];
+	const config = asRecord(parse(text, errors, { allowTrailingComma: true }) as unknown);
+	if (errors.length) throw new Error('Moderator configuration is invalid');
+	const selection = typeof config?.model === 'string' ? config.model : '';
+	const separator = selection.indexOf('/');
+	if (separator < 1 || separator === selection.length - 1)
+		throw new Error('Choose a moderator provider/model');
+	// The native generation API cannot execute tools or create an agent session.
+	// Upstream binds generation to global configuration, not workspace settings.
+	// Credentials and OAuth refresh remain in the one native OpenCode store.
+	const response = await createNativeClient({ timeoutMs: timeout }).generate.text({
+		prompt: moderationPrompt(message, signals),
+		model: { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) }
 	});
-	if (!create.ok) throw new Error(`moderator session failed: HTTP ${create.status}`);
-	const session = asRecord(await readJsonBounded(create, MAX_MODERATOR_RESPONSE_BYTES));
-	const id = session?.id;
-	if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error('invalid moderator session');
-	try {
-		const response = await fetch(`${baseUrl}/session/${encodeURIComponent(id)}/message`, {
-			method: 'POST',
-			headers,
-			body: JSON.stringify({ parts: [{ type: 'text', text: moderationPrompt(message, signals) }] }),
-			signal: AbortSignal.timeout(timeout)
-		});
-		if (!response.ok) throw new Error(`moderator message failed: HTTP ${response.status}`);
-		return responseText(await readJsonBounded(response, MAX_MODERATOR_RESPONSE_BYTES));
-	} finally {
-		void fetch(`${baseUrl}/session/${encodeURIComponent(id)}`, {
-			method: 'DELETE',
-			signal: AbortSignal.timeout(timeout)
-		}).catch(() => {});
-	}
+	return response.text;
 }
 
 export async function moderateMessage(

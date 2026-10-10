@@ -3,6 +3,11 @@
 This document describes the active runtime. The executable source is
 `packages/skeleton/system/stack/stack.compose.yml`.
 
+On `codex/opencode-v2`, user-config directory watching and the OpenCode 2 native
+API are under qualification. See the [migration handoff](opencode-v2-migration-handoff.md)
+for verified live settings behavior and outstanding history/credential gates;
+this branch is not yet a released V2 migration.
+
 ## Host layout
 
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
@@ -122,10 +127,11 @@ their portal is enabled.
 Other secrets are mounted through Compose `secrets`; no secret value belongs
 in an environment variable.
 
-Provider credentials are the deliberate exception to the `state/secrets`
-location. OpenCode owns `knowledge/secrets/auth.json`; Assistant reads it
-through its normal knowledge tree and OpenCode auth path, while Guardian receives
-only a read-only file mount for moderation.
+OpenCode v2 owns provider credentials in its native SQLite database under
+`data/assistant/.local/share/opencode/`. Guardian uses Assistant's tool-free
+native generation API and receives no provider credentials. The old
+`knowledge/secrets/auth.json` mount remains only as input to upstream's one-time
+v1 database migration; it is not the active v2 credential store.
 
 ## Assistant
 
@@ -138,15 +144,14 @@ bypasses Guardian.
 | Host source | Container target | Mode |
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
-| `config/assistant` | `/home/fhold/.config/opencode` | read-only |
-| `config/assistant/<preferred native file>` | `/home/fhold/.config/opencode/<same filename>` | read/write nested file mount for OpenCode's native settings API |
-| `knowledge/secrets/auth.json` | OpenCode auth path | read/write |
+| `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
+| `knowledge/secrets/auth.json` | Legacy OpenCode auth path | v1 migration input only |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
 | `config/codex/config.toml` | `/etc/codex/config.toml` | read-only |
 | `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only |
 | `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | read-only |
-| `config/akm` | `/etc/akm` | read-write; AKM's native scheduler activation only, no delegated ingress credentials |
+| `config/akm` | `/etc/akm` | read-write; native AKM settings and task activation, no delegated ingress credentials |
 | `knowledge` | `/stash` | read/write |
 | `data/akm/cache` | `/opt/akm/cache` | read/write |
 | `data/akm/data` | `/opt/akm/data` | read/write |
@@ -157,17 +162,18 @@ no Guardian, portal, bot, Docker, or host-admin credential. Optional recovery us
 a separate storage-only connection-string file; it is not an ingress credential
 and its value never appears in environment settings.
 
-Admin changes native provider/model preferences through OpenCode's authenticated
-global configuration API. OpenCode updates its preferred file in place and reloads
-its own cache; no process/container restart is needed. The remaining user config
-directory and managed/operator policy stay read-only. Trusted native clients can
-also edit the writable preferences file. Replacing its inode with an atomic host
-editor, or changing the preferred filename, requires `fhold restart` to refresh
-the file bind. Admin tracks that mount change, not in-place preference content,
-as pending restart. Native reloads can interrupt active OpenCode work.
+Admin makes narrow native provider/model preference edits and verifies the
+effective result through OpenCode's authenticated API. Native file watching
+applies ordinary and atomic saves; no explicit reload or process/container
+restart is needed. Managed plugins and operator policy remain read-only.
+`OPENCODE_CONFIG` selects the derived preferred filename inside the writable
+user-config directory. Selecting a different filename requires `fhold restart`
+to change that startup environment value; editing the selected file or a local
+user plugin does not. Container changes and read-only policy replacement still
+use the normal persistent pending-restart/apply workflow.
 
 The OS account and home are `fhold` and `/home/fhold`; native OpenCode Basic
-authentication uses username `user`. `/fhold-bundle` is an image-baked,
+authentication uses username `opencode`. `/fhold-bundle` is an image-baked,
 root-owned read-only AKM skills source, shared with the native fhold plugins.
 Custom AKM configuration is preserved; it does not prevent the built-in skills
 from being available through the native harness integrations.
@@ -219,9 +225,7 @@ when an ingress profile is enabled.
 | Host source | Container target | Mode |
 |---|---|---|
 | `data/logs` | `/opt/fhold/logs` | read/write |
-| `system/guardian` | `/opt/fhold/moderator-config` | read-only |
-| `config/guardian` | Guardian OpenCode user config | read-only |
-| `knowledge/secrets/auth.json` | Guardian OpenCode auth path | read-only |
+| `config/guardian` | Guardian settings and moderator model selection | read-only |
 | `workspace` | `/work` | read-only |
 | `state/credentials` | `/run/fhold-credentials` | read-only |
 

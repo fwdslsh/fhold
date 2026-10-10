@@ -25,7 +25,14 @@ describe('release surface', () => {
 		expect(compose.match(/cap_drop: \[ALL\]/g)).toHaveLength(4);
 		expect(compose.match(/no-new-privileges:true/g)).toHaveLength(4);
 		expect(compose.match(/init: true/g)).toHaveLength(4);
-		expect(compose.match(/OPENCODE_DISABLE_PROJECT_CONFIG: "true"/g)).toHaveLength(2);
+		expect(compose.match(/OPENCODE_DISABLE_PROJECT_CONFIG: "true"/g)).toHaveLength(1);
+		expect(compose).toContain('${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode');
+		expect(compose).toContain('${FH_HOME:?}/system/assistant:/etc/opencode:ro');
+		expect(compose).toContain(
+			'${FH_HOME:?}/config/opencode/opencode.json:/etc/opencode/opencode.json:ro'
+		);
+		expect(compose).not.toContain('FH_OPENCODE_PREFERENCES_FILE:-opencode.json}:/');
+		expect(compose).not.toContain('GUARDIAN_MODERATOR_URL');
 		expect(compose).toContain('fhold-healthcheck');
 		expect(compose).toContain('host_ip: "${FH_ASSISTANT_BIND_ADDRESS:-127.0.0.1}"');
 		expect(compose).toContain('GUARDIAN_AUTH_DIR: /run/fhold-credentials');
@@ -33,9 +40,7 @@ describe('release surface', () => {
 		expect(compose).toContain(
 			'${FH_HOME:?}/state/portal-credentials/discord:/run/fhold-credentials:ro'
 		);
-		expect(compose).toContain(
-			'PORTAL_CREDENTIALS_FILE: /run/fhold-credentials/credentials.json'
-		);
+		expect(compose).toContain('PORTAL_CREDENTIALS_FILE: /run/fhold-credentials/credentials.json');
 		expect(compose).not.toContain('GUARDIAN_OWNER_POLICY:');
 	});
 
@@ -43,14 +48,14 @@ describe('release surface', () => {
 		const remote = asset('packages/skeleton/system/assistant/agents/remote.md');
 		const read = asset('packages/skeleton/system/assistant/agents/remote-read.md');
 		const full = asset('packages/skeleton/system/assistant/agents/remote-full.md');
-		expect(remote).toContain('  "*": deny');
+		expect(remote).toContain('action: "*", resource: "*", effect: deny');
 		expect(remote).toContain('Restricted agent used only by the Guardian MCP gateway');
-		expect(read).toContain('  "*": deny');
-		expect(read).toContain('  read:');
-		expect(read).toContain('    "*.env": deny');
-		expect(read).toContain('    "/stash/*": allow');
-		expect(read).toContain('    "/stash/secrets/*": deny');
-		expect(read).toContain('    "/stash/env/*": deny');
+		expect(read).toContain('action: "*", resource: "*", effect: deny');
+		expect(read).toContain('action: "read", resource: "*", effect: allow');
+		expect(read).toContain('action: "read", resource: "*.env", effect: deny');
+		expect(read).toContain('action: "external_directory", resource: "/stash/*", effect: allow');
+		expect(read).toContain('action: "read", resource: "/stash/secrets/*", effect: deny');
+		expect(read).toContain('action: "read", resource: "/stash/env/*", effect: deny');
 		expect(read).not.toContain('  grep: allow');
 		expect(full).not.toContain('permission:');
 		expect(full).toContain("Assistant's OpenCode permission configuration");
@@ -58,10 +63,10 @@ describe('release surface', () => {
 
 	it('ships a restricted unattended profile for durable recurring tasks', () => {
 		const scheduled = asset('packages/skeleton/system/assistant/agents/scheduled.md');
-		expect(scheduled).toContain('  "*": deny');
-		expect(scheduled).toContain('  webfetch: allow');
-		expect(scheduled).toContain('    "/stash/secrets/*": deny');
-		expect(scheduled).toContain('    "/stash/inbox/*": allow');
+		expect(scheduled).toContain('action: "*", resource: "*", effect: deny');
+		expect(scheduled).toContain('action: "webfetch", resource: "*", effect: allow');
+		expect(scheduled).toContain('action: "read", resource: "/stash/secrets/*", effect: deny');
+		expect(scheduled).toContain('action: "edit", resource: "/stash/inbox/*", effect: allow');
 	});
 
 	it('keeps shared instructions policy-aware without forbidding full remote work', () => {

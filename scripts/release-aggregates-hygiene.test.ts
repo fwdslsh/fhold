@@ -111,24 +111,42 @@ describe('release manifest', () => {
 
 describe('release workflows', () => {
 	test('runtime exceptions stay limited to the approved npm bundle findings', () => {
-		const ignored = Bun.YAML.parse(readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')) as {
+		const ignored = Bun.YAML.parse(
+			readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')
+		) as {
 			vulnerabilities: Array<{ id: string; paths: string[]; purls: string[]; expired_at: string }>;
 		};
 		expect(ignored.vulnerabilities.map((entry) => entry.id).sort()).toEqual([
-			'CVE-2026-102276', 'CVE-2026-102278', 'CVE-2026-19534'
+			'CVE-2026-102276',
+			'CVE-2026-102278',
+			'CVE-2026-19534'
 		]);
 		for (const entry of ignored.vulnerabilities) {
 			const dependency = entry.id === 'CVE-2026-19534' ? 'undici' : 'brace-expansion';
 			const version = dependency === 'undici' ? '6.28.0' : '5.0.9';
-			expect(entry.paths).toEqual([`usr/local/lib/node_modules/npm/node_modules/${dependency}/package.json`]);
+			expect(entry.paths).toEqual([
+				`usr/local/lib/node_modules/npm/node_modules/${dependency}/package.json`
+			]);
 			expect(entry.purls).toEqual([`pkg:npm/${dependency}@${version}`]);
 			expect(String(entry.expired_at)).toBe('2026-11-04');
 		}
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
-			jobs: { images: { steps: Array<{ uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }> } };
+			jobs: {
+				images: {
+					steps: Array<{
+						uses?: string;
+						env?: Record<string, string>;
+						with?: Record<string, unknown>;
+					}>;
+				};
+			};
 		};
-		for (const step of workflow.jobs.images.steps.filter((step) => step.uses?.startsWith('aquasecurity/trivy-action@'))) {
-			expect(step.env?.TRIVY_IGNOREFILE).toBe(step.with?.severity === 'HIGH' ? '.github/trivy-ignore.yaml' : undefined);
+		for (const step of workflow.jobs.images.steps.filter((step) =>
+			step.uses?.startsWith('aquasecurity/trivy-action@')
+		)) {
+			expect(step.env?.TRIVY_IGNOREFILE).toBe(
+				step.with?.severity === 'HIGH' ? '.github/trivy-ignore.yaml' : undefined
+			);
 		}
 	});
 
@@ -267,20 +285,19 @@ describe('image tool pins', () => {
 		expect(smoke).toContain('test "$(docker exec "$container" npx --version)" = "$expected_npm"');
 	});
 
-	// core-principles.md: the assistant and Guardian images install OpenCode
-	// from their own tools manifests, and those two pins must stay in lockstep.
-	test('assistant and guardian opencode-ai pins match', () => {
-		const pin = (p: string) =>
-			(readJson(p) as { dependencies?: Record<string, string> }).dependencies?.['opencode-ai'];
-		const assistant = pin('containers/assistant/tools/package.json');
+	test('the Assistant CLI, Guardian client and native plugin share one v2 release', () => {
+		const pin = (p: string, name: string) =>
+			(readJson(p) as { dependencies?: Record<string, string> }).dependencies?.[name];
+		const assistant = pin('containers/assistant/tools/package.json', '@opencode/cli');
 		expect(assistant).toBeTruthy();
-		expect(pin('containers/guardian/tools/package.json')).toBe(assistant);
+		expect(pin('packages/guardian/package.json', '@opencode/client')).toBe(assistant);
+		expect(pin('plugins/fhold/package.json', '@opencode/plugin')).toBe(assistant);
 	});
 
 	test('every active image installs from the audited root lock', () => {
 		const root = readJson('package.json') as Manifest & { workspaces?: string[] };
 		expect(root.workspaces).toContain('containers/assistant/tools');
-		expect(root.workspaces).toContain('containers/guardian/tools');
+		expect(root.workspaces).toContain('packages/guardian');
 		for (const dockerfile of [
 			'containers/assistant/Dockerfile',
 			'containers/guardian/Dockerfile',

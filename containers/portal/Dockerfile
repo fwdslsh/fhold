@@ -10,7 +10,7 @@ COPY packages/portal/package.json ./packages/portal/package.json
 COPY packages/electron/package.json ./packages/electron/package.json
 COPY packages/claude-desktop/package.json ./packages/claude-desktop/package.json
 COPY containers/assistant/tools/package.json ./containers/assistant/tools/package.json
-COPY containers/guardian/tools/package.json ./containers/guardian/tools/package.json
+COPY plugins/fhold/package.json ./plugins/fhold/package.json
 RUN bun install --frozen-lockfile --production --ignore-scripts --linker hoisted --filter @fhold/portal
 COPY packages/portal/src ./src
 RUN bun build src/index.ts --target=node --packages=external --outfile=dist/index.mjs

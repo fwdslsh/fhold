@@ -103,9 +103,9 @@ export function recoveryConfig(env = process.env) {
 		warnings,
 		versions: Object.fromEntries([
 			...[
-				'opencode-ai',
+				'@opencode/cli',
 				'akm-cli',
-				'akm-opencode',
+				'akm-opencode-v2',
 				'@openai/codex',
 				'@anthropic-ai/claude-code'
 			].map((name) => [name, dependencies[name]]),
@@ -159,7 +159,7 @@ export async function readRecoveryStatus(path) {
 async function nativeReady(env) {
 	try {
 		const password =
-			env.OPENCODE_SERVER_PASSWORD ||
+			env.OPENCODE_PASSWORD || env.OPENCODE_SERVER_PASSWORD ||
 			(
 				await readRegular(
 					env.OPENCODE_SERVER_PASSWORD_FILE || '/run/secrets/opencode_server_password',
@@ -169,9 +169,9 @@ async function nativeReady(env) {
 				.toString()
 				.trim();
 		if (!password) return false;
-		const response = await fetch(`http://127.0.0.1:${env.OPENCODE_PORT || 4096}/global/health`, {
+		const response = await fetch(`http://127.0.0.1:${env.OPENCODE_PORT || 4096}/api/info`, {
 			headers: {
-				Authorization: `Basic ${Buffer.from(`${env.OPENCODE_SERVER_USERNAME || 'opencode'}:${password}`).toString('base64')}`
+				Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`
 			},
 			signal: AbortSignal.timeout(2_000)
 		});

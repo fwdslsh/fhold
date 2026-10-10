@@ -1,5 +1,14 @@
 # Native plugins and keep-alive verification
 
+## OpenCode v2 and final 0.10 next pins — 2026-10-10
+
+The new candidate uses OpenCode `2.0.26`, AKM CLI and all three harness plugins
+`0.10.26101002-alpha`. Native v2 recall and all five AKM tools, trusted automatic
+memory, scheduled task execution, operator policy and activity reporting are
+covered by the [v2 qualification](opencode-v2-qualification.md).
+The earlier sections below describe historical V1 candidates, not current
+engine APIs or a claim of upstream AKM stable readiness.
+
 ## AKM 0.10 next-channel refresh — 2026-10-10
 
 The official npm `next` tags select

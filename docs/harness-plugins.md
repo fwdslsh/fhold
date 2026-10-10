@@ -93,7 +93,7 @@ using an ingress endpoint backed by this OpenCode instance:
 services:
   assistant:
     environment:
-      FH_KEEPALIVE_URL: https://agent.example.com/global/health
+      FH_KEEPALIVE_URL: https://agent.example.com/api/info
       FH_KEEPALIVE_AUTH: opencode
 ```
 

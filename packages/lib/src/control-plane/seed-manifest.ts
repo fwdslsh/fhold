@@ -9,7 +9,6 @@ export const MANAGED_FILES = [
 	'system/assistant/agents/remote-read.md',
 	'system/assistant/agents/remote-full.md',
 	'system/assistant/agents/scheduled.md',
-	'system/assistant/agents/memory.md',
 	'system/assistant/lib/memory.js',
 	'system/assistant/plugins/akm.js',
 	'system/assistant/plugins/fhold.js',
@@ -20,10 +19,7 @@ export const MANAGED_FILES = [
 	'system/assistant/skills/codex-remote-setup/scripts/setup.sh',
 	'system/assistant/skills/fhold-admin/SKILL.md',
 	'system/assistant/skills/fhold-admin/scripts/session.sh',
-	'system/assistant/skills/fhold-admin/scripts/status.mjs',
-	'system/guardian/.gitignore',
-	'system/guardian/opencode.jsonc',
-	'system/guardian/instructions/moderation.md'
+	'system/assistant/skills/fhold-admin/scripts/status.mjs'
 ] as const;
 
 export const SEEDED_FILES = [

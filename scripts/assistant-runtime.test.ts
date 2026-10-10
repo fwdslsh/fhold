@@ -18,6 +18,47 @@ import {
 	validatedFacts
 } from '../packages/skeleton/system/assistant/lib/memory.js';
 
+function memoryFetch(record: (path: string, body?: Record<string, unknown>) => void = () => {}) {
+	return async (url: string, init: RequestInit = {}) => {
+		const path = new URL(url).pathname;
+		const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+		record(path, body);
+		if (path === '/api/experimental/generate')
+			return Response.json({
+				data: {
+					text: JSON.stringify({
+						facts: [
+							{
+								fact: 'The user prefers jasmine tea.',
+								evidence: 'I prefer jasmine tea.',
+								confidence: 0.95
+							}
+						]
+					})
+				}
+			});
+		if (path.endsWith('/message'))
+			return Response.json({
+				data: [
+					{
+						id: 'msg_user',
+						type: 'user',
+						text: 'I prefer jasmine tea.\nAPI key: sk-not-retained',
+						time: { created: 1 }
+					},
+					{
+						id: 'msg_answer',
+						type: 'assistant',
+						agent: 'build',
+						time: { created: 2, completed: 3 }
+					}
+				],
+				cursor: {}
+			});
+		return Response.json({ data: { id: 'ses_owner', agent: 'build' } });
+	};
+}
+
 const temporary: string[] = [];
 const home = () => {
 	const path = mkdtempSync(join(tmpdir(), 'fhold-runtime-test-'));
@@ -94,49 +135,20 @@ describe('personal memory capture', () => {
 			remember: async (fact: string) => {
 				remembered.push(fact);
 			},
-			fetch: async (url: string, init: RequestInit) => {
-				const path = new URL(url).pathname;
-				const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
-				requests.push({ path, body });
-				if (init.method === 'DELETE') return new Response(null, { status: 204 });
-				if (path === '/session') return Response.json({ id: 'ses_extract' });
-				if (path === '/session/ses_extract/message')
-					return Response.json({
-						parts: [
-							{
-								type: 'text',
-								text: JSON.stringify({
-									facts: [
-										{
-											fact: 'The user prefers jasmine tea.',
-											evidence: 'I prefer jasmine tea.',
-											confidence: 0.95
-										}
-									]
-								})
-							}
-						]
-					});
-				return Response.json([
-					{
-						info: { id: 'msg_user', role: 'user', agent: 'build' },
-						parts: [{ type: 'text', text: 'I prefer jasmine tea.\nAPI key: sk-not-retained' }]
-					}
-				]);
-			}
+			fetch: memoryFetch((path, body) => requests.push({ path, body }))
 		});
 		await capture('ses_owner');
 		expect(remembered).toEqual(['The user prefers jasmine tea.']);
-		const extraction = requests.find((item) => item.path === '/session/ses_extract/message');
-		expect(extraction?.body?.agent).toBe('memory');
-		expect(extraction?.body?.tools).toEqual({});
+		const extraction = requests.find((item) => item.path === '/api/experimental/generate');
+		expect(extraction?.body?.tools).toBeUndefined();
+		expect(extraction?.body?.prompt).toContain('internal memory extraction');
 		expect(JSON.stringify(extraction?.body)).not.toContain('sk-not-retained');
-		expect(requests.at(-1)?.path).toBe('/session/ses_extract');
+		expect(requests.some((request) => request.path === '/api/session')).toBe(false);
 		const checkpoint = readFileSync(join(root, 'ses_owner.json'), 'utf8');
 		expect(checkpoint).not.toContain('jasmine');
 		expect(checkpoint).not.toContain('API key');
 		await capture('ses_owner');
-		expect(requests).toHaveLength(4);
+		expect(requests).toHaveLength(3);
 		time += 600001;
 		await capture('ses_owner');
 		expect(remembered).toHaveLength(1);
@@ -183,34 +195,7 @@ describe('personal memory capture', () => {
 			remember: async () => {
 				if (++attempts === 1) throw new Error('fixture write failure');
 			},
-			fetch: async (url: string, init: RequestInit) => {
-				const path = new URL(url).pathname;
-				if (init.method === 'DELETE') return new Response(null, { status: 204 });
-				if (path === '/session') return Response.json({ id: 'ses_extract' });
-				if (path === '/session/ses_extract/message')
-					return Response.json({
-						parts: [
-							{
-								type: 'text',
-								text: JSON.stringify({
-									facts: [
-										{
-											fact: 'The user prefers jasmine tea.',
-											evidence: 'I prefer jasmine tea.',
-											confidence: 0.95
-										}
-									]
-								})
-							}
-						]
-					});
-				return Response.json([
-					{
-						info: { id: 'msg_user', role: 'user', agent: 'build' },
-						parts: [{ type: 'text', text: 'I prefer jasmine tea.' }]
-					}
-				]);
-			}
+			fetch: memoryFetch()
 		});
 		await capture('ses_retry');
 		expect(existsSync(join(root, 'ses_retry.json'))).toBe(false);
@@ -252,7 +237,7 @@ describe('Assistant readiness and optional-feature degradation', () => {
 			port: 0,
 			fetch: (request) =>
 				request.headers.get('authorization') ===
-				`Basic ${Buffer.from('user:fixture-only').toString('base64')}`
+				`Basic ${Buffer.from('opencode:fixture-only').toString('base64')}`
 					? new Response('{}')
 					: new Response('Unauthorized', { status: 401 })
 		});
@@ -306,67 +291,81 @@ describe('Assistant readiness and optional-feature degradation', () => {
 });
 
 describe('optional AKM integration failures', () => {
-	async function plugin(upstream: string, run: (create: Function, root: string) => Promise<void>) {
+	async function plugin(
+		upstream: string,
+		run: (
+			create: (context: unknown) => Promise<void>,
+			hooks: Map<string, (input: unknown) => unknown>,
+			root: string
+		) => Promise<void>
+	) {
 		const root = home();
+		const { createRequire } = await import('node:module');
+		const require = createRequire(new URL('../plugins/fhold/package.json', import.meta.url));
+		const effectPath = require.resolve('effect');
+		const { Effect, Stream } = await import(effectPath);
 		const dependency = join(root, 'upstream.mjs');
-		writeFileSync(dependency, upstream);
-		const entry = join(root, 'plugin.mjs');
-		// Unit-only dependency injection; image smokes load the unmodified native plugin.
-		const source = readFileSync(
-			join(import.meta.dir, '../packages/skeleton/system/assistant/plugins/akm.js'),
-			'utf8'
-		)
-			.replace('/opt/fhold/tools/node_modules/akm-opencode/dist/index.js', dependency)
+		writeFileSync(dependency, `import { Effect } from ${JSON.stringify(effectPath)};\n${upstream}`);
+		const source = readFileSync(join(import.meta.dir, '../plugins/fhold/knowledge.js'), 'utf8')
 			.replace(
-				"'../lib/memory.js'",
+				"'@opencode/plugin/effect'",
+				JSON.stringify(
+					import.meta.resolve('../plugins/fhold/node_modules/@opencode/plugin/dist/effect/index.js')
+				)
+			)
+			.replace("'effect'", JSON.stringify(effectPath))
+			.replace("'akm-opencode-v2'", JSON.stringify(dependency))
+			.replace(
+				"'/etc/opencode/lib/memory.js'",
 				JSON.stringify(
 					new URL('../packages/skeleton/system/assistant/lib/memory.js', import.meta.url).href
 				)
 			);
+		const entry = join(root, 'plugin.mjs');
 		writeFileSync(entry, source);
 		const previous = process.env.FH_RUNTIME_DIR;
 		process.env.FH_RUNTIME_DIR = root;
+		const hooks = new Map<string, (input: unknown) => unknown>();
 		try {
-			await run((await import(entry)).AkmPlugin, root);
+			const definition = (await import(entry)).default;
+			const context = {
+				location: { directory: '/work' },
+				event: { subscribe: () => Stream.never },
+				session: {
+					get: ({ sessionID }: { sessionID: string }) =>
+						Effect.succeed({ agent: sessionID === 'remote' ? 'remote' : 'build' }),
+					hook: (name: string, hook: (input: unknown) => unknown) =>
+						Effect.sync(() => hooks.set(name, (input) => Effect.runPromise(hook(input))))
+				}
+			};
+			await run(() => Effect.runPromise(Effect.scoped(definition.effect(context))), hooks, root);
 		} finally {
 			if (previous === undefined) delete process.env.FH_RUNTIME_DIR;
 			else process.env.FH_RUNTIME_DIR = previous;
 		}
 	}
-	it('disables a failed integration without rejecting native plugin initialization', async () => {
+	it('reports failed initialization without rejecting native plugin startup', async () => {
 		await plugin(
-			'export async function AkmPlugin(){throw Error("private-upstream-payload")}',
-			async (create, root) => {
-				expect(await create({})).toEqual({});
+			'export default {effect: () => Effect.fail(Error("private-upstream-payload"))}',
+			async (create, _hooks, root) => {
+				await create({});
 				const warning = readFileSync(join(root, 'degraded-knowledge'), 'utf8');
 				expect(warning).toContain('Knowledge integration is unavailable');
 				expect(warning).not.toContain('private-upstream-payload');
 			}
 		);
 	});
-	it('isolates failed knowledge hooks, retries them and clears only recovered failures', async () => {
+	it('isolates failed trusted hooks, preserves the warning when untrusted turns skip, and clears it on recovery', async () => {
 		await plugin(
-			'export async function AkmPlugin(){return {event:async input=>{if(input.fail)throw Error("private-upstream-payload")}}}',
-			async (create, root) => {
-				const hooks = await create({});
-				await hooks.event({ fail: true, event: { type: 'fixture' } });
+			'export default {effect: ctx => ctx.session.hook("context", input => input.fail ? Effect.fail(Error("private-upstream-payload")) : Effect.void)}',
+			async (create, hooks, root) => {
+				await create({});
+				const hook = hooks.get('context')!;
+				await hook({ sessionID: 'owner', agent: 'build', fail: true });
 				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
-				await hooks['chat.message']({ agent: 'build' }, { parts: [] });
+				await hook({ sessionID: 'remote', agent: 'remote' });
 				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
-				await hooks.event({ event: { type: 'fixture' } });
-				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(false);
-			}
-		);
-	});
-	it('does not clear a failed trusted hook when an untrusted session skips it', async () => {
-		await plugin(
-			'export async function AkmPlugin(){return {"chat.message":async input=>{if(input.fail)throw Error("fixture")}}}',
-			async (create, root) => {
-				const hooks = await create({});
-				await hooks['chat.message']({ agent: 'build', fail: true }, { parts: [] });
-				await hooks['chat.message']({ agent: 'remote' }, { parts: [] });
-				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(true);
-				await hooks['chat.message']({ agent: 'build' }, { parts: [] });
+				await hook({ sessionID: 'owner', agent: 'build' });
 				expect(existsSync(join(root, 'degraded-knowledge'))).toBe(false);
 			}
 		);

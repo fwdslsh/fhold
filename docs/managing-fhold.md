@@ -123,12 +123,12 @@ file paths and examples. Native remote workers remain experimental.
 Edit the native files under your instance's `config/` directory and run
 `fhold restart` from that home (with `FH_HOME` unset), or select it with `--name`.
 No image rebuild is required. Updates only seed missing operator files and
-preserve your edits. Managed policy and the configuration directories are
-read-only inside the container. OpenCode's preferred user preferences file is
-the exception: Admin and trusted native clients use OpenCode's own API to edit
-and reload it without restarting the process/container. Host editors that
-replace that file or change its filename still require `fhold restart` to refresh
-its file bind. Native reloads may interrupt active OpenCode work.
+preserve your edits. Managed policy is read-only inside the container.
+OpenCode's `config/assistant/` is a writable native user directory: Admin makes
+narrow JSONC-preserving edits and verifies them through the native API.
+OpenCode v2 watches atomic edits to the selected file and user plugins without
+reloading or restarting. Changing the selected filename, read-only policy mounts
+or image-baked plugins still requires `fhold restart`.
 Use [the configuration map](managed-harness-configuration.md#deployment-inputs)
 to choose between ordinary user settings and enforced operator policy. Do not
 edit release-owned `system/` files or generated `state/stack.env`.
@@ -383,7 +383,7 @@ The request originates inside Assistant: `localhost` means that container, not
 your desktop. Use a private address reachable from the container and restrict
 server exposure to the intended network. fhold does not start model servers,
 download models or change their listening address. See the
-[endpoint networking notes](technical/opencode-configuration.md#local-and-custom-ai-servers).
+[endpoint networking notes](technical/opencode-configuration.md#local-and-custom-servers).
 
 The model picker excludes audio-only, embedding-only, non-tool and deprecated
 models using native capabilities. Custom endpoint capabilities are native defaults;
@@ -394,14 +394,15 @@ Expand **Saved AI setups** to review old sign-ins, including restored records.
 They are not labeled connected or verified. Removing a saved sign-in deletes only
 that instance's native credential, not vendor access or endpoint/environment
 settings. **Disable endpoint** preserves its definition and separate sign-in,
-using OpenCode's native disabled-provider setting. Edit and test it to explicitly
+using OpenCode's native provider resource policy. Edit and test it to explicitly
 re-enable it; other disabled services stay disabled. Choose
 another default first if the setup is currently used by your agent. Advanced
 managed settings are read-only here; no operator policy is silently overwritten.
 
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
-Auth persists under `knowledge/secrets/auth.json`. Advanced native settings
+Native v2 credentials persist in the OpenCode database under
+`data/assistant/.local/share/opencode/`. Advanced native settings
 are documented in [OpenCode configuration](technical/opencode-configuration.md).
 
 Ask the trusted agent to remember facts or schedule work in ordinary language:
@@ -568,6 +569,12 @@ and preserve private archives outside knowledge. Recovery uses consistent
 WAL-inclusive snapshots, native preflight, collision checks, content verification,
 stripped old authority and retry journals while preserving existing target sessions.
 
+V2 transfer preserves transcripts, IDs, timestamps and parent/child relationships
+through native APIs. Upstream import does not recreate fork-origin/revert state,
+worktrees or file snapshots; the receipt lists these limits. Use an entire-instance
+export for complete same-instance recovery. V1 archives are converted by OpenCode
+on a private copy, never by writing the vendor database schema directly.
+
 Unfinished tool calls block recovery by default. After review, pass
 `--archive-interrupted` to both preview and apply to preserve those calls as native
 terminal errors, explicitly marked interrupted and never rerun. Raw exports and
@@ -581,3 +588,18 @@ under `state/update-receipts/`. Those are not complete native-data rollback.
 If a new engine may change native data, take a compatible stopped-instance
 recovery point first. Do not automatically run older images against newer data.
 No foreign-home importer or in-place foreign upgrade is provided.
+
+### Moving from OpenCode v1 to v2
+
+Before upgrading, stop the instance and retain an entire-instance export with its
+matching v1 image. The native engine performs its own one-time database and
+credential conversion. Do not downgrade against the converted database; restore
+the untouched export with the original image instead.
+
+The default scheduled engine is updated automatically from `--attach` to
+`--server`; custom engine commands need operator review. Existing operator files
+remain intact. Review mandatory OpenCode permission denials using the new native
+[resource-policy format](managed-harness-configuration.md#task-permissions).
+Guardian chat/read permissions are reapplied on every turn. MCP symbol search
+and TODO-list resources are removed because the native engine no longer supplies
+them. Native username is now `opencode`; reconnect direct clients accordingly.

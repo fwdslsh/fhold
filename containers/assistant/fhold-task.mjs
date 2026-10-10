@@ -79,6 +79,25 @@ function atomicWrite(path, text) {
 	renameSync(temporary, path);
 }
 
+// Upgrade only the exact previously shipped engine arguments. This changes the
+// persisted native configuration once, not the vendor CLI or each invocation.
+// Operator-defined engines and every other AKM setting remain untouched.
+function upgradeScheduledEngine() {
+	const path = join(process.env.AKM_CONFIG_DIR || '/etc/akm', 'config.json');
+	if (!existsSync(path)) return;
+	const config = JSON.parse(readFileSync(path, 'utf8'));
+	const engine = config?.engines?.scheduled;
+	const previous = ['run', '--attach', 'http://127.0.0.1:4096', '--agent', 'scheduled'];
+	if (
+		engine?.bin !== 'fhold-opencode-run' ||
+		JSON.stringify(engine.args) !== JSON.stringify(previous)
+	)
+		return;
+	engine.args[1] = '--server';
+	atomicWrite(path, `${JSON.stringify(config, null, 2)}\n`);
+	console.error('fhold-task: updated the default scheduled engine for OpenCode v2');
+}
+
 function setEnabled(id, enabled) {
 	const path = taskFile(id);
 	if (!existsSync(path) || !lstatSync(path).isFile()) fail(`task not found: ${id}`);
@@ -196,7 +215,11 @@ function adopt(path) {
 
 const [command, ...args] = process.argv.slice(2);
 try {
+	if (['create', 'run', 'sync', 'resume'].includes(command)) upgradeScheduledEngine();
 	switch (command) {
+		case 'sync':
+			run('akm', ['task', 'sync', '--rebind']);
+			break;
 		case 'create':
 			create(taskId(args[0]), args.slice(1));
 			break;

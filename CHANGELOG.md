@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.2610103-beta.6 — OpenCode v2 and AKM 0.10 next
+
+The Assistant uses OpenCode 2.0.26 and AKM CLI/harness plugins
+0.10.26101002-alpha. Standard upstream installation remains image-baked.
+Claude and Codex remote connections remain experimental.
+
+Native settings and user plugins apply through OpenCode's file watcher without
+reloading or restarting the agent. Admin preserves JSONC comments, confirms the
+effective configuration and keeps saved accounts separate from working
+connections. MCP OAuth integrations no longer appear as AI providers.
+
+Guardian uses native tool-free generation for moderation; its second OpenCode
+server, provider credential mount and obsolete configuration are removed.
+Credential-scoped sessions, chat/read/full policies, forms, approval controls,
+file/text search and portal progress remain. Native symbol search and TODO-list
+resources are removed because v2 no longer provides them.
+
+History and optional provider-account transfer use native APIs on private
+SQLite snapshots rather than writing the vendor schema. Pagination, target
+preservation, retry, interrupted history and key/OAuth round trips are covered.
+Native history import does not recreate fork/revert/worktree/snapshot state;
+use entire-instance export for complete same-instance recovery. Periodic
+recovery capture waits for native readiness to avoid racing startup migration.
+
+Recurring tasks use the v2 `--server` argument. The exact previously shipped
+engine is upgraded automatically; custom engines remain untouched. Tool/shell
+activity, native AKM recall, all five AKM tools and trusted automatic memory are
+qualified against the real native engine with controlled model responses.
+
+Before upgrading, retain a stopped full-instance export and its v1 image.
+Native credentials now live in OpenCode's database; direct API username is
+`opencode`. Review mandatory operator denials using v2 resource policies;
+ordinary permission settings are defaults, not an enforced ceiling. Existing
+operator files are not replaced. Never downgrade against a converted database.
+See [upgrade guidance](docs/managing-fhold.md#moving-from-opencode-v1-to-v2) and
+[qualification evidence](docs/operations/opencode-v2-qualification.md).
+
+AKM 0.10 is deliberately a prerelease. Live vendor OAuth/remote pairing and ACA
+platform Stop/scale-to-zero were not requalified here. Existing dependency
+exceptions and experimental labels remain disclosed; publishing does not update
+live instances automatically.
+
 ## 0.2.2610102-beta.5 — reliable recovery shutdown and current AKM
 
 Assistant shutdown no longer stalls when a short-lived writer exits while its

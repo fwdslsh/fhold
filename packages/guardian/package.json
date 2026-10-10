@@ -1,7 +1,7 @@
 {
   "name": "@fhold/guardian",
   "description": "Minimal MCP security gateway for a hosted fhold agent",
-  "version": "0.2.2610102-beta.5",
+  "version": "0.2.2610103-beta.6",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -17,8 +17,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.0",
-    "@opencode-ai/sdk": "1.18.34",
+    "@opencode/client": "2.0.26",
     "jose": "6.2.12",
+    "jsonc-parser": "3.3.1",
     "zod": "4.6.5"
   },
   "devDependencies": {

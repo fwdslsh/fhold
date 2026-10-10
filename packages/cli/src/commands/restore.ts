@@ -39,7 +39,9 @@ export function printRestorePlan(plan: RestorePlan, json: boolean): void {
 	}
 	console.log(`Restore source: ${displayText(plan.sourceHome)}`);
 	console.log(`Newly initialized fhold destination: ${displayText(plan.destinationHome)}`);
-	console.log('Scope: portable files only — NOT a full runtime recovery or native history restore.');
+	console.log(
+		'Scope: portable files only — NOT a full runtime recovery or native history restore.'
+	);
 	for (const item of plan.preservation) {
 		console.log(`${item.disposition}: ${displayText(item.category)} — ${displayText(item.note)}`);
 	}
@@ -116,12 +118,21 @@ export function printRestorePlan(plan: RestorePlan, json: boolean): void {
 export default defineCommand({
 	meta: {
 		name: 'restore',
-		description: 'Import portable content into a fresh install, or an entire stopped instance into an empty folder'
+		description:
+			'Import portable content into a fresh install, or an entire stopped instance into an empty folder'
 	},
 	args: {
 		from: { type: 'string', required: true, description: 'fhold export directory (read only)' },
-		full: { type: 'boolean', description: 'restore an entire stopped instance into an empty folder, including sessions and credentials' },
-		'confirm-stopped': { type: 'boolean', description: 'confirm private runtime authority and stopped writers before full import; no containers are started' },
+		full: {
+			type: 'boolean',
+			description:
+				'restore an entire stopped instance into an empty folder, including sessions and credentials'
+		},
+		'confirm-stopped': {
+			type: 'boolean',
+			description:
+				'confirm private runtime authority and stopped writers before full import; no containers are started'
+		},
 		apply: { type: 'boolean', description: 'apply a freshly validated restore plan' },
 		'dry-run': { type: 'boolean', description: 'display the plan without writing (the default)' },
 		json: { type: 'boolean', description: 'print the plan as JSON' },
@@ -151,17 +162,41 @@ export default defineCommand({
 		const state = createFholdState();
 		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');
 		if (args.full) {
-			if (['include-provider-auth', 'include-user-env', 'include-portal-maps', 'include-oauth', 'acknowledge-unrestored'].some((name) => args[name as keyof typeof args]))
-				throw new Error('--full includes all runtime data; do not combine portable restore options.');
-			const options = { sourceHome: String(args.from), destinationHome: state.homeDir, confirmedStopped: args['confirm-stopped'] === true };
-			const result = args.apply ? await restoreInstance(options) : await planInstanceRestore(options);
+			if (
+				[
+					'include-provider-auth',
+					'include-user-env',
+					'include-portal-maps',
+					'include-oauth',
+					'acknowledge-unrestored'
+				].some((name) => args[name as keyof typeof args])
+			)
+				throw new Error(
+					'--full includes all runtime data; do not combine portable restore options.'
+				);
+			const options = {
+				sourceHome: String(args.from),
+				destinationHome: state.homeDir,
+				confirmedStopped: args['confirm-stopped'] === true
+			};
+			const result = args.apply
+				? await restoreInstance(options)
+				: await planInstanceRestore(options);
 			if (args.json) console.log(JSON.stringify(result, null, 2));
 			else {
 				console.log(INSTANCE_BACKUP_NOTICE);
-				console.log(`Full-instance ${args.apply ? 'import complete' : 'preview'}: ${displayText(result.projectName)} -> ${displayText(result.destinationHome)}`);
-				console.log(`${result.copyCount} entries, ${result.totalBytes} bytes. Native sessions and account state included.`);
+				console.log(
+					`Full-instance ${args.apply ? 'import complete' : 'preview'}: ${displayText(result.projectName)} -> ${displayText(result.destinationHome)}`
+				);
+				console.log(
+					`${result.copyCount} entries, ${result.totalBytes} bytes. Native sessions and account state included.`
+				);
 				for (const warning of result.warnings) console.warn(`warning: ${displayText(warning)}`);
-				console.log(args.apply ? 'Containers remain stopped. Review saved settings, then explicitly run `fhold start` for this folder.' : 'Use --apply --confirm-stopped to import into this empty folder. Do not run `install` first.');
+				console.log(
+					args.apply
+						? 'Containers remain stopped. Review saved settings, then explicitly run `fhold start` for this folder.'
+						: 'Use --apply --confirm-stopped to import into this empty folder. Do not run `install` first.'
+				);
 			}
 			return;
 		}
@@ -177,14 +212,14 @@ export default defineCommand({
 			return;
 		}
 
-			const plan = applyRestore(options);
-			printRestorePlan(plan, args.json === true);
-			if (!args.json) {
-				console.log(
-					'Portable files copied and checksums verified. This is not a complete runtime recovery: native history and other unselected data need separate acceptance. Restoreed tasks remain inactive.'
-				);
-				console.log(`Private receipt: ${state.homeDir}/state/restore-receipts/${plan.digest}.json`);
-				console.log('Review task contents before adoption, then run `fhold setup`.');
-			}
+		const plan = await applyRestore(options);
+		printRestorePlan(plan, args.json === true);
+		if (!args.json) {
+			console.log(
+				'Portable files copied and checksums verified. This is not a complete runtime recovery: native history and other unselected data need separate acceptance. Restoreed tasks remain inactive.'
+			);
+			console.log(`Private receipt: ${state.homeDir}/state/restore-receipts/${plan.digest}.json`);
+			console.log('Review task contents before adoption, then run `fhold setup`.');
+		}
 	}
 });
