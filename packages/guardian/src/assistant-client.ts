@@ -37,8 +37,10 @@ export type AssistantMessage = {
 	parentId?: string;
 	createdAt: number;
 	completedAt?: number;
+	finish?: string;
 	text: string;
 	files: string[];
+	tools?: Array<{ name: string; status: 'pending' | 'running' | 'completed' | 'error' }>;
 	error?: string;
 	cost?: number;
 	tokens?: OpenCodeAssistantMessage['tokens'];
@@ -285,8 +287,14 @@ export function createAssistantClient(options: AssistantClientOptions = {}): Ass
 						parentId: info.parentID,
 						createdAt: info.time.created,
 						...(info.time.completed ? { completedAt: info.time.completed } : {}),
+						...(info.finish ? { finish: info.finish } : {}),
 						text,
 						files,
+						tools: parts.flatMap((part) =>
+							part.type === 'tool' && /^[A-Za-z0-9_.:-]{1,128}$/.test(part.tool)
+								? [{ name: part.tool, status: part.state.status }]
+								: []
+						),
 						...(messageError(info) ? { error: messageError(info) } : {}),
 						cost: info.cost,
 						tokens: info.tokens

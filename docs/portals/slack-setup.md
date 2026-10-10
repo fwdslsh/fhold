@@ -14,10 +14,14 @@ Create an app in the Slack API console and:
 1. enable Socket Mode;
 2. create an app-level token with `connections:write`;
 3. grant the bot `app_mentions:read`, `chat:write`, and the history scopes
-   needed for the channel types you will allow;
+   needed for the channel types you will allow (`channels:history` for public
+   channels, `groups:history` for private channels, `im:history` for DMs or
+   `mpim:history` for group DMs); add `reactions:write` for tool reactions;
 4. subscribe to `app_mention` plus the message events needed for those channel
    types; and
-5. install the app to the workspace.
+5. enable **Interactivity & Shortcuts** for buttons; Socket Mode delivers these
+   actions without a public Request URL; and
+6. install the app to the workspace (reinstall after changing scopes).
 
 Store the bot and app tokens through the CLI:
 
@@ -111,18 +115,25 @@ scope permits that. Thread replies retain an opaque, credential-scoped Guardian
 conversation handle. Changing a user's mapping starts fresh policy continuity.
 Send `/clear` or `!clear` to reset it.
 
-Long-running requests receive one "still working" notice. The bot keeps checking
-and posts the completed response in the same thread; no MCP client or job ID is
-needed just because work takes more than a few minutes. New messages in that
+Channel mentions start a threaded conversation. Public answer text streams as
+throttled edits in that thread, with a Working indicator while no text is available.
+Slack does not expose the ordinary bot typing indicator used by Discord. A compact
+tool-status message and reactions provide live feedback; unavailable reactions
+are logged without stopping the answer. The requester can use **Stop** to cancel
+the current job. The bot keeps checking long jobs and posts the complete answer;
+no MCP client or job ID is needed because work takes more than a few minutes. New messages in that
 conversation remain queued behind the active request. The Portal must stay
 running to deliver the response: restarting it does not cancel native agent work,
 but automatic reply delivery is not recovered across a Portal restart. The agent's
 work and history remain available in OpenCode.
 
-The Slack adapter is intentionally a conversational subset of the MCP catalog.
-If a `full` agent pauses for a permission decision, the adapter tells the user
-to complete that explicit decision with a full MCP client; chat text is never
-treated as permission approval.
+Questions and permissions appear as interactive blocks in the same thread.
+Only the requester can answer or stop the job, including when users share a
+credential. Questions support sequential questions, multiple selections and
+free text where allowed. Permission buttons offer only the decisions allowed by
+the credential policy; chat text never approves work. Long request text is split
+into messages instead of hiding details. Answers resume the existing job through
+Guardian MCP. Finished controls are cleared. No slash commands are required.
 
 Continuity state is stored at `data/portal/slack/portal.db`.
 The database format and conversation handles are unchanged when updating the

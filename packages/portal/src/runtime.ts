@@ -92,6 +92,8 @@ export function splitMessage(text: string, maxLength: number): string[] {
 	while (remaining.length > maxLength) {
 		let splitAt = remaining.lastIndexOf('\n', maxLength);
 		if (splitAt < Math.floor(maxLength / 2)) splitAt = maxLength;
+		// Keep a UTF-16 surrogate pair together at a hard message boundary.
+		if (/^[\uDC00-\uDFFF]$/.test(remaining[splitAt])) splitAt -= 1;
 		chunks.push(remaining.slice(0, splitAt));
 		remaining = remaining.slice(splitAt).replace(/^\n/, '');
 	}

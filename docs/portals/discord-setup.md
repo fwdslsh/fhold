@@ -9,8 +9,8 @@ In the Discord developer portal:
 
 1. create an application and bot;
 2. enable the Message Content intent;
-3. invite the bot with permission to view channels, read message history, and
-   send messages; and
+3. invite the bot with **View Channels**, **Read Message History**, **Send Messages**,
+   **Create Public Threads**, **Send Messages in Threads**, and **Add Reactions**; and
 4. copy the bot token once.
 
 Store the token through the CLI. `-` reads it from standard input and the value
@@ -117,13 +117,18 @@ issuer/subject mappings resolve through the same registry for remote MCP
 clients; Discord itself continues to use exact platform-user mappings.
 
 Mention the bot in an allowed server channel or send an allowed direct message.
-Replies continue within a per-user channel/thread and credential-scoped
-conversation. Changing a user's mapping starts fresh policy continuity. Send
+Channel mentions create a thread named after the request. Replies inside an
+active thread do not need another mention. Existing threads are reused; DMs stay
+in the DM. If thread creation is unavailable, the bot logs that limitation and
+answers in the channel. Conversations remain credential-scoped.
+Changing a user's mapping starts fresh policy continuity. Send
 `/clear` or `!clear` to discard that local conversation handle.
 
-Long-running requests receive one "still working" notice. The bot keeps checking
-and replies to the original message when the response is ready; no MCP client or
-job ID is needed just because work takes more than a few minutes. New messages in
+Typing continues while work is running. Public answer text appears as throttled
+message edits, followed by the complete answer. Tool kinds add reactions to the
+request: 🔎 knowledge search, 🐚 commands, ✏️ editing, 🧠 memory and similar icons.
+Missing reaction permissions do not stop replies. The bot keeps checking long
+jobs; no MCP client or job ID is needed because work takes more than a few minutes. New messages in
 that conversation remain queued behind the active request. The Portal must stay
 running to deliver the response: restarting it does not cancel native agent work,
 but automatic reply delivery is not recovered across a Portal restart. The agent's
@@ -139,10 +144,14 @@ before enabling the adapter. A connected gateway verifies token/intents,
 not user access or agent behavior: test an allowed DM/mention, a disallowed user,
 and the configured policy.
 
-The Discord adapter is intentionally a conversational subset of the MCP
-catalog. If a `full` agent pauses for a permission decision, the adapter tells
-the user to complete that explicit decision with a full MCP client; chat text
-is never treated as permission approval.
+Questions and native permission requests appear in the same thread with buttons.
+Only the requester may answer, even when other users share their fhold credential.
+Questions support options, multiple selections, sequential questions and free-text
+replies where the agent allows them. Permission buttons offer Allow once, Always
+allow and Deny only when permitted by the credential policy. Ordinary chat text
+is never treated as approval. Full request text is split into messages rather than
+hidden behind truncation. Buttons close after the response; answering resumes
+the existing job, not a new request. No slash-command installation is needed.
 
 ## Troubleshooting restricted-session replies
 
@@ -163,5 +172,5 @@ Mappings are reread on each message and start a fresh credential-scoped
 conversation; neither a bot restart nor deletion of old conversations is needed.
 The shared Assistant instructions must distinguish explicit full-access saves
 from automatic memory capture, which remains disabled for Guardian sessions.
-If a native tool approval is requested, use a full MCP client to complete it;
-do not broaden permissions to bypass that approval.
+If a native tool approval is requested, make the explicit decision using its
+buttons; do not broaden permissions to bypass that approval.
