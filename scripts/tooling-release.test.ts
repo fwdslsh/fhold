@@ -20,6 +20,13 @@ test('only tooling workspace version changes are ignored in the lock', () => {
 	next.packages.dep = '2';
 	expect(changeScope(['bun.lock'], () => JSON.stringify(lock), () => JSON.stringify(next))).toBe('full');
 });
+test('root build scripts can change without runtime qualification, but install hooks cannot', () => {
+	const before = { version: 'old', scripts: { check: 'old check' } };
+	const after = { version: 'new', scripts: { check: 'new check', postinstall: undefined as string | undefined } };
+	expect(changeScope(['package.json'], () => JSON.stringify(before), () => JSON.stringify(after))).toBe('tools');
+	after.scripts.postinstall = 'new install hook';
+	expect(changeScope(['package.json'], () => JSON.stringify(before), () => JSON.stringify(after))).toBe('full');
+});
 test('tooling assets omit the bridge and fresh installs use the published runtime cohort', () => {
 	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(5);
 	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools').some((name) => name.endsWith('.mcpb'))).toBe(false);

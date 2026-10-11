@@ -21,7 +21,7 @@ export function changeScope(files, readBefore, readAfter) {
 		if (path === 'package.json') {
 			const settings = (text) => {
 				const json = JSON.parse(text);
-				return JSON.stringify([json.dependencies, json.devDependencies, json.overrides, json.trustedDependencies, json.workspaces, json.packageManager]);
+				return JSON.stringify([json.dependencies, json.devDependencies, json.overrides, json.trustedDependencies, json.workspaces, json.packageManager, ...['preinstall', 'install', 'postinstall', 'prepare'].map((name) => json.scripts?.[name])]);
 			};
 			try { if (settings(readBefore(path)) === settings(readAfter(path))) continue; } catch {}
 			return 'full';

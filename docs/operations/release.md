@@ -4,8 +4,9 @@ GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribut
 host. `.github/workflows/release.yml` builds Linux downloads and signed amd64/arm64
 images on GitHub, verifies uploaded checksums and publishes the release. Public
 Docker Hub repositories are `fwdslsh/fhold-assistant`, `fwdslsh/fhold-guardian`
-and `fwdslsh/fhold-portal`. Fresh CLI/Admin installs select the matching pinned
-images automatically. No Docker Hub account is needed to pull them.
+and `fwdslsh/fhold-portal`. Fresh CLI/Admin installs select the latest published
+runtime cohort pinned by their release, even when tooling has a newer version.
+No Docker Hub account is needed to pull them.
 
 Publishing uses the repository's Docker Hub credentials and the explicit
 `FH_PUBLICATION_CONFIGURED=true` repository variable. Run the workflow from
@@ -51,8 +52,9 @@ Released candidate versions are frozen. An existing receipt permits an
 identical source/content retry only. Changed source or artifact bytes require
 a new version; unpublished candidates are not an exception.
 
-Establish release intent once and carry it across all package manifests, CLI
-version, image tags, Admin/MCPB manifests, filenames, checksums and receipt.
+Establish release intent once and carry it across the selected scope's package
+manifests, artifacts, filenames, checksums and receipt. Full releases also advance
+image and MCPB versions; tooling-only releases retain those published versions.
 `releaseIntent` binds version to revision/content hash, rejects regressed
 clocks/collisions and accepts retries only for the same identity.
 For historical 0.1 releases, at the same minute use a higher prerelease serial;
