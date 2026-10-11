@@ -172,7 +172,7 @@ while sleep 0.1; do :; done`
 
 const finished = (child: ChildProcess) =>
 	new Promise<number | null>((resolve) => {
-		if (child.exitCode !== null) resolve(child.exitCode);
+		if (child.exitCode !== null || child.signalCode !== null) resolve(child.exitCode);
 		else child.once('close', resolve);
 	});
 
@@ -231,6 +231,41 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events.indexOf('native-stopped')).toBeLessThan(events.indexOf('final-checkpoint'));
 		expect(events.indexOf('final-complete')).toBeLessThan(events.indexOf('released'));
 		expect(run.stderr()).toContain('recovery checkpoint completed and owner released');
+	});
+	it('ignores repeated TERM while the stopped-writer checkpoint is finishing', async () => {
+		const run = fixture({
+			FH_RECOVERY_URL: 'file:///fixture',
+			FIXTURE_FINAL_SECONDS: '1'
+		});
+		try {
+			await until(() => run.events().includes('native'));
+			run.child.kill('SIGTERM');
+			await until(() => run.events().includes('final-checkpoint'));
+			expect(run.child.kill('SIGTERM')).toBe(true);
+			expect(await finished(run.child)).toBe(0);
+			expect(run.events().filter((event) => event === 'final-checkpoint')).toHaveLength(1);
+			expect(run.events().filter((event) => event === 'released')).toHaveLength(1);
+			expect(run.stderr()).toContain('recovery checkpoint completed and owner released');
+			expect(run.stderr()).not.toContain('recovery failed');
+		} finally {
+			// A failed assertion must not leave this fixture waiting for its full
+			// production shutdown budget or leave its isolated recovery stub alive.
+			if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
+			await finished(run.child);
+			if (run.child.exitCode !== 0) {
+				try {
+					const pid = Number(readFileSync(join(run.root, 'runtime/recovery.pid'), 'utf8'));
+					if (
+						readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(
+							join(run.root, 'bin/fhold-recovery')
+						)
+					)
+						process.kill(-pid, 'SIGKILL');
+				} catch {
+					// Already stopped, or startup never reached the recovery worker.
+				}
+			}
+		}
 	});
 	it('finishes recovery when a writer exits between its /proc check and read', async () => {
 		const run = fixture({ FH_RECOVERY_URL: 'file:///fixture', FIXTURE_PROC_EXIT_RACE: '1' });
