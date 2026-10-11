@@ -310,7 +310,9 @@ that remains running must forward TERM/INT and wait for the assistant's actual
 exit, keeping its log streams open throughout cleanup. Keep the parent's signal
 handlers installed until that exit and make repeat forwarding idempotent: a
 one-shot listener can restore default termination while the child is still
-checkpointing. A child-process
+checkpointing. In Node or Bun, use `process.on('SIGTERM', stop)` and
+`process.on('SIGINT', stop)`, not `process.once`, until the child exits.
+`AbortController.abort()` is already idempotent. A child-process
 [AbortSignal error](https://nodejs.org/api/child_process.html#child_processspawncommand-args-options)
 reports signal forwarding, not completed shutdown. Test the deployed parent
 chain, not just the stock entrypoint; do not infer owner release from either event.
