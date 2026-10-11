@@ -299,7 +299,9 @@ while the previous writer may still exist.
 Use the runtime's normal stop operation, which sends SIGTERM to the image's
 PID 1. Do not stop just OpenCode or signal the recovery worker directly. The
 entrypoint stops writers and descendants first, then waits for the recovery
-worker's final checkpoint and exact-owner release. No pre-stop command,
+worker's in-flight capture and ownership renewal to finish before its final
+checkpoint and exact-owner release. A genuine renewal failure still prevents
+an unsafe final checkpoint. No pre-stop command,
 automatic unlock, sidecar or hosting-specific runtime is needed.
 
 1. Finish or explicitly interrupt the current work, stop sending new requests,
