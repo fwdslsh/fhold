@@ -99,7 +99,7 @@ describe('release manifest', () => {
 	});
 
 	test('native fhold plugin caches track the product release', () => {
-		const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+		const version = JSON.parse(readFileSync(join(ROOT, 'packages/skeleton/package.json'), 'utf8')).version;
 		for (const harness of ['claude', 'codex']) {
 			const plugin = JSON.parse(
 				readFileSync(join(ROOT, `plugins/fhold/.${harness}-plugin/plugin.json`), 'utf8')
@@ -415,6 +415,7 @@ describe('release completeness gate', () => {
 		expect(publish?.run).toContain('sha256sum --check --strict checksums-sha256.txt');
 		expect(publish?.run).toContain('--draft=false');
 		expect(publish?.env).toEqual({
+			SCOPE: '${{ needs.validate.outputs.scope }}',
 			GH_TOKEN: '${{ github.token }}',
 			RELEASE_SHA: '${{ github.sha }}',
 			VERSION: '${{ needs.validate.outputs.version }}',

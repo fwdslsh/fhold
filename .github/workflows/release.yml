@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: true
+      scope:
+        description: 'auto uses stamped component versions; tools publishes CLI/Admin only'
+        type: choice
+        options: [auto, full, tools]
+        default: auto
 
 concurrency:
   group: release-fhold-fhold
@@ -27,21 +32,29 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       channel: ${{ steps.version.outputs.channel }}
+      scope: ${{ steps.version.outputs.scope }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.2
       - id: version
         name: Validate the stamped release
         env:
           VERSION: ${{ inputs.version }}
+          SCOPE: ${{ inputs.scope }}
           DRY_RUN: ${{ inputs.dry_run }}
           RELEASE_REF: ${{ github.ref }}
           ACTIONS_ORIGIN: ${{ github.server_url }}
           ACTIONS_REPOSITORY: ${{ github.repository }}
           FH_PUBLICATION_CONFIGURED: ${{ vars.FH_PUBLICATION_CONFIGURED }}
         run: |
-          node --input-type=module <<'NODE'
+          bun - <<'NODE'
           import { appendFileSync, readFileSync } from 'node:fs';
           import { parseSemver } from './scripts/set-version.mjs';
+          import { gitScope } from './scripts/ci-scope.mjs';
           const version = process.env.VERSION ?? '';
           if (process.env.ACTIONS_ORIGIN !== 'https://github.com' ||
               process.env.ACTIONS_REPOSITORY !== 'fwdslsh/fhold') {
@@ -58,19 +71,27 @@ jobs:
             throw new Error('Live releases require main/release/*');
           }
           const release = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
-          const manifests = release.manifests;
+          const runtimeVersion = JSON.parse(readFileSync('packages/skeleton/package.json', 'utf8')).version;
+          const scope = (process.env.SCOPE || 'auto') === 'auto' ? (runtimeVersion === version ? 'full' : 'tools') : process.env.SCOPE;
+          const manifests = scope === 'tools' ? release.toolingManifests : release.manifests;
+          if (scope === 'tools' && gitScope(runtimeVersion) !== 'tools') {
+            throw new Error('Runtime inputs changed since the pinned image release. Stamp a full release instead.');
+          }
           for (const manifest of manifests) {
             const actual = JSON.parse(readFileSync(manifest, 'utf8')).version;
             if (actual !== version) throw new Error(`${manifest} is ${actual}; expected ${version}`);
           }
-          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
           NODE
 
   gates:
     needs: validate
     uses: ./.github/workflows/gates.yml
+    with:
+      scope: ${{ needs.validate.outputs.scope }}
 
   images:
+    if: needs.validate.outputs.scope == 'full'
     name: Publish ${{ matrix.image }} image
     needs: [validate, gates]
     runs-on: ubuntu-latest
@@ -215,6 +236,7 @@ jobs:
             packages/electron/dist/packages/*.AppImage
 
   claude-extension:
+    if: needs.validate.outputs.scope == 'full'
     name: Build optional Claude Desktop extension
     needs: [validate, gates]
     runs-on: ubuntu-latest
@@ -232,6 +254,11 @@ jobs:
           path: packages/claude-desktop/artifacts/fhold-claude-desktop-${{ needs.validate.outputs.version }}.mcpb
 
   release:
+    if: >-
+      always() && needs.validate.result == 'success' && needs.cli.result == 'success' &&
+      needs.admin.result == 'success' &&
+      (needs.images.result == 'success' || needs.images.result == 'skipped') &&
+      (needs.claude-extension.result == 'success' || needs.claude-extension.result == 'skipped')
     needs: [validate, images, cli, admin, claude-extension]
     runs-on: ubuntu-latest
     permissions:
@@ -244,6 +271,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Verify the Claude Desktop extension is present
+        if: needs.validate.outputs.scope == 'full'
         env:
           VERSION: ${{ needs.validate.outputs.version }}
         run: test -f "dist/fhold-claude-desktop-${VERSION}.mcpb"
@@ -253,6 +281,7 @@ jobs:
           sha256sum -- * > checksums-sha256.txt
       - name: Write manifest and validate the complete release
         env:
+          SCOPE: ${{ needs.validate.outputs.scope }}
           RELEASE_ASSETS_DIR: dist
           VERSION: ${{ needs.validate.outputs.version }}
         run: node scripts/validate-release-assets.mjs --write-manifest
@@ -261,14 +290,14 @@ jobs:
           name: fhold-release-assets
           path: dist
       - uses: docker/setup-buildx-action@v4.4.1
-        if: inputs.dry_run != true
+        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
       - uses: docker/login-action@v4.6.0
-        if: inputs.dry_run != true
+        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Point the release channel at the verified immutable images
-        if: inputs.dry_run != true
+        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           CHANNEL: ${{ needs.validate.outputs.channel }}
@@ -285,6 +314,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
           VERSION: ${{ needs.validate.outputs.version }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          SCOPE: ${{ needs.validate.outputs.scope }}
         run: |
           set -euo pipefail
           # Published versions are immutable; never overwrite their assets.
@@ -297,7 +327,9 @@ jobs:
           const sections = readFileSync('CHANGELOG.md', 'utf8').split(/^## /m);
           const section = sections.find((text) => text.startsWith(`${process.env.VERSION} —`));
           if (!section) throw new Error('Missing release notes in CHANGELOG.md');
-          writeFileSync('release-notes.md', section.slice(section.indexOf('\n') + 1).trim() + '\n');
+          const runtime = JSON.parse(readFileSync('packages/skeleton/package.json', 'utf8')).version;
+          const scopeNote = process.env.SCOPE === 'tools' ? `\nTooling-only release: CLI and Admin downloads. Container images remain pinned to ${runtime}; no runtime upgrade is required.\n` : '';
+          writeFileSync('release-notes.md', section.slice(section.indexOf('\n') + 1).trim() + '\n' + scopeNote);
           NODE
           args=(release create "${VERSION}" --repo "${GITHUB_REPOSITORY}" \
             --target "${RELEASE_SHA}" --title "fhold ${VERSION}" --notes-file release-notes.md --generate-notes --draft)

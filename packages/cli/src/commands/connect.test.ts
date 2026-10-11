@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readStackConfig } from '@fhold/lib';
 
-import cliPackage from '../../package.json' with { type: 'json' };
+import bridgePackage from '../../../claude-desktop/package.json' with { type: 'json' };
 
 import { bootstrapInstall } from './install.js';
 import { connectionDetails } from './connect.js';
@@ -55,7 +55,7 @@ describe('connection guidance', () => {
 		});
 		expect(revealed.credentialKey?.length).toBeGreaterThanOrEqual(32);
 		expect(revealed.extension).toBe(
-			`https://github.com/fwdslsh/fhold/releases/download/${cliPackage.version}/fhold-claude-desktop-${cliPackage.version}.mcpb`
+			`https://github.com/fwdslsh/fhold/releases/download/${bridgePackage.version}/fhold-claude-desktop-${bridgePackage.version}.mcpb`
 		);
 		expect(revealed.note).toContain('matching GitHub release');
 	});

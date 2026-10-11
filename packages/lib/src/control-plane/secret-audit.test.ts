@@ -10,7 +10,7 @@ import {
 	stackConfigEnv,
 	writeStackConfig
 } from './stack-config.js';
-import libPackage from '../../package.json' with { type: 'json' };
+import { FH_RUNTIME_VERSION } from './release.js';
 
 const roots: string[] = [];
 
@@ -49,7 +49,7 @@ const assistantEnvironment = {
 function assistantService(homeDir = '/tmp/home') {
 	const stack = readStackConfig(homeDir);
 	return {
-		image: `fwdslsh/fhold-assistant:${libPackage.version}`,
+		image: `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`,
 		hostname: stack.ok ? stackConfigEnv(stack.config).FH_INSTANCE_HOSTNAME : 'fhold',
 		init: true,
 		user: '1000:1000',
@@ -373,7 +373,7 @@ describe('Compose security audit', () => {
 
 		const issues = auditCompose(config, home);
 		expect(issues).toContain(
-			`service assistant must use managed image fwdslsh/fhold-assistant:${libPackage.version}`
+			`service assistant must use managed image fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`
 		);
 		expect(issues).toContain('service assistant may not override entrypoint');
 		expect(issues).toContain('service assistant may not override post_start');

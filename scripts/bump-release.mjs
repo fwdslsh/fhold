@@ -4,6 +4,7 @@
 // Env in:
 //   STAMP   — 'true' to write files in place; any other value = preview only
 //   VERSION — explicit semver to stamp (required)
+//   SCOPE   — 'tools' advances CLI/Admin only; 'full' (default) advances everything
 //
 // Preview locally: VERSION='<candidate-version>' node scripts/bump-release.mjs
 
@@ -11,8 +12,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { compareVersions, parseSemver, setComposeImageTags, setVersion } from './set-version.mjs';
 
 const RELEASE = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
-const manifests = RELEASE.manifests ?? [];
-const composeFiles = RELEASE.compose ?? [];
+const scope = process.env.SCOPE ?? 'full';
+if (!['full', 'tools'].includes(scope)) throw new Error('SCOPE must be full or tools');
+const manifests = (scope === 'tools' ? RELEASE.toolingManifests : RELEASE.manifests) ?? [];
+if (!manifests.length) throw new Error(`No manifests configured for ${scope}`);
+const composeFiles = scope === 'tools' ? [] : RELEASE.compose ?? [];
 
 const version = process.env.VERSION?.trim() || null;
 const doStamp = process.env.STAMP === 'true';
