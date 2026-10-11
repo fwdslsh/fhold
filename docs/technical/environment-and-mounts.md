@@ -3,10 +3,9 @@
 This document describes the active runtime. The executable source is
 `packages/skeleton/system/stack/stack.compose.yml`.
 
-On `codex/opencode-v2`, user-config directory watching and the OpenCode 2 native
-API are under qualification. See the [migration handoff](opencode-v2-migration-handoff.md)
-for verified live settings behavior and outstanding history/credential gates;
-this branch is not yet a released V2 migration.
+The released runtime uses OpenCode 2. See the
+[qualification report](../operations/opencode-v2-qualification.md) for verified
+native settings, persistence and API behavior; each release retains its own gates.
 
 ## Host layout
 

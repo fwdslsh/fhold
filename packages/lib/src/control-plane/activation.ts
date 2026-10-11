@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
 import { composeConfigJson, composeProjectName, runComposeStreaming, runDocker } from './docker.js';
 import type { FholdState } from './foundation.js';
@@ -5,7 +7,14 @@ import { acquireStackLock, releaseStackLock, type StackLock } from './lock.js';
 import { auditCompose } from './secret-audit.js';
 import { ensureRuntime } from './state.js';
 import { readStackConfig } from './stack-config.js';
-import { recordAppliedRuntime, recordRuntimeActivation, restartStatus, runtimeRevision } from './runtime-revision.js';
+import {
+	recordAppliedRuntime,
+	recordRuntimeActivation,
+	restartStatus,
+	runtimeRevision,
+	upgradedScheduledEngineContents
+} from './runtime-revision.js';
+import { assertSafePortablePath } from './provider-files.js';
 
 /** Older images must not receive a policy that disables their only hook source. */
 export async function assertManagedHarnessImage(resolved: unknown, prepareMissing?: () => Promise<void>): Promise<void> {
@@ -55,6 +64,10 @@ export async function activateComposeCommand(
 		}
 		ensureRuntime(state);
 		const revision = runtimeRevision(state.homeDir);
+		const upgradedAkm = selectedArgs[0] === 'up'
+			? upgradedScheduledEngineContents(state.homeDir) : undefined;
+		const upgradedRevision = upgradedAkm === undefined
+			? undefined : runtimeRevision(state.homeDir, upgradedAkm);
 		// Compose does not detect changed bind-mounted file contents. A pending
 		// configuration therefore needs recreation, not merely `docker restart`.
 		if (selectedArgs[0] === 'up' && restartStatus(state.homeDir).required) {
@@ -82,9 +95,21 @@ export async function activateComposeCommand(
 		await runComposeStreaming([...buildComposeCliArgs(state), ...selectedArgs], {
 			envFiles: composeOptions.envFiles
 		});
+		let appliedRevision = revision;
+		// Never acknowledge arbitrary late file changes. Only the exact predicted
+		// image-owned conversion may select the revision captured before startup.
+		if (upgradedAkm !== undefined && upgradedRevision !== undefined) {
+			try {
+				assertSafePortablePath(state.homeDir, 'config/akm/config.json', true);
+				if (readFileSync(join(state.homeDir, 'config/akm/config.json')).equals(upgradedAkm))
+					appliedRevision = upgradedRevision;
+			} catch {
+				// Optional scheduler diagnostics are not a core activation gate.
+			}
+		}
 		if (selectedArgs[0] === 'up' && selectedArgs.includes('--wait') && !options.deferAppliedReceipt)
-			recordAppliedRuntime(state.homeDir, revision);
-		return revision;
+			recordAppliedRuntime(state.homeDir, appliedRevision);
+		return appliedRevision;
 	} finally {
 		if (ownsLock) releaseStackLock(lock);
 	}
