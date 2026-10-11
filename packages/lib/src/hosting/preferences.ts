@@ -127,6 +127,26 @@ export class HostingPreferencesStore {
 		this.write(data);
 		return connection;
 	}
+	updateConnection(id: string, value: unknown): HostingConnection {
+		const previous = this.connection(id);
+		const connection = parseHostingConnection(value);
+		if (id === 'local' || connection.id !== id)
+			throw new Error('Connection identity cannot change; edit its display name instead.');
+		const data = this.read();
+		data.connections = data.connections.map((item) => (item.id === id ? connection : item));
+		if (connectionEndpoint(previous) !== connectionEndpoint(connection))
+			data.recent = data.recent.filter((item) => item.connectionId !== id);
+		this.write(data);
+		return connection;
+	}
+	removeConnection(id: string): void {
+		if (id === 'local') throw new Error('This computer is always available.');
+		this.connection(id);
+		const data = this.read();
+		data.connections = data.connections.filter((item) => item.id !== id);
+		data.recent = data.recent.filter((item) => item.connectionId !== id);
+		this.write(data);
+	}
 	remember(ref: InstanceRef, imported: InstanceRef[] = []): void {
 		const data = this.read();
 		data.recent = [ref, ...data.recent, ...imported]
@@ -140,4 +160,14 @@ export class HostingPreferencesStore {
 	private write(data: HostingPreferences): void {
 		writeFileAtomic(this.path, `${JSON.stringify(data, null, 2)}\n`);
 	}
+}
+
+export function connectionEndpoint(connection: HostingConnection): string {
+	return JSON.stringify(
+		connection.kind === 'ssh-docker'
+			? [connection.kind, connection.host, connection.port ?? null]
+			: connection.kind === 'azure-container-apps'
+				? [connection.kind, connection.subscriptionId, connection.resourceGroup]
+				: [connection.kind]
+	);
 }

@@ -6,9 +6,11 @@ import {
 	operateLocalInstance
 } from './local-docker.js';
 import { withDockerMachineOutput } from '../control-plane/docker.js';
+import { ensureDockerReady } from '../control-plane/docker.js';
+import { FH_RELEASE_VERSION } from '../control-plane/release.js';
 import { HOSTING_WIRE_VERSION, type MachineRequest, type MachineResponse } from './ssh-docker.js';
 
-const actions = ['hello', 'list', 'inspect', 'logs', 'start', 'stop', 'restart'] as const;
+const actions = ['hello', 'list', 'diagnose', 'inspect', 'logs', 'start', 'stop', 'restart'] as const;
 function path(value: unknown): string {
 	if (typeof value !== 'string' || !isAbsolute(value) || /[\0\r\n]/.test(value))
 		throw new Error('Provide an absolute directory on the remote host.');
@@ -21,11 +23,12 @@ export async function hostingMachineRequest(value: unknown): Promise<MachineResp
 		const input = value as MachineRequest;
 		if (input.version !== HOSTING_WIRE_VERSION || !actions.includes(input.action))
 			throw new Error('Unsupported hosting protocol or action.');
-		if (input.action === 'hello') return { version: 1, ok: true, value: { actions } };
-		if (input.action === 'list') {
+		if (input.action === 'hello') return { version: 1, ok: true, value: { actions, release: FH_RELEASE_VERSION } };
+		if (input.action === 'list' || input.action === 'diagnose') {
 			if (input.roots !== undefined && !Array.isArray(input.roots))
 				throw new Error('Instance roots must be an array.');
-			return { version: 1, ok: true, value: listLocalInstances(input.roots?.map(path)) };
+			const instances = await listLocalInstances(input.roots?.map(path));
+			return { version: 1, ok: true, value: input.action === 'list' ? instances : { release: FH_RELEASE_VERSION, docker: await ensureDockerReady(), instances } };
 		}
 		const homeDir = path(input.homeDir);
 		if (input.action === 'inspect')

@@ -8,13 +8,17 @@ keys and recovery storage credentials.
 
 ## Docker over SSH
 
-Install this version of the fhold CLI on the remote Docker host, available as
-`fhold` on its noninteractive SSH PATH. Complete ordinary SSH authentication and
+The remote Docker host needs a fhold CLI with hosting support. Its release may
+differ from your local tooling. fhold checks `~/.local/bin` as well as the native
+noninteractive SSH PATH. Complete ordinary SSH authentication and
 host-key review first, for example `ssh lab`. Native SSH configuration owns keys,
 ports, jump hosts and known hosts; fhold never accepts host trust automatically.
 
 ```bash
 fhold hosting add lab --provider ssh-docker --host lab --roots '["/opt/stacks"]'
+fhold hosting check lab
+# If the remote CLI is missing/old (only the CLI is replaced, no restart):
+fhold hosting repair lab --confirm
 fhold hosting instances --connection lab
 fhold --connection lab --name agent status
 fhold --connection lab --name /opt/stacks/agent logs
@@ -24,8 +28,12 @@ fhold --connection lab --name /opt/stacks/agent restart --confirm
 ```
 
 `--roots` is an optional JSON array of absolute remote directories. Discovery
-looks at each root and its immediate children, not a recursive host scan.
-Without roots it uses the remote account's `~/fhold/instances`. Short selectors
+uses managed Docker Compose working-directory labels, including stopped
+containers. Each candidate must already be a valid fhold installation; unrelated
+Compose projects are not adopted. Root discovery also checks each root, its
+immediate children and their `home/` subfolders, without recursively scanning
+user files. Without roots it additionally uses the remote account's
+`~/fhold/instances`. Short selectors
 match the discovered, persisted instance name; use an exact absolute directory
 when names are ambiguous. Remote paths are never resolved against this computer,
 and remote commands never override this computer's `FH_HOME`.
@@ -35,6 +43,15 @@ audit and pending-settings receipt paths. The wire envelope and advertised
 actions determine compatibility, not exact release-version equality. The machine
 endpoint accepts one typed operation on stdin; it is not a network server or
 arbitrary remote command runner. SSH failures do not replay a mutation.
+
+`hosting check` reports SSH, remote CLI/protocol, Docker and discovery separately.
+It never changes host trust or instance configuration. `hosting repair` downloads
+the local tooling version's Linux x64/arm64 CLI and verifies the published checksum
+before atomically installing it in `~/.local/bin/fhold`. It does not use sudo,
+change shell startup files, install Docker, restart containers or touch homes.
+For offline/private development, `--cli-file /path/to/trusted-linux-cli` accepts an
+operator-supplied artifact instead; the remote staged binary must run successfully
+and support hosting before replacement. Unpublished versions need this option.
 
 Initial remote management supports discovery, status, recent logs and lifecycle.
 Installation, image updates, configuration/provider/native-worker setup and
@@ -97,6 +114,22 @@ external responsibility; there is no rolling-update shortcut.
 
 Choose **Open another instance… → Open a hosted agent**, select a connection and
 find instances. **Add a connection** offers the same SSH/ACA metadata as the CLI.
+**Manage host connections…** is also available in the instance picker. The manager
+offers Add, Edit, Check and Remove; SSH checks offer an explicitly confirmed
+**Install / update remote CLI** action. Errors remain visible in the hosted-agent
+picker, not hidden in the management sidebar. Display names, roots and SSH ports
+can be edited. Changing a host or Azure scope requires confirmation, clears only
+that connection's recent selections and closes its selected view. Removing a
+connection forgets metadata only: no instance is stopped or deleted.
+
+The same operations are available in the CLI:
+
+```bash
+fhold hosting edit lab --label 'Lab server' --roots '["/opt/stacks"]'
+fhold hosting edit lab --host new-server --confirm
+fhold hosting remove lab --confirm
+```
+
 Open one instance to view supported controls and recent logs. Unsupported settings
 and transfer operations explain where to manage them rather than acting on a
 local home. Lifecycle actions retain explicit confirmation. Status refreshes

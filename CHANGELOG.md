@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.2610113-beta.9 — host connections (tooling only)
+
+CLI and Admin now discover managed Docker instances from Compose labels, including
+custom `/opt/stacks/<name>/home` layouts. Native SSH finds the remote CLI in
+`~/.local/bin` as well as the normal PATH. Missing or outdated remote CLIs have
+actionable diagnostics and an explicitly confirmed, atomic installation/update
+path that never restarts containers or changes instance files.
+
+Admin adds a Host connections manager with add, edit, check, repair and remove.
+Discovery errors are visible where the user is choosing an instance; changing
+connections clears stale results without resetting a saved selection. Names,
+roots and ports are editable. Retargeting a host or removing a connection requires
+confirmation and clears only its recent selections. CLI offers matching
+`hosting edit`, `check`, `repair` and `remove` commands.
+
+This release publishes CLI/Admin downloads only. Runtime images and the Claude
+Desktop extension remain pinned to **0.2.2610112-beta.8**; no instance runtime
+upgrade is required.
+
 ## 0.2.2610112-beta.8 — shared hosting management
 
 CLI and Admin now share host-side hosting adapters. Local Docker remains the

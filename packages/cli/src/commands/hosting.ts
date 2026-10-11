@@ -6,11 +6,99 @@ import {
 	hostingMachineRequest,
 	openHostingInstance
 } from '@fhold/lib';
+import { checkHostingConnection, repairSshCli, connectionEndpoint } from '@fhold/lib';
 
 const store = () => new HostingPreferencesStore();
 export const hostingCommand = defineCommand({
 	meta: { name: 'hosting', description: 'Manage host connections and discover their instances' },
 	subCommands: {
+		edit: defineCommand({
+			meta: {
+				name: 'edit',
+				description: 'Edit saved host metadata; never changes running instances'
+			},
+			args: {
+				id: { type: 'positional', required: true },
+				label: { type: 'string' },
+				host: { type: 'string' },
+				port: { type: 'string', description: 'SSH port, or default to use native SSH config' },
+				roots: { type: 'string', description: 'JSON array of remote roots' },
+				subscription: { type: 'string' },
+				group: { type: 'string' },
+				confirm: { type: 'boolean', default: false }
+			},
+			run({ args }) {
+				const preferences = store();
+				const previous = preferences.connection(args.id);
+				const next = {
+					...previous,
+					...(args.label !== undefined ? { label: args.label } : {}),
+					...(args.host !== undefined ? { host: args.host } : {}),
+					...(args.port !== undefined
+						? { port: args.port === 'default' ? undefined : Number(args.port) }
+						: {}),
+					...(args.roots !== undefined ? { roots: JSON.parse(args.roots) } : {}),
+					...(args.subscription !== undefined ? { subscriptionId: args.subscription } : {}),
+					...(args.group !== undefined ? { resourceGroup: args.group } : {})
+				};
+				if (connectionEndpoint(previous) !== connectionEndpoint(next) && !args.confirm)
+					throw new Error(
+						'Changing the host/scope clears saved recent instances for this connection. Repeat with --confirm. Containers and instance data are not changed.'
+					);
+				console.log(JSON.stringify(preferences.updateConnection(args.id, next), null, 2));
+			}
+		}),
+		remove: defineCommand({
+			meta: {
+				name: 'remove',
+				description: 'Forget a connection and its recents; no instances are stopped or deleted'
+			},
+			args: {
+				id: { type: 'positional', required: true },
+				confirm: { type: 'boolean', default: false }
+			},
+			run({ args }) {
+				if (!args.confirm)
+					throw new Error('Repeat with --confirm to remove connection metadata only.');
+				store().removeConnection(args.id);
+				console.log('Connection removed. Running instances and their data were not changed.');
+			}
+		}),
+		check: defineCommand({
+			meta: {
+				name: 'check',
+				description: 'Check native sign-in, CLI, Docker and discovery without instance changes'
+			},
+			args: { id: { type: 'positional', required: true } },
+			async run({ args }) {
+				const result = await checkHostingConnection(store().connection(args.id));
+				console.log(JSON.stringify(result, null, 2));
+				if (!result.ok) process.exitCode = 1;
+			}
+		}),
+		repair: defineCommand({
+			meta: {
+				name: 'repair',
+				description: 'Install/update only the remote Linux CLI in ~/.local/bin/fhold'
+			},
+			args: {
+				id: { type: 'positional', required: true },
+				confirm: { type: 'boolean', default: false },
+				'cli-file': {
+					type: 'string',
+					description:
+						'Trusted offline Linux CLI artifact; otherwise download this published tooling release'
+				}
+			},
+			async run({ args }) {
+				console.log(
+					await repairSshCli(store().connection(args.id), {
+						confirmed: args.confirm,
+						cliFile: args['cli-file']
+					})
+				);
+			}
+		}),
 		list: defineCommand({
 			meta: {
 				name: 'list',

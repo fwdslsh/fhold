@@ -269,6 +269,11 @@ export class AdminInstances {
 		this.selected = undefined;
 		this.newName = undefined;
 	}
+	forgetConnectionTargets(id: string): void {
+		this.assertIdle();
+		this.recent = this.recent.filter(item => item.kind !== 'hosted' || item.ref.connectionId !== id);
+		if (this.selected?.kind === 'hosted' && this.selected.ref.connectionId === id) this.close();
+	}
 
 	async run<T>(operation: () => T | Promise<T>): Promise<T> {
 		this.current();

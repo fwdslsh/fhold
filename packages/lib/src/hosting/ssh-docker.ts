@@ -10,9 +10,20 @@ import {
 } from './types.js';
 
 export const HOSTING_WIRE_VERSION = 1;
+export const SSH_RPC_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc';
+export function sshArgs(connection: Extract<HostingConnection, { kind: 'ssh-docker' }>): string[] {
+	return [
+		'-o',
+		'BatchMode=yes',
+		'-o',
+		'ConnectTimeout=10',
+		...(connection.port ? ['-p', String(connection.port)] : []),
+		connection.host
+	];
+}
 export type MachineRequest = {
 	version: 1;
-	action: 'hello' | 'list' | 'inspect' | 'logs' | 'start' | 'stop' | 'restart';
+	action: 'hello' | 'list' | 'diagnose' | 'inspect' | 'logs' | 'start' | 'stop' | 'restart';
 	homeDir?: string;
 	roots?: string[];
 	tail?: number;
@@ -29,22 +40,10 @@ export function sshDockerProvider(
 	async function request(payload: Omit<MachineRequest, 'version'>): Promise<unknown> {
 		// OpenSSH passes remote commands through a shell. The command is fixed;
 		// directories, actions and options travel only in typed JSON stdin.
-		const stdout = await run(
-			'ssh',
-			[
-				'-o',
-				'BatchMode=yes',
-				'-o',
-				'ConnectTimeout=10',
-				...(connection.port ? ['-p', String(connection.port)] : []),
-				connection.host,
-				'fhold hosting rpc'
-			],
-			{
-				input: `${JSON.stringify({ version: HOSTING_WIRE_VERSION, ...payload })}\n`,
-				timeoutMs: ['start', 'stop', 'restart'].includes(payload.action) ? 600_000 : 45_000
-			}
-		);
+		const stdout = await run('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
+			input: `${JSON.stringify({ version: HOSTING_WIRE_VERSION, ...payload })}\n`,
+			timeoutMs: ['start', 'stop', 'restart'].includes(payload.action) ? 600_000 : 45_000
+		});
 		let response: MachineResponse;
 		try {
 			response = JSON.parse(stdout) as MachineResponse;

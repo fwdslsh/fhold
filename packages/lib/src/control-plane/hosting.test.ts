@@ -11,7 +11,7 @@ import {
 } from '../hosting/preferences.js';
 import { listLocalInstances } from '../hosting/local-docker.js';
 import { hostingMachineRequest } from '../hosting/machine.js';
-import { sshDockerProvider } from '../hosting/ssh-docker.js';
+import { sshDockerProvider, SSH_RPC_COMMAND } from '../hosting/ssh-docker.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import {
 	capabilities,
@@ -19,7 +19,9 @@ import {
 	type HostingConnection,
 	type InstanceRef
 } from '../hosting/types.js';
-import type { HostingProcess } from '../hosting/process.js';
+import { hostingFailure, type HostingProcess } from '../hosting/process.js';
+import { checkHostingConnection, repairSshCli } from '../hosting/maintenance.js';
+import { createHash } from 'node:crypto';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -47,6 +49,74 @@ const aca: Extract<HostingConnection, { kind: 'azure-container-apps' }> = {
 };
 const resourceId = `/subscriptions/${subscription}/resourceGroups/agents/providers/Microsoft.App/containerApps/agent`;
 const acaRef: InstanceRef = { kind: 'azure-container-apps', connectionId: 'cloud', resourceId };
+
+test('native failures are actionable without leaking stderr or confusing connectivity with a missing CLI', () => {
+	expect(hostingFailure('ssh', 1, '', 'bash: fhold: command not found')).toContain('repair');
+	expect(hostingFailure('ssh', 1, '', 'Host key verification failed: secret')).toContain('host trust');
+	expect(hostingFailure('ssh', 1, '', 'Permission denied: secret')).toContain('sign-in');
+	expect(hostingFailure('ssh', 1, '', 'hostname not found: secret')).not.toContain('remote fhold CLI');
+	expect(hostingFailure('az', 1, 'secret-token', 'secret-token')).not.toContain('secret-token');
+});
+
+test('connection edits keep recents for labels/roots, but clear them when retargeted; removal is metadata-only', () => {
+	const directory = root(); const store = new HostingPreferencesStore(join(directory, 'hosting.json'));
+	store.saveConnection(ssh);
+	const ref: InstanceRef = {kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'};
+	store.remember(ref);
+	store.updateConnection('lab', {...ssh, label:'New label', roots:[]});
+	expect(store.read().recent).toEqual([ref]);
+	store.updateConnection('lab', {...ssh, host:'other'});
+	expect(store.read().recent).toEqual([]);
+	expect(() => store.updateConnection('lab', {...ssh,id:'new-id'})).toThrow('identity');
+	store.removeConnection('lab'); expect(store.read().connections).toEqual([]);
+	expect(() => store.removeConnection('local')).toThrow('always available');
+});
+test('discovery finds managed Compose homes anywhere and stopped root/child/home layouts without Docker', async () => {
+	const directory = root(); const rootsHome = join(directory, 'stacks', 'agent', 'home'); const custom = join(directory, 'custom');
+	for (const [path,name] of [[rootsHome,'nested'],[custom,'custom']] as const) {
+		mkdirSync(join(path, 'system', 'stack'), {recursive:true});
+		writeFileSync(join(path, 'system', 'stack', 'stack.compose.yml'), 'services: {}');
+		const config = defaultStackConfig(path); config.deployment.projectName = name; writeStackConfig(path, config);
+	}
+	const foreign = join(directory,'foreign'); mkdirSync(join(foreign,'system','stack'), {recursive:true});
+	const listed = await listLocalInstances([join(directory,'stacks')], async () => `${custom}/system/stack\n${foreign}/system/stack\n${custom}/system/stack`);
+	expect(listed.map(item => item.name).sort()).toEqual(['custom','nested']);
+	expect((await listLocalInstances([join(directory,'stacks')], async () => {throw Error('Docker stopped');})).map(item => item.name)).toEqual(['nested']);
+	expect(existsSync(join(foreign,'state'))).toBe(false);
+});
+test('connection check reports missing CLI with repair guidance without losing SSH success', async () => {
+	const result = await checkHostingConnection(ssh, async (_binary,args) => {
+		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
+		throw Error('Remote fhold missing; use Repair remote CLI.');
+	});
+	expect(result.ok).toBe(false); expect(result.repairable).toBe(true);
+	expect(result.checks[0]?.ok).toBe(true); expect(result.checks[1]?.detail).toContain('Repair');
+});
+test('connection checks report unexpected remote output without disclosing it', async () => {
+	const result = await checkHostingConnection(ssh, async (_binary, args) =>
+		args.at(-1) === 'uname -sm' ? 'Linux x86_64' : 'private startup message'
+	);
+	expect(result.ok).toBe(false);
+	expect(result.checks.at(-1)?.detail).toContain('unexpected output');
+	expect(result.checks.at(-1)?.detail).not.toContain('private startup message');
+});
+test('remote repair streams a trusted artifact and checks it before atomic replacement', async () => {
+	const artifact = join(root(),'fhold-cli'); writeFileSync(artifact, 'synthetic-cli');
+	const calls: Array<{args:string[];file?:string}> = [];
+	const run: HostingProcess = async (_binary,args,options) => {calls.push({args,file:options?.inputFile}); return args.at(-1) === 'uname -sm' ? 'Linux x86_64' : '0.2.2610113-beta.9';};
+	await expect(repairSshCli(ssh,{confirmed:false,cliFile:artifact,run})).rejects.toThrow('Confirm'); expect(calls).toHaveLength(0);
+	expect(await repairSshCli(ssh,{confirmed:true,cliFile:artifact,run})).toContain('No containers');
+	expect(calls[1]?.file).toBe(artifact);
+	expect(calls[1]?.args.at(-1)).toContain(createHash('sha256').update('synthetic-cli').digest('hex'));
+	expect(calls[1]?.args.at(-1)).toContain('hosting --help');
+	expect(calls[1]?.args.at(-1)).not.toContain('/opt/stacks');
+});
+test('corrupt published downloads cannot replace the remote CLI', async () => {
+	let mutations = 0;
+	const download: typeof fetch = async (request) => String(request).endsWith('checksums-sha256.txt') ? new Response(`${'a'.repeat(64)}  fhold-cli-linux-x64\n`) : new Response('wrong-bytes');
+	await expect(repairSshCli(ssh,{confirmed:true,fetch:download,run:async (_binary,args) => {if(args.at(-1) !== 'uname -sm') mutations++; return 'Linux x86_64';}})).rejects.toThrow('checksum mismatch');
+	expect(mutations).toBe(0);
+});
 
 describe('hosting metadata is separate from instance intent and credentials', () => {
 	test('reading default metadata creates nothing; explicit saves retain only locators', () => {
@@ -83,7 +153,7 @@ describe('hosting metadata is separate from instance intent and credentials', ()
 	});
 });
 
-test('discovery is one level, skips unrelated/broken homes and never seeds them', () => {
+test('discovery is bounded, skips unrelated/broken homes and never seeds them', async () => {
 	const directory = root();
 	const home = join(directory, 'one');
 	mkdirSync(join(home, 'system', 'stack'), { recursive: true });
@@ -96,7 +166,7 @@ test('discovery is one level, skips unrelated/broken homes and never seeds them'
 	mkdirSync(join(directory, 'broken', 'state'), { recursive: true });
 	writeFileSync(join(directory, 'broken', 'state', 'stack.json'), '{');
 	const before = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
-	const instances = listLocalInstances([directory]);
+	const instances = await listLocalInstances([directory], async () => '');
 	expect(instances.map((item) => item.name)).toEqual(['one']);
 	expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(before);
 	expect(existsSync(join(directory, 'unrelated', 'state'))).toBe(false);
@@ -157,7 +227,7 @@ describe('native SSH transport', () => {
 			remoteHome
 		});
 		expect((await session.inspect()).ref).toEqual(session.ref);
-		expect(requests[0]?.args.at(-1)).toBe('fhold hosting rpc');
+		expect(requests[0]?.args.at(-1)).toBe(SSH_RPC_COMMAND);
 		expect(requests[0]?.args.join(' ')).not.toContain(remoteHome);
 		expect(requests[0]?.input).toMatchObject({
 			version: 1,

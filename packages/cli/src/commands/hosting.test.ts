@@ -70,6 +70,18 @@ test('hosting metadata commands are independent of FH_HOME, Docker, sign-in and 
 	expect(existsSync('/bad')).toBe(false);
 });
 
+test('CLI edits, confirms retarget/removal, and leaves instance state untouched', async () => {
+	const {root,env} = fixture();
+	expect((await run(['hosting','add','lab','--provider','ssh-docker','--host','krang'],env,root)).code).toBe(0);
+	expect((await run(['hosting','edit','lab','--label','Krang','--roots','["/opt/stacks"]'],env,root)).code).toBe(0);
+	expect((await run(['hosting','edit','lab','--host','other'],env,root)).stderr).toContain('--confirm');
+	expect((await run(['hosting','edit','lab','--host','other','--confirm'],env,root)).code).toBe(0);
+	expect((await run(['hosting','remove','lab'],env,root)).stderr).toContain('--confirm');
+	expect((await run(['hosting','remove','lab','--confirm'],env,root)).code).toBe(0);
+	expect(JSON.parse((await run(['hosting','list'],env,root)).stdout).map((item:{id:string})=>item.id)).toEqual(['local']);
+	expect(existsSync(env.FH_HOME)).toBe(false);
+});
+
 test('native SSH subprocess receives a fixed command, discovers and inspects the selected remote target', async () => {
 	const { root, env } = fixture();
 	const bin = join(root, 'bin');
@@ -100,7 +112,7 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 		remoteHome: '/opt/stacks/agent'
 	});
 	const input = JSON.parse(readFileSync(capture, 'utf8'));
-	expect(input.args.at(-1)).toBe('fhold hosting rpc');
+	expect(input.args.at(-1)).toBe('PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc');
 	expect(input.args).not.toContain('/opt/stacks/agent');
 	expect(input.request).toMatchObject({
 		action: 'inspect',

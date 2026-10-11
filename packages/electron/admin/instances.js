@@ -1,10 +1,12 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
-import { targetKey, targetLocation } from './hosting.js';
+import { targetKey, targetLocation, manageHostingConnections } from './hosting.js';
 
 function instanceName(target) {
-	const name = target.name || targetLocation(target)?.split(/[\\/]/).filter(Boolean).at(-1) || 'Saved instance';
+	const parts = targetLocation(target)?.split(/[\\/]/).filter(Boolean) || [];
+	const fallback = target.kind === 'hosted' && parts.at(-1) === 'home' ? parts.at(-2) : parts.at(-1);
+	const name = target.name || fallback || 'Saved instance';
 	return target.kind === 'hosted' ? `${name} · ${target.ref.connectionId}` : name;
 }
 
@@ -22,7 +24,8 @@ export function renderInstancePicker(snapshot) {
 				value: targetKey(target),
 				label: instanceName(target)
 			})),
-			{ value: 'open-another', label: 'Open another instance…' }
+			{ value: 'open-another', label: 'Open another instance…' },
+			{ value: 'manage-hosting', label: 'Manage host connections…' }
 		],
 		selected
 	);
@@ -207,6 +210,7 @@ export function bindInstanceEvents() {
 		const selected = current?.phase === 'remote' ? targetKey({ kind: 'hosted', ref: current.hosting.ref }) : current?.homeDir || '';
 		byId('instance-picker').value = selected;
 		if (requested === 'open-another') await showInstances();
+		else if (requested === 'manage-hosting') await manageHostingConnections();
 		else {
 			const target = state.recentInstances.find((item) => targetKey(item) === requested);
 			if (target && targetKey(target) !== selected) await openInstance(target);
