@@ -3,13 +3,18 @@ import {
  installHome, createCredential, rotateCredential, removeCredential, mapPortalUser,
  isPortalName, readPortalCredentialMap, readStackConfig, planRestore, saveStackIntent,
  exportInstance, planInstanceRestore, restoreInstance, INSTANCE_BACKUP_NOTICE,
- type PortalName, type StackConfig
+ type PortalName, type StackConfig, type InstanceRef
 } from '@fhold/lib';
 import type { StackAction } from './admin-types.js';
 
-export function interruptionPrompt(action: unknown) {
+export function interruptionPrompt(action: unknown, hosting?: InstanceRef['kind']) {
 	if (typeof action !== 'string' || !['start', 'restart', 'stop', 'remote-setup', 'recovery-init', 'recovery-restore', 'instance-export', 'instance-import'].includes(action))
 		throw new Error('Invalid restart confirmation request.');
+	if (hosting === 'azure-container-apps' && (action === 'start' || action === 'stop')) return {
+		message: `Request Azure to ${action} this app?`,
+		detail: 'This submits a native platform request, not a settings update or container replacement. Active connections may be interrupted. Acceptance does not prove replica drain or agent readiness; check platform status before replacing any writers.',
+		buttons: ['Cancel', `Request ${action}`]
+	};
 	if (action === 'instance-export' || action === 'instance-import') return {
 		message: action === 'instance-export' ? 'Export this entire stopped instance?' : 'Import this entire instance into the empty folder?',
 		detail: INSTANCE_BACKUP_NOTICE,

@@ -32,9 +32,10 @@ function takesValue(flag: string, definitions: ArgsDef): boolean {
 export async function instanceArguments(
 	argv: string[],
 	command: CommandDef
-): Promise<{ argv: string[]; instance?: string }> {
+): Promise<{ argv: string[]; instance?: string; connection?: string }> {
 	const remaining: string[] = [];
 	let instance: string | undefined;
+	let connection: string | undefined;
 	let definitions = (await value(command.args)) ?? {};
 	let commands: SubCommandsDef = (await value(command.subCommands)) ?? {};
 	for (let index = 0; index < argv.length; index++) {
@@ -43,6 +44,13 @@ export async function instanceArguments(
 		if (token === '--') {
 			remaining.push(...argv.slice(index));
 			break;
+		}
+		if (token === '--connection' || token.startsWith('--connection=')) {
+			if (connection !== undefined) throw new Error('Provide --connection only once.');
+			const supplied = token.includes('=') ? token.slice('--connection='.length) : argv[++index];
+			if (!supplied || supplied.startsWith('-')) throw new Error('Provide a hosting connection name.');
+			connection = supplied;
+			continue;
 		}
 		if (
 			token === '--name' || token === '-n' ||
@@ -71,5 +79,5 @@ export async function instanceArguments(
 			}
 		}
 	}
-	return { argv: remaining, ...(instance === undefined ? {} : { instance }) };
+	return { argv: remaining, ...(instance === undefined ? {} : { instance }), ...(connection === undefined ? {} : { connection }) };
 }

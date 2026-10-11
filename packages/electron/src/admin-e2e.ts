@@ -19,7 +19,14 @@ import {
 } from '@fhold/lib';
 import { installFromAdmin } from './admin-domain.js';
 
-import { adminSnapshot, createAdminWindow, registerAdminIpc, runAdminAction } from './admin-app.js';
+import { adminSnapshot as readAdminSnapshot, createAdminWindow, registerAdminIpc, runAdminAction } from './admin-app.js';
+import type { AdminSnapshot } from './admin-types.js';
+
+async function adminSnapshot(): Promise<AdminSnapshot> {
+	const snapshot = await readAdminSnapshot();
+	if (snapshot.phase === 'remote') throw new Error('The local installer fixture selected a remote instance.');
+	return snapshot;
+}
 
 type RendererWaitState = { ready: boolean; error: string };
 
@@ -653,6 +660,7 @@ async function run(): Promise<Record<string, unknown>> {
 	mkdirSync(outputDir, { recursive: true });
 	app.setName('fhold Admin E2E');
 	app.setPath('userData', join(outputDir, 'electron-profile'));
+	process.env.XDG_CONFIG_HOME = join(outputDir, 'host-config');
 
 	progress(
 		`waiting for Electron ${process.versions.electron ?? 'unknown'} (${process.type ?? 'unknown process'})`
@@ -2504,10 +2512,11 @@ async function run(): Promise<Record<string, unknown>> {
 
 async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 	const outputDir = requiredEnvironment('FH_ADMIN_E2E_OUTPUT');
+	process.env.XDG_CONFIG_HOME = join(outputDir, 'host-config');
 	const prior = JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8'));
 	const expectedHome = prior.fullInstanceVerified?.home;
 	assert(typeof expectedHome === 'string' && existsSync(expectedHome), 'The completed walkthrough did not retain its restored instance.');
-	const preferencesPath = join(outputDir, 'electron-profile', 'instances.json');
+	const preferencesPath = join(outputDir, 'host-config', 'fhold', 'hosting.json');
 	const preferences = readFileSync(preferencesPath, 'utf8');
 	const intent = readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8');
 	app.setName('fhold Admin E2E');

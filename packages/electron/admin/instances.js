@@ -1,27 +1,30 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
+import { targetKey, targetLocation } from './hosting.js';
 
 function instanceName(target) {
-	return target.name || target.homeDir.split(/[\\/]/).filter(Boolean).at(-1) || 'Saved instance';
+	const name = target.name || targetLocation(target)?.split(/[\\/]/).filter(Boolean).at(-1) || 'Saved instance';
+	return target.kind === 'hosted' ? `${name} · ${target.ref.connectionId}` : name;
 }
 
 export function renderInstancePicker(snapshot) {
-	const others = state.recentInstances.filter((target) => target.homeDir !== snapshot.homeDir);
+	const selected = snapshot.phase === 'remote' ? targetKey({ kind: 'hosted', ref: snapshot.hosting.ref }) : snapshot.homeDir;
+	const others = state.recentInstances.filter((target) => targetKey(target) !== selected);
 	setOptions(
 		byId('instance-picker'),
 		[
 			{
-				value: snapshot.homeDir,
-				label: snapshot.config.deployment?.projectName || 'Selected instance'
+				value: selected,
+				label: snapshot.phase === 'remote' ? instanceName({kind:'hosted',ref:snapshot.hosting.ref,name:snapshot.hosting.name}) : snapshot.config.deployment?.projectName || 'Selected instance'
 			},
 			...others.map((target) => ({
-				value: target.homeDir,
+				value: targetKey(target),
 				label: instanceName(target)
 			})),
 			{ value: 'open-another', label: 'Open another instance…' }
 		],
-		snapshot.homeDir
+		selected
 	);
 	byId('instance-picker').disabled = state.operationInFlight;
 }
@@ -119,7 +122,7 @@ export function renderWelcome(welcome) {
 	document.body.dataset.phase = 'welcome';
 	setSkipTarget('instance-welcome');
 	const targets = [...welcome.recentInstances];
-	if (welcome.defaultInstance.available && !targets.some((target) => target.homeDir === welcome.defaultInstance.homeDir))
+	if (welcome.defaultInstance.available && !targets.some((target) => targetKey(target) === targetKey(welcome.defaultInstance)))
 		targets.push(welcome.defaultInstance);
 	const existingSection = byId('existing-instance-section');
 	const begin = byId('begin-new-instance');
@@ -139,13 +142,13 @@ export function renderWelcome(welcome) {
 		const row = document.createElement('button');
 		row.type = 'button';
 		row.className = 'instance-choice';
-		row.dataset.homeDir = target.homeDir;
+		row.dataset.homeDir = targetLocation(target);
 		row.disabled = !target.available;
 		const name = document.createElement('span');
 		name.className = 'instance-name';
 		name.textContent = instanceName(target);
 		row.append(name);
-		if (!target.available || target.homeDir === welcome.recentInstances[0]?.homeDir) {
+		if (!target.available || (welcome.recentInstances[0] && targetKey(target) === targetKey(welcome.recentInstances[0]))) {
 			const meta = document.createElement('span');
 			meta.className = 'instance-meta';
 			meta.textContent = target.available ? 'Last used' : 'Unavailable';
@@ -153,8 +156,8 @@ export function renderWelcome(welcome) {
 		}
 		const path = document.createElement('span');
 		path.className = 'instance-path';
-		path.textContent = target.homeDir;
-		row.setAttribute('aria-label', `${target.available ? 'Open' : 'Unavailable:'} ${instanceName(target)} at ${target.homeDir}`);
+		path.textContent = targetLocation(target);
+		row.setAttribute('aria-label', `${target.available ? 'Open' : 'Unavailable:'} ${instanceName(target)} at ${targetLocation(target)}`);
 		row.addEventListener('click', () => { if (target.available) void openInstance(target); });
 		row.append(path);
 		recent.append(row);
@@ -200,11 +203,13 @@ export function bindInstanceEvents() {
 	byId('begin-new-instance').addEventListener('click', showNewInstanceSetup);
 	byId('instance-picker').addEventListener('change', async () => {
 		const requested = byId('instance-picker').value;
-		byId('instance-picker').value = state.currentSnapshot?.homeDir || '';
+		const current = state.currentSnapshot;
+		const selected = current?.phase === 'remote' ? targetKey({ kind: 'hosted', ref: current.hosting.ref }) : current?.homeDir || '';
+		byId('instance-picker').value = selected;
 		if (requested === 'open-another') await showInstances();
 		else {
-			const target = state.recentInstances.find((item) => item.homeDir === requested);
-			if (target && target.homeDir !== state.currentSnapshot?.homeDir) await openInstance(target);
+			const target = state.recentInstances.find((item) => targetKey(item) === requested);
+			if (target && targetKey(target) !== selected) await openInstance(target);
 		}
 	});
 	byId('install-instance-name').addEventListener('input', suggestInstanceHome);

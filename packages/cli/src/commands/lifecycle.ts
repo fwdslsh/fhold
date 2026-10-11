@@ -1,69 +1,32 @@
 import { defineCommand } from 'citty';
 import {
-	acquireStackLock,
-	activateComposeCommand,
 	buildComposeCliArgs,
 	buildComposeOptions,
-	composePs,
-	containerWarnings,
 	createFholdState,
-	deactivateComposeCommand,
-	ensureDockerReady,
-	parseComposePsRows,
-	readStackConfig,
-	restartStatus,
-	releaseStackLock,
+	inspectLocalInstance,
+	operateLocalInstance,
+	resolveFholdHome,
 	requireInstall,
 	runComposeStreaming
 } from '@fhold/lib';
-import type { FholdState } from '@fhold/lib';
 
 import { defineAction } from '../lib/action.js';
 
-async function readyState(homeDir?: string): Promise<FholdState> {
-	const docker = await ensureDockerReady();
-	if (!docker.ok) throw new Error(docker.message);
-	const state = createFholdState(homeDir);
-	requireInstall(state.homeDir);
-	return state;
-}
-
-async function withLock(
-	state: FholdState,
-	action: (lock: NonNullable<ReturnType<typeof acquireStackLock>>) => Promise<unknown>
-): Promise<void> {
-	const lock = acquireStackLock(state.dataDir);
-	if (!lock) throw new Error('lifecycle_in_progress: Another stack operation is running.');
-	try {
-		await action(lock);
-	} finally {
-		releaseStackLock(lock);
-	}
-}
-
 export async function runStartAction(homeDir?: string): Promise<void> {
-	const state = await readyState(homeDir);
-	await withLock(state, (lock) =>
-		activateComposeCommand(state, ['up', '-d', '--remove-orphans', '--wait'], { lock })
-	);
+	await operateLocalInstance(resolveFholdHome(homeDir), 'start');
 }
 
 export async function runStopAction(): Promise<void> {
-	const state = await readyState();
-	await withLock(state, (lock) => deactivateComposeCommand(state, { lock }));
+	await operateLocalInstance(resolveFholdHome(), 'stop');
 }
 
 export async function runRestartAction(homeDir?: string): Promise<void> {
-	const state = await readyState(homeDir);
-	await withLock(state, (lock) =>
-		activateComposeCommand(state, ['up', '-d', '--force-recreate', '--remove-orphans', '--wait'], {
-			lock
-		})
-	);
+	await operateLocalInstance(resolveFholdHome(homeDir), 'restart');
 }
 
 export async function runLogsAction(): Promise<void> {
-	const state = await readyState();
+	const state = createFholdState();
+	requireInstall(state.homeDir);
 	const options = buildComposeOptions(state);
 	await runComposeStreaming([...buildComposeCliArgs(state), 'logs', '--tail', '100'], {
 		envFiles: options.envFiles
@@ -71,27 +34,12 @@ export async function runLogsAction(): Promise<void> {
 }
 
 export async function readStatus(): Promise<Record<string, unknown>> {
-	const state = createFholdState();
-	requireInstall(state.homeDir);
-	const config = readStackConfig(state.homeDir);
-	if (!config.ok) throw new Error(config.error);
-	const result = await composePs(buildComposeOptions(state));
-	const services = result.ok
-		? await Promise.all(
-				parseComposePsRows(result.stdout).map(async (row) => ({
-					...row,
-					...(row.service === 'assistant' && row.state === 'running' && row.id
-						? { warnings: await containerWarnings(row.id) }
-						: {})
-				}))
-			)
-		: [];
+	const snapshot = await inspectLocalInstance(resolveFholdHome());
 	return {
-		homeDir: state.homeDir,
-		config: config.config,
-		pendingRestart: restartStatus(state.homeDir),
-		services,
-		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' })
+		homeDir: snapshot.location, config: snapshot.config,
+		pendingRestart: snapshot.pendingRestart,
+		services: snapshot.services.map(row => ({ ...row, service: row.name })),
+		...(snapshot.warnings.length ? { dockerError: snapshot.warnings.join(' ') } : {})
 	};
 }
 

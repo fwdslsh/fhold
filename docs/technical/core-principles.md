@@ -95,10 +95,24 @@ Only an unusable core or unsafe continuation stops startup/writers, including
 missing authentication, incomplete restore or actual loss of recovery ownership.
 
 Host-specific deployment/qualification tooling and third-party addon installers
-are not part of the image, CLI/Admin or product test suite. fhold retains generic
+are not part of the image or product test suite. fhold retains generic
 runtime contracts, directory/Blob transports, product tests and reusable image
 smokes. External tooling consumes the shipped image and documented interfaces
 without importing internal source modules.
+CLI/Admin additionally share a small host-side hosting-provider boundary: implicit
+local Docker, native SSH to the installed Docker-host CLI, and an optional,
+experimental native Azure CLI adapter for existing Container Apps. It creates no
+cloud resources and owns no custom deployment configuration. Connection metadata
+and recents are shared in the host's `~/.config/fhold/hosting.json` (or XDG root),
+not copied into instance intent or backups. Remote targets never fall back to
+local files/containers; unsupported operations show a specific explanation.
+Native host authentication stays with SSH/Azure. A fixed SSH command receives
+typed JSON on stdin; no shell-interpolated path, arbitrary exec RPC, extra service,
+container manager credential or runtime management port is added. Native Docker
+subprocesses pin a local socket from the selected native context, never send local
+bind paths to a remote daemon or mutate the global context. ACA reports platform
+observations and accepted lifecycle requests honestly, separately from readiness,
+replica drain, runtime recovery ownership and external deployment intent.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped
@@ -168,7 +182,7 @@ app permissions; there is no separate access-manager navigation destination.
 OpenCode/MCP network controls stay under that app's Advanced
 settings. App-scoped saves use the existing intent/baseline/restart path and
 preserve other apps' drafts; bot enablement retains its shared MCP dependency.
-There is no new connection registry, protocol or generic integration engine.
+There is no new app-credential registry, ingress protocol or generic integration engine.
 Configured, running, native startup intent and verified client readiness remain
 distinct. Native workers remain experimental and require native consent.
 

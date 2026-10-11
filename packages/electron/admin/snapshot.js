@@ -14,6 +14,7 @@ import { renderInstallationReadiness, renderInstancePicker } from './instances.j
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
 import { state } from './state.js';
+import { renderHosted } from './hosting.js';
 import {
 	byId,
 	captureDirtyForms,
@@ -28,6 +29,8 @@ import {
 let statusReadInFlight = false;
 
 export function render(snapshot, options = {}) {
+	if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
+	byId('view-hosted').hidden = true;
 	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
 	const previousPhase = state.currentSnapshot?.phase;
 	state.currentSnapshot = snapshot;
@@ -131,6 +134,7 @@ export async function refresh({ statusOnly = false } = {}) {
 		try {
 			const snapshot = await state.api.snapshot();
 			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
+			if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
 			if (
 				statusOnly &&
 				state.currentSnapshot?.phase === snapshot.phase &&
@@ -155,7 +159,10 @@ export async function refresh({ statusOnly = false } = {}) {
 			} else render(snapshot);
 		} catch (error) {
 			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
-			if (state.currentSnapshot?.phase !== 'not_installed' && state.currentSnapshot) {
+			if (state.currentSnapshot?.phase === 'remote') {
+				setText('hosted-warnings', `Status is unavailable: ${message(error)}`);
+				byId('hosted-warnings').hidden = false;
+			} else if (state.currentSnapshot?.phase !== 'not_installed' && state.currentSnapshot) {
 				state.currentSnapshot = {
 					...state.currentSnapshot,
 					services: [],

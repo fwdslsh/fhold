@@ -94,7 +94,7 @@ export async function operation(progress, action, success = `${progress} complet
 				return undefined;
 			}
 		}
-		if (result?.phase && result?.config) render(result);
+		if (result?.phase && (result?.config || result.phase === 'remote')) render(result);
 		notice(success, 'success');
 		return result;
 	} catch (error) {

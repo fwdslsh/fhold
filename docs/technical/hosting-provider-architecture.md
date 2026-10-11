@@ -1,6 +1,11 @@
 # Hosting-provider architecture for CLI and Admin
 
-Status: design proposal, not implemented support or a release commitment.
+Status: the shared host-side foundation, local lifecycle extraction, SSH machine
+transport/discovery/lifecycle, shared recents and an experimental ACA adapter are
+implemented. See [the supported user path](../hosting.md). Broader remote setup,
+settings/transfer parity and live ACA qualification remain phased work, not a
+release commitment. ACA Start/Stop currently submit native accepted/pending
+requests; they do not consume ARM LRO headers or establish replica drain.
 Source baseline: `6bc54c9bfe2367b04c11dda3875137f35b6d74e9` (main).
 Official platform documentation reviewed October 11, 2026. This investigation
 used repository source and public documentation only: no SSH connection, Docker
@@ -37,15 +42,16 @@ deployment resources. A Blob URL does not identify an ACA app and an Azure
 management login does not grant recovery-storage authority.
 
 This user-requested direction expands optional CLI/Admin host management, not
-the Assistant runtime. When implemented, update the [core principles](core-principles.md)
-and architecture to describe that new host-side scope. The current release
-still has no cloud-management adapter. This document extends the existing
+the Assistant runtime. The [core principles](core-principles.md) describe that
+host-side scope. The baseline below predates these adapters; the implementation
+status at the top and [user guide](../hosting.md) describe the shipped scope.
+This document extends the existing
 [SSH proposal](ssh-management-proposal.md); use it as the common design rather
 than developing a separate SSH architecture.
 
-## What actually exists
+## Baseline before this refactor
 
-The current product is local-home orchestration. There is no hosting provider
+At the source baseline, the product is local-home orchestration. There is no hosting provider
 selector, SSH management backend or ACA management adapter. The existing
 `provider` commands and `admin/providers.js` manage **AI services through
 OpenCode**, not hosting. `remote.ts` and the `remote` command manage vendor-native

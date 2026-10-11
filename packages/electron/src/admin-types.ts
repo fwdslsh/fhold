@@ -11,6 +11,7 @@ import type {
 	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
+import type { HostingConnection, HostingSnapshot, InstanceRef, InstanceSummary } from '@fhold/lib';
 import type { recoverySnapshot } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
@@ -52,18 +53,23 @@ export type InterruptingAction =
 	| 'instance-import';
 
 export type AdminInstance = { kind: 'local'; homeDir: string };
-export type AdminWelcomeInstance = AdminInstance & { name?: string; available: boolean };
+export type AdminTarget = AdminInstance | { kind: 'hosted'; ref: InstanceRef };
+export type AdminWelcomeInstance = AdminTarget & { name?: string; available: boolean };
+export type AdminViewSnapshot = AdminSnapshot | { phase: 'remote'; hosting: HostingSnapshot };
 export type AdminWelcome = {
-	defaultInstance: AdminWelcomeInstance;
+	defaultInstance: AdminInstance & { name?: string; available: boolean };
 	instancesDirectory: string;
 	recentInstances: AdminWelcomeInstance[];
-	selectedInstance?: AdminInstance;
+	selectedInstance?: AdminTarget;
 	preferenceError?: string;
 };
 
 export type AdminApi = {
+	hostingConnections(): Promise<HostingConnection[]>;
+	hostingSaveConnection(value: unknown): Promise<HostingConnection>;
+	hostingInstances(connectionId: string): Promise<InstanceSummary[]>;
 	welcome(): Promise<AdminWelcome>;
-	openInstance(target: AdminInstance): Promise<void>;
+	openInstance(target: AdminTarget): Promise<void>;
 	prepareNewInstance(target: AdminInstance & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
 	installationReadiness(): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
@@ -80,12 +86,12 @@ export type AdminApi = {
 		input?: string;
 		restartConfirmed?: boolean;
 	}): Promise<RemoteProgress>;
-	snapshot(): Promise<AdminSnapshot>;
+	snapshot(): Promise<AdminViewSnapshot>;
 	selectedHome(): Promise<string>;
 	install(config: StackConfig, automaticPorts?: boolean): Promise<AdminSnapshot>;
 	saveConfig(value: { config: StackConfig; baseConfig: StackConfig }): Promise<AdminSnapshot>;
 	confirmRestart(action: InterruptingAction): Promise<boolean>;
-	action(action: StackAction, confirmed?: boolean): Promise<AdminSnapshot>;
+	action(action: StackAction, confirmed?: boolean): Promise<AdminViewSnapshot>;
 	logs(): Promise<string>;
 	providers(): Promise<ProviderSettings>;
 	providerKey(value: { provider: string; key: string }): Promise<void>;
@@ -156,6 +162,9 @@ export type AdminApi = {
 };
 
 export const ADMIN_CHANNELS = {
+	hostingConnections: 'admin:hosting-connections',
+	hostingSaveConnection: 'admin:hosting-save-connection',
+	hostingInstances: 'admin:hosting-instances',
 	welcome: 'admin:welcome',
 	openInstance: 'admin:open-instance',
 	prepareNewInstance: 'admin:prepare-new-instance',

@@ -12,6 +12,7 @@ import { bindRestartEvents } from './restart.js';
 import { bindRecoveryEvents } from './recovery.js';
 import { state } from './state.js';
 import { bindSnapshotEvents } from './snapshot.js';
+import { bindHostingEvents } from './hosting.js';
 
 state.api = window.fholdAdmin;
 bindUiEvents();
@@ -27,4 +28,5 @@ bindRemoteEvents();
 bindInstanceEvents();
 bindRestartEvents();
 bindSnapshotEvents();
+bindHostingEvents();
 void initializeAdmin();

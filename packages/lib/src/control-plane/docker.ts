@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { readEnvFile } from './foundation.js';
 
@@ -27,6 +28,35 @@ export type ComposePsRow = {
 
 function dockerBin(): string {
 	return process.env.FH_DOCKER_BIN?.trim() || 'docker';
+}
+
+const dockerOutput = new AsyncLocalStorage<'stderr'>();
+/** Machine requests reserve stdout for their JSON response. */
+export function withDockerMachineOutput<T>(operation: () => Promise<T>): Promise<T> {
+	return dockerOutput.run('stderr', operation);
+}
+
+export function localDockerEndpoint(endpoint: string): string {
+	if (!/^(unix:\/\/\/|npipe:\/\/)/.test(endpoint))
+		throw new Error('This Docker endpoint is remote. Select an SSH hosting connection instead; local instance folders cannot be mounted by a remote Docker daemon.');
+	return endpoint;
+}
+
+async function dockerEnvironment(parent: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {
+	// Explicit alternate binaries own their transport (including test fixtures).
+	if (dockerBin() !== 'docker') return parent;
+	let endpoint = parent.DOCKER_CONTEXT ? undefined : parent.DOCKER_HOST;
+	if (!endpoint) endpoint = await new Promise<string>((resolve, reject) => {
+		execFile('docker', ['context', 'inspect', ...(parent.DOCKER_CONTEXT ? [parent.DOCKER_CONTEXT] : []), '--format', '{{.Endpoints.docker.Host}}'], { env: parent, timeout: 10_000 }, (error, stdout) => {
+			if (error) reject(new Error('Could not resolve the local Docker context. Check your native Docker installation and context.'));
+			else resolve(stdout.trim());
+		});
+	});
+	// Pin the verified endpoint for this process invocation, not a global context
+	// switch. Docker Desktop and rootless Unix sockets remain supported.
+	const environment: NodeJS.ProcessEnv = { ...parent, DOCKER_HOST: localDockerEndpoint(endpoint) };
+	delete environment.DOCKER_CONTEXT;
+	return environment;
 }
 
 function stackEnvOverrides(files: string[]): Record<string, string> {
@@ -68,7 +98,7 @@ function friendlyError(stderr: string): string {
 	return value.split(/\r?\n/).find(Boolean) || 'Docker command failed.';
 }
 
-export function runDocker(
+export async function runDocker(
 	args: string[],
 	options: {
 		timeoutMs?: number;
@@ -77,6 +107,9 @@ export function runDocker(
 		input?: string;
 	} = {}
 ): Promise<DockerResult> {
+	let environment: NodeJS.ProcessEnv;
+	try { environment = await dockerEnvironment({ ...process.env, ...options.env }); }
+	catch (error) { return { ok: false, stdout: '', stderr: error instanceof Error ? error.message : String(error), code: 1 }; }
 	return new Promise((resolve) => {
 		const child = execFile(
 			dockerBin(),
@@ -84,7 +117,7 @@ export function runDocker(
 			{
 				timeout: options.timeoutMs ?? 120_000,
 				maxBuffer: options.maxOutputBytes ?? 1024 * 1024,
-				env: { ...process.env, ...options.env }
+				env: environment
 			},
 			(error, stdout, stderr) => {
 				const detail = stderr?.toString() || (error ? String(error) : '');
@@ -220,11 +253,14 @@ export async function runComposeStreaming(
 	const directoryIndex = args.indexOf('--project-directory');
 	if (projectIndex >= 0 && directoryIndex >= 0)
 		await assertProjectOwnership(args[projectIndex + 1], args[directoryIndex + 1]);
+	const environment = await dockerEnvironment(composeProcessEnvironment(options.envFiles ?? []));
+	const output = dockerOutput.getStore() === 'stderr' ? process.stderr : process.stdout;
 	return new Promise((resolve, reject) => {
 		const child = spawn(dockerBin(), ['compose', ...args], {
-			stdio: ['inherit', 'inherit', 'pipe'],
-			env: composeProcessEnvironment(options.envFiles ?? [])
+			stdio: ['inherit', 'pipe', 'pipe'],
+			env: environment
 		});
+		child.stdout.on('data', (chunk: Buffer) => output.write(chunk));
 		let stderr = '';
 		child.stderr.on('data', (chunk: Buffer) => {
 			process.stderr.write(chunk);

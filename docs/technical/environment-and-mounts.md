@@ -9,6 +9,12 @@ native settings, persistence and API behavior; each release retains its own gate
 
 ## Host layout
 
+Hosting connections and recent instance locators belong to the CLI/Admin host,
+in `$XDG_CONFIG_HOME/fhold/hosting.json` (default `~/.config/fhold/hosting.json`).
+They are not instance intent, credentials or backup members. SSH paths resolve
+on the Docker host; ACA resource IDs are not filesystem homes. The implicit
+local workflow is unchanged. See [hosted management](../hosting.md).
+
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
 is `~/fhold/instances/default`. CLI `--name`/`-n` selects a directory name
 under that root or an absolute path. If absent, explicit `FH_HOME` takes

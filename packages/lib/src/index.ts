@@ -1,4 +1,5 @@
 export type { FholdState } from './control-plane/foundation.js';
+export * from './hosting/index.js';
 export {
 	createFholdState,
 	defaultFholdHome,

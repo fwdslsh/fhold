@@ -58,6 +58,10 @@ its short name, for example `fhold --name april status` for
 
 ## Lifecycle and Admin
 
+Local Docker is implicit. For SSH Docker or experimental ACA connections,
+see [hosted instance management](hosting.md). Remote selectors use the owning
+host's directory/resource, not this computer's `FH_HOME`.
+
 ```bash
 fhold status
 fhold logs

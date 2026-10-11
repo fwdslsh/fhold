@@ -589,6 +589,51 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate('window.installQa.installs')).toBe(2);
 		expect(await evaluate('window.installQa.reads')).toBe(3);
 		await capture('install-distinct-retry-passed.png');
+		// The hosted view consumes the same actual renderer, but deliberately does
+		// not qualify SSH/Azure connectivity or any native account/deployment.
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');
+			const {render}=await import('./snapshot.js');
+			state.api.providers=async()=>{throw Error('Remote view attempted local provider discovery');};
+			render({phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent',services:[],warnings:[],platformState:'Scaled to zero',capabilities:{start:{supported:true},stop:{supported:true},restart:{supported:false,reason:'Ordered replacement uses deployment tooling.'},settings:{supported:false,reason:'Manage settings in deployment tooling.'},transfer:{supported:false,reason:'No local instance folder.'}},clientUrl:'https://agent.example.com'}});
+		})()`);
+		expect(await evaluate("!document.querySelector('#view-hosted').hidden && document.querySelector('#view-system').hidden && document.querySelector('#view-provider').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('[data-hosted-action=restart]').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")).toBe('cloud-agent · cloud');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');
+			const {bindHostingEvents}=await import('./hosting.js');
+			window.hostingQa={actions:0,approved:false,dialogFails:true};
+			state.api.confirmRestart=async()=>{if(window.hostingQa.dialogFails) throw Error('Native confirmation unavailable'); return window.hostingQa.approved;};
+			state.api.action=async()=>{window.hostingQa.actions++;return {...state.currentSnapshot,hosting:{...state.currentSnapshot.hosting,warnings:['Azure accepted start. Agent readiness remains unverified.']}};};
+			bindHostingEvents();
+		})()`);
+		await click('[data-hosted-action=start]');
+		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Native confirmation unavailable');
+		expect(await evaluate("document.body.dataset.busy")).toBe('false');
+		await evaluate('window.hostingQa.dialogFails=false');
+		await click('[data-hosted-action=start]');
+		expect(await evaluate('window.hostingQa.actions')).toBe(0);
+		await evaluate('window.hostingQa.approved=true');
+		await click('[data-hosted-action=start]');
+		expect(await evaluate('window.hostingQa.actions')).toBe(1);
+		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Request submitted. Check platform status.');
+		expect(await evaluate("document.querySelector('#hosted-warnings').textContent")).toContain('readiness remains unverified');
+		await capture('hosted-agent-desktop.png');
+		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
+		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		await capture('hosted-agent-narrow.png');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');
+			const {render}=await import('./snapshot.js');
+			render({phase:'remote',hosting:{...state.currentSnapshot.hosting,ref:{kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'},location:'/opt/stacks/agent',services:[{name:'assistant',state:'running',health:'healthy'}],pendingRestart:{required:true},capabilities:{...state.currentSnapshot.hosting.capabilities,restart:{supported:true}}}});
+		})()`);
+		expect(await evaluate("!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Pending restart'")).toBe(true);
+		expect(await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")).toBe('cloud-agent · lab');
+		await evaluate(`(async()=>{const {bindRestartEvents}=await import('./restart.js');bindRestartEvents();})()`);
+		await click('#apply-pending-restart');
+		expect(await evaluate('window.hostingQa.actions')).toBe(2);
+		expect(await evaluate("!document.querySelector('#view-hosted').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
 		expect(hashSources()).toEqual(sourceHashes);
 		writeFileSync(
 			join(root, 'qa-manifest.json'),
