@@ -6,6 +6,7 @@
 - [Portable backup review](technical/portable-backup-review.md): intended use, limitations and improvement findings.
 - [Ephemeral Assistant runtime plan](technical/ephemeral-assistant-plan.md): host-independent scheduler/recovery controls, SQLite-native backups and external host responsibilities.
 - [Ephemeral implementation review](technical/ephemeral-assistant-implementation-review.md): current code ownership, reusable tests and remaining qualification gates.
+- [Hosting-provider architecture proposal](technical/hosting-provider-architecture.md): planned shared CLI/Admin management for local Docker, SSH hosts and Azure Container Apps; not implemented.
 - [MCP and external clients](remote-mcp.md), [Claude Desktop bridge](claude-desktop.md).
 - [Discord](portals/discord-setup.md) and [Slack](portals/slack-setup.md).
 - [Experimental native remote workers](native-remote-access.md).

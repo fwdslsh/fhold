@@ -2,6 +2,11 @@
 
 Status: unimplemented proposal, not a release commitment.
 
+The [hosting-provider architecture proposal](hosting-provider-architecture.md)
+is the broader implementation direction for CLI and Admin. It retains the SSH
+constraints below within a shared provider boundary; neither proposal is
+implemented yet.
+
 A future local Admin could remember explicit SSH targets and dispatch host
 operations through the remote fhold CLI using system OpenSSH. It must preserve
 host-key verification, native SSH config and per-home locking, add no daemon,
