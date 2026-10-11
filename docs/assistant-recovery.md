@@ -304,6 +304,14 @@ checkpoint and exact-owner release. A genuine renewal failure still prevents
 an unsafe final checkpoint. No pre-stop command,
 automatic unlock, sidecar or hosting-specific runtime is needed.
 
+If deployment setup runs before the assistant, prefer a one-shot setup followed
+by `exec /usr/local/bin/fhold-assistant` under the image's init process. A parent
+that remains running must forward TERM/INT and wait for the assistant's actual
+exit, keeping its log streams open throughout cleanup. A child-process
+[AbortSignal error](https://nodejs.org/api/child_process.html#child_processspawncommand-args-options)
+reports signal forwarding, not completed shutdown. Test the deployed parent
+chain, not just the stock entrypoint; do not infer owner release from either event.
+
 1. Finish or explicitly interrupt the current work, stop sending new requests,
    and retain console/system logs outside the disposable container.
 2. Request normal termination with the full grace period above. Managed installs
