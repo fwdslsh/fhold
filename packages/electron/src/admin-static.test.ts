@@ -1026,7 +1026,7 @@ describe('Admin instance picker and automatic status', () => {
 		];
 		render(snapshot);
 		expect(control('instance-picker').options.map((option) => option.textContent)).toEqual([
-			'personal-agent', 'may', 'june', 'Open another instance…'
+			'personal-agent', 'may', 'june', 'Open another instance…', 'Manage host connections…'
 		]);
 		expect(control('instance-picker').value).toBe(snapshot.homeDir);
 		const sidebar = html.slice(html.indexOf('<aside class="sidebar">'), html.indexOf('</aside>'));

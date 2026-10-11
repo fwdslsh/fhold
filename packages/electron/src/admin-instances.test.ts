@@ -36,6 +36,15 @@ function installed(home: string) {
 }
 
 describe('Admin instance selection', () => {
+	it('forgetting a removed/retargeted host closes its view and drops only its recents', () => {
+		const {profile,home} = fixture(); const instances = new AdminInstances(profile,home);
+		instances.hosting.saveConnection({kind:'ssh-docker',id:'lab',host:'lab',roots:[]});
+		instances.open({kind:'hosted',ref:{kind:'ssh-docker',connectionId:'lab',remoteHome:'/remote/agent'}});
+		instances.hosting.removeConnection('lab'); instances.forgetConnectionTargets('lab');
+		expect(instances.welcome().selectedInstance).toBeUndefined(); expect(instances.welcome().recentInstances).toEqual([]);
+		expect(new AdminInstances(profile,home).welcome().selectedInstance).toBeUndefined();
+		expect(existsSync(home)).toBe(false);
+	});
 	it('shares remote targets with the CLI without interpreting remote homes as local paths', () => {
 		const { root, profile, home } = fixture();
 		const instances = new AdminInstances(profile, home);

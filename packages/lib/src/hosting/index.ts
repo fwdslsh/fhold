@@ -29,6 +29,7 @@ export {
 	HostingPreferencesStore,
 	hostingPreferencesFile,
 	parseHostingConnection,
+	connectionEndpoint,
 	parseInstanceRef
 } from './preferences.js';
 export {
@@ -39,3 +40,4 @@ export {
 } from './local-docker.js';
 export { HOSTING_WIRE_VERSION, type MachineRequest, type MachineResponse } from './ssh-docker.js';
 export { hostingMachineRequest } from './machine.js';
+export { checkHostingConnection, repairSshCli, type ConnectionCheck } from './maintenance.js';

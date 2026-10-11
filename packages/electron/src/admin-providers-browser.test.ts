@@ -634,6 +634,60 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('#apply-pending-restart');
 		expect(await evaluate('window.hostingQa.actions')).toBe(2);
 		expect(await evaluate("!document.querySelector('#view-hosted').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
+		// Host connection CRUD uses the same shipped modules and native form/dialog behavior.
+		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');const {manageHostingConnections}=await import('./hosting.js');
+			window.connectionQa={connections:[{kind:'local-docker',id:'local',label:'This computer'},{kind:'ssh-docker',id:'krang',label:'Krang',host:'krang',roots:[]}],saved:0,removed:0,repair:0,approve:false,checkFails:true};const qa=window.connectionQa;
+			state.api.hostingConnections=async()=>structuredClone(qa.connections);
+			state.api.hostingSaveConnection=async value=>{qa.saved++;qa.connections.push(value);return value;};
+			state.api.hostingUpdateConnection=async(id,value)=>{qa.saved++;qa.connections=qa.connections.map(item=>item.id===id?value:item);return value;};
+			state.api.hostingRemoveConnection=async id=>{if(!qa.approve)return false;qa.removed++;qa.connections=qa.connections.filter(item=>item.id!==id);return true;};
+			state.api.hostingCheckConnection=async()=>({ok:!qa.checkFails,repairable:true,instances:[],checks:[{name:'SSH',ok:true,detail:'Connected to krang.'},{name:'Remote CLI',ok:!qa.checkFails,detail:qa.checkFails?'Missing CLI. Install / update remote CLI.':'CLI ready.'}]});
+			state.api.hostingRepairConnection=async()=>{qa.repair++;qa.checkFails=false;return 'Remote CLI updated. No containers changed.';};
+			state.api.hostingInstances=async()=>{throw Error('SSH sign-in failed. Review native SSH configuration.');};
+			await manageHostingConnections();
+		})()`);
+		expect(await evaluate("document.querySelector('#hosting-manager').open")).toBe(true);
+		await click('button[aria-label="Check Krang"]');
+		expect(await evaluate("document.querySelector('#hosting-manager-status').textContent")).toContain('needs attention');
+		await click('#hosting-check-details button');
+		expect(await evaluate('window.connectionQa.repair')).toBe(1);
+		expect(await evaluate("document.querySelector('#hosting-manager-status').textContent")).toContain('ready');
+		await click('button[aria-label="Edit Krang"]');
+		expect(await evaluate("document.querySelector('#hosting-id').readOnly")).toBe(true);
+		await value('#hosting-label','Krang lab');
+		await value('#hosting-roots','/opt/stacks');
+		await click('#hosting-save');
+		expect(await evaluate('window.connectionQa.connections.find(item=>item.id==="krang").roots')).toEqual(['/opt/stacks']);
+		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('krang');
+		await capture('hosting-connections-desktop.png');
+		await click('button[aria-label="Remove Krang lab"]');
+		expect(await evaluate('window.connectionQa.removed')).toBe(0);
+		await click('#hosting-new');
+		await value('#hosting-label','Second host'); await value('#hosting-host','second'); await click('#hosting-save');
+		expect(await evaluate('window.connectionQa.connections.find(item=>item.id==="second-host").host')).toBe('second');
+		await evaluate('window.connectionQa.approve=true');
+		await click('button[aria-label="Remove Second host"]');
+		expect(await evaluate('window.connectionQa.removed')).toBe(1);
+		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
+		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		await capture('hosting-connections-narrow.png');
+		await click('#hosting-manager-close');
+		await evaluate("document.querySelector('#app-shell').hidden=true;document.querySelector('#instance-welcome').hidden=false;document.querySelector('#open-hosting').open=true");
+		await click('#hosting-discover');
+		expect(await evaluate("document.querySelector('#hosting-status').textContent")).toContain('SSH sign-in failed');
+		expect(await evaluate("document.querySelector('#hosting-status').hidden")).toBe(false);
+		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(0);
+		await capture('hosting-discovery-error.png');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');
+			state.api.hostingInstances=()=>new Promise((_resolve,reject)=>window.rejectOldDiscovery=reject);
+			document.querySelector('#hosting-discover').click();
+		})()`);
+		await evaluate(`document.querySelector('#hosting-connection').value='local';document.querySelector('#hosting-connection').dispatchEvent(new Event('change'));window.rejectOldDiscovery(Error('Old connection failure'));`);
+		expect(await evaluate("document.querySelector('#hosting-status').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(0);
 		expect(hashSources()).toEqual(sourceHashes);
 		writeFileSync(
 			join(root, 'qa-manifest.json'),

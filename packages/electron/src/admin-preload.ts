@@ -6,6 +6,10 @@ import type { StackConfig } from '@fhold/lib';
 const api: AdminApi = {
 	hostingConnections: () => ipcRenderer.invoke(ADMIN_CHANNELS.hostingConnections),
 	hostingSaveConnection: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSaveConnection, value),
+	hostingUpdateConnection: (id, value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingUpdateConnection, id, value),
+	hostingRemoveConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingRemoveConnection, id),
+	hostingCheckConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingCheckConnection, id),
+	hostingRepairConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingRepairConnection, id),
 	hostingInstances: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingInstances, id),
 	welcome: () => ipcRenderer.invoke(ADMIN_CHANNELS.welcome),
 	openInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.openInstance, target),

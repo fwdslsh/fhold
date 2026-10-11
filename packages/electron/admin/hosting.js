@@ -94,24 +94,59 @@ export function renderHosted(snapshot) {
 	renderInstancePicker(snapshot);
 }
 
+let savedConnections = [];
+let editingId;
+let discoveryEpoch = 0;
 async function loadConnections() {
-	const connections = await state.api.hostingConnections();
+	const selected = byId('hosting-connection').value;
+	savedConnections = await state.api.hostingConnections();
 	setOptions(
 		byId('hosting-connection'),
-		connections.map((item) => ({ value: item.id, label: item.label })),
-		'local'
+		savedConnections.map((item) => ({ value: item.id, label: item.label })),
+		savedConnections.some((item) => item.id === selected) ? selected : 'local'
 	);
+	renderConnectionList();
+}
+function hostingStatus(value, error = false) {
+	const status = byId(byId('hosting-manager').open ? 'hosting-manager-status' : 'hosting-status');
+	status.textContent = value;
+	status.hidden = !value;
+	status.className = `help-text${error ? ' danger-text' : ''}`;
+	status.setAttribute('role', error ? 'alert' : 'status');
+}
+async function connectionOperation(progress, action) {
+	if (state.operationInFlight) return undefined;
+	setBusy(true);
+	hostingStatus(`${progress}…`);
+	try {
+		return await action();
+	} catch (error) {
+		hostingStatus(message(error), true);
+		return undefined;
+	} finally {
+		setBusy(false);
+	}
 }
 async function discover() {
-	await operation('Finding instances', async () => {
-		const instances = await state.api.hostingInstances(byId('hosting-connection').value);
+	const id = byId('hosting-connection').value;
+	const epoch = ++discoveryEpoch;
+	byId('hosting-instance-list').replaceChildren();
+	await connectionOperation('Finding instances', async () => {
+		let instances;
+		try {
+			instances = await state.api.hostingInstances(id);
+		} catch (error) {
+			if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+			throw error;
+		}
+		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		const list = byId('hosting-instance-list');
 		list.replaceChildren();
-		if (!instances.length) {
-			const empty = document.createElement('p');
-			empty.textContent = 'No fhold instances found. Check the instance roots or deployment tag.';
-			list.append(empty);
-		}
+		hostingStatus(
+			instances.length
+				? ''
+				: 'No instances found. Open Manage host connections to check sign-in and the remote CLI, or add an instance root.'
+		);
 		for (const instance of instances) {
 			const button = document.createElement('button');
 			button.className = 'instance-choice';
@@ -136,37 +171,232 @@ async function discover() {
 		}
 	});
 }
+function providerFields() {
+	const ssh = byId('hosting-provider').value === 'ssh-docker';
+	byId('hosting-ssh-fields').hidden = !ssh;
+	byId('hosting-ssh-advanced').hidden = !ssh;
+	byId('hosting-azure-fields').hidden = ssh;
+	byId('hosting-host').required = ssh;
+	byId('hosting-subscription').required = !ssh;
+	byId('hosting-group').required = !ssh;
+	byId('hosting-port').disabled = !ssh;
+}
+function editConnection(connection) {
+	if (state.operationInFlight) return;
+	editingId = connection?.id;
+	byId('hosting-add-form').reset();
+	delete byId('hosting-id').dataset.manual;
+	byId('hosting-add-form').hidden = false;
+	byId('hosting-new').hidden = true;
+	setText('hosting-editor-title', connection ? 'Edit connection' : 'Add connection');
+	for (const [field, value] of Object.entries({
+		id: connection?.id,
+		label: connection?.label,
+		provider: connection?.kind || 'ssh-docker',
+		host: connection?.host,
+		port: connection?.port,
+		roots: connection?.roots?.join('\n'),
+		subscription: connection?.subscriptionId,
+		group: connection?.resourceGroup
+	}))
+		byId(`hosting-${field}`).value = value ?? '';
+	byId('hosting-id').readOnly = !!connection;
+	byId('hosting-provider').disabled = !!connection;
+	byId('hosting-advanced').open = false;
+	providerFields();
+	byId('hosting-label').focus();
+}
+function closeEditor() {
+	editingId = undefined;
+	byId('hosting-add-form').hidden = true;
+	byId('hosting-new').hidden = false;
+}
+function renderConnectionList() {
+	const list = byId('hosting-manager-list');
+	list.replaceChildren();
+	for (const connection of savedConnections.filter((item) => item.id !== 'local')) {
+		const row = document.createElement('section');
+		row.className = 'hosting-connection-row';
+		const description = document.createElement('div');
+		const title = document.createElement('strong');
+		title.textContent = connection.label;
+		const location = document.createElement('p');
+		location.className = 'help-text';
+		location.textContent = connection.host || `${connection.resourceGroup} · Azure`;
+		description.append(title, location);
+		const buttons = document.createElement('div');
+		buttons.className = 'button-row compact';
+		for (const [label, action] of [
+			['Edit', () => editConnection(connection)],
+			['Check', () => checkConnection(connection)],
+			['Remove', () => removeConnection(connection)]
+		]) {
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.className = 'secondary';
+			button.textContent = label;
+			button.setAttribute('aria-label', `${label} ${connection.label}`);
+			button.addEventListener('click', () => void action());
+			buttons.append(button);
+		}
+		row.append(description, buttons);
+		list.append(row);
+	}
+	if (!list.children.length) {
+		const hint = document.createElement('p');
+		hint.className = 'help-text';
+		hint.textContent = 'No remote connections yet. This computer is always available.';
+		list.append(hint);
+	}
+}
+async function checkConnection(connection) {
+	byId('hosting-check-details').replaceChildren();
+	await connectionOperation(`Checking ${connection.label}`, async () => {
+		const result = await state.api.hostingCheckConnection(connection.id);
+		hostingStatus(
+			result.ok ? `${connection.label} is ready.` : `${connection.label} needs attention.`,
+			!result.ok
+		);
+		const details = byId('hosting-check-details');
+		for (const check of result.checks) {
+			const line = document.createElement('p');
+			line.className = `help-text${check.ok ? '' : ' danger-text'}`;
+			line.textContent = `${check.name}: ${check.detail}`;
+			details.append(line);
+		}
+		if (connection.kind === 'ssh-docker' && result.repairable) {
+			const repair = document.createElement('button');
+			repair.type = 'button';
+			repair.className = 'secondary';
+			repair.textContent = 'Install / update remote CLI';
+			repair.addEventListener('click', async () => {
+				const done = await connectionOperation('Updating remote CLI', () =>
+					state.api.hostingRepairConnection(connection.id)
+				);
+				if (done) {
+					hostingStatus(done);
+					await checkConnection(connection);
+				} else if (
+					done === undefined &&
+					!byId('hosting-manager-status').classList.contains('danger-text')
+				)
+					hostingStatus('Remote CLI installation cancelled.');
+			});
+			details.append(repair);
+		}
+	});
+}
+async function removeConnection(connection) {
+	const removed = await connectionOperation('Removing saved connection', () =>
+		state.api.hostingRemoveConnection(connection.id)
+	);
+	if (!removed) {
+		if (removed === false) hostingStatus('Removal cancelled.');
+		return;
+	}
+	const selected = state.currentSnapshot?.hosting?.ref.connectionId === connection.id;
+	if (selected) {
+		window.location.reload();
+		return;
+	}
+	closeEditor();
+	byId('hosting-check-details').replaceChildren();
+	byId('hosting-instance-list').replaceChildren();
+	await loadConnections();
+	state.recentInstances = state.recentInstances.filter(
+		(item) => item.kind !== 'hosted' || item.ref.connectionId !== connection.id
+	);
+	if (state.currentSnapshot) renderInstancePicker(state.currentSnapshot);
+	hostingStatus('Connection removed. Instances remain running.');
+}
+export async function manageHostingConnections() {
+	if (state.operationInFlight) return;
+	byId('hosting-manager').showModal();
+	closeEditor();
+	byId('hosting-check-details').replaceChildren();
+	await connectionOperation('Loading connections', async () => {
+		await loadConnections();
+		hostingStatus('');
+	});
+}
 export function bindHostingEvents() {
 	byId('open-hosting').addEventListener('toggle', () => {
 		if (byId('open-hosting').open)
-			void loadConnections().catch((error) => notice(message(error), 'error', { persist: true }));
+			void loadConnections().catch((error) => hostingStatus(message(error), true));
 	});
-	byId('hosting-provider').addEventListener('change', () => {
-		const ssh = byId('hosting-provider').value === 'ssh-docker';
-		byId('hosting-ssh-fields').hidden = !ssh;
-		byId('hosting-azure-fields').hidden = ssh;
+	byId('hosting-manage').addEventListener('click', () => void manageHostingConnections());
+	byId('hosting-manager-close').addEventListener('click', () => {
+		if (!state.operationInFlight) byId('hosting-manager').close();
+	});
+	byId('hosting-manager').addEventListener('cancel', (event) => {
+		if (state.operationInFlight) event.preventDefault();
+	});
+	byId('hosting-new').addEventListener('click', () => editConnection());
+	byId('hosting-edit-cancel').addEventListener('click', closeEditor);
+	byId('hosting-label').addEventListener('input', () => {
+		if (!editingId && !byId('hosting-id').dataset.manual)
+			byId('hosting-id').value = byId('hosting-label')
+				.value.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/^-|-$/g, '')
+				.slice(0, 63);
+	});
+	byId('hosting-id').addEventListener('input', () => {
+		byId('hosting-id').dataset.manual = 'true';
+	});
+	for (const id of ['hosting-id', 'hosting-port'])
+		byId(id).addEventListener('invalid', () => {
+			byId('hosting-advanced').open = true;
+		});
+	byId('hosting-provider').addEventListener('change', providerFields);
+	byId('hosting-connection').addEventListener('change', () => {
+		discoveryEpoch++;
+		byId('hosting-instance-list').replaceChildren();
+		hostingStatus('');
 	});
 	byId('hosting-discover').addEventListener('click', () => void discover());
 	byId('hosting-add-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
-		const saved = await operation('Saving connection', async () => {
-			const saved = await state.api.hostingSaveConnection({
+		const previous = savedConnections.find((item) => item.id === editingId);
+		const saved = await connectionOperation('Saving connection', async () => {
+			const value = {
 				id: byId('hosting-id').value.trim(),
+				label: byId('hosting-label').value.trim(),
 				kind: byId('hosting-provider').value,
 				host: byId('hosting-host').value.trim(),
+				port: byId('hosting-port').value ? Number(byId('hosting-port').value) : undefined,
 				roots: byId('hosting-roots')
 					.value.split('\n')
 					.map((value) => value.trim())
 					.filter(Boolean),
 				subscriptionId: byId('hosting-subscription').value.trim(),
 				resourceGroup: byId('hosting-group').value.trim()
-			});
+			};
+			const saved = editingId
+				? await state.api.hostingUpdateConnection(editingId, value)
+				: await state.api.hostingSaveConnection(value);
+			if (!saved) {
+				hostingStatus('Change cancelled.');
+				return;
+			}
+			const endpoint = (item) =>
+				JSON.stringify([item.kind, item.host, item.port, item.subscriptionId, item.resourceGroup]);
+			if (
+				previous &&
+				endpoint(previous) !== endpoint(saved) &&
+				state.currentSnapshot?.hosting?.ref.connectionId === saved.id
+			) {
+				window.location.reload();
+				return;
+			}
 			await loadConnections();
 			byId('hosting-connection').value = saved.id;
-			byId('hosting-add').open = false;
+			closeEditor();
+			byId('hosting-instance-list').replaceChildren();
+			hostingStatus('Connection saved. Check it to verify sign-in and discover instances.');
 			return saved;
 		});
-		if (saved) await discover();
+		if (saved) await checkConnection(saved);
 	});
 	for (const button of all('[data-hosted-action]'))
 		button.addEventListener('click', async () => {

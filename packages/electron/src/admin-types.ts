@@ -11,7 +11,7 @@ import type {
 	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
-import type { HostingConnection, HostingSnapshot, InstanceRef, InstanceSummary } from '@fhold/lib';
+import type { HostingConnection, HostingSnapshot, InstanceRef, InstanceSummary, ConnectionCheck } from '@fhold/lib';
 import type { recoverySnapshot } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
@@ -67,6 +67,10 @@ export type AdminWelcome = {
 export type AdminApi = {
 	hostingConnections(): Promise<HostingConnection[]>;
 	hostingSaveConnection(value: unknown): Promise<HostingConnection>;
+	hostingUpdateConnection(id: string, value: unknown): Promise<HostingConnection | undefined>;
+	hostingRemoveConnection(id: string): Promise<boolean>;
+	hostingCheckConnection(id: string): Promise<ConnectionCheck>;
+	hostingRepairConnection(id: string): Promise<string | undefined>;
 	hostingInstances(connectionId: string): Promise<InstanceSummary[]>;
 	welcome(): Promise<AdminWelcome>;
 	openInstance(target: AdminTarget): Promise<void>;
@@ -164,6 +168,10 @@ export type AdminApi = {
 export const ADMIN_CHANNELS = {
 	hostingConnections: 'admin:hosting-connections',
 	hostingSaveConnection: 'admin:hosting-save-connection',
+	hostingUpdateConnection: 'admin:hosting-update-connection',
+	hostingRemoveConnection: 'admin:hosting-remove-connection',
+	hostingCheckConnection: 'admin:hosting-check-connection',
+	hostingRepairConnection: 'admin:hosting-repair-connection',
 	hostingInstances: 'admin:hosting-instances',
 	welcome: 'admin:welcome',
 	openInstance: 'admin:open-instance',

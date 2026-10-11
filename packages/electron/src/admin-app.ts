@@ -37,6 +37,7 @@ import {
 	savePortalTokens
 } from '@fhold/lib';
 import { hostingProvider, openHostingInstance, inspectLocalInstance, operateLocalInstance, localInstanceLogs, LOCAL_CONNECTION } from '@fhold/lib';
+import { parseHostingConnection, connectionEndpoint, checkHostingConnection, repairSshCli } from '@fhold/lib';
 import {
 	recoverySnapshot,
 	recoveryStatus,
@@ -251,6 +252,39 @@ async function completeAdminReadiness(
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
+	async function confirmConnectionChange(event: IpcMainInvokeEvent, message: string, detail: string): Promise<boolean> {
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		const options = { type: 'warning' as const, buttons: ['Cancel', 'Continue'], defaultId: 0, cancelId: 0, message, detail };
+		return (owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options)).response === 1;
+	}
+	ipcMain.handle(ADMIN_CHANNELS.hostingUpdateConnection, async (event, id: string, value: unknown) => {
+		requireAdminSender(event); requireSwitchable();
+		const previous = instances.hosting.connection(id);
+		const next = parseHostingConnection(value);
+		const retarget = connectionEndpoint(previous) !== connectionEndpoint(next);
+		if (retarget && !await confirmConnectionChange(event, 'Change this connection’s host?', 'Saved recent instances for this connection will be cleared and its open view closed. No running containers or instance files will be changed.')) return undefined;
+		requireSwitchable();
+		const result = instances.hosting.updateConnection(id, next);
+		if (retarget) instances.forgetConnectionTargets(id);
+		return result;
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingRemoveConnection, async (event, id: string) => {
+		requireAdminSender(event); requireSwitchable();
+		instances.hosting.connection(id);
+		if (!await confirmConnectionChange(event, 'Remove this saved connection?', 'Only connection metadata and its recent selections are removed. Instances remain running and no data is deleted.')) return false;
+		requireSwitchable(); instances.hosting.removeConnection(id); instances.forgetConnectionTargets(id); return true;
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingCheckConnection, (event, id: string) => {
+		requireAdminSender(event); requireSwitchable();
+		return instances.runConnection(() => checkHostingConnection(instances.hosting.connection(id)));
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingRepairConnection, async (event, id: string) => {
+		requireAdminSender(event); requireSwitchable();
+		const connection = instances.hosting.connection(id);
+		if (!await confirmConnectionChange(event, 'Install or update the remote fhold CLI?', `Download this tooling release and replace ~/.local/bin/fhold on ${connection.label}. No sudo, SSH trust changes, container restarts or instance configuration changes are made.`)) return undefined;
+		requireSwitchable();
+		return instances.runConnection(() => repairSshCli(connection, { confirmed: true }));
+	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingConnections, event => {
 		requireAdminSender(event);
 		return [LOCAL_CONNECTION, ...instances.hosting.read().connections.filter(item => item.id !== 'local')];

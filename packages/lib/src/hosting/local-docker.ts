@@ -16,8 +16,10 @@ import {
 	ensureDockerReady,
 	parseComposePsRows
 } from '../control-plane/docker.js';
+import { runDocker } from '../control-plane/docker.js';
 import { activateComposeCommand, deactivateComposeCommand } from '../control-plane/activation.js';
 import { assistantEndpoint } from '../control-plane/opencode.js';
+import type { HostingProcess } from './process.js';
 import {
 	capabilities,
 	type HostingAction,
@@ -27,35 +29,57 @@ import {
 	type InstanceSummary
 } from './types.js';
 
-/** Bounded one-level discovery: no recursive scan of user files or secret trees. */
-export function listLocalInstances(roots = [dirname(defaultFholdHome())]): InstanceSummary[] {
+/** Managed Compose labels plus bounded roots: never recursively scan user trees. */
+export async function listLocalInstances(
+	roots = [dirname(defaultFholdHome())],
+	run: HostingProcess = async (_binary, args, options) => {
+		const result = await runDocker(args, { timeoutMs: options?.timeoutMs });
+		if (!result.ok) throw new Error(result.stderr);
+		return result.stdout;
+	}
+): Promise<InstanceSummary[]> {
 	const found = new Map<string, InstanceSummary>();
+	const candidates = new Set<string>();
 	for (const root of roots) {
-		const paths = [root];
+		candidates.add(root);
 		try {
-			paths.push(
-				...readdirSync(root, { withFileTypes: true })
-					.filter((item) => item.isDirectory())
-					.map((item) => join(root, item.name))
-			);
+			for (const item of readdirSync(root, { withFileTypes: true }).filter((item) =>
+				item.isDirectory()
+			)) {
+				candidates.add(join(root, item.name));
+				candidates.add(join(root, item.name, 'home'));
+			}
 		} catch {
 			continue;
 		}
-		for (const path of paths) {
-			if (
-				!existsSync(join(path, 'state', 'stack.json')) ||
-				classifyInstall(path) === 'incompatible_home'
-			)
-				continue;
-			const config = readStackConfig(path);
-			if (!config.ok) continue;
-			const homeDir = createFholdState(path).homeDir;
-			found.set(homeDir, {
-				ref: { kind: 'local-docker', connectionId: 'local', homeDir },
-				name: config.config.deployment.projectName,
-				location: homeDir
-			});
+	}
+	try {
+		const labels = await run(
+			'docker',
+			['ps', '-a', '--format', '{{.Label "com.docker.compose.project.working_dir"}}'],
+			{ timeoutMs: 10_000 }
+		);
+		for (const path of labels.trim().split('\n')) {
+			if (isAbsolute(path) && path.endsWith('/system/stack'))
+				candidates.add(dirname(dirname(path)));
 		}
+	} catch {
+		/* Root discovery remains useful when Docker is stopped/unavailable. */
+	}
+	for (const path of candidates) {
+		if (
+			!existsSync(join(path, 'state', 'stack.json')) ||
+			classifyInstall(path) === 'incompatible_home'
+		)
+			continue;
+		const config = readStackConfig(path);
+		if (!config.ok) continue;
+		const homeDir = createFholdState(path).homeDir;
+		found.set(homeDir, {
+			ref: { kind: 'local-docker', connectionId: 'local', homeDir },
+			name: config.config.deployment.projectName,
+			location: homeDir
+		});
 	}
 	return [...found.values()];
 }

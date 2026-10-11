@@ -113,6 +113,13 @@ and recents are shared in the host's `~/.config/fhold/hosting.json` (or XDG root
 not copied into instance intent or backups. Remote targets never fall back to
 local files/containers; unsupported operations show a specific explanation.
 Native host authentication stays with SSH/Azure. A fixed SSH command receives
+typed JSON and uses the native PATH plus standard `~/.local/bin`. Discovery reads
+managed Compose labels and bounded root/child/home candidates. Host-CLI repair is
+explicitly confirmed, checksum-verified and atomic; it never changes Docker,
+SSH trust or instance files. Connection editing/removal affects metadata only,
+clearing scoped recents on endpoint changes rather than silently retargeting them.
+
+The fixed SSH endpoint receives
 typed JSON on stdin; no shell-interpolated path, arbitrary exec RPC, extra service,
 container manager credential or runtime management port is added. Native Docker
 subprocesses pin a local socket from the selected native context, never send local

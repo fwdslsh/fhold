@@ -11,6 +11,37 @@
     <link rel="stylesheet" href="admin.css" />
   </head>
   <body>
+    <dialog id="hosting-manager" class="hosting-manager" aria-labelledby="hosting-manager-title">
+      <header class="hosting-manager-header"><h2 id="hosting-manager-title">Host connections</h2><button id="hosting-manager-close" class="text-button" type="button" aria-label="Close host connections">Close</button></header>
+      <p class="help-text">Choose where your agents run. Sign-in stays with your computer’s SSH or Azure tools.</p>
+      <div id="hosting-manager-list"></div>
+      <p id="hosting-manager-status" class="help-text" role="status" aria-live="polite" hidden></p>
+      <div id="hosting-check-details" class="form-stack" aria-live="polite"></div>
+      <button id="hosting-new" class="secondary" type="button">Add connection</button>
+      <form id="hosting-add-form" class="form-stack hosting-editor" hidden>
+        <h3 id="hosting-editor-title">Add connection</h3>
+        <label class="field" for="hosting-label"><span>Name</span><input id="hosting-label" required placeholder="Krang" autocomplete="off" /></label>
+        <label class="field" for="hosting-provider"><span>Hosting</span><select id="hosting-provider"><option value="ssh-docker">Docker over SSH</option><option value="azure-container-apps">Azure Container Apps (experimental)</option></select></label>
+        <div id="hosting-ssh-fields" class="form-stack">
+          <label class="field" for="hosting-host"><span>SSH host or config alias</span><input id="hosting-host" placeholder="user@server" autocomplete="off" /></label>
+          <p class="help-text">Use your normal SSH connection. If sign-in or host trust needs attention, first run <code>ssh &lt;host&gt;</code> in a terminal. No password or private key is stored here.</p>
+        </div>
+        <div id="hosting-azure-fields" class="form-stack" hidden>
+          <label class="field" for="hosting-subscription"><span>Subscription ID</span><input id="hosting-subscription" autocomplete="off" /></label>
+          <label class="field" for="hosting-group"><span>Resource group</span><input id="hosting-group" autocomplete="off" /></label>
+          <p class="help-text">Run <code>az login</code> on this computer first. Deployment configuration remains with your existing tooling.</p>
+        </div>
+        <details id="hosting-advanced" class="disclosure"><summary>Advanced</summary><div class="form-stack disclosure-body">
+          <label class="field" for="hosting-id"><span>CLI connection name</span><input id="hosting-id" required pattern="[a-z0-9][a-z0-9-]{0,62}" autocomplete="off" /></label>
+          <div id="hosting-ssh-advanced" class="form-stack">
+            <label class="field" for="hosting-port"><span>SSH port (optional)</span><input id="hosting-port" type="number" min="1" max="65535" placeholder="From SSH config" /></label>
+            <label class="field" for="hosting-roots"><span>Instance roots (optional, one per line)</span><textarea id="hosting-roots" placeholder="/opt/stacks" rows="2" spellcheck="false"></textarea></label>
+            <p class="help-text">Managed Docker instances are found automatically. Add roots to find stopped homes without containers, including folders that contain a <code>home/</code> directory.</p>
+          </div>
+        </div></details>
+        <div class="button-row"><button id="hosting-save" class="primary" type="submit">Save connection</button><button id="hosting-edit-cancel" class="secondary" type="button">Cancel</button></div>
+      </form>
+    </dialog>
 	    <a id="skip-link" class="skip-link" href="#main-content">Skip to content</a>
 
 	    <div id="loading-state" class="centered-state" aria-live="polite">
@@ -40,25 +71,9 @@
           <div class="form-stack disclosure-body">
             <label class="field" for="hosting-connection"><span>Connection</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
             <button id="hosting-discover" class="secondary" type="button">Find instances</button>
+            <button id="hosting-manage" class="text-button" type="button">Manage host connections…</button>
+            <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
             <div id="hosting-instance-list" aria-live="polite"></div>
-            <details id="hosting-add" class="disclosure">
-              <summary>Add a connection</summary>
-              <form id="hosting-add-form" class="form-stack disclosure-body">
-                <label class="field" for="hosting-id"><span>Connection name</span><input id="hosting-id" required pattern="[a-z0-9][a-z0-9-]{0,62}" placeholder="lab" autocomplete="off" /></label>
-                <label class="field" for="hosting-provider"><span>Hosting</span><select id="hosting-provider"><option value="ssh-docker">Docker over SSH</option><option value="azure-container-apps">Azure Container Apps (experimental)</option></select></label>
-                <div id="hosting-ssh-fields" class="form-stack">
-                  <label class="field" for="hosting-host"><span>SSH host or config alias</span><input id="hosting-host" placeholder="user@server" autocomplete="off" /></label>
-                  <label class="field" for="hosting-roots"><span>Instance roots (optional, one per line)</span><textarea id="hosting-roots" placeholder="/opt/stacks" rows="2" spellcheck="false"></textarea></label>
-                  <p class="help-text">Install the fhold CLI on the remote host and complete native SSH sign-in first. No password or private key is stored here. Your SSH config controls identity, port and host trust.</p>
-                </div>
-                <div id="hosting-azure-fields" class="form-stack" hidden>
-                  <label class="field" for="hosting-subscription"><span>Subscription ID</span><input id="hosting-subscription" autocomplete="off" /></label>
-                  <label class="field" for="hosting-group"><span>Resource group</span><input id="hosting-group" autocomplete="off" /></label>
-                  <p class="help-text">Install the Azure CLI and run <code>az login</code> on this computer first. Discoverable custom images need the deployment tag <code>fhold=assistant</code>. Deployment configuration stays with your existing tooling.</p>
-                </div>
-                <button class="secondary" type="submit">Save and find instances</button>
-              </form>
-            </details>
           </div>
         </details>
       </section>

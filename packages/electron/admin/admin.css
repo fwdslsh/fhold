@@ -32,6 +32,7 @@
 	box-sizing: border-box;
 }
 
+
 html,
 body {
 	min-width: 0;
@@ -2164,3 +2165,28 @@ body[data-phase="setup_incomplete"] #provider-connection {
 		padding: 16px;
 	}
 }
+
+.hosting-manager {
+	width: min(680px, calc(100vw - 32px));
+	max-height: calc(100vh - 48px);
+	padding: 28px;
+	border: 1px solid var(--border-soft);
+	border-radius: 12px;
+	background: var(--surface);
+	color: var(--ink);
+	box-shadow: var(--shadow);
+}
+.hosting-manager::backdrop { background: #0009; }
+.hosting-manager-header, .hosting-connection-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+.hosting-manager-header h2 { margin: 0; }
+.hosting-connection-row { padding: 16px 0; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.hosting-connection-row .help-text { margin: 4px 0 0; overflow-wrap: anywhere; }
+.hosting-editor { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
+#hosting-new { margin-top: 20px; }
+#hosting-check-details { margin: 16px 0; }
+#hosting-check-details p { margin: 0; }

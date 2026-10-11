@@ -61,6 +61,9 @@ jobs:
           tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'config/akm/config.json'
       - name: Bundle the optional admin app
         run: bun run --cwd packages/electron bundle
+      - name: Qualify the Admin renderer in Chromium
+        if: inputs.scope == 'tools'
+        run: bun run --cwd packages/electron test:providers:browser
       - name: Validate shell entrypoints
         if: inputs.scope != 'tools'
         run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh containers/assistant/opencode-run.sh containers/guardian/entrypoint.sh
