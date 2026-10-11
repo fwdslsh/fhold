@@ -20,6 +20,7 @@ import { exportHistory, restoreHistory } from '../packages/lib/src/control-plane
 import { createBackup } from '../packages/lib/src/control-plane/backup.js';
 import { applyRestore } from '../packages/lib/src/control-plane/restore.js';
 import { runDocker } from '../packages/lib/src/control-plane/docker.js';
+import { recordAppliedRuntime, restartStatus, runtimeRevision } from '../packages/lib/src/control-plane/runtime-revision.js';
 
 const image = process.env.FH_NATIVE_TEST_IMAGE;
 const oldImage = process.env.FH_HISTORY_SOURCE_IMAGE;
@@ -232,8 +233,41 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 							}
 						]
 					}
-				]
+				] as Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }>
 			};
+			const summaryText = 'Compaction summary: the operator asked to preserve the conversation and workspace notes.';
+			// Native v1 compaction is a user request part followed by its summary
+			// assistant. A standalone summary flag is not a compaction operation.
+			fixture.messages.push({
+				info: {
+					id: 'msg_legacy_compaction', sessionID: 'ses_legacy', role: 'user',
+					time: { created: 1780000000003 }, agent: 'build',
+					model: { providerID: 'test', modelID: 'test' }
+				},
+				parts: [{ id: 'prt_legacy_compaction', sessionID: 'ses_legacy', messageID: 'msg_legacy_compaction', type: 'compaction', auto: false }]
+			});
+			for (const [id, text, summary] of [
+				['msg_legacy_reply', 'I will preserve the conversation and notes.', false],
+				['msg_legacy_summary', summaryText, true]
+			] as const) {
+				fixture.messages.push({
+					info: {
+						id, sessionID: 'ses_legacy', role: 'assistant', summary,
+						time: { created: summary ? 1780000000004 : 1780000000001, completed: summary ? 1780000000005 : 1780000000002 },
+						parentID: summary ? 'msg_legacy_compaction' : 'msg_legacy', agent: 'build', mode: 'build',
+						providerID: 'test', modelID: 'test', path: { cwd: '/work', root: '/work' },
+						cost: 0, tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+						finish: 'stop'
+					},
+					parts: [{ id: `prt_${id}`, sessionID: 'ses_legacy', messageID: id, type: 'text', text }]
+				});
+			}
+			const preserved = ['workspace/operator-note.txt', 'knowledge/operator-note.md', 'config/codex/config.toml'];
+			for (const path of preserved) writeFileSync(join(source, path), `Operator-owned ${path}\n`);
+			recordAppliedRuntime(source, runtimeRevision(source));
+			writeFileSync(join(source, 'config/codex/config.toml'), 'approval_policy = "on-request"\n');
+			const pendingReceipt = digest(join(source, 'state/applied-runtime.json'));
+			const preservedHashes = preserved.map((path) => digest(join(source, path)));
 			writeFileSync(join(root, 'seed.json'), JSON.stringify(fixture));
 			const result = await runDocker([
 				'run',
@@ -269,7 +303,10 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 			);
 			const before = digest(join(runtime(source), 'opencode/opencode.db'));
 			const archive = join(root, 'history');
-			await exportHistory({ sourceHome: source, image: oldImage!, destination: archive });
+			// The v2 worker opens a private SQLite-native snapshot of the v1 DB.
+			// This exercises upstream startup migration, not legacy transcript import,
+			// while leaving the original database and credentials untouched.
+			await exportHistory({ sourceHome: source, image: image!, destination: archive });
 			const restored = await restoreHistory({
 				homeDir: target,
 				archive,
@@ -278,6 +315,21 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 				sameInstance: true
 			});
 			expect(restored.sessions).toBe(1);
+			const migrated = JSON.parse(readFileSync(join(archive, 'ses_legacy.json'), 'utf8'));
+			expect(migrated.info.id).toBe('ses_legacy');
+			expect(migrated.messages.find((message: { id: string }) => message.id === 'msg_legacy')?.text).toBe('Keep this conversation');
+			expect(JSON.stringify(migrated.messages)).toContain('I will preserve the conversation and notes.');
+			const migratedSummary = migrated.messages.find((message: { type: string; summary?: unknown }) => message.type === 'compaction' && JSON.stringify(message.summary).includes(summaryText));
+			expect(migratedSummary).toBeDefined();
+			const targetArchive = join(root, 'restored-history');
+			await exportHistory({ sourceHome: target, image: image!, destination: targetArchive });
+			const targetSession = JSON.parse(readFileSync(join(targetArchive, 'ses_legacy.json'), 'utf8'));
+			expect(targetSession.info.id).toBe('ses_legacy');
+			const summary = targetSession.messages.find((message: { type: string; summary?: unknown }) => message.type === 'compaction' && JSON.stringify(message.summary).includes(summaryText));
+			expect(summary).toBeDefined();
+			expect(preserved.map((path) => digest(join(source, path)))).toEqual(preservedHashes);
+			expect(digest(join(source, 'state/applied-runtime.json'))).toBe(pendingReceipt);
+			expect(restartStatus(source).required).toBe(true);
 			expect(digest(join(runtime(source), 'opencode/opencode.db'))).toBe(before);
 			const backup = join(root, 'portable');
 			await createBackup({ sourceHome: source, destination: backup, includeProviderAuth: true });
@@ -286,6 +338,16 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 					readFileSync(join(backup, 'knowledge/secrets/opencode-credentials.json'), 'utf8')
 				)[0].value.key
 			).toBe('legacy-synthetic-key');
+			const credentials = JSON.parse(readFileSync(join(backup, 'knowledge/secrets/opencode-credentials.json'), 'utf8'));
+			expect(credentials).toHaveLength(1);
+			expect(credentials[0].integrationID).toBe('openai');
+			await applyRestore({ sourceHome: backup, destinationHome: target, includeProviderAuth: true, acknowledgeUnrestored: true });
+			await runNativeWorker(image!, mounts(target), async ({ open, api }) => {
+				await open('/native-data');
+				const entries = ((await api('/credential')) as { data: Array<{ id: string; integrationID: string; value: { key?: string } }> }).data;
+				if (entries.length !== 1 || entries[0]?.id !== process.env.FH_EXPECTED_CREDENTIAL_ID || entries[0]?.integrationID !== 'openai' || entries[0]?.value.key !== 'legacy-synthetic-key')
+					throw new Error('Migrated native credential identity/value was not preserved.');
+			}, [`FH_EXPECTED_CREDENTIAL_ID=${credentials[0].id}`]);
 		},
 		180_000
 	);

@@ -45,7 +45,7 @@ The skills in `packages/skeleton/system/assistant/skills` are baked into
 `/fhold-bundle/skills`, native Claude/Codex plugin packages and OpenCode's managed
 configuration. `/fhold-bundle` is owned by root with no write bits, while agents
 run as the non-root `fhold` account. Their home is `/home/fhold`; OpenCode's
-HTTP Basic username is `user`. The native password remains required.
+HTTP Basic username is `opencode`. The native password remains required and unchanged.
 
 AKM's seeded configuration includes this read-only source:
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { Client } from '@modelcontextprotocol/client';
+import { Client, SdkError, SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 
 import { GuardianChatClient } from './chat-client.js';
 
@@ -211,14 +211,90 @@ describe('Guardian portal job tracking', () => {
 		expect(callTool).toHaveBeenCalledTimes(2);
 	});
 
-	it('closes a failed transport without retrying the agent run', async () => {
+	it('reconnects to the same job after transport failure without repeating the agent run', async () => {
 		const { chat, callTool, close } = fixture();
 		callTool
 			.mockResolvedValueOnce(response('running'))
-			.mockRejectedValueOnce(new Error('MCP connection lost'));
+			.mockRejectedValueOnce(new SdkError(SdkErrorCode.ConnectionClosed, 'Connection closed'))
+			.mockResolvedValueOnce(response('completed', { text: 'Recovered result' }));
 
-		await expect(chat.chat('Work', credential)).rejects.toThrow('MCP connection lost');
+		expect((await chat.chat('Work', credential)).text).toBe('Recovered result');
 		expect(close).toHaveBeenCalledTimes(1);
+		expect(callTool.mock.calls.map(([request]) => request.name)).toEqual([
+			'fhold.agent.run',
+			'fhold.job.get',
+			'fhold.job.get'
+		]);
+		expect(callTool.mock.calls[2][0].arguments).toEqual({ job: 'test.job', waitMs: 30_000 });
+	});
+
+	it('recovers an initial lost response using the accepted job from progress, even without a renderer', async () => {
+		const { chat, callTool } = fixture();
+		callTool
+			.mockImplementationOnce(async (_request, options) => {
+				options?.onprogress?.({
+					progress: 0.25,
+					_meta: {
+						'io.fwdslsh.fhold/agent': response('running').structuredContent
+					}
+				});
+				throw new SdkError(SdkErrorCode.RequestTimeout, 'Request timed out');
+			})
+			.mockResolvedValueOnce(response('completed', { text: 'Already completed' }));
+		expect((await chat.chat('Work', credential)).text).toBe('Already completed');
+		expect(callTool.mock.calls.map(([request]) => request.name)).toEqual([
+			'fhold.agent.run',
+			'fhold.job.get'
+		]);
+	});
+
+	it('reports interrupted tracking honestly after bounded retries and preserves partial delivery', async () => {
+		const { chat, callTool } = fixture();
+		const onUpdate = mock(async (_update: unknown) => {});
+		callTool
+			.mockImplementationOnce(async (_request, options) => {
+				options?.onprogress?.({
+					progress: 0.5,
+					_meta: {
+						'io.fwdslsh.fhold/agent': response('running', { text: 'Partial result' })
+							.structuredContent
+					}
+				});
+				throw new SdkError(SdkErrorCode.ConnectionClosed, 'Connection closed');
+			})
+			.mockRejectedValue(new SdkError(SdkErrorCode.RequestTimeout, 'Request timed out'));
+		await expect(chat.chat('Work', credential, undefined, onUpdate)).rejects.toThrow(
+			'Work may still be running'
+		);
+		expect(callTool).toHaveBeenCalledTimes(3);
+		expect(onUpdate.mock.calls[0][0]).toMatchObject({ text: 'Partial result' });
+	});
+
+	it('never retries an unknown submission, approval, cancellation or authentication failure', async () => {
+		const { chat, callTool } = fixture();
+		callTool.mockRejectedValue(new SdkError(SdkErrorCode.ConnectionClosed, 'Connection closed'));
+		await expect(chat.chat('Work', credential)).rejects.toThrow('Work may still be running');
+		await expect(
+			chat.respond(credential, { interaction: 'permission', decision: 'once' })
+		).rejects.toThrow();
+		await expect(chat.cancel('test.job', credential)).rejects.toThrow();
+		expect(callTool).toHaveBeenCalledTimes(3);
+		callTool.mockRejectedValue(
+			new SdkHttpError(SdkErrorCode.ClientHttpAuthentication, 'Unauthorized', { status: 401 })
+		);
+		await expect(chat.resume('test.job', credential)).rejects.toThrow('Unauthorized');
+		expect(callTool).toHaveBeenCalledTimes(4);
+	});
+
+	it('does not retry rejected handles or terminal native failures', async () => {
+		const { chat, callTool } = fixture();
+		callTool.mockResolvedValueOnce({
+			isError: true,
+			content: [{ type: 'text', text: 'Invalid or expired job handle.' }]
+		});
+		await expect(chat.resume('test.job', credential)).rejects.toThrow('Invalid or expired');
+		callTool.mockResolvedValueOnce(response('failed', { error: 'Native failure' }));
+		await expect(chat.resume('test.job', credential)).rejects.toThrow('Native failure');
 		expect(callTool).toHaveBeenCalledTimes(2);
 	});
 

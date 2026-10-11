@@ -28,6 +28,14 @@ Platform health follows the live SDK connection; a failed/disconnected portal
 does not stop the Assistant. Vendor WebSocket implementations are not patched.
 Portal tracks running Guardian jobs through completion, failure and explicit
 input, using bounded MCP requests rather than an overall reply deadline.
+Authenticated MCP streams may remain quiet without the HTTP idle timeout closing
+them. A transient transport interruption reconnects with the existing
+credential-scoped job handle, never replays the request, approval or cancellation,
+and uses bounded inspection retries. A lost connection is not an agent failure;
+partial public answers remain visible. Handles arrive immediately after accepted
+submission, before native inspection. Slack uses native Markdown blocks with a
+plain-text fallback only when the platform explicitly rejects the blocks; final
+Stop-control cleanup preserves answer formatting.
 Discord channel mentions start threads; Slack answers stay in the message's
 thread. Public answer text streams as throttled message edits, with continuous
 Discord typing and lightweight tool feedback. Standard MCP progress carries
@@ -91,6 +99,14 @@ are not part of the image, CLI/Admin or product test suite. fhold retains generi
 runtime contracts, directory/Blob transports, product tests and reusable image
 smokes. External tooling consumes the shipped image and documented interfaces
 without importing internal source modules.
+Standalone deployers may opt into exact-name workload environment aliases using
+`FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
+logged or passed as command arguments. Original configured names are stripped
+from writer environments; scheduler and native remote-worker launches get no
+aliases. Invalid optional mappings warn without stopping the agent. This is
+process launch scoping, not plugin/tool isolation: OpenCode subprocesses inherit
+aliases and its plugins may use them during scheduled requests. No cloud-specific
+authority, token broker, wrapper or new managed settings layer is introduced.
 
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned
@@ -396,6 +412,8 @@ bounded final checkpoint; forced termination can lose unpublished changes.
 Writer shutdown and recovery have separate bounded waits so an in-flight capture
 cannot consume the stopped-writer final checkpoint's budget. External host grace
 must cover both phases and be tested in that environment.
+In-flight ownership renewal finishes before the final checkpoint and release;
+an actual renewal failure still prevents an unsafe final checkpoint.
 Process exit races in `/proc` traversal must not abandon final recovery. The
 entrypoint logs writer stop, successful checkpoint/owner release and completion;
 failed recovery is a visible nonzero shutdown, never a successful-stop claim.

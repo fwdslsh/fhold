@@ -299,8 +299,23 @@ while the previous writer may still exist.
 Use the runtime's normal stop operation, which sends SIGTERM to the image's
 PID 1. Do not stop just OpenCode or signal the recovery worker directly. The
 entrypoint stops writers and descendants first, then waits for the recovery
-worker's final checkpoint and exact-owner release. No pre-stop command,
+worker's in-flight capture and ownership renewal to finish before its final
+checkpoint and exact-owner release. A genuine renewal failure still prevents
+an unsafe final checkpoint. No pre-stop command,
 automatic unlock, sidecar or hosting-specific runtime is needed.
+
+If deployment setup runs before the assistant, prefer a one-shot setup followed
+by `exec /usr/local/bin/fhold-assistant` under the image's init process. A parent
+that remains running must forward TERM/INT and wait for the assistant's actual
+exit, keeping its log streams open throughout cleanup. Keep the parent's signal
+handlers installed until that exit and make repeat forwarding idempotent: a
+one-shot listener can restore default termination while the child is still
+checkpointing. In Node or Bun, use `process.on('SIGTERM', stop)` and
+`process.on('SIGINT', stop)`, not `process.once`, until the child exits.
+`AbortController.abort()` is already idempotent. A child-process
+[AbortSignal error](https://nodejs.org/api/child_process.html#child_processspawncommand-args-options)
+reports signal forwarding, not completed shutdown. Test the deployed parent
+chain, not just the stock entrypoint; do not infer owner release from either event.
 
 1. Finish or explicitly interrupt the current work, stop sending new requests,
    and retain console/system logs outside the disposable container.
@@ -308,7 +323,8 @@ automatic unlock, sidecar or hosting-specific runtime is needed.
    use `fhold --name my-agent stop`; a standalone Docker deployment can use
    `docker stop --time 360 EXACT_CONTAINER`. Supply at least the actual derived
    budget if settings differ; these examples do not override a hosting platform's
-   deadline.
+   deadline. When the host's stop API is asynchronous, wait for its operation
+   result before issuing a start or deployment update; acceptance is not completion.
 3. Check the retained entrypoint logs, in order: `shutdown: stopping native
    writers`, `shutdown: writers stopped; finishing recovery checkpoint and owner
    release`, `shutdown: recovery checkpoint completed and owner released`, then

@@ -21,6 +21,14 @@ AKM 0.10 stable is released.
 
 ## Reproducible checks
 
+Native v1-to-v2 history migration can replace assistant summary message IDs with
+compaction records and add system records. Compare preserved session IDs and
+ordinary conversation/summary text, rather than requiring identical old message
+counts or summary IDs. Credential checks preserve provider/account identity and
+values, allowing native OAuth refresh to rotate tokens for the same account.
+An already expired optional sign-in is reported separately; it is not evidence
+of migration data loss or a reason to stop a usable Assistant.
+
 | Check | Evidence and scope |
 |---|---|
 | Repository gates | `bun run check`, `bun run test`, `bun run lint`, reviewed `bun run audit`; CLI/Admin builds; shell syntax and all-profile Compose. Lint retains warnings; audit uses the existing documented exceptions. |
@@ -43,7 +51,48 @@ revision deactivation and scale-to-zero tests belong in the deployment harness;
 the product lifecycle regression does not claim those platform operations were
 retested here. See [issue #21](https://github.com/fwdslsh/fhold/issues/21).
 
+## Post-beta.6 upgrade regression
+
+Beta.6's image converts the previously shipped default scheduled engine during
+startup. The host had recorded its restart fingerprint before that conversion,
+so a healthy upgrade could still show **Pending restart**. The follow-up fix
+recognizes only those exact converted bytes after successful activation. It
+does not rewrite host settings, change existing receipt hashes, or clear other
+edits made during startup. Older images that retain `--attach` stay unchanged.
+
+`packages/lib/src/control-plane/runtime-revision.test.ts` covers older image
+pins, the conversion, failed activation, deferred update receipts, custom or
+malformed optional settings, and genuinely unapplied edits. The native provider
+fixture verifies that one ordinary compiled-CLI restart applies the converted
+engine without leaving a false restart alert.
+
+The native transfer fixture seeds a real v1 database using its native import
+command, migrates a private snapshot with the v2 image, and restores the native
+export. It checks ordinary conversation and compaction text, credential
+identity/value, and unchanged source database, operator files and pending
+restart evidence. These checks use synthetic credentials and no paid model.
+
 ## Fixes found by qualification
+
+### Post-beta.6 portal and workload regression
+
+The real Guardian HTTP/MCP regression runs the shipped request handler, waits
+thirteen seconds with unchanged progress and delivers final text with one native
+submission. Typed transport failures reconnect only to the already accepted job;
+unknown submissions, approvals/cancellations, rejected handles and authentication
+failures are not replayed. Portal fixtures cover partial-answer preservation and
+native Slack Markdown through streaming/final cleanup, with explicit rejected-block
+fallback. These do not claim a new live bot conversation was sent.
+
+`scripts/smoke-workload-environment.mjs IMAGE` uses the normal non-root entrypoint
+without mounts, cloud credentials or runtime modifications. It checks OpenCode's
+actual process environment, clean scheduler/native supervisor environments, and
+native shell output proving child inheritance of both aliases. No paid provider
+call is made. It is part of the native amd64/arm64 image gates. Host command fixtures
+cover malformed/colliding/reserved mappings and missing sources without core failure
+or value logging. This verifies process scope, not plugin/session isolation.
+
+### Original v2 changes
 
 - Defer periodic SQLite recovery capture until native API readiness. Lease
   renewal and final shutdown remain independent; startup migration no longer

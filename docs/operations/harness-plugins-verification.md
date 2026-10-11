@@ -143,7 +143,7 @@ The combined dependency-refresh / harness-plugins candidate is
 Guardian and Portal used the same candidate version.
 All three image startup/security smokes passed. The Assistant smoke verified
 native AKM recall and fhold activity hooks in OpenCode, Claude Code and Codex,
-native Codex hook approval boundaries, `/home/fhold`, username `user`, skill
+native Codex hook approval boundaries, `/home/fhold`, the then-v1 username `user` (v2 uses `opencode`), skill
 discovery, and failed attempts to create, overwrite or chmod `/fhold-bundle`.
 It also restarted with an older AKM catalog lacking the optional built-in
 source, verified that catalog remained byte-for-byte unchanged, and verified

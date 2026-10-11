@@ -113,6 +113,60 @@ describe('recovery wrapper configuration and private status', () => {
 			3600
 		);
 	});
+
+	it('drains an in-flight renewal before releasing ownership on TERM', () => {
+		for (const renewalFails of [false, true]) {
+			const runtimeDir = mkdtempSync(join(tmpdir(), 'fhold-wrapper-stop-renewal-'));
+			const code = `
+			import {runRecovery} from ${JSON.stringify(wrapper)};
+			import {writeFile,readFile} from 'node:fs/promises';
+			const runtimeDir=${JSON.stringify(runtimeDir)};
+			const events=[];let released=false,outcome;
+			const publication={lastCheckpointAt:null,lastCheckpointTick:null};
+			const engine={status(){return {failure:null,...publication};},
+				async acquireRestore(){await writeFile(runtimeDir+'/recovery-writers-started','fixture');},
+				async renew(){
+					events.push('renew-start');process.kill(process.pid,'SIGTERM');
+					await new Promise(resolve=>setTimeout(resolve,150));
+					// Model an asynchronous ownership check completing after release.
+					if(released){events.push('renew-after-release');throw Error('recovery not owned');}
+					if(${renewalFails}){events.push('renew-failed');throw Error('recovery ownership lost');}
+					events.push('renew-done');
+				},
+				async checkpoint(){publication.lastCheckpointAt=Date.now();publication.lastCheckpointTick=performance.now();events.push('checkpoint');},
+				async release(){released=true;events.push('release');await new Promise(resolve=>setTimeout(resolve,250));}
+			};
+			try{await runRecovery({runtimeDir,intervalSeconds:60,maxUnsavedSeconds:300,probePort:0},{env:{},engine});outcome='success';}
+			catch{outcome='failure';}
+			const status=JSON.parse(await readFile(runtimeDir+'/recovery-status.json','utf8'));
+			process.stdout.write(JSON.stringify({events,released,outcome,state:status.state,failure:status.failure}));
+		`;
+			const result = spawnSync(
+				process.execPath,
+				['--no-env-file', '--config=/dev/null', '--eval', code],
+				{
+					env: { PATH: process.env.PATH },
+					encoding: 'utf8',
+					timeout: 5_000
+				}
+			);
+			expect(result.status).toBe(0);
+			expect(result.stderr).toBe('');
+			const observed = JSON.parse(result.stdout);
+			expect(observed).toMatchObject({
+				released: true,
+				outcome: renewalFails ? 'failure' : 'success',
+				state: renewalFails ? 'failed' : 'stopped',
+				failure: renewalFails ? 'recovery ownership lost' : null
+			});
+			expect(observed.events).not.toContain('renew-after-release');
+			expect(observed.events).toEqual(
+				renewalFails
+					? ['checkpoint', 'renew-start', 'renew-failed', 'release']
+					: ['checkpoint', 'renew-start', 'renew-done', 'checkpoint', 'release']
+			);
+		}
+	});
 	it('keeps recovery ownership and checkpoints when status writes or the optional probe fail', () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-observation-'));
 		const code = `

@@ -1,6 +1,6 @@
 import { App, SocketModeReceiver, type SayFn, type types } from '@slack/bolt';
 
-import { GuardianChatClient, type ChatUpdate } from './chat-client.js';
+import { GuardianChatClient, portalFailureText, type ChatUpdate } from './chat-client.js';
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry, credentialConversationKey } from './credential-registry.js';
 import { ConversationQueue } from './queue.js';
@@ -56,6 +56,32 @@ export class SlackPortal {
 		receiver: this.receiver
 	});
 	private botUserId = '';
+	private markdown = true;
+
+	private answerBlocks(text: string): SlackBlocks {
+		return this.markdown
+			? [{ type: 'markdown', text }]
+			: [{ type: 'section', text: { type: 'plain_text', text } }];
+	}
+
+	private async deliverAnswer<T>(send: () => Promise<T>): Promise<T> {
+		try {
+			return await send();
+		} catch (error) {
+			// Some Slack apps cannot use native Markdown blocks. Fall back only
+			// when Slack explicitly rejects the blocks, never retry uncertain sends.
+			if (
+				!this.markdown ||
+				(error as { data?: { error?: string } })?.data?.error !== 'invalid_blocks'
+			)
+				throw error;
+			this.markdown = false;
+			log.warn('markdown_unavailable', {
+				message: 'Slack rejected Markdown blocks; using plain text.'
+			});
+			return send();
+		}
+	}
 
 	isReady(): boolean {
 		return this.receiver.client.websocket?.isActive() ?? false;
@@ -182,10 +208,11 @@ export class SlackPortal {
 		await this.queue.run(key, async () => {
 			let stopId = '';
 			let head: { ts: string; text: string } | undefined;
+			let lastText = '';
 			const stopBlocks = (text: string): SlackBlocks =>
 				stopId
 					? [
-							{ type: 'section', text: { type: 'mrkdwn', text } },
+							...this.answerBlocks(text),
 							{
 								type: 'actions',
 								elements: [
@@ -198,14 +225,16 @@ export class SlackPortal {
 								]
 							}
 						]
-					: [];
+					: this.answerBlocks(text);
 			const live = new LiveReply(async (text) => {
 				const first = !head;
-				const posted = await say({
-					text,
-					thread_ts: threadTs,
-					...(first ? { blocks: stopBlocks(text) } : {})
-				});
+				const posted = await this.deliverAnswer(() =>
+					say({
+						text,
+						thread_ts: threadTs,
+						blocks: first ? stopBlocks(text) : this.answerBlocks(text)
+					})
+				);
 				if (!posted.ts) throw new Error('Slack did not return the posted message timestamp.');
 				const ts = posted.ts;
 				if (first) {
@@ -214,12 +243,14 @@ export class SlackPortal {
 				}
 				return {
 					edit: async (text) => {
-						await this.app.client.chat.update({
-							channel: message.channel,
-							ts,
-							text,
-							...(first ? { blocks: stopBlocks(text) } : {})
-						});
+						await this.deliverAnswer(() =>
+							this.app.client.chat.update({
+								channel: message.channel,
+								ts,
+								text,
+								blocks: first ? stopBlocks(text) : this.answerBlocks(text)
+							})
+						);
 						if (first) head = { ts, text };
 					}
 				};
@@ -241,6 +272,7 @@ export class SlackPortal {
 			const reacted = new Set<string>();
 			let lastActivity = '';
 			const onUpdate = async (update: ChatUpdate) => {
+				if (update.text) lastText = update.text;
 				this.conversations.set('slack', key, update.conversation);
 				stopId = this.interactions.working(key, message.user, credential, update.job);
 				for (const tool of update.tools) {
@@ -301,6 +333,7 @@ export class SlackPortal {
 					result = await this.chat.resume(prompt.job, currentCredential, onUpdate);
 				}
 				this.conversations.set('slack', key, result.conversation);
+				lastText = result.text;
 				await live.update(this.interactions.cancelled(key) ? 'Work stopped.' : result.text, true);
 			} catch (error) {
 				log.warn('conversation_failed', {
@@ -311,7 +344,7 @@ export class SlackPortal {
 				await live.update(
 					this.interactions.cancelled(key)
 						? 'Work stopped.'
-						: 'The request could not be completed. You can check the session in OpenCode.',
+						: `${lastText ? `${lastText}\n\n` : ''}${portalFailureText(error)}`,
 					true
 				);
 			} finally {
@@ -325,12 +358,18 @@ export class SlackPortal {
 					.update(lastActivity, true)
 					.catch((error) => log.warn('activity_delivery_failed', { error: errorMessage(error) }));
 				this.actionLocations.delete(stopId);
-				if (head)
-					await this.app.client.chat
-						.update({ channel: message.channel, ts: head.ts, text: head.text, blocks: [] })
-						.catch((error) =>
-							log.warn('stop_control_cleanup_failed', { error: errorMessage(error) })
-						);
+				const finalHead = head;
+				if (finalHead)
+					await this.deliverAnswer(() =>
+						this.app.client.chat.update({
+							channel: message.channel,
+							ts: finalHead.ts,
+							text: finalHead.text,
+							blocks: this.answerBlocks(finalHead.text)
+						})
+					).catch((error) =>
+						log.warn('stop_control_cleanup_failed', { error: errorMessage(error) })
+					);
 			}
 		});
 	}

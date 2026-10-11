@@ -1,4 +1,9 @@
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+	Client,
+	SdkError,
+	SdkErrorCode,
+	StreamableHTTPClientTransport
+} from '@modelcontextprotocol/client';
 
 import type { PortalCredential } from './credential-registry.js';
 import { createLogger, errorMessage } from './runtime.js';
@@ -31,6 +36,35 @@ export type ChatResult = {
 	pending?: { job: string; interactions: PortalInteraction[] };
 };
 const log = createLogger('portal:chat');
+
+export class PortalConnectionError extends Error {
+	constructor() {
+		super(
+			'The connection was interrupted. Work may still be running; check the session in OpenCode.'
+		);
+	}
+}
+
+export class PortalAgentError extends Error {}
+
+export function portalFailureText(error: unknown): string {
+	if (error instanceof PortalConnectionError) return error.message;
+	if (error instanceof PortalAgentError)
+		return 'The agent could not finish this request. Check the session in OpenCode for details.';
+	return 'The request was rejected or its reply could not be delivered. Check the session in OpenCode.';
+}
+
+function interrupted(error: unknown): boolean {
+	return (
+		error instanceof SdkError &&
+		[
+			SdkErrorCode.RequestTimeout,
+			SdkErrorCode.ConnectionClosed,
+			SdkErrorCode.NotConnected,
+			SdkErrorCode.SendFailed
+		].includes(error.code)
+	);
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -208,43 +242,58 @@ export class GuardianChatClient {
 		credential: PortalCredential,
 		onUpdate?: (update: ChatUpdate) => Promise<unknown>
 	) {
-		const client = await this.clientFor(credential);
-		let delivery = Promise.resolve();
-		const result = await client
-			.callTool(
-				{ name, arguments: args },
-				{
-					timeout: 45_000,
-					maxTotalTimeout: 45_000,
-					resetTimeoutOnProgress: true,
-					onprogress: (notification) => {
-						const meta = asRecord(asRecord(notification)?._meta);
-						const snapshot = update(meta?.['io.fwdslsh.fhold/agent']);
-						if (!snapshot || !onUpdate) return;
-						delivery = delivery
-							.then(async () => {
-								await onUpdate(snapshot);
-							})
-							.catch((error) => {
-								log.warn('progress_delivery_failed', { error: errorMessage(error) });
-							});
+		// Retry only inspection of accepted work. Never replay a submission,
+		// approval or cancellation, including when its response was lost.
+		const canRecover = name === 'fhold.agent.run' || name === 'fhold.job.get';
+		let job = name === 'fhold.job.get' && typeof args.job === 'string' ? args.job : undefined;
+		for (let attempt = 0; ; attempt++) {
+			let client: Client | undefined;
+			let delivery = Promise.resolve();
+			try {
+				client = await this.clientFor(credential);
+				const result = await client.callTool(
+					{ name, arguments: args },
+					{
+						timeout: 45_000,
+						maxTotalTimeout: 45_000,
+						resetTimeoutOnProgress: true,
+						onprogress: (notification) => {
+							const meta = asRecord(asRecord(notification)?._meta);
+							const snapshot = update(meta?.['io.fwdslsh.fhold/agent']);
+							if (!snapshot) return;
+							if (canRecover) job = snapshot.job;
+							if (!onUpdate) return;
+							delivery = delivery
+								.then(async () => {
+									await onUpdate(snapshot);
+								})
+								.catch((error) => {
+									log.warn('progress_delivery_failed', { error: errorMessage(error) });
+								});
+						}
 					}
+				);
+				await delivery;
+				const snapshot = !result.isError ? update(result.structuredContent) : undefined;
+				if (snapshot && onUpdate) {
+					await onUpdate(snapshot).catch((error) => {
+						log.warn('progress_delivery_failed', { error: errorMessage(error) });
+					});
 				}
-			)
-			.catch(async (error: unknown) => {
+				return result;
+			} catch (error) {
+				await delivery;
 				const slot = this.connections.get(credential.username);
-				if (slot?.client === client) this.connections.delete(credential.username);
-				await client.close().catch(() => {});
-				throw error;
-			});
-		await delivery;
-		const snapshot = !result.isError ? update(result.structuredContent) : undefined;
-		if (snapshot && onUpdate) {
-			await onUpdate(snapshot).catch((error) => {
-				log.warn('progress_delivery_failed', { error: errorMessage(error) });
-			});
+				if (client && slot?.client === client) this.connections.delete(credential.username);
+				await client?.close().catch(() => {});
+				if (!interrupted(error)) throw error;
+				if (!canRecover || !job || attempt >= 2) throw new PortalConnectionError();
+				log.warn('job_tracking_reconnecting', { attempt: attempt + 1 });
+				await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+				name = 'fhold.job.get';
+				args = { job, waitMs: 30_000 };
+			}
 		}
-		return result;
 	}
 
 	async chat(
@@ -329,7 +378,7 @@ export class GuardianChatClient {
 			};
 		}
 		if (structured.status === 'failed') {
-			throw new Error(
+			throw new PortalAgentError(
 				(typeof structured.error === 'string' ? structured.error : 'The agent run failed.').slice(
 					0,
 					300

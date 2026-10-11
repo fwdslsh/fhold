@@ -375,6 +375,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			await run(['restart']);
 			await waitForAssistant(home);
 			const upgradedAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+			assert.equal(restartStatus(home).required, false, 'One healthy normal restart applies the converted engine');
 			oldAkm.engines.scheduled.args[1] = '--server';
 			assert.deepEqual(
 				upgradedAkm,

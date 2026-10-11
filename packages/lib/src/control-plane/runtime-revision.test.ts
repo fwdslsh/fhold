@@ -11,7 +11,7 @@ import {
 	savePortalTokens,
 	saveStackIntent
 } from './operations.js';
-import { recordAppliedRuntime, restartStatus, runtimeRevision } from './runtime-revision.js';
+import { recordAppliedRuntime, restartStatus, runtimeRevision, upgradedScheduledEngineContents } from './runtime-revision.js';
 import { activateComposeCommand, deactivateComposeCommand } from './activation.js';
 import { buildComposeOptions } from './compose.js';
 import { composeConfigJson } from './docker.js';
@@ -124,6 +124,10 @@ else if (args[0] === 'compose' && args.includes('up')) {
  writeFileSync(${JSON.stringify(calls)}, JSON.stringify(args));
  const mode = readFileSync(${JSON.stringify(mode)}, 'utf8');
  if (mode === 'fail') process.exit(1);
+ const akmPath = ${JSON.stringify(join(home, 'config/akm/config.json'))};
+ const akm = JSON.parse(readFileSync(akmPath, 'utf8'));
+ if (mode === 'akm-edit') akm.engines.scheduled.timeoutMs += 1;
+ if (mode !== 'old') { akm.engines.scheduled.args[1] = '--server'; writeFileSync(akmPath, JSON.stringify(akm, null, 2) + '\\n'); }
  if (mode === 'edit') writeFileSync(${JSON.stringify(join(home, 'config/codex/config.toml'))}, 'approval_policy = "on-request"\\n');
 }
 `,
@@ -135,8 +139,22 @@ else if (args[0] === 'compose' && args.includes('up')) {
 	await deactivateComposeCommand(state);
 	expect(restartStatus(home).required).toBe(true);
 	writeFileSync(mode, 'pass');
+	const akmPath = join(home, 'config/akm/config.json');
+	const oldAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+	oldAkm.engines.scheduled.args[1] = '--attach';
+	oldAkm.scheduler.enabled = ['operator-task'];
+	writeFileSync(akmPath, JSON.stringify(oldAkm));
+	// A newer control plane must not rewrite a still-pinned v1 engine.
+	writeFileSync(mode, 'old');
 	await activateComposeCommand(state, ['up', '-d', '--wait']);
 	expect(JSON.parse(readFileSync(calls, 'utf8'))).toContain('--force-recreate');
+	expect(JSON.parse(readFileSync(akmPath, 'utf8'))).toEqual(oldAkm);
+	expect(restartStatus(home)).toEqual({ required: false });
+	writeFileSync(mode, 'pass');
+	await activateComposeCommand(state, ['up', '-d', '--wait']);
+	oldAkm.engines.scheduled.args[1] = '--server';
+	expect(JSON.parse(readFileSync(akmPath, 'utf8'))).toEqual(oldAkm);
+	expect(JSON.parse(readFileSync(calls, 'utf8'))).toContain('--wait');
 	expect(restartStatus(home)).toEqual({ required: false });
 	// An unsuccessful restart of unchanged settings still needs a successful retry.
 	writeFileSync(mode, 'fail');
@@ -145,15 +163,59 @@ else if (args[0] === 'compose' && args.includes('up')) {
 	).rejects.toThrow();
 	expect(restartStatus(home).required).toBe(true);
 	writeFileSync(mode, 'pass');
+	oldAkm.engines.scheduled.args[1] = '--attach';
+	writeFileSync(akmPath, JSON.stringify(oldAkm));
 	const revision = await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait'], {
 		deferAppliedReceipt: true
 	});
 	expect(restartStatus(home).required).toBe(true);
 	recordAppliedRuntime(home, revision);
 	expect(restartStatus(home)).toEqual({ required: false });
-	writeFileSync(mode, 'edit');
+	oldAkm.engines.scheduled.args[1] = '--attach';
+	writeFileSync(akmPath, JSON.stringify(oldAkm));
+	writeFileSync(mode, 'akm-edit');
 	await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait']);
 	expect(restartStatus(home).required).toBe(true);
+	writeFileSync(mode, 'edit');
+	oldAkm.engines.scheduled.args[1] = '--attach';
+	writeFileSync(akmPath, JSON.stringify(oldAkm));
+	await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait']);
+	expect(restartStatus(home).required).toBe(true);
+});
+
+test('fingerprints preserve old native pins, custom engines and malformed optional settings without writes', async () => {
+	const { home } = await fixture();
+	const path = join(home, 'config/akm/config.json');
+	const custom = JSON.parse(readFileSync(path, 'utf8'));
+	const baseline = runtimeRevision(home);
+	custom.engines.scheduled.args[1] = '--attach';
+	const previous = JSON.stringify(custom);
+	writeFileSync(path, previous);
+	expect(runtimeRevision(home)).not.toBe(baseline);
+	const expected = structuredClone(custom);
+	expected.engines.scheduled.args[1] = '--server';
+	expect(upgradedScheduledEngineContents(home)).toEqual(Buffer.from(`${JSON.stringify(expected, null, 2)}\n`));
+	expect(readFileSync(path, 'utf8')).toBe(previous);
+	custom.engines.scheduled.args = ['run', '--attach', 'http://custom:4096', '--agent', 'scheduled'];
+	const original = JSON.stringify(custom);
+	writeFileSync(path, original);
+	expect(runtimeRevision(home)).not.toBe(baseline);
+	expect(upgradedScheduledEngineContents(home)).toBeUndefined();
+	expect(readFileSync(path, 'utf8')).toBe(original);
+	writeFileSync(path, '{invalid optional scheduler config');
+	expect(() => runtimeRevision(home)).not.toThrow();
+	expect(upgradedScheduledEngineContents(home)).toBeUndefined();
+	expect(readFileSync(path, 'utf8')).toBe('{invalid optional scheduler config');
+});
+
+test('existing raw server receipts remain applied without normalization or inspection writes', async () => {
+	const { home } = await fixture();
+	const path = join(home, 'config/akm/config.json');
+	const original = readFileSync(path);
+	recordAppliedRuntime(home, runtimeRevision(home));
+	expect(upgradedScheduledEngineContents(home)).toBeUndefined();
+	expect(restartStatus(home)).toEqual({ required: false });
+	expect(readFileSync(path)).toEqual(original);
 });
 
 test('invalid restart evidence is not silently treated as applied', async () => {

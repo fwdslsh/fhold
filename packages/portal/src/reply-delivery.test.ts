@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { Client as McpClient } from '@modelcontextprotocol/client';
+import { Client as McpClient, SdkError, SdkErrorCode } from '@modelcontextprotocol/client';
 
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry } from './credential-registry.js';
@@ -508,6 +508,52 @@ describe('Discord conversation UX', () => {
 });
 
 describe('Slack conversation UX', () => {
+	it('keeps native bold/table Markdown after the final Stop control is removed', async () => {
+		const fixture = slackFixture();
+		const text = '**Tasks**\n\n| Title | Owner |\n| --- | --- |\n| Check logs | Ian |';
+		spyOn(McpClient.prototype, 'callTool').mockResolvedValue(response('completed', text));
+		await new SlackPortal().start();
+		await slackMessage('app_mention', { event: fixture.event, say: fixture.say });
+		expect(fixture.replies[0].blocks?.[0]).toEqual({ type: 'markdown', text });
+		expect(slackUpdate.mock.calls.at(-1)?.[0]).toMatchObject({
+			text,
+			blocks: [{ type: 'markdown', text }]
+		});
+	});
+
+	it('falls back to plain text when Slack explicitly rejects Markdown without rerunning work', async () => {
+		const fixture = slackFixture();
+		fixture.say.mockRejectedValueOnce(
+			Object.assign(new Error('invalid_blocks'), { data: { error: 'invalid_blocks' } })
+		);
+		const calls = spyOn(McpClient.prototype, 'callTool').mockResolvedValue(
+			response('completed', '**Answer**')
+		);
+		await new SlackPortal().start();
+		await slackMessage('app_mention', { event: fixture.event, say: fixture.say });
+		expect(fixture.say).toHaveBeenCalledTimes(2);
+		expect(fixture.replies[0].blocks?.[0]).toEqual({
+			type: 'section',
+			text: { type: 'plain_text', text: '**Answer**' }
+		});
+		expect(calls).toHaveBeenCalledTimes(1);
+	});
+
+	it('preserves partial answers and reports unknown job status instead of false agent failure', async () => {
+		const fixture = slackFixture();
+		spyOn(McpClient.prototype, 'callTool')
+			.mockImplementationOnce(async (_request, options) => {
+				notify(options, { text: 'The search completed.' });
+				throw new SdkError(SdkErrorCode.RequestTimeout, 'Request timed out');
+			})
+			.mockRejectedValue(new SdkError(SdkErrorCode.ConnectionClosed, 'Connection closed'));
+		await new SlackPortal().start();
+		await slackMessage('app_mention', { event: fixture.event, say: fixture.say });
+		const final = slackUpdate.mock.calls.at(-1)?.[0].text;
+		expect(final).toContain('The search completed.');
+		expect(final).toContain('Work may still be running');
+		expect(final).not.toContain('request could not be completed');
+	});
 	it('shows complete permission patterns in threaded blocks before the buttons', async () => {
 		const fixture = slackFixture();
 		const patterns = Array.from({ length: 4 }, (_, index) => `pattern-${index}-${'x'.repeat(990)}`);
@@ -558,10 +604,13 @@ describe('Slack conversation UX', () => {
 		]);
 		expect(fixture.replies.every((reply) => reply.thread_ts === '1.000001')).toBe(true);
 		const beginning = fixture.replies.find((reply) => reply.text === 'Beginning');
-		expect(beginning?.blocks?.[0]).toMatchObject({ type: 'section', text: { text: 'Beginning' } });
+		expect(beginning?.blocks?.[0]).toMatchObject({ type: 'markdown', text: 'Beginning' });
 		expect(slackUpdate.mock.calls.some(([value]) => value.text === 's'.repeat(2_900))).toBe(true);
 		expect(fixture.replies.at(-1)?.text).toBe('s'.repeat(1_200));
-		expect(slackUpdate.mock.calls.at(-1)?.[0].blocks).toEqual([]);
+		expect(slackUpdate.mock.calls.at(-1)?.[0].blocks).toEqual([
+			{ type: 'markdown', text: 's'.repeat(2_900) }
+		]);
+		expect(fixture.replies.at(-1)?.blocks).toEqual([{ type: 'markdown', text: 's'.repeat(1_200) }]);
 		expect(callTool).toHaveBeenCalledTimes(2);
 	});
 
@@ -681,7 +730,10 @@ describe('Slack conversation UX', () => {
 		expect(callTool.mock.calls[1][0].name).toBe('fhold.job.cancel');
 		finish.resolve(response('failed', 'Aborted'));
 		await work;
-		expect(slackUpdate.mock.calls.at(-1)?.[0]).toMatchObject({ text: 'Work stopped.', blocks: [] });
+		expect(slackUpdate.mock.calls.at(-1)?.[0]).toMatchObject({
+			text: 'Work stopped.',
+			blocks: [{ type: 'markdown', text: 'Work stopped.' }]
+		});
 		expect(
 			callTool.mock.calls.filter(([request]) => request.name === 'fhold.agent.run')
 		).toHaveLength(1);

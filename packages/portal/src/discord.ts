@@ -12,7 +12,7 @@ import {
 	type Message
 } from 'discord.js';
 
-import { GuardianChatClient } from './chat-client.js';
+import { GuardianChatClient, portalFailureText } from './chat-client.js';
 import type { ChatUpdate } from './chat-client.js';
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry, credentialConversationKey } from './credential-registry.js';
@@ -253,11 +253,7 @@ export class DiscordPortal {
 				}
 			} catch (error) {
 				log.warn('conversation_failed', { userId: message.author.id, error: errorMessage(error) });
-				await post(
-					this.interactions.cancelled(key)
-						? 'Work stopped.'
-						: 'The request could not be completed. You can check the session in OpenCode.'
-				);
+				await post(this.interactions.cancelled(key) ? 'Work stopped.' : portalFailureText(error));
 			} finally {
 				stopTyping?.();
 				const pending = this.interactions.forKey(key);

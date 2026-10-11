@@ -3,10 +3,9 @@
 This document describes the active runtime. The executable source is
 `packages/skeleton/system/stack/stack.compose.yml`.
 
-On `codex/opencode-v2`, user-config directory watching and the OpenCode 2 native
-API are under qualification. See the [migration handoff](opencode-v2-migration-handoff.md)
-for verified live settings behavior and outstanding history/credential gates;
-this branch is not yet a released V2 migration.
+The released runtime uses OpenCode 2. See the
+[qualification report](../operations/opencode-v2-qualification.md) for verified
+native settings, persistence and API behavior; each release retains its own gates.
 
 ## Host layout
 
@@ -193,6 +192,43 @@ warnings into CLI status and Admin; unavailable diagnostics never restart the
 container. Authentication, safe restore and actual exclusive ownership remain
 required.
 
+### Scoped workload environment (standalone deployments)
+
+An external deployer can optionally supply `FH_OPENCODE_ENV_MAP`, a comma-separated
+list of exact `SOURCE=ALIAS` environment **names**, for example:
+
+```text
+FH_OPENCODE_ENV_MAP=WORKLOAD_IDENTITY_ENDPOINT=MY_PLUGIN_ENDPOINT,WORKLOAD_IDENTITY_HEADER=MY_PLUGIN_HEADER
+```
+
+The platform supplies the source values separately. fhold reads them at startup,
+removes the configured sources from native writer launch environments and exports
+only the aliases into OpenCode. Existing identity/recovery filtering remains in
+place. Aliases are not supplied to the scheduler or Claude/Codex supervisors, and
+the map itself is removed from writer environments. Unmapped variables retain
+their existing behavior. There is no wildcard forwarding, cloud API, startup
+installer or additional service. The default is off (unset/empty).
+
+Use the plugin's own established alias names. Names must be ordinary environment
+identifiers; destinations must be unique, unset and distinct from sources.
+Mappings cannot replace native/fhold settings or process controls such as `PATH`,
+`HOME`, `LD_PRELOAD` or `NODE_OPTIONS`, nor restore the filtered identity names.
+An invalid map disables this optional feature with a degraded-health warning;
+the agent continues. A missing source skips only that alias with a warning.
+Values are never written to settings, diagnostic files or launch arguments.
+Changing the map requires a normal restart; fhold does not refresh credentials
+or implement the workload plugin's token exchange.
+
+**This is launch-environment scoping, not a security sandbox.** OpenCode tools
+and child processes inherit its aliases. Scheduled requests use the same server,
+so its plugins can consume them during scheduled work even though the scheduler
+process has no aliases. A plugin needing per-session restrictions must enforce
+them itself. Same-UID processes and trusted native agents are not isolated from
+container credentials by environment filtering. Choose the workload's actual
+permissions accordingly. The operator-controlled managed Compose environment
+allowlist is unchanged; this setting targets externally provisioned containers,
+not a new Admin configuration surface or broad Compose passthrough.
+
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at
@@ -242,6 +278,11 @@ The read-only `config/guardian` mount also carries `oauth.json` and
 public identity-provider metadata and identity-to-credential names, never an
 OAuth token or client secret. Guardian reads identity mappings per request;
 resource-server configuration changes require a restart.
+
+Authenticated, admitted MCP requests use Bun's native per-request idle-timeout
+override: quiet streams remain open while tools run. Ordinary HTTP and rejected
+requests retain their usual timeout. Body limits, authentication, rate limits and
+bounded native operations remain unchanged; no artificial progress is generated.
 
 ## Portal adapters
 

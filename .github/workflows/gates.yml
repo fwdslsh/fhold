@@ -154,6 +154,9 @@ jobs:
       - name: Verify native work drives conditional keep-alive
         if: matrix.image == 'assistant'
         run: node scripts/smoke-keepalive.mjs fhold/assistant:ci
+      - name: Verify scoped workload aliases through native OpenCode tools
+        if: matrix.image == 'assistant'
+        run: node scripts/smoke-workload-environment.mjs fhold/assistant:ci
       - name: Verify operator-supplied native task permissions
         if: matrix.image == 'assistant'
         run: node scripts/smoke-managed-policy.mjs fhold/assistant:ci

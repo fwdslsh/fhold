@@ -211,13 +211,14 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	let wake;
 	let timer;
 	let renewal;
-	let renewing = false;
+	let renewing;
 	let statusWrite = Promise.resolve();
 	let probe;
 	let statusReportingFailed = false;
 	const warnings = [...(config.warnings ?? [])];
 	const stop = () => {
 		stopping = true;
+		clearInterval(renewal);
 		clearTimeout(timer);
 		wake?.();
 	};
@@ -315,13 +316,12 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		};
 		renewal = setInterval(() => {
 			if (renewing || stopping) return;
-			renewing = true;
-			engine
+			renewing = engine
 				.renew()
 				.then(publishStatus)
 				.catch(failClosed)
 				.finally(() => {
-					renewing = false;
+					renewing = undefined;
 				});
 		}, 1_000);
 		while (!stopping) {
@@ -350,6 +350,9 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 					timer = setTimeout(resolveWait, 250);
 				});
 		}
+		// A renewal must finish while this process still owns the checkpoint.
+		// Releasing first can turn successful shutdown into a late ownership loss.
+		await renewing;
 		state = failure ? 'failed' : 'stopping';
 		await publishStatus();
 		// Entrypoint sends TERM here only after all state-writing descendants stop.
@@ -368,6 +371,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		failureCause ??= error;
 	} finally {
 		clearInterval(renewal);
+		await renewing;
 		clearTimeout(timer);
 		if (owner) {
 			try {
