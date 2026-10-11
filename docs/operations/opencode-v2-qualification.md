@@ -58,6 +58,11 @@ retested here. See [issue #21](https://github.com/fwdslsh/fhold/issues/21).
 - Exclude native MCP OAuth integrations from the AI-account picker.
 - Wait for native asynchronous graph activation in qualification checks rather
   than treating an initially empty skill/agent inventory as final.
+  The standalone permission-probe API can run before policy hooks activate;
+  agent inventory alone is not a complete activation barrier. The policy smoke
+  uses native integration listing, which awaits activation just as native
+  prompt preparation and execution do. Policy assertions are never retried or
+  relaxed, and no extra readiness layer is added to the shipped runtime.
 - Preserve unfinished history explicitly; native export otherwise omits it.
   The import receipt discloses native fork/revert/snapshot transfer limits.
 

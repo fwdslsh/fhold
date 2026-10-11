@@ -72,15 +72,17 @@ if (process.argv[2] === '--inside') {
 				'Basic ' + Buffer.from('opencode:synthetic-policy-smoke-only').toString('base64')
 		}
 	});
-	const agentDeadline = Date.now() + 10000;
-	while (
-		!(await client.agent.list({ location: { directory: '/work' } })).data.some(
+	// Listing agents can observe a partially activated native plugin graph. Unlike
+	// real prompt/shell execution, the permission-probe API does not await it.
+	// Integration listing uses upstream's activation barrier; no sleep, retry of
+	// a failed policy assertion, or runtime readiness workaround is needed.
+	await client.integration.list({ location: { directory: '/work' } });
+	assert.ok(
+		(await client.agent.list({ location: { directory: '/work' } })).data.some(
 			(agent) => agent.id === 'scheduled'
-		)
-	) {
-		assert.ok(Date.now() < agentDeadline, 'Native restricted agent inventory did not activate');
-		await Bun.sleep(100);
-	}
+		),
+		'Native restricted agent inventory must activate'
+	);
 	for (const agent of ['build', 'remote', 'remote-read', 'scheduled']) {
 		const session = await client.session.create({ agent, location: { directory: '/work' } });
 		const check = async (action, resource, expected) => {
