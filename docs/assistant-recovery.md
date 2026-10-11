@@ -307,7 +307,10 @@ automatic unlock, sidecar or hosting-specific runtime is needed.
 If deployment setup runs before the assistant, prefer a one-shot setup followed
 by `exec /usr/local/bin/fhold-assistant` under the image's init process. A parent
 that remains running must forward TERM/INT and wait for the assistant's actual
-exit, keeping its log streams open throughout cleanup. A child-process
+exit, keeping its log streams open throughout cleanup. Keep the parent's signal
+handlers installed until that exit and make repeat forwarding idempotent: a
+one-shot listener can restore default termination while the child is still
+checkpointing. A child-process
 [AbortSignal error](https://nodejs.org/api/child_process.html#child_processspawncommand-args-options)
 reports signal forwarding, not completed shutdown. Test the deployed parent
 chain, not just the stock entrypoint; do not infer owner release from either event.
@@ -318,7 +321,8 @@ chain, not just the stock entrypoint; do not infer owner release from either eve
    use `fhold --name my-agent stop`; a standalone Docker deployment can use
    `docker stop --time 360 EXACT_CONTAINER`. Supply at least the actual derived
    budget if settings differ; these examples do not override a hosting platform's
-   deadline.
+   deadline. When the host's stop API is asynchronous, wait for its operation
+   result before issuing a start or deployment update; acceptance is not completion.
 3. Check the retained entrypoint logs, in order: `shutdown: stopping native
    writers`, `shutdown: writers stopped; finishing recovery checkpoint and owner
    release`, `shutdown: recovery checkpoint completed and owner released`, then
