@@ -21,6 +21,29 @@ registry intent retains its pull behavior; this is not a new configuration flag.
 
 ## Frozen version contract
 
+### Tooling-only publication
+
+Use `SCOPE=tools VERSION=<new-version> STAMP=true bun scripts/bump-release.mjs`
+for CLI/Admin changes, then regenerate `bun.lock` with `bun install --lockfile-only`.
+Only the root, library, CLI and Admin versions advance. The Skeleton version pins
+the last published Assistant/Guardian/Portal cohort; the Claude Desktop package
+version pins its last published extension. Fresh installs and updates never refer
+to an unpublished image or extension tag.
+
+The release workflow defaults to `scope=auto`: matching tooling/runtime versions
+publish the full stack; different versions publish only Linux x64/arm64 CLI and
+Admin downloads, checksums and the asset manifest. Tooling releases run library,
+CLI, Admin and release-helper checks and native artifact smokes. They do not build,
+scan, sign or publish containers, build the unchanged extension, or move Docker
+channel tags. Release notes disclose the retained runtime version.
+
+PR CI uses the same input classification. Changes to runtime sources, Skeleton,
+plugins, seed inputs or dependency resolution select full gates; unknown inputs
+also select full gates. Tooling workspace version-only lock changes do not.
+Publication compares runtime inputs with the pinned runtime release tag so a
+tooling release cannot accidentally omit pending container changes. A full release
+still uses the default `SCOPE=full` stamping and the complete existing gates.
+
 For the historical **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
 `-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
 canonical integers and numeric precedence are enforced by `scripts/set-version.mjs`.

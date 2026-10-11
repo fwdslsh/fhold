@@ -54,12 +54,13 @@ export function expectedClaudeExtensionAsset(version) {
 	return `fhold-claude-desktop-${version}.mcpb`;
 }
 
-export function requiredReleaseAssets(version, productName = readElectronProductName()) {
+export function requiredReleaseAssets(version, productName = readElectronProductName(), scope = 'full') {
 	if (!parseSemver(version)) throw new Error('Invalid fhold release version');
+	if (!['full', 'tools'].includes(scope)) throw new Error('Invalid release scope');
 	return [
 		...CLI_BINARIES,
 		...expectedAdminAssets(version, productName),
-		expectedClaudeExtensionAsset(version),
+		...(scope === 'full' ? [expectedClaudeExtensionAsset(version)] : []),
 		'checksums-sha256.txt'
 	];
 }
@@ -72,18 +73,19 @@ export function checksumFor(checksumsText, filename) {
 	return undefined;
 }
 
-export function writeReleaseAssetManifest(dir, version, productName = readElectronProductName()) {
-	const hashes = Object.fromEntries(requiredReleaseAssets(version, productName).map((name) => {
+export function writeReleaseAssetManifest(dir, version, productName = readElectronProductName(), scope = 'full') {
+	const hashes = Object.fromEntries(requiredReleaseAssets(version, productName, scope).map((name) => {
 		const path = join(dir, name);
 		if (!lstatSync(path, { throwIfNoEntry: false })?.isFile()) throw new Error(`Missing regular asset: ${name}`);
 		return [name, createHash('sha256').update(readFileSync(path)).digest('hex')];
 	}));
 	const manifest = {
 		version,
+		scope,
 		platforms: ['linux-x64', 'linux-arm64'],
 		product: productName,
 		hashes,
-		assets: [...requiredReleaseAssets(version, productName)].sort()
+		assets: [...requiredReleaseAssets(version, productName, scope)].sort()
 	};
 	const output = `${JSON.stringify(manifest, null, 2)}\n`;
 	const path = join(dir, 'release-assets-manifest.json');
@@ -100,7 +102,7 @@ export function writeReleaseAssetManifest(dir, version, productName = readElectr
 	return manifest;
 }
 
-export function validateReleaseAssets(dir, version, productName = readElectronProductName()) {
+export function validateReleaseAssets(dir, version, productName = readElectronProductName(), scope = 'full') {
 	const problems = [];
 	const manifestPath = join(dir, 'release-assets-manifest.json');
 	if (!existsSync(manifestPath)) return [`Missing ${manifestPath}`];
@@ -116,6 +118,7 @@ export function validateReleaseAssets(dir, version, productName = readElectronPr
 	}
 	if (
 		manifest.version !== version ||
+		(manifest.scope ?? 'full') !== scope ||
 		manifest.product !== productName ||
 		JSON.stringify(manifest.platforms) !== JSON.stringify(['linux-x64', 'linux-arm64']) ||
 		!Array.isArray(manifest.assets) ||
@@ -124,7 +127,7 @@ export function validateReleaseAssets(dir, version, productName = readElectronPr
 		problems.push('Release asset manifest has the wrong version, product, or asset list');
 	}
 
-	const required = requiredReleaseAssets(version, productName);
+	const required = requiredReleaseAssets(version, productName, scope);
 	let unsafeFiles = false;
 	for (const name of readdirSync(dir)) {
 		if (![...required, 'release-assets-manifest.json'].includes(name)) {
@@ -183,15 +186,16 @@ export function validateReleaseAssets(dir, version, productName = readElectronPr
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const dir = resolve(process.env.RELEASE_ASSETS_DIR ?? 'dist');
 	const version = process.env.VERSION;
+	const scope = process.env.SCOPE ?? 'full';
 	if (!version) throw new Error('VERSION is required');
-	if (process.argv.includes('--write-manifest')) writeReleaseAssetManifest(dir, version);
-	const problems = validateReleaseAssets(dir, version);
+	if (process.argv.includes('--write-manifest')) writeReleaseAssetManifest(dir, version, readElectronProductName(), scope);
+	const problems = validateReleaseAssets(dir, version, readElectronProductName(), scope);
 	if (problems.length > 0) {
 		console.error(`Release asset set for ${version} is incomplete:`);
 		for (const problem of problems) console.error(`  - ${problem}`);
 		process.exit(1);
 	}
 	console.log(
-		`Validated ${requiredReleaseAssets(version).length} required release assets for ${version}`
+		`Validated ${requiredReleaseAssets(version, readElectronProductName(), scope).length} required ${scope} release assets for ${version}`
 	);
 }

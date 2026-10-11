@@ -12,5 +12,6 @@
 		"plugins/fhold/.claude-plugin/plugin.json",
 		"plugins/fhold/.codex-plugin/plugin.json"
 	],
+	"toolingManifests": ["package.json", "packages/lib/package.json", "packages/cli/package.json", "packages/electron/package.json"],
 	"compose": ["packages/skeleton/system/stack/stack.compose.yml"]
 }

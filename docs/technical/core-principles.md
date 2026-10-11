@@ -10,6 +10,12 @@ Native live settings, permissions and persistence checks are recorded in the
 [qualification report](../operations/opencode-v2-qualification.md). Public
 artifacts must additionally pass the GitHub release gates.
 
+CLI/Admin may publish independently of the runtime. Their build version comes
+from the library manifest; the Skeleton and Claude Desktop manifests retain the
+last published runtime and extension versions. Tooling-only releases preserve
+those image/download defaults and run tooling/artifact gates, not unchanged
+container gates. Runtime or dependency-resolution changes require a full release.
+
 ## Product and ownership
 
 The wordmark is **f/hold**; plain text, commands and persisted names use lowercase

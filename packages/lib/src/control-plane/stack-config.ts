@@ -12,7 +12,7 @@ import {
 	stackEnvFile,
 	writeFileAtomic
 } from './foundation.js';
-import { FH_RELEASE_VERSION } from './release.js';
+import { FH_RUNTIME_VERSION } from './release.js';
 import { nativePreferencesFile } from './provider-files.js';
 import { defaultRecoverySettings, parseRecoverySettings, recoveryDirectory, recoveryEnvironment, recoveryStopGrace, type RecoverySettings } from './recovery-config.js';
 
@@ -127,9 +127,9 @@ export function defaultStackConfig(homeDir?: string): StackConfig {
 			projectName: namedHome ? name : `fhold-${suffix}`,
 			imageNamespace: 'fwdslsh',
 			images: {
-				assistant: FH_RELEASE_VERSION,
-				guardian: FH_RELEASE_VERSION,
-				portal: FH_RELEASE_VERSION
+				assistant: FH_RUNTIME_VERSION,
+				guardian: FH_RUNTIME_VERSION,
+				portal: FH_RUNTIME_VERSION
 			}
 		},
 		assistant: {

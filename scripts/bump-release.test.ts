@@ -1,12 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
 describe("release version validation", () => {
+  test("tooling stamping preserves runtime manifests and Compose defaults", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "fhold-release-preview-"));
+    try {
+      mkdirSync(join(fixture, ".github"));
+      writeFileSync(join(fixture, ".github/release-manifest.json"), JSON.stringify({ manifests: ["package.json", "runtime.json"], toolingManifests: ["package.json"], compose: ["stack.yml"] }));
+      const previous = JSON.stringify({ version: "0.2.2610112-beta.8" });
+      writeFileSync(join(fixture, "package.json"), previous);
+      writeFileSync(join(fixture, "runtime.json"), previous);
+      writeFileSync(join(fixture, "stack.yml"), 'image: fwdslsh/fhold-assistant:${FH_ASSISTANT_VERSION:-0.2.2610112-beta.8}\n');
+      const result = spawnSync(process.execPath, [join(ROOT, "scripts/bump-release.mjs")], { cwd: fixture, env: { ...process.env, SCOPE: "tools", STAMP: "true", VERSION: "0.2.2610121-beta.9" }, encoding: "utf8" });
+      expect(result.status).toBe(0);
+      expect(JSON.parse(readFileSync(join(fixture, "package.json"), "utf8")).version).toBe("0.2.2610121-beta.9");
+      expect(readFileSync(join(fixture, "runtime.json"), "utf8")).toBe(previous);
+      expect(readFileSync(join(fixture, "stack.yml"), "utf8")).toContain("beta.8");
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
+  });
   test("previews the date/build release without modifying any manifest", () => {
     const fixture = mkdtempSync(join(tmpdir(), "fhold-release-preview-"));
     mkdirSync(join(fixture, ".github"));

@@ -15,7 +15,7 @@ import { installHome } from './install.js';
 import { updateHome } from './update.js';
 import { MANAGED_FILES, SEEDED_FILES, skeletonRoot } from './seed.js';
 import { readStackConfig, writeStackConfig } from './stack-config.js';
-import { FH_RELEASE_VERSION } from './release.js';
+import { FH_RUNTIME_VERSION } from './release.js';
 
 const roots: string[] = [];
 const originalSkeleton = process.env.FH_SKELETON_DIR;
@@ -122,8 +122,8 @@ test('update advances managed release tags while preserving explicit pins, proje
 		projectName: 'reviewed-instance',
 		imageNamespace: 'local-review',
 		images: {
-			assistant: FH_RELEASE_VERSION,
-			guardian: FH_RELEASE_VERSION,
+			assistant: FH_RUNTIME_VERSION,
+			guardian: FH_RUNTIME_VERSION,
 			portal: 'reviewed-portal-pin'
 		}
 	});

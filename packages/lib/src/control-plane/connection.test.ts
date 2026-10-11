@@ -7,7 +7,7 @@ import { connectionDetails } from './connection.js';
 import { ensureCredentialKeys } from './credential-store.js';
 import { managedComposeFile, stateSecretFile } from './foundation.js';
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
-import { FH_RELEASE_VERSION } from './release.js';
+import { FH_BRIDGE_VERSION } from './release.js';
 
 const roots: string[] = [];
 
@@ -32,7 +32,7 @@ describe('shared connection details', () => {
 		const root = home();
 		const details = connectionDetails(root, 'claude');
 		expect(details.extension).toBe(
-			`https://github.com/fwdslsh/fhold/releases/download/${FH_RELEASE_VERSION}/fhold-claude-desktop-${FH_RELEASE_VERSION}.mcpb`
+			`https://github.com/fwdslsh/fhold/releases/download/${FH_BRIDGE_VERSION}/fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb`
 		);
 		expect(details.note).toContain('matching GitHub release');
 		expect(details.credentialKey).toBeUndefined();
