@@ -63,7 +63,9 @@ describe('Admin domain', () => {
 			expect(confirmedAdminAction({ action, confirmed: true })).toBe(action);
 		}
 		expect(() => confirmedAdminAction({ action: ['start'], confirmed: true })).toThrow();
-		expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+	expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+	expect(interruptionPrompt('start', 'azure-container-apps').buttons).toEqual(['Cancel', 'Request start']);
+	expect(interruptionPrompt('stop', 'azure-container-apps').detail).toContain('Acceptance does not prove replica drain');
 		expect(interruptionPrompt('recovery-init').buttons[0]).toBe('Cancel');
 		expect(interruptionPrompt('recovery-init').detail).toContain('genuinely unused');
 		expect(interruptionPrompt('recovery-restore').detail).toContain('containers remain stopped');

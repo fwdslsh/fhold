@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Shared filesystem and Docker Compose control plane for fhold",
+  "description": "Shared instance and host-side hosting control plane for fhold",
   "engines": {
     "bun": ">=1.0.0"
   },

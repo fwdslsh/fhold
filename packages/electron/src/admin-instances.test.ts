@@ -11,7 +11,12 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createFholdState, defaultFholdHome, defaultStackConfig, markInstalled, resolveFholdHome, writeStackConfig } from '@fhold/lib';
-import { AdminInstances, validateInstance } from './admin-instances.js';
+import { AdminInstances as Instances, validateInstance } from './admin-instances.js';
+import { HostingPreferencesStore } from '@fhold/lib';
+
+class AdminInstances extends Instances {
+	constructor(profile: string, home: string) { super(profile, home, new HostingPreferencesStore(join(profile, 'hosting.json'))); }
+}
 
 const roots: string[] = [];
 afterEach(() => {
@@ -31,6 +36,27 @@ function installed(home: string) {
 }
 
 describe('Admin instance selection', () => {
+	it('shares remote targets with the CLI without interpreting remote homes as local paths', () => {
+		const { root, profile, home } = fixture();
+		const instances = new AdminInstances(profile, home);
+		instances.hosting.saveConnection({ kind: 'ssh-docker', id: 'lab', host: 'lab', roots: ['/opt/stacks'] });
+		const target = { kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'lab', remoteHome: join(root, 'must-not-create') } };
+		instances.open(target);
+		expect(instances.current()).toEqual(target);
+		expect(() => instances.currentLocal()).toThrow('not this computer');
+		expect(existsSync(target.ref.remoteHome)).toBe(false);
+		expect(instances.hosting.read().recent).toEqual([target.ref]);
+		expect(new AdminInstances(profile, home).current()).toEqual(target);
+	});
+	it('blocks switching during connection discovery even before an instance is selected', async () => {
+		const { profile, home } = fixture();
+		const instances = new AdminInstances(profile, home);
+		let finish!: () => void;
+		const discovering = instances.runConnection(() => new Promise<void>(resolve => { finish = resolve; }));
+		expect(() => instances.prepareNew({ kind: 'local', homeDir: home })).toThrow('current operation');
+		finish(); await discovering;
+		instances.prepareNew({ kind: 'local', homeDir: home });
+	});
 	it('opens on welcome without seeding the default home or writing a profile', () => {
 		const { home, profile } = fixture();
 		const instances = new AdminInstances(profile, home);
@@ -71,14 +97,14 @@ describe('Admin instance selection', () => {
 		instances.open({ kind: 'local', homeDir: other });
 		instances.open({ kind: 'local', homeDir: alias });
 		expect(instances.welcome().recentInstances.map((item) => item.homeDir)).toEqual([home, other]);
-		const preferences = readFileSync(join(profile, 'instances.json'), 'utf8');
+		const preferences = readFileSync(join(profile, 'hosting.json'), 'utf8');
 		const stack = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
 		const restarted = new AdminInstances(profile, other);
 		expect(restarted.current()).toEqual({ kind: 'local', homeDir: home });
 		expect(restarted.welcome().selectedInstance).toEqual(restarted.current());
 		expect(restarted.welcome().defaultInstance.homeDir).toBe(other);
 		expect(restarted.welcome().recentInstances.map((item) => item.homeDir)).toEqual([home, other]);
-		expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
+		expect(readFileSync(join(profile, 'hosting.json'), 'utf8')).toBe(preferences);
 		expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(stack);
 	});
 
@@ -144,12 +170,12 @@ describe('Admin instance selection', () => {
 		writeStackConfig(home, config);
 		const instances = new AdminInstances(profile, home);
 		instances.open({ kind: 'local', homeDir: home });
-		const preferences = readFileSync(join(profile, 'instances.json'), 'utf8');
+		const preferences = readFileSync(join(profile, 'hosting.json'), 'utf8');
 		const stack = readFileSync(join(home, 'state', 'stack.json'), 'utf8');
 		expect(instances.welcome().recentInstances[0].name).toBe('april');
 		expect(instances.welcome().recentInstances[0].available).toBe(true);
 		expect(readFileSync(join(home, 'state', 'stack.json'), 'utf8')).toBe(stack);
-		expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
+		expect(readFileSync(join(profile, 'hosting.json'), 'utf8')).toBe(preferences);
 		expect(preferences).not.toContain('april');
 		expect(preferences).not.toContain('available');
 		const missing = join(root, 'missing');
@@ -299,7 +325,7 @@ describe('Admin instance selection', () => {
 		writeFileSync(sentinel, 'keep');
 		const instances = new AdminInstances(profile, home);
 		instances.open({ kind: 'local', homeDir: home });
-		const preferences = readFileSync(join(profile, 'instances.json'), 'utf8');
+		const preferences = readFileSync(join(profile, 'hosting.json'), 'utf8');
 		const targets = [home, populated, sentinel, 'relative'];
 		if (process.platform !== 'win32') {
 			const alias = join(root, 'alias');
@@ -309,7 +335,7 @@ describe('Admin instance selection', () => {
 		for (const folder of targets) {
 			expect(() => instances.prepareNew({ kind: 'local', homeDir: folder })).toThrow();
 			expect(instances.current().homeDir).toBe(home);
-			expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
+			expect(readFileSync(join(profile, 'hosting.json'), 'utf8')).toBe(preferences);
 		}
 		expect(readFileSync(sentinel, 'utf8')).toBe('keep');
 		expect(existsSync(join(populated, 'state'))).toBe(false);

@@ -4,23 +4,17 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
-	activateComposeCommand,
 	beginRemoteEnable,
 	remoteTool,
 	remoteBrowserUrls,
 	remoteConnection,
 	beginProviderOAuth,
-	buildComposeOptions,
 	classifyInstall,
-	composeLogs,
-	composePs,
-	containerWarnings,
 	completeProviderOAuth,
 	configureGuardianModeratorModel,
 	connectionDetails,
 	createFholdState,
 	defaultStackConfig,
-	deactivateComposeCommand,
 	ensureDockerReady,
 	isCodexSandbox,
 	isCredentialUsername,
@@ -32,8 +26,6 @@ import {
 	removeProviderSetup,
 	markInstalled,
 	mutateStack,
-	restartStatus,
-	parseComposePsRows,
 	parseStackConfig,
 	portalSecretConfigured,
 	readCredentialKey,
@@ -44,6 +36,7 @@ import {
 	testAssistantReadiness,
 	savePortalTokens
 } from '@fhold/lib';
+import { hostingProvider, openHostingInstance, inspectLocalInstance, operateLocalInstance, localInstanceLogs, LOCAL_CONNECTION } from '@fhold/lib';
 import {
 	recoverySnapshot,
 	recoveryStatus,
@@ -61,7 +54,7 @@ import type { AssistantReadiness, CodexSandbox, RemoteEnableSession } from '@fho
 
 import { AdminInstances } from './admin-instances.js';
 
-import { ADMIN_CHANNELS, type AdminSnapshot, type StackAction } from './admin-types.js';
+import { ADMIN_CHANNELS, type AdminSnapshot, type AdminViewSnapshot, type StackAction } from './admin-types.js';
 import {
 	confirmedAdminAction,
 	interruptionPrompt,
@@ -92,7 +85,12 @@ let verifiedModel:
 	| undefined;
 
 function managedState() {
-	return createFholdState(instances.current().homeDir);
+	return createFholdState(instances.currentLocal().homeDir);
+}
+function hostedSession() {
+	const target = instances.current();
+	if (target.kind !== 'hosted') return undefined;
+	return openHostingInstance(instances.hosting.connection(target.ref.connectionId), target.ref);
 }
 
 function handleAdmin(
@@ -170,7 +168,9 @@ function oauthInput(value: unknown): {
 	};
 }
 
-export async function adminSnapshot(): Promise<AdminSnapshot> {
+export async function adminSnapshot(): Promise<AdminViewSnapshot> {
+	const session = hostedSession();
+	if (session) return { phase: 'remote', hosting: await session.inspect() };
 	const candidate = managedState();
 	const installState = classifyInstall(candidate.homeDir);
 	if (installState === 'not_installed') {
@@ -198,19 +198,8 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	const current = state();
 	const config = readStackConfig(current.homeDir);
 	if (!config.ok) throw new Error(config.error);
-	const result = await composePs(buildComposeOptions(current));
-	const services = result.ok
-		? await Promise.all(
-				parseComposePsRows(result.stdout).map(async (row) => ({
-					name: row.service,
-					state: row.state,
-					health: row.health,
-					...(row.service === 'assistant' && row.state === 'running' && row.id
-						? { warnings: await containerWarnings(row.id) }
-						: {})
-				}))
-			)
-		: [];
+	const hosting = await inspectLocalInstance(current.homeDir);
+	const services = hosting.services;
 	let recovery: ReturnType<typeof recoverySnapshot> | undefined;
 	let recoveryError: string | undefined;
 	try {
@@ -225,10 +214,10 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 		configPath: stackConfigFile(current.homeDir),
 		config: config.config,
 		services,
-		pendingRestart: restartStatus(current.homeDir),
+		pendingRestart: hosting.pendingRestart,
 		recovery,
 		recoveryError,
-		...(result.ok ? {} : { dockerError: result.stderr || 'Docker is unavailable' }),
+		...(hosting.warnings.length ? { dockerError: hosting.warnings.join(' ') } : {}),
 		portalMappings: adminPortalMappings(current.homeDir),
 		portalSecrets: {
 			discord: portalSecretConfigured(current.homeDir, 'discord'),
@@ -238,21 +227,14 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	};
 }
 
-export async function runAdminAction(action: StackAction): Promise<AdminSnapshot> {
-	const current = state();
-	if (action === 'stop') {
-		await deactivateComposeCommand(current);
-	} else if (action === 'restart') {
-		await activateComposeCommand(current, [
-			'up',
-			'-d',
-			'--force-recreate',
-			'--remove-orphans',
-			'--wait'
-		]);
-	} else {
-		await activateComposeCommand(current, ['up', '-d', '--remove-orphans', '--wait']);
+export async function runAdminAction(action: StackAction): Promise<AdminViewSnapshot> {
+	const session = hostedSession();
+	if (session) {
+		const result = await session.operate(action, true);
+		return { phase: 'remote', hosting: { ...result.snapshot, warnings: [...result.snapshot.warnings, ...(result.message ? [result.message] : [])] } };
 	}
+	const current = state();
+	await operateLocalInstance(current.homeDir, action);
 	return adminSnapshot();
 }
 
@@ -269,6 +251,19 @@ async function completeAdminReadiness(
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
+	ipcMain.handle(ADMIN_CHANNELS.hostingConnections, event => {
+		requireAdminSender(event);
+		return [LOCAL_CONNECTION, ...instances.hosting.read().connections.filter(item => item.id !== 'local')];
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingSaveConnection, (event, value: unknown) => {
+		requireAdminSender(event); requireSwitchable();
+		return instances.hosting.saveConnection(value);
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingInstances, async (event, id: unknown) => {
+		requireAdminSender(event); requireSwitchable();
+		if (typeof id !== 'string') throw new Error('Choose a hosting connection.');
+		return instances.runConnection(() => hostingProvider(instances.hosting.connection(id)).listInstances());
+	});
 	ipcMain.handle(ADMIN_CHANNELS.welcome, (event) => {
 		requireAdminSender(event);
 		return instances.welcome();
@@ -385,7 +380,8 @@ export function registerAdminIpc(): void {
 	ipcMain.handle(ADMIN_CHANNELS.selectedHome, (event) => {
 		requireAdminSender(event);
 		const welcome = instances.welcome();
-		return welcome.selectedInstance?.homeDir ?? welcome.defaultInstance.homeDir;
+		const target = welcome.selectedInstance;
+		return target?.kind === 'hosted' ? target.ref.kind === 'ssh-docker' ? target.ref.remoteHome : target.ref.kind === 'azure-container-apps' ? target.ref.resourceId : target.ref.homeDir : target?.homeDir ?? welcome.defaultInstance.homeDir;
 	});
 	handleAdmin(
 		ADMIN_CHANNELS.install,
@@ -401,7 +397,7 @@ export function registerAdminIpc(): void {
 			const docker = await ensureDockerReady();
 			if (!docker.ok) throw new Error(docker.message);
 			await assertProjectOwnership(parsed.config.deployment.projectName);
-			await installFromAdmin(parsed.config, instances.current().homeDir, automaticPorts);
+			await installFromAdmin(parsed.config, instances.currentLocal().homeDir, automaticPorts);
 			return runAdminAction('start');
 		}
 	);
@@ -419,15 +415,16 @@ export function registerAdminIpc(): void {
 		return adminSnapshot();
 	});
 	handleAdmin(ADMIN_CHANNELS.confirmRestart, async (event, action: unknown) => {
+		const target = instances.current();
 		const options = {
-			...interruptionPrompt(action),
+			...interruptionPrompt(action, target.kind === 'hosted' ? target.ref.kind : 'local-docker'),
 			type: 'question' as const,
 			defaultId: 0,
 			cancelId: 0,
 			noLink: true
 		};
 		if (action === 'instance-export' || action === 'instance-import')
-			options.detail += `\n\nSelected instance folder: ${instances.current().homeDir}`;
+			options.detail += `\n\nSelected instance folder: ${instances.currentLocal().homeDir}`;
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		const result = owner
 			? await dialog.showMessageBox(owner, options)
@@ -438,10 +435,10 @@ export function registerAdminIpc(): void {
 		return runAdminAction(confirmedAdminAction(input));
 	});
 	handleAdmin(ADMIN_CHANNELS.logs, async (_event) => {
+		const session = hostedSession();
+		if (session) return session.logs({ tail: 250 });
 		const current = state();
-		const result = await composeLogs(buildComposeOptions(current), 250);
-		if (!result.ok) throw new Error(result.stderr || 'Could not read Docker logs');
-		return result.stdout.slice(-200_000);
+		return (await localInstanceLogs(current.homeDir, { tail: 250 })).slice(-200_000);
 	});
 	handleAdmin(ADMIN_CHANNELS.providers, (_event) => {
 		const current = state();

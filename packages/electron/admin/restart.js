@@ -47,6 +47,7 @@ export async function requestStackAction(action) {
 }
 
 export async function offerRestart(snapshot = state.currentSnapshot) {
+	if (snapshot?.phase === 'remote') snapshot = snapshot.hosting;
 	if (!snapshot?.pendingRestart?.required) return;
 	return requestStackAction(snapshot.services.some(isRunning) ? 'restart' : 'start');
 }

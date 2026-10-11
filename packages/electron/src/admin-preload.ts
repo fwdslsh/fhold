@@ -4,6 +4,9 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	hostingConnections: () => ipcRenderer.invoke(ADMIN_CHANNELS.hostingConnections),
+	hostingSaveConnection: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSaveConnection, value),
+	hostingInstances: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingInstances, id),
 	welcome: () => ipcRenderer.invoke(ADMIN_CHANNELS.welcome),
 	openInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.openInstance, target),
 	prepareNewInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.prepareNewInstance, target),

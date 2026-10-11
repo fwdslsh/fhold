@@ -53,3 +53,9 @@ test('missing and duplicate selectors fail instead of silently targeting another
 	for (const argv of [['--name'], ['--name='], ['-n'], ['--name', '--help'], ['--name', 'april', 'status', '-n', 'may']])
 		await expect(instanceArguments(argv, command)).rejects.toThrow();
 });
+
+test('hosting connection selectors respect command values and do not reinterpret the remote name', async () => {
+	expect(await instanceArguments(['--connection', 'lab', 'status', '-n', '/opt/stacks/agent'], command)).toEqual({ argv: ['status'], connection: 'lab', instance: '/opt/stacks/agent' });
+	expect(await instanceArguments(['task', 'create', 'idea', '--prompt', '--connection=literal'], command)).toEqual({ argv: ['task', 'create', 'idea', '--prompt', '--connection=literal'] });
+	await expect(instanceArguments(['status', '--connection', 'lab', '--connection=other'], command)).rejects.toThrow('only once');
+});

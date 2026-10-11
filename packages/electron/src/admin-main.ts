@@ -34,6 +34,7 @@ if (releaseSmoke) {
 	} else {
 		// Packaged startup uses the real preload and CSP, with no production-profile writes.
 		app.setPath('userData', mkdtempSync(join(tmpdir(), 'fhold-admin-release-profile-')));
+		process.env.XDG_CONFIG_HOME = join(app.getPath('userData'), 'host-config');
 	}
 }
 

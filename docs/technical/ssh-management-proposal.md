@@ -1,6 +1,13 @@
 # Future SSH instance management
 
-Status: unimplemented proposal, not a release commitment.
+Status: discovery, inspect/logs and lifecycle for existing SSH-Docker instances
+are implemented through the shared host-side boundary. Remote installation,
+settings/setup parity and automatic client tunnels remain deferred.
+
+The [hosting-provider architecture](hosting-provider-architecture.md)
+is the broader implementation direction for CLI and Admin. It retains the SSH
+constraints below within a shared provider boundary. See the
+[current supported workflow](../hosting.md) before using future ideas below.
 
 A future local Admin could remember explicit SSH targets and dispatch host
 operations through the remote fhold CLI using system OpenSSH. It must preserve

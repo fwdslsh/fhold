@@ -67,6 +67,7 @@ async function autoRun(): Promise<void> {
 }
 
 const subCommands = {
+	hosting: () => import('./commands/hosting.js').then((module) => module.default),
 	install: () => import('./commands/install.js').then((module) => module.default),
 	setup: () => import('./commands/setup.js').then((module) => module.default),
 	provider: () => import('./commands/provider.js').then((module) => module.default),
@@ -91,6 +92,7 @@ const subCommands = {
 } as const;
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
+	hosting: 'fhold hosting list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | instances --connection <connection>',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup: 'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote]',
 	provider:
@@ -132,7 +134,8 @@ export function helpText(command?: string): string {
 	return [
 		'fhold — manage your self-hosted personal agent',
 		'',
-		'Usage: fhold [--name <name|absolute-path>] <command> [options]',
+		'Usage: fhold [--connection <connection>] [--name <name|absolute-path>] <command> [options]',
+		'Hosting defaults to this computer. Remote lifecycle changes require --confirm.',
 		'Instance selection: --name (or -n), then FH_HOME, then the current directory.',
 		'Names resolve under ~/fhold/instances. Absolute paths can select any instance.',
 		'',
@@ -179,6 +182,17 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 	}
 	if (argv.length && !commandNames.has(argv[0] ?? '')) {
 		throw new Error(`Unknown command: ${argv[0]}. Run \`fhold --help\` for available commands.`);
+	}
+	if (argv[0] === 'hosting') {
+		// Host metadata and the SSH machine endpoint do not select or seed a local home.
+		if (selected.instance !== undefined) throw new Error('--name selects an instance, not a hosting connection.');
+		await runCommand(mainCommand, { rawArgs: [...argv, ...(selected.connection ? ['--connection', selected.connection] : [])] });
+		return;
+	}
+	if (selected.connection && selected.connection !== 'local') {
+		const { runHostedCommand } = await import('./commands/hosting.js');
+		await runHostedCommand(selected.connection, selected.instance, argv);
+		return;
 	}
 	const previousHome = process.env.FH_HOME;
 	process.env.FH_HOME = resolveInstanceHome(selected.instance);

@@ -6,6 +6,7 @@ import { updateRecoveryFields } from './recovery.js';
 import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
 import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
+import { renderHosted } from './hosting.js';
 
 export function renderPhase(phase) {
 	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
@@ -30,6 +31,7 @@ export function renderPhase(phase) {
 }
 
 export function renderRuntimeControls(snapshot) {
+	if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
 	const unavailable = !!snapshot.dockerError;

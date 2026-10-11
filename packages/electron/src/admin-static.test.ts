@@ -30,6 +30,8 @@ import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, 
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
 import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
+import { renderHosted, targetKey } from '../admin/hosting.js';
+import { capabilities } from '@fhold/lib';
 import {
 	initializeAdmin,
 	renderWelcome,
@@ -171,6 +173,26 @@ afterEach(() => {
 });
 
 describe('Admin static security boundary', () => {
+	it('renders remote targets without a fake local configuration or provider discovery', () => {
+		let providers = 0;
+		state.api = { providers: async () => { providers++; return { providers: [] }; } };
+		const hosting = { ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' }, name: 'cloud-agent', location: '/resource', services: [], warnings: ['Platform observation only'], platformState: 'Scaled to zero', capabilities: capabilities(false), clientUrl: 'https://agent.example.com' };
+		render({ phase: 'remote', hosting });
+		expect(control('view-hosted').hidden).toBe(false);
+		expect(control('app-shell').hidden).toBe(false);
+		expect(control('view-title').textContent).toBe('cloud-agent');
+		expect(state.currentConfig).toBeNull(); expect(providers).toBe(0);
+		expect(control('hosted-open-agent').hidden).toBe(false);
+		expect(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'one', remoteHome: '/agent' } })).not.toBe(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' } }));
+	});
+	it('keeps remote status failures in the selected remote view, with no local fallback', async () => {
+		state.currentSnapshot = { phase: 'remote', hosting: { name: 'remote' } };
+		state.api = { snapshot: async () => { throw new Error('SSH disconnected'); } };
+		await refresh({ statusOnly: true });
+		expect(state.currentSnapshot.phase).toBe('remote');
+		expect(control('hosted-warnings').textContent).toContain('SSH disconnected');
+		expect(control('hosted-warnings').hidden).toBe(false);
+	});
 	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
 		expect(html).toContain('Entire instance (must be stopped)');
 		expect(html).toContain('Import an entire instance instead');

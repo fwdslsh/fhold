@@ -18,6 +18,11 @@ running processes, mocked tests and source scans are not live readiness.
   Compose profiles.
 - CLI owns local installation/lifecycle. Optional Admin uses the same library;
   it has no hosted server, chat, background updater or automatic window resizing.
+- Shared host-side hosting adapters manage existing local Docker, SSH-Docker and
+  experimental ACA targets. Keep provider selection in the shared library,
+  native SSH/Azure credentials on the management host, and remote paths/resources
+  out of local FH_HOME. Unsupported actions must not fall back to local operations.
+  No cloud provisioning, custom deployment editing or host-side recovery engine.
 - Native Codex and Claude Code workers are experimental and image-baked.
   Both supervisors default on, waiting for native sign-in and consent.
   Explicit off choices remain off. Enabled workers start
@@ -29,7 +34,8 @@ running processes, mocked tests and source scans are not live readiness.
   defaulting to on-request; never automatically change policy after failure.
   Built-in AKM/fhold hooks use native managed registration, without personal
   approval records. See `docs/managed-harness-configuration.md`.
-- No new protocol, service, provider registry, scheduler or compatibility layer.
+- No new ingress protocol, service, AI provider registry, scheduler or compatibility layer.
+  The bounded CLI JSON machine envelope exists only over native SSH/stdin.
 - Host-specific deployment/qualification and external vendor installers are not
   product runtime features. Keep generic transports, runtime contracts, product
   tests and reusable image smokes here.
