@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.2610112-beta.8 — shared hosting management
+
+CLI and Admin now share host-side hosting adapters. Local Docker remains the
+default, with existing installation, settings and lifecycle behavior. Saved
+connections and recent targets live outside instance homes and contain locators,
+not hosting credentials, AI accounts or app access keys.
+
+Docker over SSH supports discovering existing instances, status, recent logs and
+confirmed start/stop/restart through the remote host's installed fhold CLI. Native
+SSH owns authentication and host-key review. Remote lifecycle uses the existing
+ownership, recovery-drain and pending-settings paths, without replaying mutations.
+Local Docker endpoints are pinned per subprocess without changing global context;
+remote daemons cannot receive local instance bind paths.
+
+An experimental Azure Container Apps adapter uses the management host's native
+Azure CLI for scoped discovery, platform/revision status, system logs and confirmed
+Start/Stop requests on externally provisioned assistants. Accepted requests remain
+pending, not verified shutdown or readiness. There is no provisioning, deployment
+editing, host-side recovery engine or change to the Assistant container.
+
+Admin offers connection discovery, unambiguous recent targets and controls based
+on each provider's supported actions. Lifecycle confirmation, pending restart
+and unavailable-action guidance remain explicit. Switching instances does not
+resize windows or start/stop agents.
+
+Remote installation, upgrades, settings/provider/native-worker setup, import/export
+and managed SSH tunnels remain deferred. SSH and ACA live platform qualification
+has not been performed; ACA lifecycle and native Claude/Codex connections remain
+experimental. OpenCode/AKM pins and existing reviewed dependency exceptions are
+unchanged. Publishing does not upgrade running instances.
+
 ## 0.2.2610111-beta.7 — reliable portal replies and scoped workload environment
 
 Guardian's admitted MCP streams no longer close during quiet tool runs. Portal
