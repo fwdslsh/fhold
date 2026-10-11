@@ -5,10 +5,23 @@ export function observeOpenCode(event) {
 	const data = event.data ?? {};
 	const session = data.sessionID;
 	const mark = (token, busy) => activity('opencode', session, token, busy);
+	const shell = data.shell;
+	const shellID = typeof shell?.id === 'string' ? shell.id : undefined;
 	report(() => {
 		if (event.type === 'session.execution.started') mark('turn', true);
-		if (event.type === 'session.shell.started') mark(`shell:${data.shell.id}`, true);
-		if (event.type === 'session.shell.ended') mark(`shell:${data.shell.id}`, false);
+		if (event.type === 'session.shell.started' && shellID) mark(`shell:${shellID}`, true);
+		if (
+			shellID &&
+			[
+				'session.shell.ended',
+				'session.shell.failed',
+				'session.shell.interrupted',
+				'session.shell.cancelled',
+				'session.shell.killed',
+				'session.shell.timed-out'
+			].includes(event.type)
+		)
+			mark(`shell:${shellID}`, false);
 		if (
 			[
 				'session.execution.succeeded',

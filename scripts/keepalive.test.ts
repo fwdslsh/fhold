@@ -256,6 +256,17 @@ test('OpenCode tools, shells and terminal events preserve overlapping work', asy
 		observe({ type: 'session.shell.ended', data: { sessionID: 'b', shell: { id: 'shell' } } });
 		expect(activityStatus(root, [])).toBe('idle');
 		for (const type of [
+			'session.shell.failed',
+			'session.shell.interrupted',
+			'session.shell.cancelled',
+			'session.shell.killed',
+			'session.shell.timed-out'
+		]) {
+			observe({ type: 'session.shell.started', data: { sessionID: 'b', shell: { id: 'shell' } } });
+			observe({ type, data: { sessionID: 'b', shell: { id: 'shell' } } });
+			expect(activityStatus(root, [])).toBe('idle');
+		}
+		for (const type of [
 			'session.execution.succeeded',
 			'session.execution.failed',
 			'session.idle',
