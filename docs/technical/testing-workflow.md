@@ -36,6 +36,14 @@ Required behavior coverage includes instance isolation, read-only inspection,
 credential-scoped MCP/handles, path/descriptor escape refusal, moderation fail-closed,
 portal default-deny, own-backup manifest/hash/conflict/partial-retry preservation,
 native-history WAL/collision checks, restricted tasks, memory and native trust.
+Guardian's real HTTP MCP regression waits through thirteen seconds of unchanged
+progress and verifies one submission with a delivered final answer. Portal tests
+cover reconnecting to the same job, lost initial responses, bounded failed
+recovery, partial answers, terminal/native/authentication rejection and explicit
+approval/cancellation without replay. Slack tests preserve native Markdown after
+Stop cleanup and exercise explicit unsupported-block fallback. Assistant launch
+fixtures verify exact environment aliases, ordinary tool-child inheritance,
+clean scheduler/remote launches and optional-error isolation without logging values.
 
 The Assistant's conditional heartbeat has a separate offline image check:
 `node scripts/smoke-keepalive.mjs fhold/assistant:<candidate>` starts a native

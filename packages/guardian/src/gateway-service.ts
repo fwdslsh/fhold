@@ -626,6 +626,13 @@ export class GatewayService {
 			this.startingSessions.delete(session.id);
 			throw publicError(error);
 		}
+		// Publish the existing job before any potentially slow native inspection.
+		// A portal can reconnect/poll it without resubmitting side-effecting work.
+		await progress?.(0.25, 'Agent run accepted', {
+			status: 'running',
+			session: createSessionHandle(session.id, this.principal, this.handleKey, this.now()),
+			job: jobHandle
+		});
 		const result = await this.waitForJob(
 			job,
 			jobHandle,
@@ -906,7 +913,12 @@ export class GatewayService {
 				throw new GatewayError('answers are too long.', 'invalid_input');
 			}
 			await this.screen(answerText);
-			await this.assistant.answerQuestion(session.id, decoded.value.requestId, input.answers, signal);
+			await this.assistant.answerQuestion(
+				session.id,
+				decoded.value.requestId,
+				input.answers,
+				signal
+			);
 			return { accepted: true, kind: 'question' };
 		}
 

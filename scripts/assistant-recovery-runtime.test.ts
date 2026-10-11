@@ -65,7 +65,30 @@ fi
 		const check = ['akm', 'fhold-task', 'supercronic', 'opencode', 'fhold-remote'].includes(name)
 			? writerCheck
 			: '';
-		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${body}\n`);
+		const mapCheck = !['opencode', 'supercronic', 'fhold-task', 'fhold-remote'].includes(name)
+			? ''
+			: `
+if [ "\${FIXTURE_MAP_CHECK:-0}" = 1 ]; then
+  test -z "\${WORKLOAD_ENDPOINT+x}"
+  test -z "\${IDENTITY_HEADER+x}"
+  test -z "\${FH_OPENCODE_ENV_MAP+x}"
+  ${
+		name === 'opencode'
+			? `
+  test "$PLUGIN_ENDPOINT" = "$FIXTURE_ENDPOINT"
+  test "$PLUGIN_HEADER" = "$FIXTURE_HEADER"
+  bash -c 'test "$PLUGIN_HEADER" = "$FIXTURE_HEADER"'
+  printf 'opencode-aliases-and-child-inheritance\\n' >>"$EVENTS"
+  `
+			: `
+  test -z "\${PLUGIN_ENDPOINT+x}"
+  test -z "\${PLUGIN_HEADER+x}"
+  printf 'clean-${name}-environment\\n' >>"$EVENTS"
+  `
+	}
+fi
+`;
+		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${mapCheck}${body}\n`);
 		chmodSync(path, 0o755);
 	};
 	stub(
@@ -152,6 +175,7 @@ while sleep 0.1; do :; done`
 			FH_SCHEDULER_ENABLED: '0',
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0',
+			FH_OPENCODE_ENV_MAP: undefined,
 			FH_SHUTDOWN_SECONDS: '2',
 			OPENCODE_SERVER_PASSWORD: 'fixture-only',
 			...extra
@@ -185,6 +209,82 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
+	it('maps exact capability names only into OpenCode and its normal subprocesses', async () => {
+		const header = 'synthetic value with spaces\nand $literal; not shell code';
+		const run = fixture({
+			FH_OPENCODE_ENV_MAP: 'WORKLOAD_ENDPOINT=PLUGIN_ENDPOINT,IDENTITY_HEADER=PLUGIN_HEADER',
+			WORKLOAD_ENDPOINT: 'https://synthetic.invalid/identity',
+			IDENTITY_HEADER: header,
+			FIXTURE_ENDPOINT: 'https://synthetic.invalid/identity',
+			FIXTURE_HEADER: header,
+			FIXTURE_MAP_CHECK: '1',
+			FH_SCHEDULER_ENABLED: '1',
+			FH_CODEX_REMOTE: '1',
+			FH_CLAUDE_REMOTE: '1'
+		});
+		try {
+			await until(() =>
+				[
+					'opencode-aliases-and-child-inheritance',
+					'clean-supercronic-environment',
+					'clean-fhold-task-environment',
+					'clean-fhold-remote-environment'
+				].every((event) => run.events().includes(event))
+			);
+			expect(run.child.exitCode).toBeNull();
+			expect(run.stderr()).not.toContain(header);
+			expect(readFileSync(join(run.root, 'entrypoint.sh'), 'utf8')).not.toContain(header);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+
+	it('skips missing capability sources with a warning while the agent remains available', async () => {
+		const run = fixture({ FH_OPENCODE_ENV_MAP: 'MISSING_CAPABILITY=PLUGIN_MISSING' });
+		try {
+			await until(() => run.events().includes('native'));
+			expect(run.child.exitCode).toBeNull();
+			expect(run.stderr()).toContain('source MISSING_CAPABILITY is missing');
+			expect(readFileSync(join(run.root, 'runtime/degraded-environment'), 'utf8')).toContain(
+				'skipped'
+			);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+
+	for (const mapping of [
+		'IDENTITY_HEADER=PATH',
+		'IDENTITY_HEADER=FH_RECOVERY_URL',
+		'IDENTITY_HEADER=LD_PRELOAD',
+		'IDENTITY_HEADER=OPENCODE_SERVER_PASSWORD',
+		'IDENTITY_HEADER=PLUGIN_ONE,MSI_ENDPOINT=PLUGIN_ONE',
+		'IDENTITY_HEADER=IDENTITY_HEADER',
+		'IDENTITY_HEADER=*',
+		'IDENTITY_HEADER=PLUGIN_ONE,',
+		'IDENTITY_HEADER=PLUGIN_ONE\nMSI_ENDPOINT=PLUGIN_TWO',
+		'IDENTITY_HEADER=PLUGIN_ONE,PLUGIN_ONE=PLUGIN_TWO',
+		'IDENTITY_HEADER=EXISTING_PLUGIN'
+	]) {
+		it(`degrades a malformed/reserved/colliding optional environment map without stopping startup: ${mapping}`, async () => {
+			const run = fixture({
+				FH_OPENCODE_ENV_MAP: mapping,
+				IDENTITY_HEADER: 'never-log-this-value',
+				EXISTING_PLUGIN: 'existing-value'
+			});
+			try {
+				await until(() => run.events().includes('native'));
+				expect(run.child.exitCode).toBeNull();
+				expect(run.stderr()).toContain('no aliases were applied');
+				expect(run.stderr()).not.toContain('never-log-this-value');
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
+	}
 	it('uses safe default recovery budgets when numeric settings are malformed', async () => {
 		for (const value of ['0', '-1', 'false', '1.5', '3601']) {
 			const run = fixture({ FH_RECOVERY_OPERATION_TIMEOUT_SECONDS: value });

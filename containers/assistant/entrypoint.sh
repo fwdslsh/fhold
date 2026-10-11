@@ -51,7 +51,8 @@ descendant_pids=()
 essential_pids=()
 recovery_pid=""
 stopping=0
-writer_env=(-u FH_RECOVERY_PARENT_PID)
+writer_env=(-u FH_RECOVERY_PARENT_PID -u FH_OPENCODE_ENV_MAP)
+opencode_aliases=()
 # Storage and managed-identity selectors belong only to the recovery worker.
 # This is environment minimization, not isolation from same-UID private files.
 while IFS= read -r variable; do
@@ -64,6 +65,60 @@ done < <(compgen -e)
 mark_degraded() {
   echo "assistant: $2" >&2
   printf '%s\n' "$2" >"$RUNTIME_DIR/degraded-$1" || true
+}
+
+# Optional deployer-owned SOURCE=ALIAS pairs. Values stay in process memory,
+# never arguments, logs or files. This scopes launch environments, not tools
+# or scheduled requests running inside the same OpenCode server.
+prepare_opencode_environment() {
+  local mapping="${FH_OPENCODE_ENV_MAP:-}" pair source target variable i
+  local -a pairs=() sources=() targets=()
+  local -A aliases=() inherited=()
+  [ -n "$mapping" ] || return 0
+  while IFS= read -r variable; do inherited[$variable]=1; done < <(compgen -e)
+  IFS=, read -r -a pairs <<<"$mapping"
+  for pair in "${pairs[@]}"; do
+    source="${pair%%=*}"; target="${pair#*=}"
+    if [[ "$pair" != *=* ]] || ! [[ "$source" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && "$target" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || [ "$source" = "$target" ]; then
+      mark_degraded environment 'FH_OPENCODE_ENV_MAP must contain comma-separated SOURCE=ALIAS names; no aliases were applied.'
+      return 0
+    fi
+    # Aliases must not replace runtime controls or restore filtered originals.
+    case "$target" in
+      FH_*|OPENCODE_*|AKM_*|CODEX_*|CLAUDE_*|IDENTITY_*|MSI_*|IMDS_*|AZURE_CLIENT_ID|PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|TZ|TMP*|IFS|ENV|BASH*|SHELLOPTS|BASHOPTS|LD_*|BUN_*|NODE_*|NODE_OPTIONS)
+        mark_degraded environment 'FH_OPENCODE_ENV_MAP contains a reserved alias; no aliases were applied.'; return 0 ;;
+    esac
+    case "$source" in
+      FH_*|OPENCODE_*|AKM_*|CODEX_*|CLAUDE_*|PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|TZ|TMP*|IFS|ENV|BASH*|SHELLOPTS|BASHOPTS|LD_*|BUN_*|NODE_*)
+        mark_degraded environment 'FH_OPENCODE_ENV_MAP cannot rename runtime settings; no aliases were applied.'; return 0 ;;
+    esac
+    if [[ -v aliases[$target] ]] || [[ -v "$target" ]]; then
+      mark_degraded environment 'FH_OPENCODE_ENV_MAP aliases must be unique and unset; no aliases were applied.'
+      return 0
+    fi
+    aliases[$target]=1
+    sources+=("$source"); targets+=("$target")
+  done
+  if [[ "$mapping" == *, ]] || [[ "$mapping" == *$'\n'* ]]; then
+    mark_degraded environment 'FH_OPENCODE_ENV_MAP contains an empty or multiline mapping; no aliases were applied.'
+    return 0
+  fi
+  for source in "${sources[@]}"; do
+    if [[ -v aliases[$source] ]]; then
+      mark_degraded environment 'FH_OPENCODE_ENV_MAP sources and aliases must not overlap; no aliases were applied.'
+      return 0
+    fi
+  done
+  for ((i=0; i<${#sources[@]}; i++)); do
+    source="${sources[i]}"; target="${targets[i]}"
+    writer_env+=(-u "$target")
+    if [[ -v inherited[$source] ]]; then
+      writer_env+=(-u "$source")
+      opencode_aliases+=("$target=${!source}")
+    else
+      mark_degraded environment "FH_OPENCODE_ENV_MAP source $source is missing; its alias was skipped."
+    fi
+  done
 }
 
 signal_descendants() {
@@ -304,7 +359,7 @@ mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
 rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration scheduler keepalive codex claude native-defaults; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults; do
   rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
 done
 if [ "$configuration_degraded" = 1 ]; then
@@ -344,11 +399,18 @@ if [ "$SCHEDULER_ENABLED" = 1 ] && { ! command -v akm >/dev/null || ! command -v
 fi
 
 cd /work
-setsid env "${writer_env[@]}" opencode serve \
-  --hostname 0.0.0.0 \
-  --port "$OPENCODE_PORT" \
-  --print-logs \
-  --log-level "${OPENCODE_LOG_LEVEL:-info}" &
+prepare_opencode_environment
+(
+  # Remove export attributes rather than mutating shell variables (including
+  # readonly environment imports); exec receives only the resulting environment.
+  for ((i=1; i<${#writer_env[@]}; i+=2)); do export -n "${writer_env[i]}"; done
+  for alias in "${opencode_aliases[@]}"; do export "$alias"; done
+  exec setsid opencode serve \
+    --hostname 0.0.0.0 \
+    --port "$OPENCODE_PORT" \
+    --print-logs \
+    --log-level "${OPENCODE_LOG_LEVEL:-info}"
+) &
 assistant_pid=$!
 writer_pids+=("$assistant_pid")
 essential_pids+=("$assistant_pid")

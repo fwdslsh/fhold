@@ -74,6 +74,26 @@ restart evidence. These checks use synthetic credentials and no paid model.
 
 ## Fixes found by qualification
 
+### Post-beta.6 portal and workload regression
+
+The real Guardian HTTP/MCP regression runs the shipped request handler, waits
+thirteen seconds with unchanged progress and delivers final text with one native
+submission. Typed transport failures reconnect only to the already accepted job;
+unknown submissions, approvals/cancellations, rejected handles and authentication
+failures are not replayed. Portal fixtures cover partial-answer preservation and
+native Slack Markdown through streaming/final cleanup, with explicit rejected-block
+fallback. These do not claim a new live bot conversation was sent.
+
+`scripts/smoke-workload-environment.mjs IMAGE` uses the normal non-root entrypoint
+without mounts, cloud credentials or runtime modifications. It checks OpenCode's
+actual process environment, clean scheduler/native supervisor environments, and
+native shell output proving child inheritance of both aliases. No paid provider
+call is made. It is part of the native amd64/arm64 image gates. Host command fixtures
+cover malformed/colliding/reserved mappings and missing sources without core failure
+or value logging. This verifies process scope, not plugin/session isolation.
+
+### Original v2 changes
+
 - Defer periodic SQLite recovery capture until native API readiness. Lease
   renewal and final shutdown remain independent; startup migration no longer
   races a periodic snapshot for the database lock.

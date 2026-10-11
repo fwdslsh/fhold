@@ -189,11 +189,11 @@ async function boundedRequestBody(request: Request): Promise<Request | null> {
 
 export function createGuardianHandler(
 	overrides: Partial<GuardianDependencies> = {}
-): (request: Request, clientIp?: string) => Promise<Response> {
+): (request: Request, clientIp?: string, acceptMcp?: () => void) => Promise<Response> {
 	const dependencies = { ...defaultDependencies(), ...overrides };
 	let activeRequests = 0;
 
-	return async (request, clientIp = '') => {
+	return async (request, clientIp = '', acceptMcp) => {
 		const id = requestId(request);
 		const url = new URL(request.url);
 
@@ -265,6 +265,9 @@ export function createGuardianHandler(
 		}
 
 		const startedAt = performance.now();
+		// MCP can legitimately be quiet during a tool run. Disable Bun's socket
+		// idle timeout only after authentication/admission; operation bounds remain.
+		acceptMcp?.();
 		activeRequests += 1;
 		try {
 			const response = await dependencies.handleMcp(boundedRequest, principal, id);
@@ -312,7 +315,9 @@ export function startGuardian(
 		hostname,
 		maxRequestBodySize: MAX_REQUEST_BYTES,
 		fetch(request, bunServer) {
-			return handle(request, bunServer.requestIP(request)?.address ?? '');
+			return handle(request, bunServer.requestIP(request)?.address ?? '', () =>
+				bunServer.timeout(request, 0)
+			);
 		}
 	});
 	logger.info('started', {

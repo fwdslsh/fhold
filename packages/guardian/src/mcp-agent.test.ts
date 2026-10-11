@@ -17,6 +17,7 @@ import type {
 import type { AuthenticatedCredential, CredentialClass } from './credentials.js';
 import { createSessionHandle } from './conversation.js';
 import { createMcpAgentHandler, createMcpAgentServer, type McpAgentOptions } from './mcp-agent.js';
+import { startGuardian } from './server.js';
 import type { WorkspaceAccess } from './workspace-access.js';
 
 class FakeAssistant implements AssistantClient {
@@ -137,7 +138,7 @@ class FakeAssistant implements AssistantClient {
 		this.complete(sessionId, `answer:${message}`);
 	}
 
-	private complete(sessionId: string, text: string): void {
+	complete(sessionId: string, text: string): void {
 		const entries = this.messages.get(sessionId) ?? [];
 		const parentId = [...entries].reverse().find((message) => message.role === 'user')?.id;
 		entries.push({
@@ -245,6 +246,77 @@ function body(result: { structuredContent?: unknown }): Record<string, unknown> 
 }
 
 describe('full fhold MCP gateway', () => {
+	const socketIt = process.env.CI === 'true' || process.env.FH_SOCKET_TESTS === '1' ? it : it.skip;
+	socketIt(
+		'keeps real MCP HTTP streams alive through a quiet tool run without replaying work',
+		async () => {
+			const assistant = new FakeAssistant();
+			assistant.runMode = 'running';
+			const submitted = spyOn(assistant, 'runAsync');
+			const principal = { id: 'owner', username: 'owner', policy: 'full' as const };
+			const handler = createMcpAgentHandler(principal, {
+				assistant,
+				handleKey: 'k'.repeat(64),
+				moderate: allow
+			});
+			const server = startGuardian({
+				port: 0,
+				hostname: '127.0.0.1',
+				dependencies: {
+					authenticate: (request) =>
+						request.headers.get('authorization') === 'Bearer test' ? principal : null,
+					handleMcp: (request) => handler.fetch(request),
+					audit: () => {},
+					allowPreAuth: () => true,
+					allowPrincipal: () => true,
+					allowedOrigins: new Set(),
+					maxConcurrency: 2,
+					oauth: null
+				}
+			});
+			const client = new Client({ name: 'quiet-stream-test', version: '2' }, { capabilities: {} });
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			try {
+				await client.connect(
+					new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.port}/mcp`), {
+						authProvider: { token: async () => 'test' }
+					})
+				);
+				const started = Date.now();
+				let accepted = false;
+				const result = await client.callTool(
+					{
+						name: 'fhold.agent.run',
+						arguments: {
+							message: 'Quiet work',
+							waitMs: 20_000
+						}
+					},
+					{
+						timeout: 25_000,
+						onprogress: (notification) => {
+							if (notification.message === 'Agent run accepted' && !accepted) {
+								accepted = true;
+								timer = setTimeout(() => {
+									const sessionId = [...assistant.sessions.keys()][0];
+									assistant.complete(sessionId, 'Quiet work completed');
+								}, 13_000);
+							}
+						}
+					}
+				);
+				expect(body(result)).toMatchObject({ status: 'completed', text: 'Quiet work completed' });
+				expect(Date.now() - started).toBeGreaterThan(12_000);
+				expect(submitted).toHaveBeenCalledTimes(1);
+			} finally {
+				clearTimeout(timer);
+				await client.close();
+				await server.stop(true);
+			}
+		},
+		30_000
+	);
+
 	it('streams only current-turn public text and tool activity over standard MCP progress, including job polling', async () => {
 		const assistant = new FakeAssistant();
 		assistant.runMode = 'running';

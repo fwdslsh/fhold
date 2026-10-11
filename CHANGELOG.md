@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.2610111-beta.7 — reliable portal replies and scoped workload environment
+
+Guardian's admitted MCP streams no longer close during quiet tool runs. Portal
+reconnects to the existing credential-scoped job after a transient connection
+failure, with bounded inspection retries and no replay of requests, approvals or
+cancellations. Accepted jobs are reported before native inspection. Interrupted
+delivery is distinguished from native failure, and partial answers are retained.
+Slack uses native Markdown blocks for answers, preserving them when Stop controls
+are removed; apps rejecting those blocks fall back to plain text.
+
+Standalone deployers can opt into exact `SOURCE=ALIAS` workload environment
+mappings with `FH_OPENCODE_ENV_MAP`. Values reach OpenCode without command-line,
+file or log copies, while scheduler and remote-worker launches receive no aliases.
+Invalid optional configuration warns and leaves the agent available. This scopes
+launch environments, not agent tools or plugins: OpenCode subprocesses inherit
+aliases and its plugins may use them during scheduled requests. No cloud-specific
+code, token broker, sidecar or extra Admin configuration is added.
+
+Healthy v2 upgrades no longer retain a false pending-restart alert after the
+exact shipped scheduled-engine conversion. Recovery shutdown waits for an
+in-flight ownership renewal before checkpoint/release. Repeated termination
+signals and asynchronous parent shutdown are covered; external deployment
+parents must use persistent, idempotent signal handling and await their child.
+
+Regression coverage includes a real MCP HTTP stream quiet for thirteen seconds,
+same-job reconnection and exactly one submission, Slack rendering/fallback,
+and shipped-image native tools consuming workload aliases while scheduler and
+remote launches remain clean. GitHub release gates additionally qualify both
+native image architectures, recovery/history, provider settings and harnesses.
+OpenCode/AKM pins are unchanged from beta.6. Native remote connections remain
+experimental, and existing narrowly reviewed dependency exceptions remain.
+Publishing does not upgrade existing instances or modify external launch wrappers.
+
 ## 0.2.2610103-beta.6 — OpenCode v2 and AKM 0.10 next
 
 The Assistant uses OpenCode 2.0.26 and AKM CLI/harness plugins

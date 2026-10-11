@@ -1,13 +1,8 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 
-import {
-	createGuardianHandler,
-	parseAllowedOrigins,
-	startGuardian
-} from './server.js';
+import { createGuardianHandler, parseAllowedOrigins, startGuardian } from './server.js';
 
-const socketIt =
-	process.env.CI === 'true' || process.env.FH_SOCKET_TESTS === '1' ? it : it.skip;
+const socketIt = process.env.CI === 'true' || process.env.FH_SOCKET_TESTS === '1' ? it : it.skip;
 
 function handler() {
 	return createGuardianHandler({
@@ -26,6 +21,35 @@ function handler() {
 }
 
 describe('Guardian HTTP boundary', () => {
+	it('extends streaming timeouts only for admitted authenticated MCP requests', async () => {
+		const handle = handler();
+		const accepted = mock(() => {});
+		for (const path of ['/health', '/missing', '/mcp']) {
+			await handle(new Request(`http://guardian${path}`), '', accepted);
+		}
+		await handle(
+			new Request('http://guardian/mcp', {
+				headers: {
+					authorization: 'Bearer valid',
+					origin: 'https://evil.example'
+				}
+			}),
+			'',
+			accepted
+		);
+		expect(accepted).not.toHaveBeenCalled();
+		await handle(
+			new Request('http://guardian/mcp', {
+				method: 'POST',
+				headers: {
+					authorization: 'Bearer valid'
+				}
+			}),
+			'',
+			accepted
+		);
+		expect(accepted).toHaveBeenCalledTimes(1);
+	});
 	it('exposes only the managed HTTP surface', async () => {
 		const handle = handler();
 		expect(await (await handle(new Request('http://guardian/health'))).json()).toEqual({
