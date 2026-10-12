@@ -43,6 +43,14 @@
       </form>
     </dialog>
 	    <a id="skip-link" class="skip-link" href="#main-content">Skip to content</a>
+		<dialog id="remote-directory-dialog" class="hosting-manager" aria-labelledby="remote-directory-title">
+		  <h2 id="remote-directory-title">Choose a folder</h2>
+		  <div class="hosting-picker-row"><button id="remote-directory-up" type="button" class="secondary" aria-label="Parent folder">↑</button><input id="remote-directory-path" aria-label="Folder path" spellcheck="false"/><button id="remote-directory-go" type="button" class="secondary">Go</button></div>
+		  <p id="remote-directory-status" class="help-text" role="status" aria-live="polite"></p>
+		  <div id="remote-directory-list" class="directory-list"></div>
+		  <p class="help-text">For a new instance, you can enter a new folder path. Nothing is created until you install or import.</p>
+		  <div class="button-row"><button id="remote-directory-select" class="primary" type="button">Use this folder</button><button id="remote-directory-cancel" class="secondary" type="button">Cancel</button></div>
+		</dialog>
 
 	    <div id="loading-state" class="centered-state" aria-live="polite">
       <div class="loading-mark" aria-hidden="true"></div>
@@ -65,17 +73,21 @@
             <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
           </section>
           <button id="begin-instance-import" class="text-button instance-import-choice" type="button">Import an instance…</button>
+		  <button id="connect-host" class="text-button" type="button">Connect to another computer or cloud…</button>
         </div>
-        <details id="open-hosting" class="disclosure">
-          <summary>Open a hosted agent</summary>
-          <div class="form-stack disclosure-body">
-            <label class="field" for="hosting-connection"><span>Connection</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
-            <button id="hosting-discover" class="secondary" type="button">Find instances</button>
-            <button id="hosting-manage" class="text-button" type="button">Manage host connections…</button>
+		<section id="open-hosting" class="form-stack hosting-chooser" hidden>
+		  <button id="hosting-back" class="text-button" type="button">← Back</button>
+		  <h2>Your instances</h2>
+		  <div class="hosting-picker-row">
+            <label class="field" for="hosting-connection"><span>Computer or cloud</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
+            <button id="hosting-manage" class="secondary" type="button">Connections…</button>
+		  </div>
+		  <button id="hosting-discover" class="text-button" type="button" hidden>Try again</button>
             <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
+		  <div class="button-row"><button id="hosting-install" class="secondary" type="button" hidden>New instance</button><button id="hosting-import" class="text-button" type="button" hidden>Import instance…</button></div>
             <div id="hosting-instance-list" aria-live="polite"></div>
-          </div>
-        </details>
+		  <button id="hosting-open-folder" class="text-button" type="button" hidden>Open a folder…</button>
+		</section>
       </section>
     </main>
 
@@ -342,6 +354,7 @@
                   <button id="start-stack" data-action="start" class="secondary" type="button">Start</button>
                   <button id="restart-stack" data-action="restart" class="secondary" type="button">Restart</button>
                   <button id="stop-stack" data-action="stop" class="danger subtle" type="button">Stop</button>
+				  <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
               </div>
               <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
@@ -504,6 +517,7 @@
                   <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
                   <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
                 </dl>
+				  <p id="opencode-connection-help" class="help-text" role="status"></p>
                 <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
                 <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
                 <details class="disclosure">

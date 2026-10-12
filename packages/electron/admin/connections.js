@@ -43,12 +43,14 @@ export function renderConnectionStatus(snapshot) {
 		byId('opencode-connection-status'),
 		unavailable
 			? 'Status unavailable'
-			: isHealthy(assistant)
-				? 'Available'
-				: isRunning(assistant)
-					? 'Needs attention'
-					: 'Stopped',
-		!unavailable && isHealthy(assistant) ? 'success' : 'neutral'
+			: snapshot.connectionError
+				? 'Connection unavailable'
+				: isHealthy(assistant)
+					? 'Available'
+					: isRunning(assistant)
+						? 'Needs attention'
+						: 'Stopped',
+		!unavailable && !snapshot.connectionError && isHealthy(assistant) ? 'success' : 'neutral'
 	);
 	setBadge(
 		byId('mcp-connection-status'),
@@ -131,13 +133,14 @@ export function showPortalTokenForm(portal, field = `${portal}-bot-token`) {
 	queueMicrotask(() => byId(field).focus());
 }
 
-export function renderConnectionDetails(snapshot) {
+export function renderConnectionLinks(snapshot) {
 	const details = snapshot.connectionDetails;
 	if (!details) return;
 	const directLink = byId('direct-url');
 	directLink.textContent = details.opencode.url;
-	directLink.setAttribute('href', details.opencode.url);
-	directLink.hidden = false;
+	directLink.setAttribute('href', details.opencode.url || 'about:blank');
+	directLink.hidden = !details.opencode.url;
+	setText('opencode-connection-help', snapshot.connectionError || details.opencode.note || '');
 	setText('direct-username', details.opencode.username || 'user');
 	setText('claude-url', details.claude.url);
 	setText('mcp-url', details.mcp.url);
@@ -145,6 +148,14 @@ export function renderConnectionDetails(snapshot) {
 	const extensionLink = byId('claude-extension-download');
 	extensionLink.setAttribute('href', details.claude.extension || 'about:blank');
 	extensionLink.hidden = !details.claude.extension;
+	for (const id of ['direct-url', 'claude-url', 'mcp-url', 'guardian-health-url-detail'])
+		for (const button of all(`[data-copy-field="${id}"]`))
+			button.disabled = !byId(id).textContent || state.operationInFlight;
+	updateGuardianGuide();
+}
+
+export function renderConnectionDetails(snapshot) {
+	renderConnectionLinks(snapshot);
 	byId('direct-password').value = '';
 	byId('direct-password').type = 'password';
 	byId('show-direct-password').checked = false;
@@ -152,20 +163,19 @@ export function renderConnectionDetails(snapshot) {
 }
 
 export function renderNetworkDetails(snapshot) {
-	const assistantUrl = endpoint(
-		snapshot.config.assistant.bindAddress,
-		snapshot.config.assistant.port
-	);
-	const healthUrl = endpoint(
-		snapshot.config.gateway.bindAddress,
-		snapshot.config.gateway.port,
-		'/health'
-	);
+	const assistantUrl = snapshot.connectionDetails
+		? snapshot.connectionDetails.opencode.url
+		: endpoint(snapshot.config.assistant.bindAddress, snapshot.config.assistant.port);
+	const healthUrl = snapshot.connectionDetails
+		? snapshot.connectionDetails.mcp.url
+			? new URL('/health', snapshot.connectionDetails.mcp.url).href
+			: ''
+		: endpoint(snapshot.config.gateway.bindAddress, snapshot.config.gateway.port, '/health');
 	for (const id of ['assistant-url-detail', 'overview-opencode-link']) {
 		const link = byId(id);
 		if (id === 'assistant-url-detail') link.textContent = assistantUrl;
-		link.setAttribute('href', assistantUrl);
-		link.hidden = false;
+		link.setAttribute('href', assistantUrl || 'about:blank');
+		link.hidden = !assistantUrl;
 	}
 	setText('guardian-health-url-detail', healthUrl);
 	setText(
@@ -180,7 +190,7 @@ export async function loadDirectPassword(copyOnly) {
 	const verb = copyOnly ? 'copy' : 'load';
 	if (
 		!window.confirm(
-			`${verb === 'copy' ? 'Copy' : 'Load'} the trusted OpenCode password? It provides full local access.`
+			`${verb === 'copy' ? 'Copy' : 'Load'} the trusted OpenCode password? It provides full access to this instance.`
 		)
 	)
 		return;

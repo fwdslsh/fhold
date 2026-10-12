@@ -71,7 +71,9 @@ function describeInstance(target: AdminTarget): AdminWelcomeInstance {
 			available: true,
 			name:
 				target.ref.kind === 'ssh-docker'
-					? target.ref.remoteHome.split('/').at(-1)
+					? target.ref.remoteHome.split('/').at(-1) === 'home'
+						? target.ref.remoteHome.split('/').at(-2)
+						: target.ref.remoteHome.split('/').at(-1)
 					: target.ref.kind === 'azure-container-apps'
 						? target.ref.resourceId.split('/').at(-1)
 						: undefined
@@ -227,6 +229,18 @@ export class AdminInstances {
 
 	prepareNew(value: unknown): void {
 		this.assertIdle();
+		const requested = adminTarget(value);
+		if (requested.kind === 'hosted') {
+			if (requested.ref.kind !== 'ssh-docker')
+				throw Error('Create cloud deployments with the owning deployment tools.');
+			openHostingInstance(this.hosting.connection(requested.ref.connectionId), requested.ref);
+			const name = (value as { name?: unknown }).name;
+			if (name !== undefined && !isInstanceName(name))
+				throw Error('Choose a lowercase instance name.');
+			this.select(requested);
+			this.newName = name;
+			return;
+		}
 		const target = localInstance(value);
 		const name = (value as { name?: unknown }).name;
 		if (name !== undefined && !isInstanceName(name))
@@ -271,7 +285,9 @@ export class AdminInstances {
 	}
 	forgetConnectionTargets(id: string): void {
 		this.assertIdle();
-		this.recent = this.recent.filter(item => item.kind !== 'hosted' || item.ref.connectionId !== id);
+		this.recent = this.recent.filter(
+			(item) => item.kind !== 'hosted' || item.ref.connectionId !== id
+		);
 		if (this.selected?.kind === 'hosted' && this.selected.ref.connectionId === id) this.close();
 	}
 

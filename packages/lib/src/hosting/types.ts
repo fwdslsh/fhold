@@ -1,5 +1,6 @@
 import type { StackConfig } from '../control-plane/stack-config.js';
 import type { RestartStatus } from '../control-plane/runtime-revision.js';
+import type { InstanceManagement } from '../management/types.js';
 
 export type HostingConnection =
 	| { kind: 'local-docker'; id: 'local'; label: string }
@@ -50,6 +51,10 @@ export type HostingLogOptions = {
 	container?: string;
 };
 export interface InstanceSession {
+	management?(options?: {
+		setupName?: string;
+		openUrl?: (url: string) => void;
+	}): InstanceManagement;
 	readonly ref: InstanceRef;
 	inspect(): Promise<HostingSnapshot>;
 	operate(action: HostingAction, confirmed: boolean): Promise<HostingResult>;

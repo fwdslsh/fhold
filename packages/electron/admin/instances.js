@@ -2,23 +2,40 @@ import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
 import { targetKey, targetLocation, manageHostingConnections } from './hosting.js';
+import { chooseManagedDirectory } from './directories.js';
+import { resetProviderState } from './providers.js';
 
 function instanceName(target) {
 	const parts = targetLocation(target)?.split(/[\\/]/).filter(Boolean) || [];
-	const fallback = target.kind === 'hosted' && parts.at(-1) === 'home' ? parts.at(-2) : parts.at(-1);
+	const fallback =
+		target.kind === 'hosted' && parts.at(-1) === 'home' ? parts.at(-2) : parts.at(-1);
 	const name = target.name || fallback || 'Saved instance';
 	return target.kind === 'hosted' ? `${name} · ${target.ref.connectionId}` : name;
 }
 
 export function renderInstancePicker(snapshot) {
-	const selected = snapshot.phase === 'remote' ? targetKey({ kind: 'hosted', ref: snapshot.hosting.ref }) : snapshot.homeDir;
+	const selected =
+		snapshot.phase === 'remote'
+			? targetKey({ kind: 'hosted', ref: snapshot.hosting.ref })
+			: snapshot.target
+				? targetKey({ kind: 'hosted', ref: snapshot.target })
+				: snapshot.homeDir;
 	const others = state.recentInstances.filter((target) => targetKey(target) !== selected);
 	setOptions(
 		byId('instance-picker'),
 		[
 			{
 				value: selected,
-				label: snapshot.phase === 'remote' ? instanceName({kind:'hosted',ref:snapshot.hosting.ref,name:snapshot.hosting.name}) : snapshot.config.deployment?.projectName || 'Selected instance'
+				label:
+					snapshot.phase === 'remote'
+						? instanceName({
+								kind: 'hosted',
+								ref: snapshot.hosting.ref,
+								name: snapshot.hosting.name
+							})
+						: snapshot.target
+							? `${snapshot.config.deployment.projectName} · ${snapshot.connectionLabel}`
+							: snapshot.config.deployment?.projectName || 'Selected instance'
 			},
 			...others.map((target) => ({
 				value: targetKey(target),
@@ -61,13 +78,15 @@ export function renderInstallationReadiness(readiness) {
 		requirements.setAttribute('role', failed ? 'alert' : 'status');
 		requirements.querySelector('[data-requirement-title]').hidden = !failed;
 		requirements.querySelector('[data-requirement-guidance]').hidden = !failed;
-		requirements.querySelector('[data-requirement-message]').textContent =
-			ready ? '' : readiness?.message || 'Checking installation requirements…';
+		requirements.querySelector('[data-requirement-message]').textContent = ready
+			? ''
+			: readiness?.message || 'Checking installation requirements…';
 		requirements.querySelector('[data-check-prerequisites]').hidden = !readiness || ready;
 	}
 	byId('install').disabled = state.operationInFlight || !ready;
 	byId('preview-instance-restore').disabled = state.operationInFlight || !ready;
-	byId('apply-instance-restore').disabled = state.operationInFlight || !ready || !state.instanceRestorePreview;
+	byId('apply-instance-restore').disabled =
+		state.operationInFlight || !ready || !state.instanceRestorePreview;
 }
 
 export async function checkInstallationReadiness() {
@@ -75,7 +94,9 @@ export async function checkInstallationReadiness() {
 	renderInstallationReadiness(undefined);
 	state.setupCheckPromise = (async () => {
 		try {
-			renderInstallationReadiness(await state.api.installationReadiness());
+			renderInstallationReadiness(
+				await state.api.installationReadiness(state.installConnection?.id)
+			);
 		} catch (error) {
 			renderInstallationReadiness({ ok: false, message: message(error) });
 		} finally {
@@ -85,8 +106,11 @@ export async function checkInstallationReadiness() {
 	return state.setupCheckPromise;
 }
 
-function showNewInstanceSetup() {
+export function showNewInstanceSetup() {
 	if (state.operationInFlight) return;
+	state.currentSnapshot = null;
+	state.currentConfig = null;
+	resetProviderState();
 	suggestInstanceHome();
 	byId('instance-welcome').hidden = true;
 	byId('instance-import-section').hidden = true;
@@ -101,11 +125,20 @@ function showNewInstanceSetup() {
 
 export async function prepareInstallTarget() {
 	try {
-		await state.api.prepareNewInstance({
-			kind: 'local',
-			homeDir: byId('install-home').value.trim(),
-			name: byId('install-instance-name').value.trim()
-		});
+		const homeDir = byId('install-home').value.trim();
+		await state.api.prepareNewInstance(
+			state.installConnection?.kind === 'ssh-docker'
+				? {
+						kind: 'hosted',
+						ref: {
+							kind: 'ssh-docker',
+							connectionId: state.installConnection.id,
+							remoteHome: homeDir
+						},
+						name: byId('install-instance-name').value.trim()
+					}
+				: { kind: 'local', homeDir, name: byId('install-instance-name').value.trim() }
+		);
 	} catch (error) {
 		byId('install-advanced').open = true;
 		byId('install-home').focus();
@@ -125,7 +158,10 @@ export function renderWelcome(welcome) {
 	document.body.dataset.phase = 'welcome';
 	setSkipTarget('instance-welcome');
 	const targets = [...welcome.recentInstances];
-	if (welcome.defaultInstance.available && !targets.some((target) => targetKey(target) === targetKey(welcome.defaultInstance)))
+	if (
+		welcome.defaultInstance.available &&
+		!targets.some((target) => targetKey(target) === targetKey(welcome.defaultInstance))
+	)
 		targets.push(welcome.defaultInstance);
 	const existingSection = byId('existing-instance-section');
 	const begin = byId('begin-new-instance');
@@ -133,14 +169,20 @@ export function renderWelcome(welcome) {
 	const hasAvailable = targets.some((target) => target.available);
 	// DOM and visual order agree: first-time setup first, saved instances first
 	// when there is an actual compatible home to open. No automatic selection.
-	byId('instance-options').append(...(hasAvailable
-		? [existingSection, begin, importChoice] : [begin, existingSection, importChoice]));
+	byId('instance-options').append(
+		...(hasAvailable
+			? [existingSection, begin, importChoice]
+			: [begin, existingSection, importChoice])
+	);
 	begin.className = hasAvailable ? 'secondary' : 'primary';
 	byId('instance-options').hidden = false;
 	const recent = byId('recent-instances');
 	recent.replaceChildren();
 	byId('recent-instances-section').hidden = !targets.length;
-	setText('recent-instances-title', welcome.recentInstances.length ? 'Recent instances' : 'On this computer');
+	setText(
+		'recent-instances-title',
+		welcome.recentInstances.length ? 'Recent instances' : 'On this computer'
+	);
 	for (const target of targets) {
 		const row = document.createElement('button');
 		row.type = 'button';
@@ -151,7 +193,10 @@ export function renderWelcome(welcome) {
 		name.className = 'instance-name';
 		name.textContent = instanceName(target);
 		row.append(name);
-		if (!target.available || (welcome.recentInstances[0] && targetKey(target) === targetKey(welcome.recentInstances[0]))) {
+		if (
+			!target.available ||
+			(welcome.recentInstances[0] && targetKey(target) === targetKey(welcome.recentInstances[0]))
+		) {
 			const meta = document.createElement('span');
 			meta.className = 'instance-meta';
 			meta.textContent = target.available ? 'Last used' : 'Unavailable';
@@ -160,8 +205,13 @@ export function renderWelcome(welcome) {
 		const path = document.createElement('span');
 		path.className = 'instance-path';
 		path.textContent = targetLocation(target);
-		row.setAttribute('aria-label', `${target.available ? 'Open' : 'Unavailable:'} ${instanceName(target)} at ${targetLocation(target)}`);
-		row.addEventListener('click', () => { if (target.available) void openInstance(target); });
+		row.setAttribute(
+			'aria-label',
+			`${target.available ? 'Open' : 'Unavailable:'} ${instanceName(target)} at ${targetLocation(target)}`
+		);
+		row.addEventListener('click', () => {
+			if (target.available) void openInstance(target);
+		});
 		row.append(path);
 		recent.append(row);
 	}
@@ -203,11 +253,20 @@ export async function showInstances() {
 }
 
 export function bindInstanceEvents() {
-	byId('begin-new-instance').addEventListener('click', showNewInstanceSetup);
+	byId('begin-new-instance').addEventListener('click', () => {
+		state.installConnection = undefined;
+		state.installationReadiness = undefined;
+		showNewInstanceSetup();
+	});
 	byId('instance-picker').addEventListener('change', async () => {
 		const requested = byId('instance-picker').value;
 		const current = state.currentSnapshot;
-		const selected = current?.phase === 'remote' ? targetKey({ kind: 'hosted', ref: current.hosting.ref }) : current?.homeDir || '';
+		const selected =
+			current?.phase === 'remote'
+				? targetKey({ kind: 'hosted', ref: current.hosting.ref })
+				: current?.target
+					? targetKey({ kind: 'hosted', ref: current.target })
+					: current?.homeDir || '';
 		byId('instance-picker').value = selected;
 		if (requested === 'open-another') await showInstances();
 		else if (requested === 'manage-hosting') await manageHostingConnections();
@@ -219,7 +278,9 @@ export function bindInstanceEvents() {
 	byId('install-instance-name').addEventListener('input', suggestInstanceHome);
 	byId('install-home').addEventListener('input', suggestInstanceHome);
 	for (const field of all('#install-advanced input'))
-		field.addEventListener('invalid', () => { byId('install-advanced').open = true; });
+		field.addEventListener('invalid', () => {
+			byId('install-advanced').open = true;
+		});
 	byId('choose-instance').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
 		let directory;
@@ -237,7 +298,7 @@ export function bindInstanceEvents() {
 		if (state.operationInFlight) return;
 		setBusy(true);
 		try {
-			const directory = await state.api.chooseDirectory({ purpose: 'new-instance' });
+			const directory = await chooseManagedDirectory('new-instance');
 			if (directory) {
 				byId('install-home').value = directory;
 				suggestInstanceHome();

@@ -23,6 +23,7 @@ export function createAdminState() {
 		providerTestTarget: null,
 		activeOAuth: null,
 		operationInFlight: false,
+		installConnection: null,
 		disabledButtons: [],
 		noticeTimer: undefined,
 		restorePreviewSignature: null,

@@ -31,7 +31,10 @@ export function renderPhase(phase) {
 }
 
 export function renderRuntimeControls(snapshot) {
-	if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
+	if (snapshot.phase === 'remote') {
+		renderHosted(snapshot);
+		return;
+	}
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
 	const unavailable = !!snapshot.dockerError;
@@ -39,6 +42,7 @@ export function renderRuntimeControls(snapshot) {
 	byId('restart-stack').disabled = state.operationInFlight || unavailable || !running;
 	byId('stop-stack').disabled =
 		state.operationInFlight || unavailable || snapshot.services.length === 0;
+	byId('update-stack').disabled = state.operationInFlight || unavailable;
 	renderRestartStatus(snapshot);
 	updateRecoveryFields();
 }
@@ -48,6 +52,8 @@ export function renderServices(snapshot) {
 	updateGuardianGuide();
 	const unavailable = !!snapshot.dockerError;
 	const warnings = snapshot.services.flatMap((service) => service.warnings ?? []);
+	if (snapshot.connectionError)
+		warnings.push(`Browser connection unavailable. ${snapshot.connectionError}`);
 	setText(
 		'runtime-status-detail',
 		unavailable
@@ -141,7 +147,7 @@ export function renderServices(snapshot) {
 	byId('provider-connection').hidden = needsRecovery;
 	setText(
 		'setup-runtime',
-		isHealthy(assistant) ? 'Your agent is running locally.' : 'Agent startup needs attention.'
+		isHealthy(assistant) ? 'Your agent is running.' : 'Agent startup needs attention.'
 	);
 	setText(
 		'setup-step',
@@ -164,6 +170,16 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
+	byId('update-stack').addEventListener('click', async () => {
+		if (state.operationInFlight) return;
+		if (!(await state.api.confirmRestart('update'))) return;
+		const result = await operation(
+			'Updating instance',
+			() => state.api.update({ confirmed: true }),
+			'Instance updated.'
+		);
+		if (result) render(result);
+	});
 	for (const button of all('[data-check-prerequisites]'))
 		button.addEventListener('click', () => void checkInstallationReadiness());
 	byId('install-automatic-ports').addEventListener('change', () => {

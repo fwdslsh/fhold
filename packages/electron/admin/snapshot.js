@@ -2,6 +2,7 @@ import { renderCredentials, renderMappings } from './access.js';
 import { renderConnectionKeys } from './keys.js';
 import {
 	renderConnectionDetails,
+	renderConnectionLinks,
 	renderNetworkDetails,
 	renderPortalSecrets,
 	updateConditionalConnections,
@@ -29,7 +30,10 @@ import {
 let statusReadInFlight = false;
 
 export function render(snapshot, options = {}) {
-	if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
+	if (snapshot.phase === 'remote') {
+		renderHosted(snapshot);
+		return;
+	}
 	byId('view-hosted').hidden = true;
 	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
 	const previousPhase = state.currentSnapshot?.phase;
@@ -134,7 +138,10 @@ export async function refresh({ statusOnly = false } = {}) {
 		try {
 			const snapshot = await state.api.snapshot();
 			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
-			if (snapshot.phase === 'remote') { renderHosted(snapshot); return; }
+			if (snapshot.phase === 'remote') {
+				renderHosted(snapshot);
+				return;
+			}
 			if (
 				statusOnly &&
 				state.currentSnapshot?.phase === snapshot.phase &&
@@ -146,9 +153,13 @@ export async function refresh({ statusOnly = false } = {}) {
 					...state.currentSnapshot,
 					services: snapshot.services,
 					dockerError: snapshot.dockerError,
-					pendingRestart: snapshot.pendingRestart
+					pendingRestart: snapshot.pendingRestart,
+					connectionDetails: snapshot.connectionDetails,
+					connectionError: snapshot.connectionError
 				};
 				renderServices(snapshot);
+				renderNetworkDetails(snapshot);
+				renderConnectionLinks(snapshot);
 				updateConditionalConnections();
 				if (
 					!state.providersLoaded &&

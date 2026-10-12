@@ -66,19 +66,39 @@ test('hosting metadata commands are independent of FH_HOME, Docker, sign-in and 
 		root
 	);
 	expect(rejected.code).not.toBe(0);
-	expect(rejected.stderr).toContain('No local instance was changed');
+	expect(rejected.stderr).toMatch(/SSH|resolve|Connection|connect|hostname/i);
+	expect(existsSync(env.FH_HOME)).toBe(false);
 	expect(existsSync('/bad')).toBe(false);
 });
 
 test('CLI edits, confirms retarget/removal, and leaves instance state untouched', async () => {
-	const {root,env} = fixture();
-	expect((await run(['hosting','add','lab','--provider','ssh-docker','--host','krang'],env,root)).code).toBe(0);
-	expect((await run(['hosting','edit','lab','--label','Krang','--roots','["/opt/stacks"]'],env,root)).code).toBe(0);
-	expect((await run(['hosting','edit','lab','--host','other'],env,root)).stderr).toContain('--confirm');
-	expect((await run(['hosting','edit','lab','--host','other','--confirm'],env,root)).code).toBe(0);
-	expect((await run(['hosting','remove','lab'],env,root)).stderr).toContain('--confirm');
-	expect((await run(['hosting','remove','lab','--confirm'],env,root)).code).toBe(0);
-	expect(JSON.parse((await run(['hosting','list'],env,root)).stdout).map((item:{id:string})=>item.id)).toEqual(['local']);
+	const { root, env } = fixture();
+	expect(
+		(await run(['hosting', 'add', 'lab', '--provider', 'ssh-docker', '--host', 'krang'], env, root))
+			.code
+	).toBe(0);
+	expect(
+		(
+			await run(
+				['hosting', 'edit', 'lab', '--label', 'Krang', '--roots', '["/opt/stacks"]'],
+				env,
+				root
+			)
+		).code
+	).toBe(0);
+	expect((await run(['hosting', 'edit', 'lab', '--host', 'other'], env, root)).stderr).toContain(
+		'--confirm'
+	);
+	expect(
+		(await run(['hosting', 'edit', 'lab', '--host', 'other', '--confirm'], env, root)).code
+	).toBe(0);
+	expect((await run(['hosting', 'remove', 'lab'], env, root)).stderr).toContain('--confirm');
+	expect((await run(['hosting', 'remove', 'lab', '--confirm'], env, root)).code).toBe(0);
+	expect(
+		JSON.parse((await run(['hosting', 'list'], env, root)).stdout).map(
+			(item: { id: string }) => item.id
+		)
+	).toEqual(['local']);
 	expect(existsSync(env.FH_HOME)).toBe(false);
 });
 
@@ -95,6 +115,7 @@ const input = await Bun.stdin.text(); const request = JSON.parse(input);
 writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args: process.argv.slice(2), request }));
 const item = { ref: { kind:'local-docker',connectionId:'local',homeDir:'/opt/stacks/agent' },name:'agent',location:'/opt/stacks/agent',services:[],warnings:[] };
 const value = request.action==='hello' ? {actions:['list','inspect','logs','start','stop','restart']} : request.action==='list' ? [item] : item;
+if(request.action==='hello') process.exitCode=0;
 console.log(JSON.stringify({version:1,ok:true,value}));
 `,
 		{ mode: 0o700 }
@@ -114,11 +135,7 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 	const input = JSON.parse(readFileSync(capture, 'utf8'));
 	expect(input.args.at(-1)).toBe('PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc');
 	expect(input.args).not.toContain('/opt/stacks/agent');
-	expect(input.request).toMatchObject({
-		action: 'inspect',
-		homeDir: '/opt/stacks/agent',
-		version: 1
-	});
+	expect(input.request).toMatchObject({ action: 'hello', version: 1 });
 	expect(existsSync(env.FH_HOME)).toBe(false);
 });
 

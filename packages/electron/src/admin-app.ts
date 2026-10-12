@@ -1,97 +1,109 @@
+import {
+	SshInstanceManagement,
+	MANAGEMENT_METHODS,
+	ensureDockerReady,
+	hostingProvider,
+	openHostingInstance,
+	LOCAL_CONNECTION,
+	parseHostingConnection,
+	connectionEndpoint,
+	checkHostingConnection,
+	repairSshCli,
+	sshArgs,
+	SSH_RPC_COMMAND,
+	runHostingProcess,
+	type HostingConnection,
+	type InstanceManagement
+} from '@fhold/lib';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import {
-	beginRemoteEnable,
-	remoteTool,
-	remoteBrowserUrls,
-	remoteConnection,
-	beginProviderOAuth,
-	classifyInstall,
-	completeProviderOAuth,
-	configureGuardianModeratorModel,
-	connectionDetails,
-	createFholdState,
-	defaultStackConfig,
-	ensureDockerReady,
-	isCodexSandbox,
-	isCredentialUsername,
-	isPortalName,
-	listProviderSettings,
-	saveProviderEndpoint,
-	discoverProviderModels,
-	useProviderModel,
-	removeProviderSetup,
-	markInstalled,
-	mutateStack,
-	parseStackConfig,
-	portalSecretConfigured,
-	readCredentialKey,
-	readStackConfig,
-	requireInstall,
-	setProviderApiKey,
-	stackConfigFile,
-	testAssistantReadiness,
-	savePortalTokens
-} from '@fhold/lib';
-import { hostingProvider, openHostingInstance, inspectLocalInstance, operateLocalInstance, localInstanceLogs, LOCAL_CONNECTION } from '@fhold/lib';
-import { parseHostingConnection, connectionEndpoint, checkHostingConnection, repairSshCli } from '@fhold/lib';
-import {
-	recoverySnapshot,
-	recoveryStatus,
-	runRecoveryOperation,
-	saveRecoverySettings,
-	saveRecoveryCredential
-} from '@fhold/lib';
-import {
-	reviewCodexRecall,
-	changeCodexRecall,
-	assertProjectOwnership,
-	isInstanceName
-} from '@fhold/lib';
-import type { AssistantReadiness, CodexSandbox, RemoteEnableSession } from '@fhold/lib';
-
 import { AdminInstances } from './admin-instances.js';
 
-import { ADMIN_CHANNELS, type AdminSnapshot, type AdminViewSnapshot, type StackAction } from './admin-types.js';
+import {
+	ADMIN_CHANNELS,
+	type AdminSnapshot,
+	type AdminViewSnapshot,
+	type StackAction
+} from './admin-types.js';
 import {
 	confirmedAdminAction,
 	interruptionPrompt,
-	adminPortalMappings,
-	adminPortalTokens,
-	backupFromAdmin,
-	instanceRestoreFromAdmin,
-	createAdminCredential,
 	externalAdminUrl,
-	restoreFromAdmin,
-	installFromAdmin,
-	isAdminPageUrl,
-	mapAdminPortalUser,
-	removeAdminCredential,
-	rotateAdminCredential,
-	saveAdminConfig
+	isAdminPageUrl
 } from './admin-domain.js';
 
 const adminDirectory = fileURLToPath(new URL('../admin', import.meta.url));
 const adminIndexPath = join(adminDirectory, 'index.html');
 const adminIndexUrl = pathToFileURL(adminIndexPath).href;
-let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
-let remoteStarting = false;
 let instances: AdminInstances;
-let pendingOAuth: { homeDir: string; provider: string; method: number; attemptID: string } | undefined;
-let verifiedModel:
-	| { homeDir: string; readiness: Extract<AssistantReadiness, { ok: true }> }
-	| undefined;
-
-function managedState() {
-	return createFholdState(instances.currentLocal().homeDir);
+let activeManagement: { key: string; api: InstanceManagement } | undefined;
+function management() {
+	const target = instances.current();
+	const homeDir =
+		target.kind === 'local'
+			? target.homeDir
+			: target.ref.kind === 'ssh-docker'
+				? target.ref.remoteHome
+				: undefined;
+	if (!homeDir)
+		throw Error('This hosting environment does not expose instance-file administration.');
+	const key = JSON.stringify(target);
+	if (activeManagement?.key === key) return activeManagement.api;
+	const openUrl = (url: string) => {
+		void shell.openExternal(externalAdminUrl(url)).catch(() => undefined);
+	};
+	const connection =
+		target.kind === 'local'
+			? LOCAL_CONNECTION
+			: instances.hosting.connection(target.ref.connectionId);
+	const ref =
+		target.kind === 'local'
+			? { kind: 'local-docker' as const, connectionId: 'local' as const, homeDir }
+			: target.ref;
+	const api = openHostingInstance(connection, ref).management?.({
+		setupName: instances.setupName,
+		openUrl
+	});
+	if (!api) throw Error('This hosting environment does not expose instance administration.');
+	activeManagement = { key, api };
+	return api;
+}
+async function discardManagement() {
+	const old = activeManagement;
+	activeManagement = undefined;
+	await old?.api.close();
+}
+function selectedConnection(id: string) {
+	const target = instances.welcome().selectedInstance;
+	return target?.kind === 'hosted' && target.ref.connectionId === id;
 }
 function hostedSession() {
 	const target = instances.current();
-	if (target.kind !== 'hosted') return undefined;
-	return openHostingInstance(instances.hosting.connection(target.ref.connectionId), target.ref);
+	return target.kind === 'hosted' && target.ref.kind === 'azure-container-apps'
+		? openHostingInstance(instances.hosting.connection(target.ref.connectionId), target.ref)
+		: undefined;
+}
+async function hostingInfo(id: string) {
+	const connection = instances.hosting.connection(id);
+	if (connection.kind !== 'ssh-docker') throw Error('Choose an SSH computer.');
+	const response = JSON.parse(
+		await runHostingProcess('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
+			input: JSON.stringify({ version: 1, action: 'hello' })
+		})
+	) as { ok?: boolean; value?: { instancesDirectory?: string; management?: string[] } };
+	if (
+		response.ok !== true ||
+		typeof response.value?.instancesDirectory !== 'string' ||
+		!response.value.management?.includes('snapshot')
+	)
+		throw Error('Update the remote fhold CLI from Connections before managing this computer.');
+	return {
+		instancesDirectory: response.value.instancesDirectory,
+		defaultHome: join(response.value.instancesDirectory, 'default')
+	};
 }
 
 function handleAdmin(
@@ -106,7 +118,7 @@ function handleAdmin(
 
 function requireSwitchable(): void {
 	instances.assertIdle();
-	if (remoteStarting || activeRemote?.session.snapshot().running)
+	if (activeManagement?.api.busy())
 		throw new Error('Finish or cancel native remote setup before switching instances.');
 }
 
@@ -124,330 +136,232 @@ function requireAdminSender(event: IpcMainInvokeEvent): void {
 		throw new Error('Unauthorized admin IPC sender');
 }
 
-function state() {
-	const value = managedState();
-	requireInstall(value.homeDir);
-	return value;
-}
-
-function connectionSnapshot(homeDir: string): NonNullable<AdminSnapshot['connectionDetails']> {
-	return {
-		opencode: connectionDetails(homeDir, 'opencode'),
-		mcp: connectionDetails(homeDir, 'mcp'),
-		claude: connectionDetails(homeDir, 'claude')
-	};
-}
-
-function oauthInput(value: unknown): {
-	provider: string;
-	method: number;
-	inputs?: Record<string, string>;
-} {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error('Invalid provider sign-in request.');
-	}
-	const input = value as { provider?: unknown; method?: unknown; inputs?: unknown };
-	if (typeof input.provider !== 'string' || typeof input.method !== 'number') {
-		throw new Error('Provider and sign-in method are required.');
-	}
-	if (
-		input.inputs !== undefined &&
-		(!input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs))
-	) {
-		throw new Error('Invalid provider sign-in fields.');
-	}
-	if (
-		input.inputs &&
-		Object.values(input.inputs as Record<string, unknown>).some((item) => typeof item !== 'string')
-	) {
-		throw new Error('Invalid provider sign-in fields.');
-	}
-	return {
-		provider: input.provider,
-		method: input.method,
-		...(input.inputs ? { inputs: input.inputs as Record<string, string> } : {})
-	};
-}
-
 export async function adminSnapshot(): Promise<AdminViewSnapshot> {
 	const session = hostedSession();
 	if (session) return { phase: 'remote', hosting: await session.inspect() };
-	const candidate = managedState();
-	const installState = classifyInstall(candidate.homeDir);
-	if (installState === 'not_installed') {
-		const config = defaultStackConfig(candidate.homeDir);
-		if (instances.setupName) {
-			config.deployment.projectName = instances.setupName;
-			config.recovery.instanceId = instances.setupName;
-		}
-		return {
-			installationReadiness: await ensureDockerReady(),
-			phase: 'not_installed',
-			homeDir: candidate.homeDir,
-			configPath: stackConfigFile(candidate.homeDir),
-			config,
-			services: [],
-			portalMappings: {},
-			portalSecrets: {}
-		};
-	}
-	if (installState === 'incompatible_home') {
-		throw new Error(
-			'The selected folder is incompatible with fhold. Choose an empty directory for installation.'
-		);
-	}
-	const current = state();
-	const config = readStackConfig(current.homeDir);
-	if (!config.ok) throw new Error(config.error);
-	const hosting = await inspectLocalInstance(current.homeDir);
-	const services = hosting.services;
-	let recovery: ReturnType<typeof recoverySnapshot> | undefined;
-	let recoveryError: string | undefined;
-	try {
-		recovery = recoverySnapshot(current.homeDir);
-	} catch {
-		recoveryError =
-			'Recovery selection could not be read. Review config/recovery/include.json; no recovery settings were changed.';
-	}
-	return {
-		phase: installState === 'installed' ? 'ready' : 'setup_incomplete',
-		homeDir: current.homeDir,
-		configPath: stackConfigFile(current.homeDir),
-		config: config.config,
-		services,
-		pendingRestart: hosting.pendingRestart,
-		recovery,
-		recoveryError,
-		...(hosting.warnings.length ? { dockerError: hosting.warnings.join(' ') } : {}),
-		portalMappings: adminPortalMappings(current.homeDir),
-		portalSecrets: {
-			discord: portalSecretConfigured(current.homeDir, 'discord'),
-			slack: portalSecretConfigured(current.homeDir, 'slack')
-		},
-		connectionDetails: connectionSnapshot(current.homeDir)
-	};
+	const snapshot = await management().call<AdminSnapshot>('snapshot');
+	const target = instances.current();
+	return target.kind === 'hosted' && target.ref.kind === 'ssh-docker'
+		? {
+				...snapshot,
+				target: target.ref,
+				connectionLabel: instances.hosting.connection(target.ref.connectionId).label
+			}
+		: snapshot;
 }
-
 export async function runAdminAction(action: StackAction): Promise<AdminViewSnapshot> {
 	const session = hostedSession();
 	if (session) {
 		const result = await session.operate(action, true);
-		return { phase: 'remote', hosting: { ...result.snapshot, warnings: [...result.snapshot.warnings, ...(result.message ? [result.message] : [])] } };
+		return { phase: 'remote', hosting: result.snapshot };
 	}
-	const current = state();
-	await operateLocalInstance(current.homeDir, action);
+	await management().call('action', { action, confirmed: true });
 	return adminSnapshot();
-}
-
-async function completeAdminReadiness(
-	homeDir: string,
-	readiness: AssistantReadiness
-): Promise<void> {
-	if (!readiness.ok) return;
-	mutateStack(homeDir, () => {
-		configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
-		markInstalled(homeDir);
-	});
 }
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
-	async function confirmConnectionChange(event: IpcMainInvokeEvent, message: string, detail: string): Promise<boolean> {
-		const owner = BrowserWindow.fromWebContents(event.sender);
-		const options = { type: 'warning' as const, buttons: ['Cancel', 'Continue'], defaultId: 0, cancelId: 0, message, detail };
-		return (owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options)).response === 1;
-	}
-	ipcMain.handle(ADMIN_CHANNELS.hostingUpdateConnection, async (event, id: string, value: unknown) => {
-		requireAdminSender(event); requireSwitchable();
-		const previous = instances.hosting.connection(id);
-		const next = parseHostingConnection(value);
-		const retarget = connectionEndpoint(previous) !== connectionEndpoint(next);
-		if (retarget && !await confirmConnectionChange(event, 'Change this connection’s host?', 'Saved recent instances for this connection will be cleared and its open view closed. No running containers or instance files will be changed.')) return undefined;
-		requireSwitchable();
-		const result = instances.hosting.updateConnection(id, next);
-		if (retarget) instances.forgetConnectionTargets(id);
-		return result;
+	ipcMain.handle(ADMIN_CHANNELS.hostingInfo, (event, id: string) => {
+		requireAdminSender(event);
+		return instances.runConnection(() => hostingInfo(id));
 	});
+	ipcMain.handle(
+		ADMIN_CHANNELS.hostingDirectory,
+		(event, value: { connectionId: string; path?: string }) => {
+			requireAdminSender(event);
+			return instances.runConnection(async () => {
+				const info = await hostingInfo(value.connectionId);
+				const connection = instances.hosting.connection(value.connectionId) as Extract<
+					HostingConnection,
+					{ kind: 'ssh-docker' }
+				>;
+				const api = new SshInstanceManagement(connection, info.defaultHome);
+				try {
+					return await api.call('directory', value.path ?? info.instancesDirectory);
+				} finally {
+					await api.close();
+				}
+			});
+		}
+	);
+	for (const method of MANAGEMENT_METHODS) {
+		if (
+			method === 'transferCreate' ||
+			method === 'transferRelease' ||
+			method === 'transferPack' ||
+			method === 'transferUnpack'
+		)
+			continue;
+		ipcMain.handle(ADMIN_CHANNELS[method], (event, value: unknown, ...extra: unknown[]) => {
+			requireAdminSender(event);
+			return instances.run(async () => {
+				if (method === 'snapshot') return adminSnapshot();
+				if (method === 'action') return runAdminAction(confirmedAdminAction(value));
+				if (method === 'logs' && hostedSession()) return hostedSession()!.logs({ tail: 250 });
+				const result = await management().call(method, value, ...extra);
+				if (result && typeof result === 'object' && 'phase' in result) return adminSnapshot();
+				return result;
+			});
+		});
+	}
+	app.on('before-quit', (event) => {
+		if (!activeManagement) return;
+		event.preventDefault();
+		void discardManagement().finally(() => app.quit());
+	});
+	async function confirmConnectionChange(
+		event: IpcMainInvokeEvent,
+		message: string,
+		detail: string
+	): Promise<boolean> {
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		const options = {
+			type: 'warning' as const,
+			buttons: ['Cancel', 'Continue'],
+			defaultId: 0,
+			cancelId: 0,
+			message,
+			detail
+		};
+		return (
+			(owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options))
+				.response === 1
+		);
+	}
+	ipcMain.handle(
+		ADMIN_CHANNELS.hostingUpdateConnection,
+		async (event, id: string, value: unknown) => {
+			requireAdminSender(event);
+			requireSwitchable();
+			const previous = instances.hosting.connection(id);
+			const next = parseHostingConnection(value);
+			const retarget = connectionEndpoint(previous) !== connectionEndpoint(next);
+			if (
+				retarget &&
+				!(await confirmConnectionChange(
+					event,
+					'Change this connection’s host?',
+					'Saved recent instances for this connection will be cleared and its open view closed. No running containers or instance files will be changed.'
+				))
+			)
+				return undefined;
+			requireSwitchable();
+			const result = instances.hosting.updateConnection(id, next);
+			if (retarget) {
+				if (selectedConnection(id)) await discardManagement();
+				instances.forgetConnectionTargets(id);
+			}
+			return result;
+		}
+	);
 	ipcMain.handle(ADMIN_CHANNELS.hostingRemoveConnection, async (event, id: string) => {
-		requireAdminSender(event); requireSwitchable();
+		requireAdminSender(event);
+		requireSwitchable();
 		instances.hosting.connection(id);
-		if (!await confirmConnectionChange(event, 'Remove this saved connection?', 'Only connection metadata and its recent selections are removed. Instances remain running and no data is deleted.')) return false;
-		requireSwitchable(); instances.hosting.removeConnection(id); instances.forgetConnectionTargets(id); return true;
+		if (
+			!(await confirmConnectionChange(
+				event,
+				'Remove this saved connection?',
+				'Only connection metadata and its recent selections are removed. Instances remain running and no data is deleted.'
+			))
+		)
+			return false;
+		requireSwitchable();
+		if (selectedConnection(id)) await discardManagement();
+		instances.hosting.removeConnection(id);
+		instances.forgetConnectionTargets(id);
+		return true;
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingCheckConnection, (event, id: string) => {
-		requireAdminSender(event); requireSwitchable();
+		requireAdminSender(event);
+		requireSwitchable();
 		return instances.runConnection(() => checkHostingConnection(instances.hosting.connection(id)));
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingRepairConnection, async (event, id: string) => {
-		requireAdminSender(event); requireSwitchable();
-		const connection = instances.hosting.connection(id);
-		if (!await confirmConnectionChange(event, 'Install or update the remote fhold CLI?', `Download this tooling release and replace ~/.local/bin/fhold on ${connection.label}. No sudo, SSH trust changes, container restarts or instance configuration changes are made.`)) return undefined;
-		requireSwitchable();
-		return instances.runConnection(() => repairSshCli(connection, { confirmed: true }));
-	});
-	ipcMain.handle(ADMIN_CHANNELS.hostingConnections, event => {
 		requireAdminSender(event);
-		return [LOCAL_CONNECTION, ...instances.hosting.read().connections.filter(item => item.id !== 'local')];
+		requireSwitchable();
+		const connection = instances.hosting.connection(id);
+		if (
+			!(await confirmConnectionChange(
+				event,
+				'Install or update the remote fhold CLI?',
+				`Download this tooling release and replace ~/.local/bin/fhold on ${connection.label}. No sudo, SSH trust changes, container restarts or instance configuration changes are made.`
+			))
+		)
+			return undefined;
+		requireSwitchable();
+		return instances.runConnection(async () => {
+			const result = await repairSshCli(connection, { confirmed: true });
+			if (selectedConnection(id)) await discardManagement();
+			return result;
+		});
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingConnections, (event) => {
+		requireAdminSender(event);
+		return [
+			LOCAL_CONNECTION,
+			...instances.hosting.read().connections.filter((item) => item.id !== 'local')
+		];
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingSaveConnection, (event, value: unknown) => {
-		requireAdminSender(event); requireSwitchable();
+		requireAdminSender(event);
+		requireSwitchable();
 		return instances.hosting.saveConnection(value);
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingInstances, async (event, id: unknown) => {
-		requireAdminSender(event); requireSwitchable();
+		requireAdminSender(event);
+		requireSwitchable();
 		if (typeof id !== 'string') throw new Error('Choose a hosting connection.');
-		return instances.runConnection(() => hostingProvider(instances.hosting.connection(id)).listInstances());
+		return instances.runConnection(() =>
+			hostingProvider(instances.hosting.connection(id)).listInstances()
+		);
 	});
 	ipcMain.handle(ADMIN_CHANNELS.welcome, (event) => {
 		requireAdminSender(event);
 		return instances.welcome();
 	});
-	ipcMain.handle(ADMIN_CHANNELS.installationReadiness, (event) => {
+	ipcMain.handle(ADMIN_CHANNELS.installationReadiness, (event, id?: string) => {
 		requireAdminSender(event);
 		// Read-only host checks can run before any installation folder is selected.
-		return ensureDockerReady();
+		return id && id !== 'local'
+			? checkHostingConnection(instances.hosting.connection(id)).then((result) => ({
+					ok: result.ok,
+					message: result.checks.find((item) => !item.ok)?.detail
+				}))
+			: ensureDockerReady();
 	});
-	ipcMain.handle(ADMIN_CHANNELS.openInstance, (event, target: unknown) => {
+	ipcMain.handle(ADMIN_CHANNELS.openInstance, async (event, target: unknown) => {
 		requireAdminSender(event);
 		requireSwitchable();
+		await discardManagement();
 		instances.open(target);
-		activeRemote = undefined;
-		pendingOAuth = undefined;
 	});
-	ipcMain.handle(ADMIN_CHANNELS.prepareNewInstance, (event, target: unknown) => {
+	ipcMain.handle(ADMIN_CHANNELS.prepareNewInstance, async (event, target: unknown) => {
 		requireAdminSender(event);
 		requireSwitchable();
+		await discardManagement();
 		instances.prepareNew(target);
-		activeRemote = undefined;
-		pendingOAuth = undefined;
 	});
-	ipcMain.handle(ADMIN_CHANNELS.closeInstance, (event) => {
+	ipcMain.handle(ADMIN_CHANNELS.closeInstance, async (event) => {
 		requireAdminSender(event);
 		requireSwitchable();
+		await discardManagement();
 		instances.close();
-		activeRemote = undefined;
-		pendingOAuth = undefined;
 	});
-	handleAdmin(ADMIN_CHANNELS.codexRecall, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid recall request.');
-		const input = value as Record<string, unknown>;
-		const current = state();
-		if (input.action === 'review') return reviewCodexRecall(current);
-		if (input.action !== 'approve' && input.action !== 'disable')
-			throw new Error('Unknown recall action.');
-		if (typeof input.digest !== 'string') throw new Error('Review the current hooks first.');
-		if (remoteStarting || activeRemote?.session.snapshot().running)
-			throw new Error('Finish or cancel remote setup first.');
-		return changeCodexRecall(current, input.action, input.digest, input.confirmed === true);
-	});
-	handleAdmin(ADMIN_CHANNELS.remote, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid native remote request.');
-		const input = value as Record<string, unknown>;
-		const tool = remoteTool(input.tool);
-		const current = state();
-		if (input.action === 'connection') {
-			const output = await remoteConnection(current, tool);
-			for (const url of remoteBrowserUrls(output))
-				void shell.openExternal(url).catch(() => undefined);
-			return { tool, stage: 'connection', output, running: false, enabled: true };
-		}
-		if (input.action === 'enable') {
-			if (input.restartConfirmed !== true)
-				throw new Error('Confirm the possible container restarts before remote setup.');
-			if (remoteStarting || activeRemote?.session.snapshot().running)
-				throw new Error('Finish or cancel the current remote setup first.');
-			if (input.sandbox !== undefined && !isCodexSandbox(input.sandbox))
-				throw new Error('Invalid Codex sandbox mode.');
-			remoteStarting = true;
-			const opened = new Set<string>();
-			try {
-				const session = await beginRemoteEnable(current, tool, {
-					trusted: input.trusted === true,
-					sandbox: input.sandbox as CodexSandbox | undefined,
-					update(progress) {
-						for (const url of remoteBrowserUrls(progress.output)) {
-							if (opened.has(url)) continue;
-							opened.add(url);
-							void shell.openExternal(url).catch(() => undefined);
-						}
-					}
-				});
-				activeRemote = { homeDir: current.homeDir, session };
-				return session.snapshot();
-			} finally {
-				remoteStarting = false;
-			}
-		}
-		if (input.action === 'disable') {
-			const read = readStackConfig(current.homeDir);
-			if (!read.ok) throw new Error(read.error);
-			const config = structuredClone(read.config);
-			config.assistant[tool === 'codex' ? 'codexRemote' : 'claudeRemote'] = false;
-			saveAdminConfig(current.homeDir, config, read.config);
-			return { tool, stage: 'saved', output: '', running: false, enabled: false };
-		}
-		if (
-			!activeRemote ||
-			activeRemote.homeDir !== current.homeDir ||
-			activeRemote.session.snapshot().tool !== tool
-		)
-			throw new Error('Start remote setup for this installation first.');
-		if (input.action === 'input') {
-			if (typeof input.input !== 'string') throw new Error('A native prompt answer is required.');
-			activeRemote.session.input(input.input);
-		} else if (input.action === 'cancel') {
-			activeRemote.session.cancel();
-			return activeRemote.session.done;
-		} else if (input.action !== 'progress') throw new Error('Unknown remote setup action.');
-		return activeRemote.session.snapshot();
-	});
-	app.on('before-quit', (event) => {
-		if (!activeRemote?.session.snapshot().running) return;
-		event.preventDefault();
-		activeRemote.session.cancel();
-		void activeRemote.session.done.finally(() => app.quit());
-	});
-	handleAdmin(ADMIN_CHANNELS.snapshot, (_event) => {
-		return adminSnapshot();
-	});
+
 	ipcMain.handle(ADMIN_CHANNELS.selectedHome, (event) => {
 		requireAdminSender(event);
 		const welcome = instances.welcome();
 		const target = welcome.selectedInstance;
-		return target?.kind === 'hosted' ? target.ref.kind === 'ssh-docker' ? target.ref.remoteHome : target.ref.kind === 'azure-container-apps' ? target.ref.resourceId : target.ref.homeDir : target?.homeDir ?? welcome.defaultInstance.homeDir;
+		return target?.kind === 'hosted'
+			? target.ref.kind === 'ssh-docker'
+				? target.ref.remoteHome
+				: target.ref.kind === 'azure-container-apps'
+					? target.ref.resourceId
+					: target.ref.homeDir
+			: (target?.homeDir ?? welcome.defaultInstance.homeDir);
 	});
-	handleAdmin(
-		ADMIN_CHANNELS.install,
-		async (_event, value: unknown, automaticPorts: unknown = true) => {
-			if (typeof automaticPorts !== 'boolean')
-				throw new Error('Invalid connection port selection.');
-			const parsed = parseStackConfig(value);
-			if (!parsed.ok) throw new Error(parsed.error);
-			if (!isInstanceName(parsed.config.deployment.projectName))
-				throw new Error(
-					'Instance name must be 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.'
-				);
-			const docker = await ensureDockerReady();
-			if (!docker.ok) throw new Error(docker.message);
-			await assertProjectOwnership(parsed.config.deployment.projectName);
-			await installFromAdmin(parsed.config, instances.currentLocal().homeDir, automaticPorts);
-			return runAdminAction('start');
-		}
-	);
-	handleAdmin(ADMIN_CHANNELS.saveConfig, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid settings save request');
-		const input = value as { config?: unknown; baseConfig?: unknown };
-		const parsed = parseStackConfig(input.config);
-		if (!parsed.ok) throw new Error(parsed.error);
-		const baseline = parseStackConfig(input.baseConfig);
-		if (!baseline.ok)
-			throw new Error('Refresh settings before saving; a valid baseline is required.');
-		const current = state();
-		saveAdminConfig(current.homeDir, parsed.config, baseline.config);
-		return adminSnapshot();
-	});
+
 	handleAdmin(ADMIN_CHANNELS.confirmRestart, async (event, action: unknown) => {
 		const target = instances.current();
 		const options = {
@@ -458,176 +372,14 @@ export function registerAdminIpc(): void {
 			noLink: true
 		};
 		if (action === 'instance-export' || action === 'instance-import')
-			options.detail += `\n\nSelected instance folder: ${instances.currentLocal().homeDir}`;
+			options.detail += `\n\nSelected instance folder: ${(await management().call<AdminSnapshot>('snapshot')).homeDir}`;
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		const result = owner
 			? await dialog.showMessageBox(owner, options)
 			: await dialog.showMessageBox(options);
 		return result.response === 1;
 	});
-	handleAdmin(ADMIN_CHANNELS.action, (_event, input: unknown) => {
-		return runAdminAction(confirmedAdminAction(input));
-	});
-	handleAdmin(ADMIN_CHANNELS.logs, async (_event) => {
-		const session = hostedSession();
-		if (session) return session.logs({ tail: 250 });
-		const current = state();
-		return (await localInstanceLogs(current.homeDir, { tail: 250 })).slice(-200_000);
-	});
-	handleAdmin(ADMIN_CHANNELS.providers, (_event) => {
-		const current = state();
-		return listProviderSettings(current.homeDir);
-	});
-	handleAdmin(ADMIN_CHANNELS.providerKey, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid provider settings');
-		const input = value as { provider?: unknown; key?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.key !== 'string') {
-			throw new Error('Provider and key are required.');
-		}
-		const current = state();
-		verifiedModel = undefined;
-		await setProviderApiKey(current.homeDir, input.provider, input.key);
-	});
-	handleAdmin(ADMIN_CHANNELS.providerEndpoint, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid AI service settings.');
-		const input = value as {
-			provider?: unknown;
-			name?: unknown;
-			url?: unknown;
-			model?: unknown;
-			key?: unknown;
-		};
-		if (
-			typeof input.provider !== 'string' ||
-			typeof input.name !== 'string' ||
-			typeof input.url !== 'string' ||
-			typeof input.model !== 'string' ||
-			(input.key !== undefined && typeof input.key !== 'string')
-		)
-			throw new Error('Service, URL and model are required.');
-		verifiedModel = undefined;
-		return saveProviderEndpoint(state().homeDir, {
-			provider: input.provider,
-			name: input.name,
-			url: input.url,
-			model: input.model,
-			...(typeof input.key === 'string' ? { key: input.key } : {})
-		});
-	});
-	handleAdmin(ADMIN_CHANNELS.providerModels, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid server settings.');
-		const input = value as { url?: unknown; key?: unknown };
-		if (typeof input.url !== 'string' || (input.key !== undefined && typeof input.key !== 'string'))
-			throw new Error('Server URL is required.');
-		return discoverProviderModels(state().homeDir, {
-			url: input.url,
-			...(typeof input.key === 'string' ? { key: input.key } : {})
-		});
-	});
-	handleAdmin(ADMIN_CHANNELS.providerUse, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid model selection.');
-		const input = value as { provider?: unknown; model?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.model !== 'string')
-			throw new Error('Service and model are required.');
-		const current = state();
-		if (
-			!verifiedModel ||
-			verifiedModel.homeDir !== current.homeDir ||
-			verifiedModel.readiness.provider !== input.provider ||
-			verifiedModel.readiness.model !== input.model
-		)
-			throw new Error('Test this model before using it for your agent.');
-		const settings = await useProviderModel(current.homeDir, input.provider, input.model);
-		await completeAdminReadiness(current.homeDir, verifiedModel.readiness);
-		return settings;
-	});
-	handleAdmin(ADMIN_CHANNELS.providerRemove, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid saved setup.');
-		const input = value as { provider?: unknown; endpoint?: unknown };
-		if (
-			typeof input.provider !== 'string' ||
-			(input.endpoint !== undefined && typeof input.endpoint !== 'boolean')
-		)
-			throw new Error('Service is required.');
-		verifiedModel = undefined;
-		return removeProviderSetup(state().homeDir, input.provider, {
-			endpoint: input.endpoint === true
-		});
-	});
-	handleAdmin(ADMIN_CHANNELS.providerOAuthStart, async (_event, value: unknown) => {
-		const input = oauthInput(value);
-		const current = state();
-		const authorization = await beginProviderOAuth(
-			current.homeDir,
-			input.provider,
-			input.method,
-			input.inputs
-		);
-		pendingOAuth = { homeDir: current.homeDir, provider: input.provider, method: input.method, attemptID: authorization.attemptID };
-		await shell.openExternal(externalAdminUrl(authorization.url));
-		return authorization;
-	});
-	handleAdmin(ADMIN_CHANNELS.providerOAuthFinish, async (_event, value: unknown) => {
-		const input = oauthInput(value);
-		const rawCode = (value as { code?: unknown }).code;
-		if (rawCode !== undefined && typeof rawCode !== 'string') {
-			throw new Error('Invalid provider authorization code.');
-		}
-		const current = state();
-		if (
-			!pendingOAuth ||
-			pendingOAuth.homeDir !== current.homeDir ||
-			pendingOAuth.provider !== input.provider ||
-			pendingOAuth.method !== input.method
-		)
-			throw new Error('Start provider sign-in for this instance first.');
-		await completeProviderOAuth(current.homeDir, input.provider, pendingOAuth.attemptID, rawCode);
-		pendingOAuth = undefined;
-		verifiedModel = undefined;
-	});
-	handleAdmin(ADMIN_CHANNELS.readiness, (_event, value: unknown) => {
-		if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
-			throw new Error('Invalid provider readiness request.');
-		}
-		const rawProvider = (value as { provider?: unknown } | undefined)?.provider;
-		const rawModel = (value as { model?: unknown } | undefined)?.model;
-		if (rawProvider !== undefined && typeof rawProvider !== 'string') {
-			throw new Error('Invalid readiness provider.');
-		}
-		if (rawModel !== undefined && (typeof rawModel !== 'string' || !rawProvider))
-			throw new Error('Choose a service for this model test.');
-		const current = state();
-		return testAssistantReadiness(current.homeDir, {
-			...(rawProvider ? { provider: rawProvider } : {}),
-			...(typeof rawModel === 'string' ? { model: rawModel } : {})
-		}).then(async (readiness) => {
-			verifiedModel = readiness.ok ? { homeDir: current.homeDir, readiness } : undefined;
-			// A successful candidate test is not a default-model choice. Complete
-			// new setup after explicit Use; checking the existing default is enough.
-			const settings = readiness.ok ? await listProviderSettings(current.homeDir) : undefined;
-			if (
-				!rawProvider ||
-				(readiness.ok &&
-					settings?.currentModel?.provider === readiness.provider &&
-					settings?.currentModel?.model === readiness.model)
-			) {
-				await completeAdminReadiness(current.homeDir, readiness);
-			}
-			return readiness;
-		});
-	});
-	handleAdmin(ADMIN_CHANNELS.assistantPassword, (_event) => {
-		const current = state();
-		const details = connectionDetails(current.homeDir, 'opencode', {
-			showAssistantPassword: true
-		});
-		if (!details.password) throw new Error('OpenCode password is unavailable.');
-		return { password: details.password };
-	});
+
 	handleAdmin(ADMIN_CHANNELS.copyText, (_event, value: unknown) => {
 		if (typeof value !== 'string' || value.length < 1 || value.length > 10_000) {
 			throw new Error('Invalid clipboard value.');
@@ -683,87 +435,6 @@ export function registerAdminIpc(): void {
 			: await dialog.showOpenDialog(options);
 		return result.canceled ? undefined : result.filePaths[0];
 	});
-	handleAdmin(ADMIN_CHANNELS.credential, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid credential operation');
-		const input = value as { action?: unknown; username?: unknown; policy?: unknown };
-		const current = state();
-		if (input.action === 'create') {
-			createAdminCredential(current.homeDir, {
-				username: input.username,
-				policy: input.policy
-			});
-		} else if (input.action === 'rotate') rotateAdminCredential(current.homeDir, input.username);
-		else if (input.action === 'remove') removeAdminCredential(current.homeDir, input.username);
-		else throw new Error('Invalid credential operation');
-		return adminSnapshot();
-	});
-	handleAdmin(ADMIN_CHANNELS.credentialKey, (_event, value: unknown) => {
-		if (!isCredentialUsername(value)) throw new Error('Invalid credential username.');
-		const current = state();
-		const config = readStackConfig(current.homeDir);
-		if (!config.ok) throw new Error(config.error);
-		if (!Object.hasOwn(config.config.credentials, value)) {
-			throw new Error(`Unknown credential: ${value}`);
-		}
-		return { username: value, key: readCredentialKey(current.homeDir, value) };
-	});
-	handleAdmin(ADMIN_CHANNELS.mapPortalUser, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid portal mapping');
-		const current = state();
-		mapAdminPortalUser(current.homeDir, value as never);
-		return adminSnapshot();
-	});
-	handleAdmin(ADMIN_CHANNELS.portalToken, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid portal token operation');
-		const input = value as { portal?: unknown; botToken?: unknown; appToken?: unknown };
-		if (!isPortalName(input.portal)) throw new Error('Portal must be discord or slack.');
-		const current = state();
-		const config = readStackConfig(current.homeDir);
-		if (!config.ok) throw new Error(config.error);
-		const configured = portalSecretConfigured(current.homeDir, input.portal);
-		const { botToken, appToken } = adminPortalTokens(value, configured);
-		savePortalTokens(current.homeDir, { portal: input.portal, botToken, appToken });
-		return adminSnapshot();
-	});
-	handleAdmin(ADMIN_CHANNELS.backup, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid backup request');
-		const current = state();
-		return backupFromAdmin(current.homeDir, value as never);
-	});
-	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid recovery request.');
-		const input = value as Record<string, unknown>;
-		const home = state().homeDir;
-		if (input.action === 'save') {
-			if (typeof input.baselineDigest !== 'string')
-				throw new Error('Refresh recovery settings before saving.');
-			saveRecoverySettings(home, {
-				settings: input.settings,
-				selection: input.selection,
-				baselineDigest: input.baselineDigest
-			});
-			return adminSnapshot();
-		}
-		if (input.action === 'credential') {
-			saveRecoveryCredential(home, input.connectionString);
-			return adminSnapshot();
-		}
-		if (input.action === 'status') return recoveryStatus(home);
-		if (input.action === 'inspect' || input.action === 'init' || input.action === 'restore')
-			return runRecoveryOperation(home, input.action, input.confirmed === true);
-		throw new Error('Invalid recovery action.');
-	});
-	handleAdmin(ADMIN_CHANNELS.restoreData, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid restore request');
-		const current = state();
-		return restoreFromAdmin(current.homeDir, value as never);
-	});
-	handleAdmin(ADMIN_CHANNELS.restoreInstance, (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid full-instance import request.');
-		return instanceRestoreFromAdmin(managedState().homeDir, value as never);
-	});
 }
 
 export function createAdminWindow(options: { show?: boolean } = {}): BrowserWindow {
@@ -783,7 +454,9 @@ export function createAdminWindow(options: { show?: boolean } = {}): BrowserWind
 			sandbox: true
 		}
 	});
-	window.on('closed', () => activeRemote?.session.cancel());
+	window.on('closed', () => {
+		void discardManagement();
+	});
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		try {
 			void shell.openExternal(externalAdminUrl(url)).catch(() => undefined);

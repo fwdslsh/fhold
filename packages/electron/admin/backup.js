@@ -1,8 +1,19 @@
 import { loadProviders } from './providers.js';
+import { chooseManagedDirectory } from './directories.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { checkInstallationReadiness, renderInstallationReadiness } from './instances.js';
-import { all, byId, message, notice, operation, setBadge, setBusy, setSkipTarget, setText } from './ui.js';
+import {
+	all,
+	byId,
+	message,
+	notice,
+	operation,
+	setBadge,
+	setBusy,
+	setSkipTarget,
+	setText
+} from './ui.js';
 
 export function restoreInput(apply) {
 	return {
@@ -82,7 +93,7 @@ export async function chooseDirectory(purpose, inputId) {
 	if (state.operationInFlight) return;
 	setBusy(true);
 	try {
-		const selected = await state.api.chooseDirectory({ purpose });
+		const selected = await chooseManagedDirectory(purpose);
 		if (!selected) return;
 		byId(inputId).value = selected;
 		byId(inputId).dispatchEvent(new Event('input', { bubbles: true }));
@@ -125,7 +136,10 @@ export function renderInstanceRestorePlan(result) {
 	setText('instance-restore-name', result.projectName);
 	setText('instance-restore-review-source', result.sourceHome);
 	setText('instance-restore-review-home', result.destinationHome);
-	setText('instance-restore-summary', `${result.copyCount.toLocaleString()} files, folders and links, including conversations, files, permissions and plugins.`);
+	setText(
+		'instance-restore-summary',
+		`${result.copyCount.toLocaleString()} files, folders and links, including conversations, files, permissions and plugins.`
+	);
 	const warnings = byId('instance-restore-warnings');
 	warnings.replaceChildren();
 	for (const warning of result.warnings) {
@@ -137,8 +151,14 @@ export function renderInstanceRestorePlan(result) {
 }
 
 export function bindInstanceRestoreEvents() {
-	byId('begin-instance-import').addEventListener('click', () => {
+	byId('begin-instance-import').addEventListener('click', (event) => {
 		if (state.operationInFlight) return;
+		if (!event.detail?.remote) {
+			state.installConnection = undefined;
+			state.installationReadiness = undefined;
+		}
+		state.currentSnapshot = null;
+		state.currentConfig = null;
 		invalidateInstanceRestorePreview();
 		byId('instance-welcome').hidden = true;
 		byId('install-section').hidden = true;
@@ -156,10 +176,17 @@ export function bindInstanceRestoreEvents() {
 		notice('');
 		byId('instance-restore-source').focus();
 	});
-	byId('choose-instance-restore-source').addEventListener('click', () => void chooseDirectory('restore', 'instance-restore-source'));
-	byId('choose-instance-restore-home').addEventListener('click', () => void chooseDirectory('new-instance', 'instance-restore-home'));
+	byId('choose-instance-restore-source').addEventListener(
+		'click',
+		() => void chooseDirectory('restore', 'instance-restore-source')
+	);
+	byId('choose-instance-restore-home').addEventListener(
+		'click',
+		() => void chooseDirectory('new-instance', 'instance-restore-home')
+	);
 	for (const id of ['instance-restore-source', 'instance-restore-home'])
-		for (const event of ['input', 'change']) byId(id).addEventListener(event, invalidateInstanceRestorePreview);
+		for (const event of ['input', 'change'])
+			byId(id).addEventListener(event, invalidateInstanceRestorePreview);
 	byId('instance-restore-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
 		if (state.operationInFlight || byId('instance-import-section').hidden) return;
@@ -167,13 +194,33 @@ export function bindInstanceRestoreEvents() {
 		if (!byId('instance-restore-form').reportValidity()) return;
 		const sourceHome = byId('instance-restore-source').value.trim();
 		const targetHome = byId('instance-restore-home').value.trim();
-		const result = await operation('Previewing entire instance', async () => {
-			await state.api.prepareNewInstance({ kind: 'local', homeDir: targetHome });
-			return state.api.restoreInstance({ sourceHome });
-		}, 'Full-instance preview is ready. Review before importing.');
+		const result = await operation(
+			'Previewing entire instance',
+			async () => {
+				await state.api.prepareNewInstance(
+					state.installConnection?.kind === 'ssh-docker'
+						? {
+								kind: 'hosted',
+								ref: {
+									kind: 'ssh-docker',
+									connectionId: state.installConnection.id,
+									remoteHome: targetHome
+								}
+							}
+						: { kind: 'local', homeDir: targetHome }
+				);
+				return state.api.restoreInstance({ sourceHome });
+			},
+			'Full-instance preview is ready. Review before importing.'
+		);
 		if (!result) return;
-		if (sourceHome !== byId('instance-restore-source').value.trim() || targetHome !== byId('instance-restore-home').value.trim()) {
-			notice('The folder choices changed. Review them again before importing.', 'error', { persist: true });
+		if (
+			sourceHome !== byId('instance-restore-source').value.trim() ||
+			targetHome !== byId('instance-restore-home').value.trim()
+		) {
+			notice('The folder choices changed. Review them again before importing.', 'error', {
+				persist: true
+			});
 			return;
 		}
 		renderInstanceRestorePlan(result);
@@ -183,12 +230,23 @@ export function bindInstanceRestoreEvents() {
 		byId('instance-restore-review-title').focus();
 	});
 	byId('apply-instance-restore').addEventListener('click', async () => {
-		if (state.operationInFlight || byId('instance-import-review').hidden || byId('instance-import-section').hidden) return;
+		if (
+			state.operationInFlight ||
+			byId('instance-import-review').hidden ||
+			byId('instance-import-section').hidden
+		)
+			return;
 		const preview = state.instanceRestorePreview;
 		const sourceHome = byId('instance-restore-source').value.trim();
-		if (!preview || preview.sourceHome !== sourceHome || preview.targetHome !== byId('instance-restore-home').value.trim()) {
+		if (
+			!preview ||
+			preview.sourceHome !== sourceHome ||
+			preview.targetHome !== byId('instance-restore-home').value.trim()
+		) {
 			invalidateInstanceRestorePreview();
-			notice('Preview this full-instance export again before importing.', 'error', { persist: true });
+			notice('Preview this full-instance export again before importing.', 'error', {
+				persist: true
+			});
 			return;
 		}
 		let confirmed = false;
@@ -201,9 +259,17 @@ export function bindInstanceRestoreEvents() {
 			setBusy(false);
 		}
 		if (!confirmed) return;
-		const result = await operation('Importing entire instance', () =>
-			state.api.restoreInstance({ sourceHome, apply: true, previewDigest: preview.digest, confirmed: true }),
-			'Entire instance imported. Containers remain stopped; review settings before starting.');
+		const result = await operation(
+			'Importing entire instance',
+			() =>
+				state.api.restoreInstance({
+					sourceHome,
+					apply: true,
+					previewDigest: preview.digest,
+					confirmed: true
+				}),
+			'Entire instance imported. Containers remain stopped; review settings before starting.'
+		);
 		if (!result) return;
 		invalidateInstanceRestorePreview();
 		await refresh();
@@ -236,14 +302,18 @@ export function bindBackupEvents() {
 			() =>
 				state.api.backup({
 					destination,
-					...(full ? { full: true, confirmed: true } : {
-					includeProviderAuth: byId('backup-auth').checked,
-					includeUserEnv: byId('backup-env').checked,
-					includePortalMaps: byId('backup-maps').checked,
-					includeOAuth: byId('backup-maps').checked
-					})
+					...(full
+						? { full: true, confirmed: true }
+						: {
+								includeProviderAuth: byId('backup-auth').checked,
+								includeUserEnv: byId('backup-env').checked,
+								includePortalMaps: byId('backup-maps').checked,
+								includeOAuth: byId('backup-maps').checked
+							})
 				}),
-			full ? 'Entire instance exported, including conversations. Containers remain stopped.' : 'Export created. Native conversation history is not included.'
+			full
+				? 'Entire instance exported, including conversations. Containers remain stopped.'
+				: 'Export created. Native conversation history is not included.'
 		);
 		if (!result) return;
 		byId('backup-result').value = JSON.stringify(result, null, 2);
@@ -251,7 +321,9 @@ export function bindBackupEvents() {
 		byId('backup-summary').hidden = false;
 		byId('backup-summary').replaceChildren();
 		const title = document.createElement('strong');
-		title.textContent = full ? `${result.files.length} full-instance items exported.` : `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} exported.`;
+		title.textContent = full
+			? `${result.files.length} full-instance items exported.`
+			: `${result.files.length} portable file${result.files.length === 1 ? '' : 's'} exported.`;
 		const detail = document.createElement('span');
 		detail.textContent = full
 			? `Saved privately to ${destination}. Conversations, sign-ins, keys and active task settings included. External drives and images need separate protection. Containers remain stopped.${result.warnings.length ? ` ${result.warnings.length} warnings need review.` : ''}`

@@ -4,9 +4,14 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	directory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.directory, value),
+	hostingInfo: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingInfo, id),
+	hostingDirectory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingDirectory, value),
+	update: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.update, value),
 	hostingConnections: () => ipcRenderer.invoke(ADMIN_CHANNELS.hostingConnections),
 	hostingSaveConnection: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSaveConnection, value),
-	hostingUpdateConnection: (id, value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingUpdateConnection, id, value),
+	hostingUpdateConnection: (id, value) =>
+		ipcRenderer.invoke(ADMIN_CHANNELS.hostingUpdateConnection, id, value),
 	hostingRemoveConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingRemoveConnection, id),
 	hostingCheckConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingCheckConnection, id),
 	hostingRepairConnection: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingRepairConnection, id),
@@ -15,15 +20,17 @@ const api: AdminApi = {
 	openInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.openInstance, target),
 	prepareNewInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.prepareNewInstance, target),
 	closeInstance: () => ipcRenderer.invoke(ADMIN_CHANNELS.closeInstance),
-	installationReadiness: () => ipcRenderer.invoke(ADMIN_CHANNELS.installationReadiness),
+	installationReadiness: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.installationReadiness, id),
 	codexRecall: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.codexRecall, value),
 	remote: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.remote, value),
 	snapshot: () => ipcRenderer.invoke(ADMIN_CHANNELS.snapshot),
 	selectedHome: () => ipcRenderer.invoke(ADMIN_CHANNELS.selectedHome),
-	install: (config: StackConfig, automaticPorts = true) => ipcRenderer.invoke(ADMIN_CHANNELS.install, config, automaticPorts),
+	install: (config: StackConfig, automaticPorts = true) =>
+		ipcRenderer.invoke(ADMIN_CHANNELS.install, config, automaticPorts),
 	saveConfig: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.saveConfig, value),
 	confirmRestart: (action) => ipcRenderer.invoke(ADMIN_CHANNELS.confirmRestart, action),
-	action: (action: StackAction, confirmed = false) => ipcRenderer.invoke(ADMIN_CHANNELS.action, { action, confirmed }),
+	action: (action: StackAction, confirmed = false) =>
+		ipcRenderer.invoke(ADMIN_CHANNELS.action, { action, confirmed }),
 	logs: () => ipcRenderer.invoke(ADMIN_CHANNELS.logs),
 	providers: () => ipcRenderer.invoke(ADMIN_CHANNELS.providers),
 	providerKey: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerKey, value),

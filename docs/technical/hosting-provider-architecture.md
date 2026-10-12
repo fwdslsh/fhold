@@ -2,9 +2,11 @@
 
 Status: the shared host-side foundation, local lifecycle extraction, SSH machine
 transport/discovery/lifecycle, shared recents and an experimental ACA adapter are
-implemented. See [the supported user path](../hosting.md). Broader remote setup,
-settings/transfer parity and live ACA qualification remain phased work, not a
-release commitment. ACA Start/Stop currently submit native accepted/pending
+implemented. SSH now additionally shares the normal Admin/CLI instance operations,
+setup, image updates, private archive transfer and automatic browser forwarding.
+See [the supported user path](../hosting.md) for current behavior; phased stages
+below describe the original investigation, not current SSH capability limits.
+Live ACA qualification remains separate. ACA Start/Stop submit native accepted/pending
 requests; they do not consume ARM LRO headers or establish replica drain.
 Source baseline: `6bc54c9bfe2367b04c11dda3875137f35b6d74e9` (main).
 Official platform documentation reviewed October 11, 2026. This investigation
