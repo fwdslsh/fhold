@@ -38,6 +38,13 @@ export {
 	operateLocalInstance,
 	localInstanceLogs
 } from './local-docker.js';
-export { HOSTING_WIRE_VERSION, type MachineRequest, type MachineResponse } from './ssh-docker.js';
+export {
+	HOSTING_WIRE_VERSION,
+	SSH_RPC_COMMAND,
+	sshArgs,
+	type MachineRequest,
+	type MachineResponse
+} from './ssh-docker.js';
+export { runHostingProcess } from './process.js';
 export { hostingMachineRequest } from './machine.js';
 export { checkHostingConnection, repairSshCli, type ConnectionCheck } from './maintenance.js';

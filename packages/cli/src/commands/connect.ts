@@ -9,11 +9,12 @@ import {
 export function connectionDetails(
 	homeDir: string,
 	type: ConnectionDetails['type'],
-	options: { credential?: string; showKey?: boolean } = {}
+	options: { credential?: string; showKey?: boolean; showPassword?: boolean } = {}
 ): ConnectionDetails {
 	return sharedConnectionDetails(homeDir, type, {
 		credential: options.credential,
-		showCredentialKey: options.showKey
+		showCredentialKey: options.showKey,
+		showAssistantPassword: options.showPassword
 	});
 }
 
@@ -27,6 +28,7 @@ export default defineCommand({
 		},
 		credential: { type: 'string', description: 'named Guardian credential (default: owner)' },
 		showKey: { type: 'boolean', description: 'include the Guardian credential key' },
+		'show-password': { type: 'boolean', description: 'include the trusted OpenCode password' },
 		json: { type: 'boolean', description: 'print machine-readable JSON' }
 	},
 	run({ args }) {
@@ -36,13 +38,15 @@ export default defineCommand({
 		}
 		const details = connectionDetails(resolveFholdHome(), client as ConnectionDetails['type'], {
 			credential: args.credential ? String(args.credential) : undefined,
-			showKey: args.showKey === true
+			showKey: args.showKey === true,
+			showPassword: args['show-password'] === true
 		});
 		if (args.json) console.log(JSON.stringify(details, null, 2));
 		else {
 			console.log(`${details.type}: ${details.url}`);
 			if (details.username) console.log(`Username: ${details.username}`);
 			if (details.passwordFile) console.log(`Password file: ${details.passwordFile}`);
+			if (details.password) console.log(`Password: ${details.password}`);
 			if (details.credential) console.log(`Credential: ${details.credential}`);
 			if (details.credentialKeyFile)
 				console.log(`Credential key file: ${details.credentialKeyFile}`);

@@ -3,49 +3,29 @@ import type {
 	BackupManifest,
 	InstanceBackupManifest,
 	InstanceRestorePlan,
-	ConnectionDetails,
 	RestorePlan,
 	ProviderOAuthAuthorization,
 	ProviderSettings,
 	ProviderEndpointInput,
-	RestartStatus,
 	StackConfig
 } from '@fhold/lib';
-import type { HostingConnection, HostingSnapshot, InstanceRef, InstanceSummary, ConnectionCheck } from '@fhold/lib';
-import type { recoverySnapshot } from '@fhold/lib';
+import type {
+	HostingConnection,
+	HostingSnapshot,
+	InstanceRef,
+	InstanceSummary,
+	ConnectionCheck
+} from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
+import type { ManagedSnapshot } from '@fhold/lib';
 
-export type AdminSnapshot = {
-	phase: 'not_installed' | 'setup_incomplete' | 'ready';
-	homeDir: string;
-	configPath: string;
-	config: StackConfig;
-	services: Array<{
-		name: string;
-		state: string;
-		health: string;
-		warnings?: string[];
-	}>;
-	dockerError?: string;
-	installationReadiness?: { ok: boolean; message?: string };
-	portalMappings: Record<string, { default: string; users: Record<string, string> }>;
-	portalSecrets: Record<string, Record<string, boolean>>;
-	connectionDetails?: {
-		opencode: ConnectionDetails;
-		mcp: ConnectionDetails;
-		claude: ConnectionDetails;
-	};
-	codexRecall?: CodexRecallReview;
-	codexRecallError?: string;
-	pendingRestart?: RestartStatus;
-	recovery?: ReturnType<typeof recoverySnapshot>;
-	recoveryError?: string;
-};
+export type AdminSnapshot = ManagedSnapshot;
 
 export type StackAction = 'start' | 'restart' | 'stop';
 export type InterruptingAction =
 	| StackAction
+	| 'update'
 	| 'remote-setup'
 	| 'recovery-init'
 	| 'recovery-restore'
@@ -65,6 +45,13 @@ export type AdminWelcome = {
 };
 
 export type AdminApi = {
+	directory(value?: string): Promise<import('@fhold/lib').DirectoryListing>;
+	hostingInfo(id: string): Promise<{ instancesDirectory: string; defaultHome: string }>;
+	hostingDirectory(value: {
+		connectionId: string;
+		path?: string;
+	}): Promise<import('@fhold/lib').DirectoryListing>;
+	update(value: { confirmed: boolean; pull?: boolean }): Promise<AdminSnapshot>;
 	hostingConnections(): Promise<HostingConnection[]>;
 	hostingSaveConnection(value: unknown): Promise<HostingConnection>;
 	hostingUpdateConnection(id: string, value: unknown): Promise<HostingConnection | undefined>;
@@ -74,9 +61,11 @@ export type AdminApi = {
 	hostingInstances(connectionId: string): Promise<InstanceSummary[]>;
 	welcome(): Promise<AdminWelcome>;
 	openInstance(target: AdminTarget): Promise<void>;
-	prepareNewInstance(target: AdminInstance & { name?: string }): Promise<void>;
+	prepareNewInstance(target: AdminTarget & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
-	installationReadiness(): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
+	installationReadiness(
+		connectionId?: string
+	): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
 	codexRecall(value: {
 		action: 'review' | 'approve' | 'disable';
 		digest?: string;
@@ -166,6 +155,10 @@ export type AdminApi = {
 };
 
 export const ADMIN_CHANNELS = {
+	directory: 'admin:directory',
+	hostingInfo: 'admin:hosting-info',
+	hostingDirectory: 'admin:hosting-directory',
+	update: 'admin:update',
 	hostingConnections: 'admin:hosting-connections',
 	hostingSaveConnection: 'admin:hosting-save-connection',
 	hostingUpdateConnection: 'admin:hosting-update-connection',

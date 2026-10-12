@@ -2190,3 +2190,12 @@ body[data-phase="setup_incomplete"] #provider-connection {
 #hosting-new { margin-top: 20px; }
 #hosting-check-details { margin: 16px 0; }
 #hosting-check-details p { margin: 0; }
+.hosting-chooser h2 { margin: 0 0 8px; }
+.hosting-picker-row { display: flex; gap: 12px; align-items: end; }
+.hosting-picker-row .field, .hosting-picker-row input { flex: 1; min-width: 0; }
+.hosting-picker-row .field { margin: 0; }
+#hosting-instance-list { display: grid; gap: 8px; }
+#hosting-instance-list .instance-choice { width: 100%; }
+.directory-list { display: grid; gap: 4px; max-height: 320px; overflow: auto; margin: 12px 0 20px; }
+.directory-choice { text-align: left; padding: 10px 12px; background: var(--surface-raised); border: 1px solid var(--border-soft); border-radius: 6px; color: var(--ink); }
+#instance-welcome:has(#open-hosting:not([hidden])) { max-width: 660px; width: min(100%, 660px); }

@@ -1,5 +1,6 @@
 import { parseInstanceRef } from './preferences.js';
 import { runHostingProcess, type HostingProcess } from './process.js';
+import { SshInstanceManagement } from '../management/ssh.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -119,19 +120,34 @@ export function sshDockerProvider(
 				const snapshot = value as HostingSnapshot;
 				if (!Array.isArray(snapshot.services) || !Array.isArray(snapshot.warnings))
 					throw new Error('The remote CLI returned an invalid status snapshot.');
+				let managed = false;
+				const warnings = [...snapshot.warnings];
+				try {
+					const hello = (await request({ action: 'hello' })) as
+						| { management?: string[] }
+						| undefined;
+					managed =
+						hello?.management?.includes('saveConfig') === true &&
+						hello.management.includes('backup');
+				} catch {
+					warnings.push(
+						'Status was read, but advanced management support could not be checked. Check this host connection before changing settings.'
+					);
+				}
 				// Return only the public hosting contract, not unknown future fields or
 				// an unusable remote loopback URL. Native credentials never cross here.
 				return {
 					...identity,
 					ref,
 					services: snapshot.services,
-					warnings: snapshot.warnings,
+					warnings,
 					pendingRestart: snapshot.pendingRestart,
-					capabilities: capabilities()
+					capabilities: capabilities(true, managed)
 				};
 			}
 			return {
 				ref,
+				management: (options) => new SshInstanceManagement(connection, ref.remoteHome, options),
 				inspect,
 				async logs(options = {}) {
 					return String(

@@ -26,7 +26,9 @@ export function notice(value, tone = 'success', options = {}) {
 	const element = byId('notice');
 	const wizardStatus = !byId('install-section').hidden
 		? byId('install-status')
-		: !byId('instance-import-section').hidden ? byId('instance-import-status') : undefined;
+		: !byId('instance-import-section').hidden
+			? byId('instance-import-status')
+			: undefined;
 	clearTimeout(state.noticeTimer);
 	byId('install-status').hidden = true;
 	byId('instance-import-status').hidden = true;
@@ -64,10 +66,14 @@ export function setBusy(value) {
 	document.body.dataset.busy = String(value);
 	const busyRegion = !byId('install-section').hidden
 		? byId('install-section')
-		: !byId('instance-import-section').hidden ? byId('instance-import-section')
-			: !state.currentSnapshot ? byId('instance-welcome') : byId('main-content');
+		: !byId('instance-import-section').hidden
+			? byId('instance-import-section')
+			: !state.currentSnapshot
+				? byId('instance-welcome')
+				: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
 	byId('instance-picker').disabled = value;
+	byId('hosting-connection').disabled = value;
 	if (value) {
 		state.disabledButtons = all('button').map((button) => ({ button, disabled: button.disabled }));
 		for (const { button } of state.disabledButtons) button.disabled = true;

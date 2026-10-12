@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — complete SSH management (tooling only)
+
+SSH instances now use the normal Admin pages and shared local management operations:
+installation, AI/app setup, deferred settings, update, logs and local import/export.
+Native SSH forwards make OpenCode usable without manual tunnel commands. Connection
+selection discovers instances automatically, and remote folders have their own picker.
+The normal CLI commands work over SSH, with private staging for file inputs and archives.
+Full exports retain exact timestamps, modes, links and session data across transfer.
+Native host trust, sign-in and operation confirmations remain unchanged. No runtime
+image changes, management daemon or automatic window resizing is introduced.
+
 ## 0.2.2610113-beta.9 — host connections (tooling only)
 
 CLI and Admin now discover managed Docker instances from Compose labels, including

@@ -40,7 +40,9 @@ channel tags. Release notes disclose the retained runtime version.
 
 PR CI uses the same input classification. Changes to runtime sources, Skeleton,
 plugins, seed inputs or dependency resolution select full gates; unknown inputs
-also select full gates. Tooling workspace version-only lock changes do not.
+also select full gates. Tooling workspace version/dependency declarations can
+reuse already locked packages without full gates; any package-resolution change
+still selects full qualification.
 Publication compares runtime inputs with the pinned runtime release tag so a
 tooling release cannot accidentally omit pending container changes. A full release
 still uses the default `SCOPE=full` stamping and the complete existing gates.

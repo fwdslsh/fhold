@@ -119,7 +119,13 @@ explicitly confirmed, checksum-verified and atomic; it never changes Docker,
 SSH trust or instance files. Connection editing/removal affects metadata only,
 clearing scoped recents on endpoint changes rather than silently retargeting them.
 
-The fixed SSH endpoint receives
+SSH opens a session-scoped management facade over stdin/stdout, preserving native
+sign-in and model-verification state. Local and SSH Admin use the same instance
+domain functions; only transport, directory selection, archive transfer and browser
+forwarding differ. SSH exposes the normal Admin pages and CLI commands, not merely
+lifecycle observations. Standard private SCP/PAX transfer preserves full-export
+metadata, and native loopback forwards close on switch/exit without stopping agents.
+The fixed SSH endpoints receive
 typed JSON on stdin; no shell-interpolated path, arbitrary exec RPC, extra service,
 container manager credential or runtime management port is added. Native Docker
 subprocesses pin a local socket from the selected native context, never send local

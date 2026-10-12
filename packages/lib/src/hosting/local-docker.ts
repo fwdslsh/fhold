@@ -20,6 +20,7 @@ import { runDocker } from '../control-plane/docker.js';
 import { activateComposeCommand, deactivateComposeCommand } from '../control-plane/activation.js';
 import { assistantEndpoint } from '../control-plane/opencode.js';
 import type { HostingProcess } from './process.js';
+import { localInstanceManagement } from '../management/instance.js';
 import {
 	capabilities,
 	type HostingAction,
@@ -155,6 +156,7 @@ export const localDockerProvider: HostingProvider = {
 		if (ref.kind !== 'local-docker') throw new Error('Select a local Docker instance.');
 		return {
 			ref,
+			management: (options) => localInstanceManagement(ref.homeDir, options),
 			inspect: () => inspectLocalInstance(ref.homeDir),
 			logs: (options) => localInstanceLogs(ref.homeDir, options),
 			async operate(action, confirmed) {

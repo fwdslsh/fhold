@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { join } from 'node:path';
 import { applyEdits, modify } from 'jsonc-parser/lib/esm/main.js';
 import { readStackConfig } from './stack-config.js';
@@ -86,7 +87,17 @@ function modelId(value: unknown): string | undefined {
 		? value
 		: undefined;
 }
+const activeEndpoint = new AsyncLocalStorage<{ homeDir: string; url: string }>();
+export function withAssistantEndpoint<T>(
+	homeDir: string,
+	url: string,
+	operation: () => Promise<T>
+): Promise<T> {
+	return activeEndpoint.run({ homeDir, url }, operation);
+}
 export function assistantEndpoint(home: string): string {
+	const active = activeEndpoint.getStore();
+	if (active?.homeDir === home) return active.url;
 	const result = readStackConfig(home);
 	if (!result.ok) throw new Error(result.error);
 	const bind = result.config.assistant.bindAddress;

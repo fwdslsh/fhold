@@ -10,8 +10,9 @@ import {
 	setSkipTarget,
 	setText
 } from './ui.js';
-import { openInstance, renderInstancePicker } from './instances.js';
+import { openInstance, renderInstancePicker, showNewInstanceSetup } from './instances.js';
 import { renderRestartStatus } from './restart.js';
+import { chooseManagedDirectory } from './directories.js';
 
 export function targetKey(target) {
 	return target.kind === 'hosted'
@@ -97,6 +98,11 @@ export function renderHosted(snapshot) {
 let savedConnections = [];
 let editingId;
 let discoveryEpoch = 0;
+function selectedConnectionId() {
+	return (
+		state.currentSnapshot?.target?.connectionId || state.currentSnapshot?.hosting?.ref.connectionId
+	);
+}
 async function loadConnections() {
 	const selected = byId('hosting-connection').value;
 	savedConnections = await state.api.hostingConnections();
@@ -131,6 +137,9 @@ async function discover() {
 	const id = byId('hosting-connection').value;
 	const epoch = ++discoveryEpoch;
 	byId('hosting-instance-list').replaceChildren();
+	byId('hosting-discover').hidden = true;
+	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
+		byId(button).hidden = true;
 	await connectionOperation('Finding instances', async () => {
 		let instances;
 		try {
@@ -141,6 +150,9 @@ async function discover() {
 		}
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		const list = byId('hosting-instance-list');
+		const connection = savedConnections.find((item) => item.id === id);
+		for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
+			byId(button).hidden = connection?.kind !== 'ssh-docker';
 		list.replaceChildren();
 		hostingStatus(
 			instances.length
@@ -170,6 +182,16 @@ async function discover() {
 			list.append(button);
 		}
 	});
+	byId('hosting-discover').hidden = !byId('hosting-status').classList.contains('danger-text');
+}
+export async function showHostingChooser(id) {
+	byId('app-shell').hidden = true;
+	byId('instance-welcome').hidden = false;
+	byId('instance-options').hidden = true;
+	byId('open-hosting').hidden = false;
+	await loadConnections();
+	if (id) byId('hosting-connection').value = id;
+	await discover();
 }
 function providerFields() {
 	const ssh = byId('hosting-provider').value === 'ssh-docker';
@@ -227,6 +249,13 @@ function renderConnectionList() {
 		const buttons = document.createElement('div');
 		buttons.className = 'button-row compact';
 		for (const [label, action] of [
+			[
+				'Open',
+				async () => {
+					byId('hosting-manager').close();
+					await showHostingChooser(connection.id);
+				}
+			],
 			['Edit', () => editConnection(connection)],
 			['Check', () => checkConnection(connection)],
 			['Remove', () => removeConnection(connection)]
@@ -294,7 +323,7 @@ async function removeConnection(connection) {
 		if (removed === false) hostingStatus('Removal cancelled.');
 		return;
 	}
-	const selected = state.currentSnapshot?.hosting?.ref.connectionId === connection.id;
+	const selected = selectedConnectionId() === connection.id;
 	if (selected) {
 		window.location.reload();
 		return;
@@ -320,9 +349,32 @@ export async function manageHostingConnections() {
 	});
 }
 export function bindHostingEvents() {
-	byId('open-hosting').addEventListener('toggle', () => {
-		if (byId('open-hosting').open)
-			void loadConnections().catch((error) => hostingStatus(message(error), true));
+	byId('hosting-open-folder').addEventListener('click', async () => {
+		const connection = savedConnections.find(
+			(item) => item.id === byId('hosting-connection').value
+		);
+		const previous = state.installConnection;
+		state.installConnection = connection;
+		try {
+			const home = await chooseManagedDirectory('instance');
+			if (home)
+				await openInstance({
+					kind: 'hosted',
+					ref: { kind: 'ssh-docker', connectionId: connection.id, remoteHome: home }
+				});
+		} finally {
+			state.installConnection = previous;
+		}
+	});
+	byId('connect-host').addEventListener('click', () => void showHostingChooser());
+	byId('hosting-back').addEventListener('click', () => {
+		byId('open-hosting').hidden = true;
+		state.installConnection = undefined;
+		state.installationReadiness = undefined;
+		if (state.currentSnapshot) {
+			byId('instance-welcome').hidden = true;
+			byId('app-shell').hidden = false;
+		} else byId('instance-options').hidden = false;
 	});
 	byId('hosting-manage').addEventListener('click', () => void manageHostingConnections());
 	byId('hosting-manager-close').addEventListener('click', () => {
@@ -353,7 +405,32 @@ export function bindHostingEvents() {
 		discoveryEpoch++;
 		byId('hosting-instance-list').replaceChildren();
 		hostingStatus('');
+		void discover();
 	});
+	for (const [button, importing] of [
+		['hosting-install', false],
+		['hosting-import', true]
+	])
+		byId(button).addEventListener('click', async () => {
+			const connection = savedConnections.find(
+				(item) => item.id === byId('hosting-connection').value
+			);
+			const info = await connectionOperation('Preparing setup', () =>
+				state.api.hostingInfo(connection.id)
+			);
+			if (!info) return;
+			state.installConnection = connection;
+			state.instancesDirectory = info.instancesDirectory;
+			state.installationReadiness = undefined;
+			byId('open-hosting').hidden = true;
+			byId('install-home').value = '';
+			delete byId('install-home').dataset.suggestedHome;
+			if (importing)
+				byId('begin-instance-import').dispatchEvent(
+					new CustomEvent('click', { detail: { remote: true } })
+				);
+			else showNewInstanceSetup();
+		});
 	byId('hosting-discover').addEventListener('click', () => void discover());
 	byId('hosting-add-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
@@ -384,7 +461,7 @@ export function bindHostingEvents() {
 			if (
 				previous &&
 				endpoint(previous) !== endpoint(saved) &&
-				state.currentSnapshot?.hosting?.ref.connectionId === saved.id
+				selectedConnectionId() === saved.id
 			) {
 				window.location.reload();
 				return;
@@ -396,7 +473,13 @@ export function bindHostingEvents() {
 			hostingStatus('Connection saved. Check it to verify sign-in and discover instances.');
 			return saved;
 		});
-		if (saved) await checkConnection(saved);
+		if (saved) {
+			await checkConnection(saved);
+			if (!byId('hosting-manager-status').classList.contains('danger-text')) {
+				byId('hosting-manager').close();
+				await showHostingChooser(saved.id);
+			}
+		}
 	});
 	for (const button of all('[data-hosted-action]'))
 		button.addEventListener('click', async () => {

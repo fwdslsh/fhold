@@ -1,8 +1,8 @@
 # Future SSH instance management
 
-Status: discovery, inspect/logs and lifecycle for existing SSH-Docker instances
-are implemented through the shared host-side boundary. Remote installation,
-settings/setup parity and automatic client tunnels remain deferred.
+Status: SSH discovery, normal Admin/CLI management, remote installation/update,
+provider/app setup, import/export and automatic loopback client forwarding are
+implemented through the shared host-side boundary. See the current workflow below.
 
 The [hosting-provider architecture](hosting-provider-architecture.md)
 is the broader implementation direction for CLI and Admin. It retains the SSH
@@ -21,10 +21,10 @@ preferences may contain host/home selection but no passwords, keys, provider or
 MCP credentials. Switching clears transient state and waits for in-flight work.
 
 Start with inspect/log/start/stop and existing shared configuration operations.
-Defer provisioning, remote installs/upgrades, backup transfer, provider/browser
-sign-in and interactive native worker setup until separately verified.
+Cloud provisioning remains outside this boundary. Remote instance operations
+reuse the same shared domain as local operations; native sign-in remains explicit.
 A local OpenCode tunnel must bind loopback, retain authentication, close on
 switch/exit and not change remote stack lifecycle.
 
 This is separate from Guardian MCP and vendor-native Codex/Claude remote sessions.
-No SSH backend or management protocol is implemented in the Linux alpha.
+No SSH daemon, public management server or container-side hosting adapter is added.

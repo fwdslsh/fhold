@@ -53,13 +53,46 @@ For offline/private development, `--cli-file /path/to/trusted-linux-cli` accepts
 operator-supplied artifact instead; the remote staged binary must run successfully
 and support hosting before replacement. Unpublished versions need this option.
 
-Initial remote management supports discovery, status, recent logs and lifecycle.
-Installation, image updates, configuration/provider/native-worker setup and
-import/export remain on the owning host's CLI. A loopback-only OpenCode API stays
-loopback-only. To access it, use a native local SSH port forward with the instance's
-configured port, for example `ssh -N -L 4810:127.0.0.1:3810 lab`, then open
-`http://127.0.0.1:4810`. Its native authentication still applies. This release
-does not manage tunnels or transfer native credentials.
+SSH instances use the same Admin pages and operations as local instances:
+Overview, Agent settings, Apps and System. You can install into a remote folder,
+configure providers and apps, complete native sign-in, save changes with a deferred
+restart, update images, view logs, and import/export. The owning host executes the
+same shared operations; settings are never copied into a shadow home on this computer.
+
+The normal CLI also works with `--connection lab --name agent`. For example:
+
+```bash
+fhold --connection lab --name new-agent install --no-start
+fhold --connection lab --name agent config assistant --timezone America/Chicago --no-apply
+fhold --connection lab --name agent setup
+fhold --connection lab --name agent update
+fhold --connection lab --name agent connect opencode --show-password
+fhold --connection lab --name agent backup --to ./agent-export --full --confirm-stopped
+fhold --connection lab --name /opt/stacks/restored-agent restore \
+  --from ./agent-export --full --confirm-stopped --apply
+```
+
+Admin opens OpenCode through an automatic, loopback-only native SSH forward.
+Keep Admin open while using that browser connection. Switching instances or closing
+Admin closes its forward, not the agent. `connect` creates the equivalent forward
+for CLI users: leave the command running and use Ctrl+C when finished. Authentication
+still applies; passwords/keys are revealed only by explicit actions. The forward and
+provider operations use the running container's published address, not an unapplied
+port setting. A forwarding problem reports a connection error without disabling settings.
+
+Backup destinations and import sources refer to folders on **this computer**.
+The normal stopped-writer confirmation, empty-target requirement, preview and
+checksum checks still apply. Transfer uses SCP for a private PAX archive, preserving
+file contents, permissions, exact timestamps and symbolic links without following them.
+GNU `tar` must be available on both Linux computers for archive creation. Temporary
+transfer files are private and scoped to the open SSH session. File-valued CLI input
+options (configuration, keys, tokens and selection files, including stdin `-`) are
+staged privately on the remote host. Other native command paths, such as history
+export destinations, refer to the remote filesystem.
+
+New names install under the remote account's `~/fhold/instances`; an absolute
+path chooses another directory. Admin provides a remote folder picker for remote
+instance/recovery locations and a native local picker for export/import archives.
 
 ## Azure Container Apps (experimental)
 
@@ -112,8 +145,9 @@ external responsibility; there is no rolling-update shortcut.
 
 ## Admin and shared preferences
 
-Choose **Open another instance… → Open a hosted agent**, select a connection and
-find instances. **Add a connection** offers the same SSH/ACA metadata as the CLI.
+Choose **Open another instance… → Connect to another computer or cloud…**, then
+select a connection. Instances are discovered automatically. **Connections…**
+offers the same SSH/ACA metadata as the CLI.
 **Manage host connections…** is also available in the instance picker. The manager
 offers Add, Edit, Check and Remove; SSH checks offer an explicitly confirmed
 **Install / update remote CLI** action. Errors remain visible in the hosted-agent
@@ -130,9 +164,9 @@ fhold hosting edit lab --host new-server --confirm
 fhold hosting remove lab --confirm
 ```
 
-Open one instance to view supported controls and recent logs. Unsupported settings
-and transfer operations explain where to manage them rather than acting on a
-local home. Lifecycle actions retain explicit confirmation. Status refreshes
+Open an SSH instance to use the normal Admin pages; no manual tunnel is needed.
+ACA shows its narrower platform controls with explicit explanations for unsupported
+operations, never substitutes a local home. Lifecycle actions retain explicit confirmation. Status refreshes
 automatically without waking the agent; switching never changes window size or
 starts/stops an instance.
 

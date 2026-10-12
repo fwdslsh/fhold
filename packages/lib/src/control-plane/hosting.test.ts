@@ -236,7 +236,7 @@ describe('native SSH transport', () => {
 		});
 		expect(requests[0]?.args).toContain('BatchMode=yes');
 		await expect(session.operate('stop', false)).rejects.toThrow('Confirm');
-		expect(requests).toHaveLength(1);
+		expect(requests).toHaveLength(2);
 	});
 	test('missing protocol support and native connection failures never retry work', async () => {
 		let calls = 0;

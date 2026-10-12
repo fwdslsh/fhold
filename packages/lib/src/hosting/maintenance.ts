@@ -46,7 +46,7 @@ export async function checkHostingConnection(
 			const hello = parseResponse(raw) as {
 				version?: number;
 				ok?: boolean;
-				value?: { actions?: string[]; release?: string };
+				value?: { actions?: string[]; release?: string; management?: string[] };
 			};
 			if (
 				hello.version !== HOSTING_WIRE_VERSION ||
@@ -61,6 +61,14 @@ export async function checkHostingConnection(
 				name: 'Remote CLI',
 				ok: true,
 				detail: hello.value.release || 'Compatible hosting protocol.'
+			});
+			const management = hello.value.management?.includes('snapshot') === true;
+			result.checks.push({
+				name: 'Instance management',
+				ok: management,
+				detail: management
+					? 'Settings, apps, updates and import/export are available.'
+					: 'Update the remote fhold CLI to enable full management. Discovery and supported lifecycle commands remain available.'
 			});
 			if (hello.value.actions.includes('diagnose')) {
 				const response = parseResponse(
