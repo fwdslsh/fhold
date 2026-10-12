@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — complete SSH management (tooling only)
+## 0.2.2610121-beta.10 — complete SSH management (tooling only)
 
 SSH instances now use the normal Admin pages and shared local management operations:
 installation, AI/app setup, deferred settings, update, logs and local import/export.
@@ -10,6 +10,18 @@ The normal CLI commands work over SSH, with private staging for file inputs and 
 Full exports retain exact timestamps, modes, links and session data across transfer.
 Native host trust, sign-in and operation confirmations remain unchanged. No runtime
 image changes, management daemon or automatic window resizing is introduced.
+
+Verified through the packaged Linux x64 Admin and standalone CLI against a
+disposable SSH-hosted instance: fresh installation, native provider setup,
+automatic browser forwarding, deferred settings and update, and stopped full
+export/import preserving the original agent session. Existing agents were not
+restarted. GitHub additionally builds both Linux CLI architectures and AppImages;
+ARM64 Admin startup and ACA full-stack management remain unqualified.
+
+CLI/Admin downloads advance to this version. Runtime images and the Claude
+Desktop extension remain pinned to **0.2.2610112-beta.8**; no runtime upgrade is
+required. Remote hosts need the new CLI for full management; Admin's explicit
+Repair action installs it without changing or restarting their instances.
 
 ## 0.2.2610113-beta.9 — host connections (tooling only)
 
