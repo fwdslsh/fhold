@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — dependency refresh
+## 0.2.2610131-beta.11 — native toolchain refresh
 
 Refresh the image-baked AKM CLI to 0.10.261004-beta and all three AKM harness
 plugins to 0.10.261003-beta from the verified immutable upstream release.
@@ -13,7 +13,16 @@ types and runtime dependencies, the Unify renderer/template, and artifact
 upload/download actions. Node 24 LTS, npm, Supercronic and the remaining direct
 dependencies retain their current supported releases. A new contributor guide
 documents pin ownership, upstream review, native qualification and release
-publication. These source changes require a full runtime release.
+publication. This full release advances CLI/Admin, the Claude Desktop extension,
+native fhold plugins and all three runtime image pins together.
+
+Native Linux x64 and ARM64 dependency gates passed, including real AKM recall,
+managed permissions, provider/task behavior, history and cold/upgrade recovery.
+The release also verifies fresh native CLI artifacts and packaged Linux x64 Admin
+startup. ARM64 Admin startup and real vendor entitlement remain unqualified.
+The existing narrowly reviewed dependency exceptions remain in force; raw audit
+and image findings are retained. See the
+[dependency verification](docs/operations/dependency-refresh-2026-10-13.md).
 
 ## 0.2.2610121-beta.10 — complete SSH management (tooling only)
 
