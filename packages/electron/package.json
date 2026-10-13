@@ -1,6 +1,6 @@
 {
   "name": "@fhold/electron",
-  "version": "0.2.2610121-beta.10",
+  "version": "0.2.2610131-beta.11",
   "private": true,
   "type": "module",
   "description": "Optional static desktop administration tool for fhold stacks",
@@ -21,10 +21,10 @@
   },
   "devDependencies": {
     "@fhold/lib": "workspace:*",
-    "axe-core": "4.13.0",
-    "electron": "44.5.1",
-    "electron-builder": "^26.15.3",
+    "axe-core": "4.14.0",
+    "electron": "44.7.1",
+    "electron-builder": "^26.17.0",
     "typescript": "^7.0.2",
-    "@types/node": "^26.6.4"
+    "@types/node": "^26.6.5"
   }
 }

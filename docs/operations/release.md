@@ -1,5 +1,8 @@
 # Release runbook
 
+For the contributor walkthrough, see
+[update dependencies and make a release](updating-dependencies-and-releasing.md).
+
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
 host. `.github/workflows/release.yml` builds Linux downloads and signed amd64/arm64
 images on GitHub, verifies uploaded checksums and publishes the release. Public

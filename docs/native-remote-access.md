@@ -168,8 +168,8 @@ recovery destination or account state. Claude also supports `--name` for an
 explicitly launched session and renaming from its own app; see the
 [native Remote Control options](https://code.claude.com/docs/en/remote-control#start-a-remote-control-session).
 
-The pinned Codex 0.160.0 remote controller derives its server name from the
-[OS hostname](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/app-server-transport/src/transport/remote_control/controller.rs).
+The pinned Codex 0.162.1 remote controller derives its server name from the
+[OS hostname](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/app-server-transport/src/transport/remote_control/controller.rs).
 It has no qualified independent display-name setting in this image. Managed
 local instances already use their instance name as hostname; externally hosted
 containers may show a platform-generated name. Do not change recovery identity,

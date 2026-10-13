@@ -1,9 +1,9 @@
 {
   "name": "fhold",
-  "version": "0.2.2610121-beta.10",
+  "version": "0.2.2610131-beta.11",
   "private": true,
   "license": "MIT",
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.3",
   "trustedDependencies": [
     "@anthropic-ai/claude-code",
     "@opencode/cli",
@@ -57,7 +57,7 @@
   },
   "overrides": {
     "@discordjs/rest": "2.6.3",
-    "@huggingface/transformers": "4.3.0",
+    "@huggingface/transformers": "4.3.1",
     "tmp": "0.2.7"
   }
 }
