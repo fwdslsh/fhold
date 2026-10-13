@@ -18,10 +18,13 @@ export function qualifies(run, jobs, sha, scope, now = Date.now()) {
 	const quality = jobs.find((job) => job.name === 'gates / stack quality');
 	if (quality?.conclusion !== 'success') return false;
 	const step = scope === 'tools' ? 'Check and test tooling' : 'Test active packages';
-	if (!quality.steps?.some((item) => item.name === step && item.conclusion === 'success'))
-		return false;
-	if (scope === 'tools') return true;
+	const tested = quality.steps?.some((item) => item.name === step && item.conclusion === 'success');
+	if (quality.steps?.length && !tested) return false;
+	if (scope === 'tools') return tested === true;
 	if (scope !== 'full') return false;
+	// GitHub can omit step metadata for successful reusable jobs. In this
+	// workflow, all six images require quality and run under the same != tools
+	// condition as the full source tests. Their success proves full scope.
 	return ['assistant', 'guardian', 'portal'].every((image) =>
 		['amd64', 'arm64'].every((arch) =>
 			jobs.some(

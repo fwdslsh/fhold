@@ -214,7 +214,10 @@ image scans and all other release gates remain enabled.
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux
 targets. Release validation reuses a successful canonical push CI run for the
 exact SHA and scope only while it is less than 24 hours old. It verifies source
-tests and all six native image jobs for a full release; absent or invalid evidence
+the successful quality job and all six native image jobs for a full release.
+Their shared workflow conditions prove full source testing even when GitHub
+omits reusable-job step metadata; tooling reuse needs explicit step evidence.
+Absent or invalid evidence
 runs the shared gates again. Artifact builds, startup tests, signing and download
 verification still run on each release. A separate dry run is optional.
 Read-only CI also runs in contributor forks. Release publishing requires

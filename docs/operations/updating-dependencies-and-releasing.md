@@ -174,7 +174,7 @@ for each new candidate. Check existing tags/releases first:
 git fetch origin --tags
 gh release list --repo fwdslsh/fhold --limit 20
 # Example only: select an unused date/build/channel for the actual candidate.
-VERSION=0.2.2610133-beta.11
+VERSION=0.2.2610134-beta.11
 SCOPE=full VERSION="$VERSION" bun scripts/bump-release.mjs
 SCOPE=full VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
 bun install --lockfile-only
@@ -191,8 +191,11 @@ owned by the vendor tools, not the product release number.
 Submit the reviewed change through a PR and retain its validation evidence.
 After the stamped candidate reaches the intended release branch, wait for that
 exact commit's GitHub CI to pass. Release validation can reuse this canonical
-push run for 24 hours, checking the SHA, workflow, scope, successful source
-tests and all six native image jobs. Fork/PR runs, different commits, stale runs,
+push run for 24 hours, checking the SHA, workflow, successful quality job
+and all six native image jobs. Those images require successful quality and run
+under the same full-scope condition as the source tests. Their complete success
+also proves full scope when GitHub omits reusable-job step metadata. Tooling
+reuse still needs explicit tooling-test step evidence. Fork/PR runs, different commits, stale runs,
 missing jobs or failed checks cannot qualify a release. If no qualifying run is
 available, the release workflow runs the same gates itself.
 Publication builds also import the native CI image caches, avoiding expensive

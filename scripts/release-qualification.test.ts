@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { qualifies } from './release-qualification.mjs';
 
 const now = Date.now();
@@ -70,4 +71,37 @@ test('tooling checks cannot qualify a full runtime release', () => {
 	expect(qualifies(run, tools, 'abc', 'tools', now)).toBe(true);
 	expect(qualifies(run, tools, 'abc', 'full', now)).toBe(false);
 	expect(qualifies(run, jobs, 'abc', 'unexpected', now)).toBe(false);
+});
+
+test('sparse reusable-job steps require the complete native full-scope evidence', () => {
+	const sparse = [{ ...quality, steps: [] }, ...images];
+	expect(qualifies(run, sparse, 'abc', 'full', now)).toBe(true);
+	expect(qualifies(run, [{ ...quality, steps: [] }], 'abc', 'full', now)).toBe(false);
+	expect(qualifies(run, sparse.slice(0, -1), 'abc', 'full', now)).toBe(false);
+	expect(qualifies(run, sparse, 'abc', 'tools', now)).toBe(false);
+	expect(
+		qualifies(
+			run,
+			[{ ...quality, steps: [{ name: 'Test active packages', conclusion: 'failure' }] }, ...images],
+			'abc',
+			'full',
+			now
+		)
+	).toBe(false);
+});
+
+test('native image success proves the same full-scope source-test condition', () => {
+	const gates = Bun.YAML.parse(
+		readFileSync(new URL('../.github/workflows/gates.yml', import.meta.url), 'utf8')
+	) as {
+		jobs: {
+			quality: { steps: Array<{ name?: string; if?: string }> };
+			images: { if: string; needs: string };
+		};
+	};
+	expect(gates.jobs.images.needs).toBe('quality');
+	expect(gates.jobs.images.if).toBe("inputs.scope != 'tools'");
+	expect(gates.jobs.quality.steps.find((step) => step.name === 'Test active packages')?.if).toBe(
+		gates.jobs.images.if
+	);
 });

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2610133-beta.11 — native toolchain and browser tools
+## 0.2.2610134-beta.11 — native toolchain and browser tools
 
 Assistant now includes Playwright 1.64.0, its matching Chromium, fonts and system
 libraries, ready to render pages as the non-root operator without downloads.
