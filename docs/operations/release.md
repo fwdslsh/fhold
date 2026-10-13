@@ -212,7 +212,12 @@ image scans and all other release gates remain enabled.
 ## Public release gates
 
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux
-targets. Read-only CI also runs in contributor forks. Release publishing requires
+targets. Release validation reuses a successful canonical push CI run for the
+exact SHA and scope only while it is less than 24 hours old. It verifies source
+tests and all six native image jobs for a full release; absent or invalid evidence
+runs the shared gates again. Artifact builds, startup tests, signing and download
+verification still run on each release. A separate dry run is optional.
+Read-only CI also runs in contributor forks. Release publishing requires
 the exact repository/origin and stamped versions, and refuses live publication
 unless explicitly configured. The workflows retain immutable image/tag
 retry and upload checksum checks. Source hosting is canonical on GitHub; binary

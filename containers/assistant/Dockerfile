@@ -89,17 +89,31 @@ RUN mkdir -p /native-defaults/codex \
     && CODEX_HOME=/native-defaults/codex codex plugin add fhold@fhold-plugins \
     && chmod a+r /native-defaults/codex/config.toml
 
-FROM oven/bun:1.4.3-slim
+# Playwright supports Noble on both architectures. Its security repositories
+# supply patched graphics/XML libraries absent from the Debian 13 browser stack.
+FROM ubuntu:24.04
 
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
       bash ca-certificates curl git libnss-wrapper tzdata tini tree util-linux \
+      ripgrep jq python3 python3-venv python3-pip sqlite3 zip unzip \
+      poppler-utils file less procps \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=scheduler-build /go/bin/supercronic /usr/local/bin/supercronic
 COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
+COPY --from=tools /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s bun /usr/local/bin/bunx
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+# Install the locked upstream browser and its system libraries before USER fhold.
+# A shared immutable cache survives home mounts and works on both native arches.
+RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chromium \
+    && ln -s "$(node -e 'process.stdout.write(require("/opt/fhold/tools/node_modules/playwright").chromium.executablePath())')" /usr/local/bin/chromium \
+    && chmod -R a+rX /opt/ms-playwright \
+    && chmod -R a-w /opt/ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
 # Keep the compatible, pinned upstream npm/npx installed in the Node stage,
 # not Debian's npm or a second package manager installation at startup.
 COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
@@ -142,13 +156,13 @@ LABEL org.opencontainers.image.title="fhold Assistant" \
     org.opencontainers.image.licenses="MIT"
 
 RUN test -n "$PLATFORM_VERSION" \
-    && usermod -l fhold -d /home/fhold bun \
-    && groupmod -n fhold bun \
+    && usermod -l fhold -d /home/fhold ubuntu \
+    && groupmod -n fhold ubuntu \
     && chmod -R a-w /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && chmod -R a+rX /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
     && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
-    && for command in opencode akm codex claude; do \
+    && for command in opencode akm codex claude playwright; do \
       test -x "/opt/fhold/tools/node_modules/.bin/$command" || exit 1; \
       ln -s "/opt/fhold/tools/node_modules/.bin/$command" "/usr/local/bin/$command" || exit 1; \
     done \
@@ -182,7 +196,7 @@ ENV HOME=/home/fhold \
     DISABLE_AUTOUPDATER=1 \
     BUN_OPTIONS="--no-env-file --config=/dev/null" \
     TZ=UTC \
-    PATH="/opt/fhold/tools/node_modules/.bin:/home/fhold/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    PATH="/home/fhold/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/fhold/tools/node_modules/.bin"
 
 WORKDIR /work
 EXPOSE 4096

@@ -174,7 +174,7 @@ for each new candidate. Check existing tags/releases first:
 git fetch origin --tags
 gh release list --repo fwdslsh/fhold --limit 20
 # Example only: select an unused date/build/channel for the actual candidate.
-VERSION=0.2.2610131-beta.11
+VERSION=0.2.2610133-beta.11
 SCOPE=full VERSION="$VERSION" bun scripts/bump-release.mjs
 SCOPE=full VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
 bun install --lockfile-only
@@ -189,8 +189,17 @@ the earlier candidate was not published. Native data-schema compatibility is
 owned by the vendor tools, not the product release number.
 
 Submit the reviewed change through a PR and retain its validation evidence.
-After the stamped candidate reaches the intended release branch, start the
-nonpublishing workflow:
+After the stamped candidate reaches the intended release branch, wait for that
+exact commit's GitHub CI to pass. Release validation can reuse this canonical
+push run for 24 hours, checking the SHA, workflow, scope, successful source
+tests and all six native image jobs. Fork/PR runs, different commits, stale runs,
+missing jobs or failed checks cannot qualify a release. If no qualifying run is
+available, the release workflow runs the same gates itself.
+Publication builds also import the native CI image caches, avoiding expensive
+recompilation under ARM64 emulation. These caches save build work; successful
+CI evidence, rather than cache contents, authorizes skipping repeated tests.
+
+A separate nonpublishing run is optional when artifact inspection is needed:
 
 ```sh
 gh workflow run release.yml --repo fwdslsh/fhold --ref main \
@@ -198,7 +207,7 @@ gh workflow run release.yml --repo fwdslsh/fhold --ref main \
 gh run list --repo fwdslsh/fhold --workflow release.yml --limit 5
 ```
 
-Inspect that exact run: both native architectures, CLI/AppImages, extension,
+Inspect the chosen release run: both native architectures, CLI/AppImages, extension,
 container scans/smokes, checksums and asset manifest must pass. Include the
 rendered/packaged Admin and any live-provider qualification required by
 [the release runbook](release.md). A workflow dispatch is not proof it passed.

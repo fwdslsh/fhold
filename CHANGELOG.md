@@ -1,6 +1,20 @@
 # Changelog
 
-## 0.2.2610131-beta.11 — native toolchain refresh
+## 0.2.2610133-beta.11 — native toolchain and browser tools
+
+Assistant now includes Playwright 1.64.0, its matching Chromium, fonts and system
+libraries, ready to render pages as the non-root operator without downloads.
+Its runtime uses supported Ubuntu 24.04 LTS for patched browser graphics/XML
+libraries, retaining the pinned upstream Bun and Node binaries.
+Also include ripgrep, jq, Python/pip/venv, SQLite, archive utilities, Poppler PDF
+tools and common inspection utilities. Native image smoke tests cover JavaScript,
+light/dark themes, mobile layout, hover tooltips, screenshots and PDF output.
+
+Release validation reuses recent successful canonical CI for the exact release
+commit and scope, retaining all six native image gates. Publication imports
+native CI build caches, reducing ARM64 compilation under emulation. A separate
+dry run is optional; source/artifact checks, signing and download verification
+remain required. The earlier unpublished candidates are superseded.
 
 Refresh the image-baked AKM CLI to 0.10.261004-beta and all three AKM harness
 plugins to 0.10.261003-beta from the verified immutable upstream release.

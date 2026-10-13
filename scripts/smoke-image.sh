@@ -60,7 +60,7 @@ verify_runtime_versions() {
 		# OpenCode runs login shells whose /etc/profile replaces the image PATH.
 		# Native CLIs must remain ordinary commands without an agent exporting PATH.
 		docker exec --workdir /work "$container" bash --login -c \
-			'for tool in opencode akm codex claude; do test "$(command -v "$tool")" = "/usr/local/bin/$tool" || exit 1; "$tool" --version || exit 1; done'
+			'for tool in opencode akm codex claude playwright chromium; do test "$(command -v "$tool")" = "/usr/local/bin/$tool" || exit 1; "$tool" --version || exit 1; done'
 		docker exec --workdir /work "$container" bash --login -c \
 			'test "$(id -un)" = fhold && tree --version && tree -L 1 /fhold-bundle/skills/fhold-admin'
 		docker exec "$container" node --input-type=module -e '
@@ -243,6 +243,7 @@ assistant)
 		"$image" >/dev/null
 	wait_for_health
 	verify_runtime_versions
+	docker exec -i "$container" node --input-type=module < scripts/smoke-browser.mjs
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
 	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null
