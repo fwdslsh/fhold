@@ -29,6 +29,22 @@ Sign-in, startup intent, managed hook readiness and actual remote readiness are
 separate. Built-in hooks use native system policy and need no personal approval;
 task permissions follow the supplied instance policy.
 
+## Available rendering and utility tools
+
+Chromium and Playwright are installed with matching browsers, fonts and system
+libraries. Use `playwright screenshot --full-page file:///work/report.html
+/work/report.png` for a quick render. For JavaScript, hover, mobile or theme
+checks, import `chromium` from
+`/opt/fhold/tools/node_modules/playwright/index.mjs` and use the normal Playwright
+API. `await chromium.launch()` works as the non-root operator with the shipped
+container restrictions. Do not download browsers or try installing system
+libraries to render a page. Direct `chromium --headless` requires `--no-sandbox`
+inside this container; do not add capabilities or bypass agent permissions.
+
+Also available: `rg`, `jq`, `python3`, pip/venv, `sqlite3`, `zip`, `unzip`,
+`pdftotext`, `pdfinfo`, `pdftoppm`, `file`, `less` and process utilities.
+Use a workspace virtual environment for extra Python packages.
+
 ## Personal memory
 
 AKM automatically captures a few useful long-term facts/preferences from trusted

@@ -26,6 +26,30 @@ not bind them to a new published release identity.
 | Guardian Zod | 4.6.5 | 4.6.7 |
 | Unify / docs template | 0.11.13 / 0.4.0 | 0.11.16 / 0.5.0 |
 | Artifact upload/download actions | v7.0.1 / v8.0.1 | v7.0.2 / v8.0.2 |
+| Playwright / matching Chromium | absent | 1.64.0 / upstream bundled browser |
+
+The follow-up Assistant image also installs ripgrep, jq, Python/pip/venv,
+SQLite, zip/unzip, Poppler PDF tools, file, less and process utilities through
+Ubuntu packages. Playwright installs its browser and system libraries at build
+time into an immutable shared cache. It requires no runtime installation, root
+user or additional container capabilities. The initial image IDs and advisory
+counts below describe the original toolchain refresh; final browser-image
+qualification is recorded in the new candidate's CI and release runs.
+
+The Assistant runtime uses supported Ubuntu 24.04 LTS, retaining the same pinned
+Bun and Node binaries. Debian 13's required browser graphics stack pulled in
+libxml2 with CVE-2026-6653 and failed the unchanged critical gate. Ubuntu provides
+the vendor fix in 2.9.14+dfsg-1.3ubuntu3.8 and later; see the
+[Ubuntu advisory](https://ubuntu.com/security/CVE-2026-6653). No new scan exception
+or vendor patch was added. Guardian and Portal retain their existing base images.
+
+The local Ubuntu browser image passes real offline JavaScript, theme/mobile,
+hover, screenshot, PDF and Python-venv checks under non-root, cap-drop-all and
+no-new-privileges. Its raw Trivy scan reports zero critical and four high
+findings; the unchanged critical and fixable-high gates pass with only the
+existing npm exceptions. The release workflow also validates recent canonical
+CI for the exact SHA/scope and imports native build caches. Artifact and
+publication verification remain mandatory.
 
 Node 24.21.0 is the newest patch of the existing LTS line; npm 12.2.0 and
 Supercronic v0.2.49 remain their current releases. Azure SDKs, TypeScript,

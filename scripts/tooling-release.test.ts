@@ -1,19 +1,19 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+	FH_BRIDGE_VERSION,
+	FH_RUNTIME_VERSION
+} from '../packages/lib/src/control-plane/release.js';
+import { defaultStackConfig } from '../packages/lib/src/control-plane/stack-config.js';
 import { changeScope } from './ci-scope.mjs';
 import {
 	requiredReleaseAssets,
-	writeReleaseAssetManifest,
-	validateReleaseAssets
+	validateReleaseAssets,
+	writeReleaseAssetManifest
 } from './validate-release-assets.mjs';
-import {
-	FH_RUNTIME_VERSION,
-	FH_BRIDGE_VERSION
-} from '../packages/lib/src/control-plane/release.js';
-import { defaultStackConfig } from '../packages/lib/src/control-plane/stack-config.js';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 
 test('tooling changes do not require container qualification', () => {
 	expect(
@@ -128,8 +128,15 @@ test('tooling workflow skips image gates and publication without skipping artifa
 		>;
 	};
 	expect(gates.jobs.images?.if).toBe("inputs.scope != 'tools'");
-	expect(release.jobs.images?.if).toBe("needs.validate.outputs.scope == 'full'");
-	expect(release.jobs['claude-extension']?.if).toBe("needs.validate.outputs.scope == 'full'");
+	const qualified =
+		"always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))";
+	expect(release.jobs.images?.if).toBe(`${qualified} && needs.validate.outputs.scope == 'full'`);
+	expect(release.jobs['claude-extension']?.if).toBe(
+		`${qualified} && needs.validate.outputs.scope == 'full'`
+	);
+	expect(release.jobs.cli?.if).toBe(qualified);
+	expect(release.jobs.admin?.if).toBe(qualified);
+	expect(release.jobs.gates?.if).toBe("needs.validate.outputs.qualified != 'true'");
 	expect(
 		release.jobs.release?.steps?.find(
 			(step) => step.name === 'Write manifest and validate the complete release'

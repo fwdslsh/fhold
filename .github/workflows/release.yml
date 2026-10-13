@@ -24,6 +24,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   validate:
@@ -33,6 +34,7 @@ jobs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       channel: ${{ steps.version.outputs.channel }}
       scope: ${{ steps.version.outputs.scope }}
+      qualified: ${{ steps.qualification.outputs.reused }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -84,14 +86,22 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
           NODE
 
+      - id: qualification
+        name: Reuse successful CI for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ steps.version.outputs.scope }}
+        run: bun scripts/release-qualification.mjs
+
   gates:
+    if: needs.validate.outputs.qualified != 'true'
     needs: validate
     uses: ./.github/workflows/gates.yml
     with:
       scope: ${{ needs.validate.outputs.scope }}
 
   images:
-    if: needs.validate.outputs.scope == 'full'
+    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true')) && needs.validate.outputs.scope == 'full'
     name: Publish ${{ matrix.image }} image
     needs: [validate, gates]
     runs-on: ubuntu-latest
@@ -153,7 +163,10 @@ jobs:
             org.opencontainers.image.version=${{ needs.validate.outputs.version }}
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=release-${{ matrix.image }}
+          cache-from: |
+            type=gha,scope=release-${{ matrix.image }}
+            type=gha,scope=fhold-${{ matrix.image }}-linux/amd64
+            type=gha,scope=fhold-${{ matrix.image }}-linux/arm64
           cache-to: type=gha,scope=release-${{ matrix.image }},mode=max
       - uses: sigstore/cosign-installer@v4.1.2
         if: inputs.dry_run != true
@@ -166,6 +179,7 @@ jobs:
         run: cosign sign --yes "fwdslsh/fhold-${{ matrix.image }}@${DIGEST}"
 
   cli:
+    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))
     name: Build CLI ${{ matrix.asset }}
     needs: [validate, gates]
     runs-on: ${{ matrix.os }}
@@ -207,6 +221,7 @@ jobs:
           path: packages/cli/dist/${{ matrix.asset }}
 
   admin:
+    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))
     name: Build optional admin for ${{ matrix.platform }}
     needs: [validate, gates]
     runs-on: ${{ matrix.os }}
@@ -236,7 +251,7 @@ jobs:
             packages/electron/dist/packages/*.AppImage
 
   claude-extension:
-    if: needs.validate.outputs.scope == 'full'
+    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true')) && needs.validate.outputs.scope == 'full'
     name: Build optional Claude Desktop extension
     needs: [validate, gates]
     runs-on: ubuntu-latest
