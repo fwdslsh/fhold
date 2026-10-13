@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — dependency refresh
+
+Refresh the image-baked AKM CLI to 0.10.261004-beta and all three AKM harness
+plugins to 0.10.261003-beta from the verified immutable upstream release.
+Update OpenCode CLI/client/plugin SDK to 2.0.28, Codex to 0.162.1 and Claude Code
+to 2.1.296. Bun advances to 1.4.3 across containers, development types and CI;
+the unchanged Supercronic source builds with Go 1.27.2.
+
+Also refresh MCP SDKs, Electron/packaging/accessibility tooling, supporting
+types and runtime dependencies, the Unify renderer/template, and artifact
+upload/download actions. Node 24 LTS, npm, Supercronic and the remaining direct
+dependencies retain their current supported releases. A new contributor guide
+documents pin ownership, upstream review, native qualification and release
+publication. These source changes require a full runtime release.
+
 ## 0.2.2610121-beta.10 — complete SSH management (tooling only)
 
 SSH instances now use the normal Admin pages and shared local management operations:

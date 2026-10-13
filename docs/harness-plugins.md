@@ -17,23 +17,22 @@ harnesses, without a vendor account or model request. Guardian and Portal do not
 install AKM or native harness plugins.
 
 The current pins use the AKM 0.10 `next` channel: CLI
-`0.10.26101002-alpha` and all three plugins `0.10.26101001-alpha`.
-The published OpenCode plugin pins that exact CLI, and the native plugins accept
-`^0.10.26101002-alpha`; no AKM dependency override is needed. Release builds pin
+`0.10.261004-beta` and all three plugins `0.10.261003-beta`.
+The published OpenCode plugin pins that exact CLI; no AKM dependency override
+is needed. Release builds pin
 these immutable versions, not a moving dist-tag. The image smoke verifies the
 plugin's actual resolved dependency, not just `akm --version`.
 
 AKM 0.10's OpenCode plugin calls the public CLI instead of importing its internal
-modules. This is the upstream V1 plugin, tested with the unchanged OpenCode
-1.18.34. OpenCode V2 uses a separate upstream plugin and remains a separate
-fhold migration; updating AKM does not replace the native OpenCode engine.
+modules. OpenCode 2 uses the separate upstream `akm-opencode-v2` package.
+Updating AKM does not replace the native OpenCode engine.
 The fhold task commands use AKM's current public interfaces: task listing uses
 `search --type task`, and paused task adoption uses read-only `task explain`
 before reconciliation. Native AKM validates task source grammar; fhold retains
 its restricted prompt-only adoption boundary and never activates an import.
 
 This beta intentionally includes prerelease AKM packages. Advanced users with
-custom AKM workflows should review [the upstream 0.10 changes](https://github.com/itlackey/akm/releases/tag/v0.10.26101001-alpha):
+custom AKM workflows should review [the upstream 0.10 changes](https://github.com/itlackey/akm/releases/tag/v0.10.261004-beta):
 YAML workflows and several deprecated commands/options were removed. Ordinary
 fhold prompt tasks remain supported; upgrades do not rewrite knowledge or task
 files. Software and plugins are still installed only at image build time, not

@@ -16,15 +16,15 @@
     "directory": "packages/guardian"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.3.0",
-    "@opencode/client": "2.0.26",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@opencode/client": "2.0.28",
     "jose": "6.2.12",
     "jsonc-parser": "3.3.1",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.3.0",
-    "bun-types": "^1.4.2",
+    "@modelcontextprotocol/client": "2.3.1",
+    "bun-types": "^1.4.3",
     "typescript": "^7.0.2"
   }
 }

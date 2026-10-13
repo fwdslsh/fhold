@@ -5,7 +5,7 @@ implementation that changes a boundary. fhold is a single-install personal
 OpenCode agent: native provider sign-in, real readiness, persistent knowledge,
 ordinary-language recurring work and standards-based client access.
 
-This implementation uses OpenCode 2.0.26 with AKM 0.10 prerelease integrations.
+This implementation uses OpenCode 2 with AKM 0.10 prerelease integrations.
 Native live settings, permissions and persistence checks are recorded in the
 [qualification report](../operations/opencode-v2-qualification.md). Public
 artifacts must additionally pass the GitHub release gates.

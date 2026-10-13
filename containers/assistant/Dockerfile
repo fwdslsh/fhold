@@ -7,13 +7,13 @@ RUN npm install --global "npm@${NPM_VERSION}" \
 
 # Build the unchanged upstream scheduler with a patched supported Go runtime.
 # The latest prebuilt release still embeds Go 1.26.6; no vendor code is patched.
-FROM golang:1.26.9-bookworm AS scheduler-build
+FROM golang:1.27.2-bookworm AS scheduler-build
 ARG SUPERCRONIC_VERSION=v0.2.49
 RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
 
-FROM oven/bun:1.4.2 AS tools
+FROM oven/bun:1.4.3 AS tools
 ARG TARGETARCH
 WORKDIR /repo
 COPY package.json bun.lock ./
@@ -63,17 +63,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:ded41c05b543017fdb3166b326a0d541f018299f9b535349ec5002293c2eea67 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/ce90781946050d123d345d2aaf5ce053a31cd9b5 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:0e0e68095ea9139ec02a7cdfd5aef279fa824376fb8eb85bb979eef89a6861be \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/14351e74c717aa4df781108a32a2be3787b12ba8 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/claude \
+    && plugin_root=akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/.agents/plugins/marketplace.json \
-      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/.claude-plugin/marketplace.json \
-      akm-plugins-ce90781946050d123d345d2aaf5ce053a31cd9b5/LICENSE
+      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/.agents/plugins/marketplace.json \
+      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/.claude-plugin/marketplace.json \
+      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
@@ -89,7 +89,7 @@ RUN mkdir -p /native-defaults/codex \
     && CODEX_HOME=/native-defaults/codex codex plugin add fhold@fhold-plugins \
     && chmod a+r /native-defaults/codex/config.toml
 
-FROM oven/bun:1.4.2-slim
+FROM oven/bun:1.4.3-slim
 
 RUN apt-get update \
     && apt-get upgrade -y \

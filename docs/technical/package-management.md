@@ -1,7 +1,7 @@
 # Dependencies and development
 
 The source workspaces share one root `bun.lock`. Host orchestration imports
-`@fhold/lib`; the library has no runtime dependency. Standard MCP/platform SDKs
+`@fhold/lib`; the library uses standard tar and JSONC utilities. MCP/platform SDKs
 remain in their owning packages. The CLI source/build workspace produces a
 standalone Linux executable; it is not an npm bootstrap package. GitHub is the
 canonical source and release builder; Linux downloads are published there and
@@ -35,5 +35,6 @@ installer. Set `FH_DEV_HOME` to an explicit scratch directory and use free ports
 The source-only `compose.dev.yml` adds build instructions without changing the
 two-file installed runtime. No private homes, keys or ignored state are source inputs.
 
-See [tests](testing-workflow.md), [release gates](../operations/release.md),
+See [updating dependencies and releasing](../operations/updating-dependencies-and-releasing.md),
+[tests](testing-workflow.md), [release gates](../operations/release.md),
 [configuration](environment-and-mounts.md) and [the MIT license](../../LICENSE).

@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.3
       - name: Install the single locked workspace
         run: bun install --frozen-lockfile
       - name: Audit dependencies with reviewed specific exceptions
@@ -188,7 +188,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2.2.0
         if: matrix.image == 'assistant'
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.3
       - name: Install locked workspace for native history verification
         if: matrix.image == 'assistant'
         run: bun install --frozen-lockfile

@@ -21,6 +21,8 @@
 - [Managed harness configuration](managed-harness-configuration.md): editable native settings, enforced policies and custom hooks.
 - [MCP API reference](technical/api-spec.md).
 - [Dependencies and development](technical/package-management.md), [tests](technical/testing-workflow.md).
+- [Update dependencies and make a release](operations/updating-dependencies-and-releasing.md): contributor steps, owning pins, native image checks and publication.
+- [October 13 dependency verification](operations/dependency-refresh-2026-10-13.md): selected versions, native Linux x64 evidence and advisory limits.
 - [Admin verification](operations/admin-setup-verification.md) and [release gates](operations/release.md).
 - [Linux qualification and release limits](operations/alpha-qualification.md).
 - [Documentation website](operations/docs-website.md): native npm template builds and Pages deployment.
