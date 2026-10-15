@@ -122,10 +122,11 @@ tool-status message and reactions provide live feedback; unavailable reactions
 are logged without stopping the answer. The requester can use **Stop** to cancel
 the current job. The bot keeps checking long jobs and posts the complete answer;
 no MCP client or job ID is needed because work takes more than a few minutes. New messages in that
-conversation remain queued behind the active request. The Portal must stay
-running to deliver the response: restarting it does not cancel native agent work,
-but automatic reply delivery is not recovered across a Portal restart. The agent's
-work and history remain available in OpenCode.
+conversation remain queued behind the active request. After a Portal restart,
+accepted jobs are inspected again and known reply messages are edited in the
+original thread without rerunning the work. Questions and permission controls
+are refreshed from Guardian and still require the requester to respond.
+See [restart recovery and delivery limits](restart-recovery.md).
 
 Questions and permissions appear as interactive blocks in the same thread.
 Only the requester can answer or stop the job, including when users share a
@@ -136,8 +137,8 @@ into messages instead of hiding details. Answers resume the existing job through
 Guardian MCP. Finished controls are cleared. No slash commands are required.
 
 Continuity state is stored at `data/portal/slack/portal.db`.
-The database format and conversation handles are unchanged when updating the
-Portal runtime. Its health check follows the current platform connection rather
+Existing conversation handles are preserved; delivery receipts use an additional
+private table in the same database. Its health check follows the current platform connection rather
 than remaining healthy after the first successful login. The SDK owns reconnects;
 a disconnected bot does not stop the Assistant.
 

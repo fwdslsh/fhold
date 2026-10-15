@@ -129,8 +129,13 @@ outside recovered user state.
 Any active work or unknown observation sends a heartbeat. All observed work
 must be idle before heartbeats stop. A running process by itself is never
 classified as busy or idle. An enabled native worker with no observed fhold
-hooks is unknown, including restored signed-in workers before their first observed
-session. Before launching a remote worker, its supervisor asks the native CLI for
+hooks is unknown. Before its first session, Codex's supervisor makes one bounded
+read-only connection to that running server's native Unix WebSocket. It verifies
+the exact enabled managed activity hooks and a complete empty loaded-thread list
+before establishing initial coverage. It creates no session, sends no model request,
+changes no native configuration and starts no second server. If threads already
+exist, normal session hooks must provide coverage; inspection failure remains
+unknown. Before launching a remote worker, its supervisor asks the native CLI for
 the required subscription-account status. A confirmed missing account reports
 `sign-in-needed` and waits without starting that worker, so a fresh unsigned-in
 instance can become idle normally. Native sign-in is rechecked on the existing

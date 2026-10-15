@@ -1,0 +1,51 @@
+import { afterEach, expect, test, spyOn, mock } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { bootstrapCodexActivity } from '../containers/assistant/fhold-remote.mjs';
+import * as recall from '../containers/assistant/fhold-codex-recall.mjs';
+
+afterEach(() => mock.restore());
+
+test('only managed ready hooks plus an empty complete native session inventory prove initial coverage', async () => {
+	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready', managed: true });
+	const methods: string[] = [];
+	let loaded: unknown = { data: [], nextCursor: null };
+	let alive = true;
+	const inspect = async (check: (rpc: (method: string) => Promise<unknown>) => Promise<boolean>) => check(async (method) => { methods.push(method); return loaded; });
+	expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(true);
+	expect(methods).toEqual(['thread/loaded/list']);
+	for (loaded of [{ data: ['existing-thread'] }, { data: [], nextCursor: 'more' }, {}, { data: null }])
+		expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
+	loaded = { data: [] }; alive = false;
+	expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
+	alive = true;
+	for (const hooks of [{ status: 'approval-needed', managed: true }, { status: 'ready', managed: false }]) {
+		review.mockResolvedValue(hooks);
+		expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
+	}
+	// Inspection does not fabricate SessionStart, write account state or create a thread.
+	expect(methods.every((method) => method === 'thread/loaded/list')).toBe(true);
+});
+
+test('native control RPC is bounded, initializes normally and never starts another server', async () => {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-codex-control-'));
+	mkdirSync(join(root, 'app-server-control'));
+	const methods: string[] = [];
+	const server = Bun.serve({
+		unix: join(root, 'app-server-control/app-server-control.sock'),
+		fetch(request, server) { if (!server.upgrade(request)) return new Response(null, { status: 400 }); },
+		websocket: { message(socket, message) {
+			const input = JSON.parse(String(message)); methods.push(input.method);
+			if (input.id && input.method !== 'hold') socket.send(JSON.stringify({ id: input.id, result: input.method === 'initialize' ? {} : { data: [] } }));
+		} }
+	});
+	try {
+		const result = await recall.withCodexControl((rpc) => rpc('thread/loaded/list', {}), { env: { CODEX_HOME: root }, timeoutMs: 1000 });
+		expect(result).toEqual({ data: [] });
+		expect(methods).toEqual(['initialize', 'initialized', 'thread/loaded/list']);
+		await expect(recall.withCodexControl((rpc) => rpc('hold', {}), { env: { CODEX_HOME: root }, timeoutMs: 100 })).rejects.toThrow('coverage');
+		const abort = new AbortController(); abort.abort();
+		await expect(recall.withCodexControl(async () => {}, { env: { CODEX_HOME: root }, signal: abort.signal })).rejects.toThrow('coverage');
+	} finally { server.stop(true); rmSync(root, { recursive: true, force: true }); }
+});

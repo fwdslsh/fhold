@@ -1,8 +1,9 @@
 import { App, SocketModeReceiver, type SayFn, type types } from '@slack/bolt';
 
-import { GuardianChatClient, portalFailureText, type ChatUpdate } from './chat-client.js';
+import { GuardianChatClient, PortalConnectionError, portalFailureText, type ChatUpdate, type ChatResult } from './chat-client.js';
+import { PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
 import { ConversationStore } from './conversations.js';
-import { PortalCredentialRegistry, credentialConversationKey } from './credential-registry.js';
+import { PortalCredentialRegistry, credentialConversationKey, type PortalCredential } from './credential-registry.js';
 import { ConversationQueue } from './queue.js';
 import { PortalInteractions, promptView, type PendingPrompt } from './interactions.js';
 import { LiveReply, toolEmoji } from './live-reply.js';
@@ -145,6 +146,30 @@ export class SlackPortal {
 		const auth = await this.app.client.auth.test();
 		this.botUserId = typeof auth.user_id === 'string' ? auth.user_id : '';
 		log.info('connected', { botUserId: this.botUserId });
+		void this.recoverDeliveries().catch((error) => log.error('delivery_recovery_failed', { error: errorMessage(error) }));
+	}
+
+	private async recoverDeliveries(): Promise<void> {
+		for (const record of this.conversations.pendingDeliveries('slack')) {
+			const delivery = new PortalDelivery(record, this.conversations);
+			try {
+				if (record.state === 'blocked') throw new Error(record.reason);
+				const destination = record.destination;
+				if (destination.adapter !== 'slack' || record.bot !== this.botUserId) throw new Error('Bot identity changed.');
+				const message: SlackMessage = { user: record.user, channel: destination.channel, ts: destination.ts, thread_ts: destination.thread, channel_type: destination.channelType };
+				if (!this.permitted(message)) throw new Error('Requester no longer has access to the original conversation.');
+				const credential = this.credentials.forUser(record.user);
+				delivery.assertCredential(credential);
+				if (record.key !== credentialConversationKey(credential.username, this.key(message))) throw new Error('Original conversation identity changed.');
+				const say: SayFn = (payload) => this.app.client.chat.postMessage({ ...(typeof payload === 'string' ? { text: payload } : payload), channel: destination.channel });
+				void this.runConversation(message, say, record.key, credential, delivery).catch((error) => {
+					log.warn('delivery_recovery_failed', { error: errorMessage(error) });
+				});
+			} catch (error) {
+				delivery.blocked(errorMessage(error));
+				log.warn('delivery_recovery_blocked', { error: errorMessage(error), message: 'Check the original session in OpenCode; work and approvals were not replayed.' });
+			}
+		}
 	}
 
 	private key(message: SlackMessage): string {
@@ -205,10 +230,33 @@ export class SlackPortal {
 			return;
 		}
 
+		const id = `${message.channel}:${message.ts}`;
+		if (this.conversations.delivery('slack', id)) return;
+		const delivery = PortalDelivery.create(this.conversations, {
+			id, key, user: message.user, bot: this.botUserId, input: text,
+			destination: { adapter: 'slack', channel: message.channel, ts: message.ts, thread: threadTs, channelType: message.channel_type }
+		}, credential);
+		await this.runConversation(message, say, key, credential, delivery).catch((error) => {
+			if (delivery.record.state === 'queued') delivery.blocked(errorMessage(error));
+			throw error;
+		});
+	}
+
+	private async runConversation(message: SlackMessage, say: SayFn, key: string, credential: PortalCredential, delivery: PortalDelivery): Promise<void> {
+		const threadTs = message.thread_ts ?? message.ts;
 		await this.queue.run(key, async () => {
+			delivery.assertCredential(this.credentials.forUser(message.user));
+			if (delivery.record.state === 'submitted' || delivery.record.state === 'blocked') {
+				await this.blockDelivery(delivery, message.channel, 'Submission could not be confirmed. Check the original session in OpenCode; it was not repeated.');
+				log.warn('delivery_recovery_blocked', { message: delivery.record.reason });
+				return;
+			}
 			let stopId = '';
-			let head: { ts: string; text: string } | undefined;
-			let lastText = '';
+			const firstReceipt = delivery.record.messages.answer?.[0];
+			let head: { ts: string; text: string } | undefined = firstReceipt?.id ? { ts: firstReceipt.id, text: firstReceipt.text } : undefined;
+			let restoredControls = false;
+			let lastText = head?.text ?? '';
+			let delivered = false;
 			const stopBlocks = (text: string): SlackBlocks =>
 				stopId
 					? [
@@ -226,7 +274,8 @@ export class SlackPortal {
 							}
 						]
 					: this.answerBlocks(text);
-			const live = new LiveReply(async (text) => {
+			let live: LiveReply;
+			try { live = delivery.liveReply('answer', 2_900, async (text) => {
 				const first = !head;
 				const posted = await this.deliverAnswer(() =>
 					say({
@@ -241,20 +290,16 @@ export class SlackPortal {
 					head = { ts, text };
 					this.actionLocations.set(stopId, { key, channel: message.channel, ts });
 				}
-				return {
-					edit: async (text) => {
-						await this.deliverAnswer(() =>
-							this.app.client.chat.update({
-								channel: message.channel,
-								ts,
-								text,
-								blocks: first ? stopBlocks(text) : this.answerBlocks(text)
-							})
-						);
-						if (first) head = { ts, text };
-					}
-				};
-			}, 2_900);
+				return { id: ts };
+			}, async (ts, text) => {
+				const first = head?.ts === ts;
+				await this.deliverAnswer(() => this.app.client.chat.update({ channel: message.channel, ts, text, blocks: first ? stopBlocks(text) : this.answerBlocks(text) }));
+				if (first) head = { ts, text };
+			}); } catch (error) {
+				await this.blockDelivery(delivery, message.channel, errorMessage(error));
+				log.warn('delivery_recovery_blocked', { error: errorMessage(error) });
+				return;
+			}
 			const activity = new LiveReply(async (text) => {
 				const blocks: SlackBlocks = [{ type: 'context', elements: [{ type: 'mrkdwn', text }] }];
 				const posted = await say({ text, thread_ts: threadTs, blocks });
@@ -272,9 +317,18 @@ export class SlackPortal {
 			const reacted = new Set<string>();
 			let lastActivity = '';
 			const onUpdate = async (update: ChatUpdate) => {
+				delivery.assertCredential(this.credentials.forUser(message.user));
+				delivery.accepted(update.job, update.conversation);
 				if (update.text) lastText = update.text;
 				this.conversations.set('slack', key, update.conversation);
 				stopId = this.interactions.working(key, message.user, credential, update.job);
+				if (head) {
+					this.actionLocations.set(stopId, { key, channel: message.channel, ts: head.ts });
+					if (!restoredControls) {
+						await this.deliverAnswer(() => this.app.client.chat.update({ channel: message.channel, ts: head!.ts, text: head!.text, blocks: stopBlocks(head!.text) }));
+						restoredControls = true;
+					}
+				}
 				for (const tool of update.tools) {
 					const emoji = toolEmoji(tool.name).slack;
 					if (reacted.has(emoji)) continue;
@@ -299,12 +353,17 @@ export class SlackPortal {
 				);
 			};
 			try {
-				let result = await this.chat.chat(
-					text,
-					credential,
-					this.conversations.get('slack', key),
-					onUpdate
-				);
+				let result: ChatResult;
+				if (delivery.record.state === 'complete') {
+					result = { text: delivery.record.result ?? '', conversation: delivery.record.conversation ?? '' };
+				} else if (delivery.record.job) {
+					result = await this.chat.resume(delivery.record.job, credential, onUpdate);
+				} else {
+					const input = delivery.record.input!;
+					await live.update('Working…', true);
+					delivery.submitting();
+					result = await this.chat.chat(input, credential, this.conversations.get('slack', key), onUpdate);
+				}
 				while (result.pending) {
 					this.conversations.set('slack', key, result.conversation);
 					const previous = this.interactions.forKey(key);
@@ -314,14 +373,21 @@ export class SlackPortal {
 						await this.refreshPrompt(previous).catch(() => {});
 					if (!this.actionLocations.has(prompt.id)) {
 						const post = (text: string) => say({ text, thread_ts: threadTs });
-						for (const chunk of splitMessage(promptView(prompt).text, 2_900).slice(0, -1))
-							await post(chunk);
-						const posted = await say({ ...this.promptPayload(prompt), thread_ts: threadTs });
-						if (!posted.ts) throw new Error('Slack did not return the question message timestamp.');
+						const view = promptView(prompt).text;
+						const last = splitMessage(view, 2_900).at(-1);
+						delivery.refreshPrompt();
+						const promptReply = delivery.liveReply('prompt', 2_900, async (text) => {
+							const sent = await say({ ...(text === last ? this.promptPayload(prompt) : { text }), thread_ts: threadTs });
+							if (!sent.ts) throw new Error('Slack did not return the question message timestamp.');
+							return { id: sent.ts };
+						}, (ts, text) => this.app.client.chat.update({ channel: message.channel, ts, ...(text === last ? this.promptPayload(prompt) : { text, blocks: [] }) }));
+						await promptReply.update(view, true);
+						const ts = delivery.record.messages.prompt.at(-1)!.id!;
+						delivery.prompt(ts, prompt.questionIndex);
 						this.actionLocations.set(prompt.id, {
 							key,
 							channel: message.channel,
-							ts: posted.ts,
+							ts,
 							questionIndex: prompt.questionIndex,
 							post
 						});
@@ -334,19 +400,26 @@ export class SlackPortal {
 				}
 				this.conversations.set('slack', key, result.conversation);
 				lastText = result.text;
-				await live.update(this.interactions.cancelled(key) ? 'Work stopped.' : result.text, true);
+				const text = this.interactions.cancelled(key) ? 'Work stopped.' : result.text;
+				delivery.complete(text, result.conversation);
+				await live.update(text, true);
+				delivered = true;
 			} catch (error) {
 				log.warn('conversation_failed', {
 					userId: message.user,
 					channelId: message.channel,
 					error: errorMessage(error)
 				});
-				await live.update(
-					this.interactions.cancelled(key)
-						? 'Work stopped.'
-						: `${lastText ? `${lastText}\n\n` : ''}${portalFailureText(error)}`,
-					true
-				);
+				if (error instanceof UnconfirmedDeliveryError) {
+					await this.blockDelivery(delivery, message.channel, error.message);
+				}
+				else if (delivery.record.state !== 'complete') {
+					const text = this.interactions.cancelled(key) ? 'Work stopped.' : `${lastText ? `${lastText}\n\n` : ''}${portalFailureText(error)}`;
+					const tracking = Boolean(error instanceof PortalConnectionError && delivery.record.job);
+					if (!tracking) delivery.complete(text);
+					await live.update(text, true);
+					delivered = !tracking;
+				}
 			} finally {
 				const prompt = this.interactions.forKey(key);
 				this.interactions.close(key);
@@ -358,6 +431,7 @@ export class SlackPortal {
 					.update(lastActivity, true)
 					.catch((error) => log.warn('activity_delivery_failed', { error: errorMessage(error) }));
 				this.actionLocations.delete(stopId);
+				if (head && delivery.record.reason) head.text = delivery.record.reason;
 				const finalHead = head;
 				if (finalHead)
 					await this.deliverAnswer(() =>
@@ -370,8 +444,19 @@ export class SlackPortal {
 					).catch((error) =>
 						log.warn('stop_control_cleanup_failed', { error: errorMessage(error) })
 					);
+				if (!prompt && delivery.record.prompt)
+					await this.app.client.chat.update({ channel: message.channel, ts: delivery.record.prompt.message, text: 'Previous controls closed. Use the current response or controls.', blocks: [] })
+						.catch((error) => log.warn('prompt_update_failed', { error: errorMessage(error) }));
+				if (delivered) delivery.finish();
 			}
 		});
+	}
+
+	private async blockDelivery(delivery: PortalDelivery, channel: string, reason: string): Promise<void> {
+		delivery.blocked(reason);
+		const ts = delivery.record.messages.answer?.[0]?.id;
+		if (ts) await this.deliverAnswer(() => this.app.client.chat.update({ channel, ts, text: reason, blocks: this.answerBlocks(reason) }))
+			.catch((error) => log.warn('delivery_notice_failed', { error: errorMessage(error) }));
 	}
 
 	private promptPayload(prompt: PendingPrompt): { text: string; blocks: SlackBlocks } {

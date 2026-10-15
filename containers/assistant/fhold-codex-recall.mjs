@@ -3,6 +3,7 @@
 // plugin installation, blanket trust, or independent approval store.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { remoteEnvironment } from './fhold-remote.mjs';
 
 export function recallReview(value, plugin = 'akm@akm-plugins', managed = {}) {
@@ -190,6 +191,64 @@ export async function withCodexRecall(
 		} finally {
 			clearTimeout(force);
 		}
+	}
+}
+
+/** Read-only, bounded connection to the existing vendor server. Bun implements
+ * the native WebSocket-over-Unix transport; no second server or proxy is run.
+ */
+export async function withCodexControl(callback, { env = process.env, signal, timeoutMs = 8_000 } = {}) {
+	const home = env.CODEX_HOME || (env.HOME && join(env.HOME, '.codex'));
+	if (!home) throw new Error('Codex home is unavailable.');
+	const socket = new WebSocket(`ws+unix://${join(home, 'app-server-control', 'app-server-control.sock')}`);
+	const pending = new Map();
+	let serial = 0;
+	let stopped;
+	let opened;
+	const ready = new Promise((resolve, reject) => { opened = { resolve, reject }; });
+	const fail = () => {
+		stopped = new Error('Native Codex activity coverage could not be established.');
+		opened.reject(stopped);
+		for (const entry of pending.values()) entry.reject(stopped);
+		pending.clear();
+		socket.close();
+	};
+	const timer = setTimeout(fail, timeoutMs);
+	signal?.addEventListener('abort', fail, { once: true });
+	socket.onopen = () => opened.resolve();
+	socket.onerror = fail;
+	socket.onclose = fail;
+	socket.onmessage = (event) => {
+		try {
+			if (typeof event.data !== 'string' || event.data.length > 1_048_576) throw new Error('Invalid native response.');
+			const response = JSON.parse(event.data);
+			const entry = pending.get(response.id);
+			if (!entry) return;
+			pending.delete(response.id);
+			if (response.error) entry.reject(new Error('Native Codex rejected the activity inspection.'));
+			else entry.resolve(response.result);
+		} catch { fail(); }
+	};
+	const rpc = (method, params) => new Promise((resolve, reject) => {
+		if (stopped) return reject(stopped);
+		const id = ++serial;
+		pending.set(id, { resolve, reject });
+		try { socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params })); }
+		catch { fail(); }
+	});
+	try {
+		if (signal?.aborted) fail();
+		await ready;
+		await rpc('initialize', { clientInfo: { name: 'fhold-activity-bootstrap', version: '1' } });
+		socket.send('{"jsonrpc":"2.0","method":"initialized"}');
+		return await callback(rpc);
+	} finally {
+		clearTimeout(timer);
+		signal?.removeEventListener('abort', fail);
+		socket.onclose = null;
+		socket.onerror = null;
+		socket.onmessage = null;
+		socket.close();
 	}
 }
 

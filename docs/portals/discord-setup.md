@@ -129,13 +129,14 @@ message edits, followed by the complete answer. Tool kinds add reactions to the
 request: 🔎 knowledge search, 🐚 commands, ✏️ editing, 🧠 memory and similar icons.
 Missing reaction permissions do not stop replies. The bot keeps checking long
 jobs; no MCP client or job ID is needed because work takes more than a few minutes. New messages in
-that conversation remain queued behind the active request. The Portal must stay
-running to deliver the response: restarting it does not cancel native agent work,
-but automatic reply delivery is not recovered across a Portal restart. The agent's
-work and history remain available in OpenCode.
+that conversation remain queued behind the active request. After a Portal restart,
+accepted jobs are inspected again and known reply messages are edited in the
+original conversation without rerunning the work. Questions and permission
+controls are refreshed from Guardian and still require the requester to respond.
+See [restart recovery and delivery limits](restart-recovery.md).
 
-The adapter stores only opaque Guardian session handles in
-`data/portal/discord/portal.db`.
+The adapter stores opaque Guardian session handles and private delivery receipts
+in `data/portal/discord/portal.db`.
 
 An existing bot token can be configured with
 `fhold portal token discord --bot-token-file <private-file> --no-apply`.

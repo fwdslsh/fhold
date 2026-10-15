@@ -51,7 +51,7 @@ if (process.argv[2] === 'login' || process.argv[2] === 'auth') {
  process.exit(signedIn?0:1);
 }
 fs.appendFileSync('workers','1'); setInterval(()=>{},1000);`, {mode:0o700});
-			const env = { ...process.env, FH_RUNTIME_DIR: root, PATH: `${root}:${process.env.PATH}` };
+			const env = { ...process.env, CODEX_HOME: join(root, 'codex'), FH_RUNTIME_DIR: root, PATH: `${root}:${process.env.PATH}` };
 			const child = Bun.spawn([process.execPath, '--eval', `import {superviseRemote} from ${JSON.stringify(module)}; await superviseRemote(${JSON.stringify(tool)}, {workdir:${JSON.stringify(root)}, retryMs:100});`], {env, stdout:'pipe', stderr:'pipe'});
 			const snapshot = () => JSON.parse(readFileSync(state, 'utf8'));
 			try {

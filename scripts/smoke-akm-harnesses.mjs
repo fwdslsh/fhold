@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
+import { bootstrapCodexActivity } from '/usr/local/bin/fhold-remote.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
 const prompt = 'Find the lean release verification knowledge for the personal agent rollout';
@@ -365,6 +366,18 @@ function recalled(file, harness) {
 		)
 	);
 	const options = { env: f.env, workdir: f.cwd };
+	// Native SessionStart is thread-scoped. A fresh/restored, unused server
+	// must prove installed hook coverage without a synthetic session or user turn.
+	for (let boot = 0; boot < 2; boot++) {
+		const server = Bun.spawn(['codex', 'app-server', '--listen', 'unix://'], {
+			env: f.env, cwd: f.cwd, stdout: 'ignore', stderr: 'ignore'
+		});
+		try {
+			await waitFor(() => existsSync(join(f.env.CODEX_HOME, 'app-server-control/app-server-control.sock')), 'native Codex control socket');
+			assert.equal(await bootstrapCodexActivity({ env: f.env, alive: () => server.exitCode === null }), true);
+			assert.equal(existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')), false, 'Inspection must not fabricate a SessionStart event');
+		} finally { server.kill(); await server.exited; }
+	}
 	writeFileSync(
 		join(f.env.CODEX_HOME, 'hooks.json'),
 		JSON.stringify({

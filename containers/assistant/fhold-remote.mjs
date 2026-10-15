@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bun --no-env-file
 // Optional vendor-native agents. Their failures never stop OpenCode or cron.
 import { spawn } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 
@@ -88,6 +88,23 @@ export function claudePrompt(text) {
 		return { kind: 'workspace-trust', position: trust };
 }
 
+// SessionStart is a thread hook, not an app-server startup event. Before the
+// first thread, prove that the running server has the managed activity hooks
+// armed and no loaded sessions. Never infer idle from its PID or missing busy
+// markers, and never create a synthetic session or approve native hooks.
+export async function bootstrapCodexActivity({ env, alive, signal, inspect } = {}) {
+	const { withCodexControl, reviewRecall } = await import('./fhold-codex-recall.mjs');
+	const check = async (rpc) => {
+		const hooks = await reviewRecall(rpc, 'fhold@fhold-plugins');
+		if (hooks.status !== 'ready' || hooks.managed !== true) return false;
+		const loaded = await rpc('thread/loaded/list', {});
+		if (!Array.isArray(loaded?.data) || loaded.data.length || loaded.nextCursor) return false;
+		if (!alive()) return false;
+		return true;
+	};
+	return inspect ? inspect(check) : withCodexControl(check, { env, signal });
+}
+
 export async function superviseRemote(
 	tool,
 	{ directory = remoteDirectory, retryMs = 300_000, env = process.env, workdir = '/work' } = {}
@@ -107,6 +124,8 @@ export async function superviseRemote(
 	let wake;
 	let timer;
 	let childDeadline;
+	let bootstrap;
+	let bootstrapAbort;
 	let groupForced = false;
 	let log = Buffer.alloc(0);
 	const status = (state, details = {}) => {
@@ -139,6 +158,7 @@ export async function superviseRemote(
 	};
 	const restart = () => {
 		restartRequested = true;
+		bootstrapAbort?.abort();
 		clearTimeout(timer);
 		wake?.();
 		if (child?.pid) {
@@ -165,6 +185,7 @@ export async function superviseRemote(
 	};
 	const stop = () => {
 		stopping = true;
+		bootstrapAbort?.abort();
 		clearTimeout(timer);
 		wake?.();
 		if (child?.pid) {
@@ -223,9 +244,30 @@ export async function superviseRemote(
 				});
 				child.stdout.on('data', record);
 				child.stderr.on('data', record);
-				child.on('spawn', () => status('process-running', { pid: child.pid }));
+				child.on('spawn', () => {
+					status('process-running', { pid: child.pid });
+					const worker = child;
+					bootstrapAbort = new AbortController();
+					const control = env.CODEX_HOME || (env.HOME && join(env.HOME, '.codex'));
+					const alive = () => !stopping && !restartRequested && child === worker && worker.exitCode === null && worker.signalCode === null;
+					bootstrap = (async () => {
+						// The native socket is created asynchronously during startup.
+						for (let attempt = 0; control && attempt < 120 && alive(); attempt++) {
+							if (!existsSync(join(control, 'app-server-control', 'app-server-control.sock'))) {
+								await new Promise((done) => setTimeout(done, 250));
+								continue;
+							}
+							try {
+								if (await bootstrapCodexActivity({ env, alive, signal: bootstrapAbort.signal }) && alive())
+									writeFileSync(join(dirname(directory), 'activity', 'codex.ready'), '', { mode: 0o600 });
+							} catch { /* Native startup/configuration may not yet be ready. */ }
+							return; // A failed observation remains unknown, never guessed idle.
+						}
+					})();
+				});
 				child.on('error', () => resolve(127));
 				child.on('exit', () => {
+					bootstrapAbort?.abort();
 					const pid = child.pid;
 					try {
 						process.kill(-pid, 'SIGTERM');
@@ -245,6 +287,8 @@ export async function superviseRemote(
 				});
 				child.on('close', (exitCode) => resolve(exitCode ?? 1));
 			});
+			await bootstrap;
+			bootstrap = undefined;
 			// The leader can exit before its session children. Do not cancel the
 			// shutdown deadline or start another attempt while descendants survive.
 			if (child?.pid) {

@@ -4,6 +4,10 @@ import { Client as McpClient, SdkError, SdkErrorCode } from '@modelcontextprotoc
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry } from './credential-registry.js';
 import * as runtime from './runtime.js';
+import { PortalDelivery } from './delivery.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 type SlackReply = { text: string; thread_ts?: string; blocks?: unknown[] };
 type SlackPayload = {
@@ -20,7 +24,18 @@ type DiscordPost = {
 const slackEvents = new Map<string, (payload: SlackPayload) => Promise<void>>();
 let slackAction: (payload: unknown) => Promise<void>;
 const discordEvents = new Map<string, (message: unknown) => void>();
-const slackUpdate = mock(async (_args: Record<string, unknown>) => ({}));
+const slackPosts = new Map<string, SlackReply>();
+const discordChannels = new Map<string, unknown>();
+const temporaryPaths: string[] = [];
+const slackUpdate = mock(async (args: Record<string, unknown>) => {
+	const posted = slackPosts.get(args.ts as string);
+	if (posted) {
+		if (typeof args.text === 'string') posted.text = args.text;
+		if (Array.isArray(args.blocks)) posted.blocks = structuredClone(args.blocks);
+	}
+	return {};
+});
+let currentSlackSay: (payload: SlackReply) => Promise<{ ts: string }>;
 const slackReaction = mock(async (_args: Record<string, unknown>) => ({}));
 const slackEphemeral = mock(async (_args: Record<string, unknown>) => ({}));
 
@@ -28,7 +43,7 @@ mock.module('@slack/bolt', () => ({
 	App: class {
 		client = {
 			auth: { test: async () => ({ user_id: 'UBOT123' }) },
-			chat: { update: slackUpdate, postEphemeral: slackEphemeral },
+			chat: { update: slackUpdate, postEphemeral: slackEphemeral, postMessage: (payload: SlackReply) => currentSlackSay(payload) },
 			reactions: { add: slackReaction }
 		};
 		event(name: string, handler: (payload: SlackPayload) => Promise<void>) {
@@ -49,6 +64,7 @@ mock.module('discord.js', () => ({
 	Client: class {
 		user = { id: '900000', tag: 'test-bot' };
 		guilds = { cache: { size: 1 } };
+		channels = { fetch: async (id: string) => discordChannels.get(id) };
 		on(name: string, handler: (message: unknown) => void) {
 			discordEvents.set(name, handler);
 		}
@@ -115,6 +131,8 @@ const originalEnvironment = new Map(environmentNames.map((name) => [name, proces
 beforeEach(() => {
 	slackEvents.clear();
 	discordEvents.clear();
+	slackPosts.clear();
+	discordChannels.clear();
 	slackUpdate.mockClear();
 	slackReaction.mockClear();
 	slackEphemeral.mockClear();
@@ -139,6 +157,7 @@ afterEach(() => {
 		if (value === undefined) delete process.env[name];
 		else process.env[name] = value;
 	}
+	for (const path of temporaryPaths.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 
 function response(status: string, text?: string, extra: Record<string, unknown> = {}) {
@@ -183,15 +202,17 @@ function discordFixture() {
 	const thread = {
 		id: '777777',
 		isThread: () => true,
+		isTextBased: () => true,
 		send: post,
 		sendTyping: typing,
 		permissionsFor: mock(() => ({ has: () => true }))
 	};
-	const channel = { id: '654321', isThread: () => false, send: post, sendTyping: typing };
+	const channel = { id: '654321', isThread: () => false, isTextBased: () => true, send: post, sendTyping: typing };
 	const message = {
 		id: '111111',
 		author: { id: '123456', bot: false },
 		guildId: '123456' as string | null,
+		guild: { members: { fetch: async () => ({ roles: { cache: { map: () => [] } } }) } },
 		mentions: { has: () => true },
 		content: '<@900000> Do the work',
 		channel,
@@ -200,6 +221,11 @@ function discordFixture() {
 		startThread: mock(async (_args: Record<string, unknown>) => thread),
 		thread: undefined as typeof thread | undefined
 	};
+	const messages = { fetch: async (id: string) => id === message.id ? message : posts.find((post) => post.id === id) };
+	Object.assign(channel, { messages });
+	Object.assign(thread, { messages });
+	discordChannels.set(channel.id, channel);
+	discordChannels.set(thread.id, thread);
 	return { posts, post, typing, thread, channel, message };
 }
 type DiscordInternals = {
@@ -237,9 +263,13 @@ function questionPost(posts: DiscordPost[]): DiscordPost {
 function slackFixture() {
 	const replies: SlackReply[] = [];
 	const say = mock(async (reply: SlackReply) => {
-		replies.push(reply);
-		return { ts: `bot.${replies.length}` };
+		const posted = structuredClone(reply);
+		replies.push(posted);
+		const ts = `bot.${replies.length}`;
+		slackPosts.set(ts, posted);
+		return { ts };
 	});
+	currentSlackSay = say;
 	const event = { user: 'U123', channel: 'C123', text: '<@UBOT123> Work', ts: '1.000001' };
 	return { replies, say, event };
 }
@@ -262,6 +292,30 @@ function slackButton(reply: SlackReply, ts: string, label: string, user = 'U123'
 		action: { ...button, type: 'button' },
 		body: { type: 'block_actions', channel: { id: 'C123' }, message: { ts }, user: { id: user } }
 	};
+}
+
+function recoveryFixture(adapter: 'slack' | 'discord', message: string, state: 'tracking' | 'complete' | 'submitted' = 'tracking') {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-portal-restart-')); temporaryPaths.push(root);
+	process.env.PORTAL_STATE_PATH = join(root, 'portal.db');
+	const store = new ConversationStore();
+	const delivery = PortalDelivery.create(store, {
+		id: adapter === 'slack' ? 'C123:1.000001' : '111111',
+		key: adapter === 'slack' ? 'credential:test-user:thread:C123:1.000001' : 'credential:test-user:thread:777777',
+		user: adapter === 'slack' ? 'U123' : '123456', bot: adapter === 'slack' ? 'UBOT123' : '900000', input: 'Already submitted request',
+		destination: adapter === 'slack' ? { adapter, channel: 'C123', ts: '1.000001', thread: '1.000001' } : { adapter, sourceChannel: '654321', sourceMessage: '111111', channel: '777777', guild: '123456' }
+	}, { username: 'test-user', key: 'unit-test-key' });
+	delivery.record.messages.answer = [{ id: message, text: 'Working…' }];
+	delivery.submitting();
+	if (state !== 'submitted') delivery.accepted('test.job', 'test.session');
+	if (state === 'complete') delivery.complete('Saved final answer', 'test.session');
+	store.close();
+	return delivery.record.id;
+}
+
+async function settledDelivery(adapter: string, id: string, state = 'done') {
+	const store = new ConversationStore();
+	try { await until(() => store.delivery(adapter, id)?.state === state); }
+	finally { store.close(); }
 }
 const question = {
 	kind: 'question',
@@ -321,7 +375,7 @@ describe('Discord conversation UX', () => {
 			.mockResolvedValueOnce(response('completed', 'Answered in OpenCode'));
 		const portal = await discordPortal();
 		await portal.onMessage(fixture.message);
-		expect(fixture.posts.at(-1)?.content).toBe('Answered in OpenCode');
+		expect(fixture.posts[0]?.content).toBe('Answered in OpenCode');
 		expect(fixture.posts.every((post) => post.components.length === 0)).toBe(true);
 	});
 
@@ -357,7 +411,7 @@ describe('Discord conversation UX', () => {
 		finish.resolve(response('completed', 'Finished work'));
 		await work;
 		expect(fixture.posts.map((post) => post.content)).toEqual(['Finished work']);
-		expect(fixture.posts[0].edit).toHaveBeenCalledTimes(1);
+		expect(fixture.posts[0].edit).toHaveBeenCalledTimes(2);
 		expect(fixture.message.react.mock.calls.map(([emoji]) => emoji)).toEqual(['🐚', '🔎']);
 		expect(cleared).toHaveBeenCalled();
 		expect(callTool).toHaveBeenCalledTimes(1);
@@ -373,6 +427,7 @@ describe('Discord conversation UX', () => {
 		await portal.onMessage(fixture.message);
 		await portal.onMessage({
 			...fixture.message,
+			id: '111112',
 			channel: fixture.thread,
 			content: 'Next thing',
 			mentions: { has: () => false }
@@ -397,6 +452,7 @@ describe('Discord conversation UX', () => {
 		await until(() => callTool.mock.calls.length === 1);
 		const next = portal.onMessage({
 			...fixture.message,
+			id: '111112',
 			channel: fixture.thread,
 			content: 'Followup',
 			mentions: { has: () => false }
@@ -420,7 +476,7 @@ describe('Discord conversation UX', () => {
 		const portal = await discordPortal();
 		await portal.onMessage(fixture.message);
 		expect(fixture.posts[0].content).toBe('Result');
-		await portal.onMessage({ ...fixture.message, guildId: null });
+		await portal.onMessage({ ...fixture.message, id: '111112', guildId: null });
 		expect(fixture.message.startThread).toHaveBeenCalledTimes(1);
 		expect(fixture.posts[1].content).toBe('Result');
 	});
@@ -473,7 +529,7 @@ describe('Discord conversation UX', () => {
 			answers: [['API'], ['staging']]
 		});
 		expect(prompt.components).toEqual([]);
-		expect(fixture.posts.at(-1)?.content).toBe('Selected API staging');
+		expect(fixture.posts[0]?.content).toBe('Selected API staging');
 	});
 
 	it('never treats chat text as command approval and records an explicit button decision', async () => {
@@ -603,8 +659,8 @@ describe('Slack conversation UX', () => {
 			'test.session'
 		]);
 		expect(fixture.replies.every((reply) => reply.thread_ts === '1.000001')).toBe(true);
-		const beginning = fixture.replies.find((reply) => reply.text === 'Beginning');
-		expect(beginning?.blocks?.[0]).toMatchObject({ type: 'markdown', text: 'Beginning' });
+		expect(slackUpdate.mock.calls.some(([reply]) => reply.text === 'Beginning' &&
+			(reply.blocks as Array<{type: string}>)[0]?.type === 'markdown')).toBe(true);
 		expect(slackUpdate.mock.calls.some(([value]) => value.text === 's'.repeat(2_900))).toBe(true);
 		expect(fixture.replies.at(-1)?.text).toBe('s'.repeat(1_200));
 		expect(slackUpdate.mock.calls.at(-1)?.[0].blocks).toEqual([
@@ -638,16 +694,17 @@ describe('Slack conversation UX', () => {
 		});
 	});
 
-	it('retries final delivery when an intermediate platform post fails', async () => {
+	it('does not accept work or retry an unacknowledged initial platform post', async () => {
 		const fixture = slackFixture();
-		spyOn(McpClient.prototype, 'callTool')
+		const calls = spyOn(McpClient.prototype, 'callTool')
 			.mockResolvedValueOnce(response('running'))
 			.mockResolvedValueOnce(response('completed', 'Finished'));
 		fixture.say.mockRejectedValueOnce(new Error('Slack temporarily unavailable'));
 		await new SlackPortal().start();
 		await slackMessage('app_mention', { event: fixture.event, say: fixture.say });
-		expect(fixture.replies.at(-1)?.text).toBe('Finished');
-		expect(fixture.say).toHaveBeenCalledTimes(2);
+		expect(fixture.replies).toEqual([]);
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+		expect(calls).not.toHaveBeenCalled();
 	});
 
 	it('supports explicit questions, acknowledges buttons first, and rejects other users with the same credential', async () => {
@@ -737,5 +794,134 @@ describe('Slack conversation UX', () => {
 		expect(
 			callTool.mock.calls.filter(([request]) => request.name === 'fhold.agent.run')
 		).toHaveLength(1);
+	});
+});
+
+describe('Portal process replacement', () => {
+	it('does not rerun an expired Guardian job when restoring a pending reply', async () => {
+		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts);
+		const calls = spyOn(McpClient.prototype, 'callTool').mockResolvedValue({ isError: true, content: [{ type: 'text', text: 'Job handle expired' }] });
+		await new SlackPortal().start(); await settledDelivery('slack', id);
+		expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+		expect(fixture.replies[0].text).toContain('Check the session in OpenCode');
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+	});
+
+	it('restores requester-owned Stop on an existing Slack message without repeating the agent request', async () => {
+		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts);
+		const finish = Promise.withResolvers<ReturnType<typeof response>>();
+		const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request, options) => {
+			if (request.name === 'fhold.job.cancel') { finish.resolve(response('completed', 'Cancelled')); return { content: [] }; }
+			if (request.name !== 'fhold.job.get') throw new Error('Unexpected native submission');
+			notify(options, { text: 'Still working' });
+			return finish.promise;
+		});
+		await new SlackPortal().start();
+		await until(() => fixture.replies[0].blocks?.some((block) => (block as { type: string }).type === 'actions') === true);
+		await slackAction(slackButton(fixture.replies[0], first.ts, 'Stop', 'UOTHER'));
+		expect(calls.mock.calls.filter(([request]) => request.name === 'fhold.job.cancel')).toHaveLength(0);
+		await slackAction(slackButton(fixture.replies[0], first.ts, 'Stop'));
+		await settledDelivery('slack', id);
+		expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get', 'fhold.job.cancel']);
+		expect(fixture.replies[0].text).toBe('Work stopped.');
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+	});
+	it('reopens a persisted Slack job and edits its original message without running the agent again', async () => {
+		const fixture = slackFixture();
+		const first = await fixture.say({ text: 'Working…', thread_ts: '1.000001' });
+		const id = recoveryFixture('slack', first.ts);
+		const calls = spyOn(McpClient.prototype, 'callTool').mockResolvedValue(response('completed', 'Recovered final answer'));
+		await new SlackPortal().start();
+		await settledDelivery('slack', id);
+		expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+		expect(fixture.replies[0].text).toBe('Recovered final answer');
+		expect(fixture.replies[0].thread_ts).toBe('1.000001');
+	});
+
+	it('reopens a persisted Discord job in the original thread and edits the same message', async () => {
+		const fixture = discordFixture();
+		const first = await fixture.post({ content: 'Working…' });
+		const id = recoveryFixture('discord', first.id);
+		const calls = spyOn(McpClient.prototype, 'callTool').mockResolvedValue(response('completed', 'Recovered Discord answer'));
+		await new DiscordPortal().start();
+		await settledDelivery('discord', id);
+		expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+		expect(fixture.post).toHaveBeenCalledTimes(1);
+		expect(first.content).toBe('Recovered Discord answer');
+	});
+
+	it('redelivers a persisted final result by editing and survives a second replacement without duplicates', async () => {
+		const fixture = slackFixture();
+		const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts, 'complete');
+		const calls = spyOn(McpClient.prototype, 'callTool');
+		await new SlackPortal().start(); await settledDelivery('slack', id);
+		await new SlackPortal().start();
+		expect(calls).not.toHaveBeenCalled();
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+		expect(fixture.replies[0].text).toBe('Saved final answer');
+	});
+
+	it('reports an unknown native submission on its existing message without resubmission', async () => {
+		const fixture = slackFixture();
+		const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts, 'submitted');
+		const calls = spyOn(McpClient.prototype, 'callTool');
+		await new SlackPortal().start(); await settledDelivery('slack', id, 'blocked');
+		expect(calls).not.toHaveBeenCalled();
+		expect(fixture.say).toHaveBeenCalledTimes(1);
+		expect(fixture.replies[0].text).toContain('Submission could not be confirmed');
+	});
+
+	it('rejects recovery after a requester mapping changes instead of exposing a saved answer', async () => {
+		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts, 'complete');
+		spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'different', key: 'different-key' });
+		const calls = spyOn(McpClient.prototype, 'callTool');
+		await new SlackPortal().start(); await settledDelivery('slack', id, 'blocked');
+		expect(calls).not.toHaveBeenCalled();
+		expect(slackUpdate).not.toHaveBeenCalled();
+		expect(fixture.replies[0].text).toBe('Working…');
+	});
+
+	it('rechecks current Discord allowlists before recovering or editing a reply', async () => {
+		const fixture = discordFixture(); const first = await fixture.post({ content: 'Working…' });
+		const id = recoveryFixture('discord', first.id);
+		process.env.DISCORD_ALLOWED_USERS = '999999';
+		const calls = spyOn(McpClient.prototype, 'callTool');
+		await new DiscordPortal().start(); await settledDelivery('discord', id, 'blocked');
+		expect(calls).not.toHaveBeenCalled();
+		expect(first.edit).not.toHaveBeenCalled();
+	});
+
+	it('recreates permission controls from current Guardian state and requires a fresh requester decision', async () => {
+		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
+		const id = recoveryFixture('slack', first.ts);
+		const previous = await fixture.say({ text: 'Stale permission controls' });
+		const store = new ConversationStore();
+		const record = store.delivery('slack', id)!;
+		record.messages.prompt = [{ id: previous.ts, text: 'Stale permission controls' }];
+		record.prompt = { message: previous.ts, questionIndex: 0 };
+		store.saveDelivery(record); store.close();
+		let approved = false;
+		const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request) => {
+			if (request.name === 'fhold.interaction.respond') { approved = true; return { content: [] }; }
+			if (request.name !== 'fhold.job.get') throw new Error('Native submission must not be replayed');
+			return approved ? response('completed', 'Approved result') : response('input_required', '', { interactions: [permission] });
+		});
+		await new SlackPortal().start();
+		await until(() => fixture.replies[1].blocks?.some((block) => (block as { type: string }).type === 'actions') === true);
+		expect(approved).toBe(false);
+		await slackAction(slackButton(fixture.replies[1], previous.ts, 'Allow once', 'UOTHER'));
+		expect(approved).toBe(false);
+		await slackAction(slackButton(fixture.replies[1], previous.ts, 'Allow once'));
+		await settledDelivery('slack', id);
+		expect(calls.mock.calls.filter(([request]) => request.name === 'fhold.interaction.respond')).toHaveLength(1);
+		expect(calls.mock.calls.some(([request]) => request.name === 'fhold.agent.run')).toBe(false);
+		expect(fixture.replies).toHaveLength(2);
+		expect(fixture.replies[0].text).toBe('Approved result');
 	});
 });

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.2610151-beta.12 — native idle coverage and Portal restart recovery
+
+Fix Codex idle observability before its first native session (#38). The existing
+supervisor makes a bounded read-only connection to the running app-server,
+verifies the exact enabled managed activity hooks, and requires a complete empty
+loaded-thread list before establishing initial coverage. It creates no synthetic
+session, changes no approvals or native settings, and runs no second server.
+Observation failure remains unknown; active work and busy markers never expire.
+
+Preserve pending Discord/Slack delivery across Portal replacement (#39). Private
+SQLite receipts retain queued requests, accepted Guardian jobs, final answers and
+acknowledged message IDs. Recovery checks current identity/access, inspects the
+existing job, edits known messages and recreates requester-owned question,
+permission and Slack Stop controls. Work and decisions are never blindly replayed.
+Unknown submissions/posts produce an explicit blocked receipt and a notice on an
+acknowledged message when available. This is bounded duplicate prevention rather
+than an exactly-once transaction across external services.
+
+Existing conversation mappings remain intact. Let beta.11 jobs finish before
+upgrading: old work has no delivery receipts. Recovery also requires the original
+Guardian job to remain valid; a simultaneous Guardian replacement or expired
+handle is reported without rerunning work. Receipts include private queued/public
+reply text, not connection keys or saved approval decisions.
+
+Regression coverage includes reopened adapters, refreshed permissions and Stop,
+revoked access, expired handles, ambiguous sends and native Node SQLite SIGKILL.
+Actual native Codex startup/replacement and all three harness hooks are exercised
+without vendor credentials. Live vendor-client reconnect and live Slack/Discord
+delivery remain separate qualification; native ARM64 Admin startup is still
+unqualified (#40). Dependencies and existing security exceptions are unchanged.
+See the [qualification evidence](docs/operations/beta12-reliability-qualification.md)
+and [Portal recovery contract](docs/portals/restart-recovery.md).
+
 ## 0.2.2610134-beta.11 — native toolchain and browser tools
 
 Assistant now includes Playwright 1.64.0, its matching Chromium, fonts and system

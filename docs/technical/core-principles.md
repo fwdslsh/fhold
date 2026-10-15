@@ -51,8 +51,13 @@ a credential. Decisions go through Guardian's existing interaction API; ordinary
 chat text never approves a permission. Slack Stop controls cancel the same job.
 No slash commands or direct Assistant connection are required. Missing optional
 thread/reaction permissions or failed progress delivery are logged without
-abandoning valid work. Automatic delivery and pending controls are not recovered
-across a Portal restart; native sessions remain accessible in OpenCode.
+abandoning valid work. Private SQLite delivery receipts retain queued requests,
+accepted job handles, public reply snapshots and acknowledged platform message IDs.
+After a Portal replacement, recheck requester access and resume inspection of the
+accepted job; do not submit it again. Recreate current input controls from Guardian,
+never from saved approval decisions. Known messages are edited in place; unknown
+submissions or unacknowledged posts require explicit review rather than blind replay.
+Native sessions remain accessible in OpenCode. See [Portal restart recovery](../portals/restart-recovery.md).
 
 OpenCode owns provider discovery, models, authentication and native approvals.
 AKM owns knowledge and task formats. No parallel provider registry, proxy,

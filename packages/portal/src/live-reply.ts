@@ -6,13 +6,13 @@ export type EditableReply = { edit: (text: string) => Promise<unknown> };
  * Flush final text even when the last progress update fell inside the throttle.
  */
 export class LiveReply {
-	private readonly messages: Array<{ reply: EditableReply; text: string }> = [];
 	private nextUpdate = 0;
 
 	constructor(
-		private readonly post: (text: string) => Promise<EditableReply>,
+		private readonly post: (text: string, index: number) => Promise<EditableReply>,
 		private readonly maxLength: number,
-		private readonly now: () => number = Date.now
+		private readonly now: () => number = Date.now,
+		private readonly messages: Array<{ reply: EditableReply; text: string }> = []
 	) {}
 
 	async update(text: string, final = false): Promise<void> {
@@ -25,10 +25,10 @@ export class LiveReply {
 				await previous.reply.edit(chunk);
 				previous.text = chunk;
 			} else {
-				this.messages.push({ reply: await this.post(chunk), text: chunk });
+				this.messages.push({ reply: await this.post(chunk, index), text: chunk });
 			}
 		}
-		this.nextUpdate = this.now() + 1_200;
+		this.nextUpdate = final ? 0 : this.now() + 1_200;
 	}
 }
 
