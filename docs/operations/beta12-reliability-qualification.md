@@ -7,6 +7,8 @@ The source starts from canonical main
 `32e0bafa3f86830379c3b468225a15d729cc5c74`.
 This report records local Linux x64 evidence collected October 15, 2026;
 the PR's canonical push CI must additionally qualify its final commit.
+The subsequent [dependency review](dependency-refresh-2026-10-15.md) advances the
+candidate to build 3 and records qualification of the refreshed dependency set.
 
 ## Codex startup coverage
 
@@ -43,7 +45,7 @@ The Portal suites pass 70 tests, including adapter replacement for Slack and
 Discord, recovery of pending permission and Stop controls, cached final delivery,
 repeated replacement, access revocation, expired handles and uncertain sends or
 submissions. A native Node process is killed with SIGKILL after its synchronized
-SQLite checkpoint; a fresh process reads the accepted job and message receipt.
+SQLite checkpoint; a fresh SQLite connection reads the accepted job and message receipt.
 The built Portal also passes its native Node SQLite, controlled Slack heartbeat,
 mention/acknowledgment and automatic reconnect smoke.
 

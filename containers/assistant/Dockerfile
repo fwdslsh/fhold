@@ -1,4 +1,4 @@
-FROM node:24.21.0-bookworm-slim AS node-runtime
+FROM node:24.22.0-bookworm-slim AS node-runtime
 ARG NPM_VERSION=12.2.0
 # Use npm's supported self-upgrade at build time, without altering its bundle.
 # This upgrade fixes several bundled advisories; remaining findings still block CI.
@@ -63,17 +63,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:0e0e68095ea9139ec02a7cdfd5aef279fa824376fb8eb85bb979eef89a6861be \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/14351e74c717aa4df781108a32a2be3787b12ba8 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:b448332d9c237aa36d89d3cef03c13f60a1649a81cd29ab511601d0e0b251193 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/3461257250277f25f2a17c1701aa6ed468541851 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/claude \
+    && plugin_root=akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/.agents/plugins/marketplace.json \
-      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/.claude-plugin/marketplace.json \
-      akm-plugins-14351e74c717aa4df781108a32a2be3787b12ba8/LICENSE
+      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/.agents/plugins/marketplace.json \
+      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/.claude-plugin/marketplace.json \
+      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node

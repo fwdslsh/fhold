@@ -14,6 +14,15 @@ results and skipped gates in the PR.
 
 ## Find and review updates
 
+Dependency review is required before **every PR merge**, including changes that
+started without dependency edits. Check upstream again during final review and
+record the date, release channels, old/new versions and any compatibility holds.
+Update all supported compatible direct pins and transitive resolutions before
+freezing the candidate. New dependencies invalidate the earlier commit's CI;
+complete one full qualification on the final SHA and reuse it for publication
+while eligible. Do not merge silently outdated pins or call a held dependency
+the latest release. Use the repository's PR template to record this review.
+
 Use the Bun version declared by the root `packageManager` and a native Node
 binary compatible with the pinned Node image. A shell shim that runs Node
 programs through Bun does not qualify Electron or npm tooling.
@@ -22,7 +31,7 @@ programs through Bun does not qualify Electron or npm tooling.
 bun --version
 node --version
 bun install --frozen-lockfile
-bun outdated
+bun outdated --recursive
 npm view akm-cli dist-tags --json
 npm view akm-cli@next version engines --json
 npm view akm-opencode-v2@latest version dependencies peerDependencies --json
@@ -94,7 +103,11 @@ Personal plugin updates or a `git pull` in an unrelated AKM checkout do not
 change this image.
 
 After editing the owning manifests, run `bun install` with the selected Bun to
-regenerate the single lockfile. Review its diff and resolved transitive versions,
+regenerate the single lockfile. Also run `bun update --recursive --no-cache` to
+refresh transitive resolutions within the reviewed manifest constraints. The
+root-only outdated command can miss workspace updates; neither form checks the
+native marketplace archive, Docker bases, scanner or workflow pins. Review the
+lockfile diff and resolved transitive versions,
 then verify `bun install --frozen-lockfile`. Do not edit integrity records by hand
 or add a second container lockfile. Leave historical qualification reports and
 old release entries intact; update current-facing documentation and add new

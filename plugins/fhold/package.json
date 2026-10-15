@@ -3,5 +3,9 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "dependencies": { "@opencode/plugin": "2.0.28", "effect": "4.0.1", "akm-opencode-v2": "0.10.261003-beta" }
+  "dependencies": {
+    "@opencode/plugin": "2.0.29",
+    "effect": "4.0.1",
+    "akm-opencode-v2": "0.10.261004-beta"
+  }
 }

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2610152-beta.12 — native idle coverage and Portal restart recovery
+## 0.2.2610153-beta.12 — native idle coverage and Portal restart recovery
 
 Fix Codex idle observability before its first native session (#38). The existing
 supervisor makes a bounded read-only connection to the running app-server,
@@ -31,7 +31,15 @@ revoked access, expired handles, ambiguous sends and native Node SQLite SIGKILL.
 Actual native Codex startup/replacement and all three harness hooks are exercised
 without vendor credentials. Live vendor-client reconnect and live Slack/Discord
 delivery remain separate qualification; native ARM64 Admin startup is still
-unqualified (#40). Dependencies and existing security exceptions are unchanged.
+unqualified (#40).
+
+Refresh dependencies before merge: AKM CLI 0.10.261005-beta and all three AKM
+plugins 0.10.261004-beta, OpenCode 2.0.29, Claude Code 2.1.300, Node LTS 24.22.0,
+Azure Identity 4.14.0, Playwright/Chromium 1.64.1, Electron 44.7.2 and Trivy 0.76.0.
+Refresh compatible transitive resolutions, retain documented SDK compatibility
+constraints, and require dependency review in contributor/agent instructions and
+the PR template. Existing security exceptions are unchanged. See the
+[October 15 dependency review](docs/operations/dependency-refresh-2026-10-15.md).
 See the [qualification evidence](docs/operations/beta12-reliability-qualification.md)
 and [Portal recovery contract](docs/portals/restart-recovery.md).
 

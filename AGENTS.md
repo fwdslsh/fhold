@@ -103,6 +103,17 @@ Guardian authentication/moderation/ownership/path containment protections.
 
 ## Development and verification
 
+Before every PR merge, review current upstream releases for all workspace
+dependencies and overrides, image-baked tools and marketplaces, runtime/compiler
+base images, CI tools and docs dependencies. Update to the latest compatible
+supported releases, refresh transitive resolutions, and record the check date,
+selected channels, changes and any compatibility holds in the PR. Check AKM's
+required CLI and all three plugin installations together; root-only `bun outdated`
+does not check every workspace or the immutable native marketplace archive.
+Follow `docs/operations/updating-dependencies-and-releasing.md`. Requalify the final
+changed SHA; earlier CI does not qualify new dependencies. Keep runtime pins exact
+and image-baked rather than introducing floating versions or startup upgrades.
+
 Docs and website-only changes use the documentation workflow rather than the
 full container matrix. Lockfile-only changes also skip product CI. Keep this
 separation when editing CI; root manifests and runtime Markdown skills/prompts

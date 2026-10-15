@@ -49,6 +49,14 @@ bun run dev:build
 
 ## Required checks
 
+Before merging every PR, review and update dependencies using
+[the dependency and release guide](../docs/operations/updating-dependencies-and-releasing.md).
+Include every workspace, transitive resolutions, container tools/base images,
+AKM's CLI and three harness plugins, CI tools and docs dependencies. Record when
+upstream was checked, old/new versions, selected channels and reasons for any
+compatibility holds in the PR. Qualify the final commit after updates; a previous
+successful run does not cover changed pins or lockfile content.
+
 ```bash
 bun run check
 bun run test

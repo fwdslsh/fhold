@@ -4,15 +4,15 @@
 	"license": "MIT",
 	"dependencies": {
 		"@azure/storage-blob": "12.34.0",
-		"@azure/identity": "4.13.3",
+		"@azure/identity": "4.14.0",
 		"@openai/codex": "0.162.1",
-		"@anthropic-ai/claude-code": "2.1.296",
-		"akm-opencode-v2": "0.10.261003-beta",
-		"@opencode/cli": "2.0.28",
-		"@opencode/client": "2.0.28",
-		"@opencode/plugin": "2.0.28",
-		"akm-cli": "0.10.261004-beta",
-		"playwright": "1.64.0"
+		"@anthropic-ai/claude-code": "2.1.300",
+		"akm-opencode-v2": "0.10.261004-beta",
+		"@opencode/cli": "2.0.29",
+		"@opencode/client": "2.0.29",
+		"@opencode/plugin": "2.0.29",
+		"akm-cli": "0.10.261005-beta",
+		"playwright": "1.64.1"
 	},
 	"overrides": {
 		"@huggingface/transformers": "4.3.1"

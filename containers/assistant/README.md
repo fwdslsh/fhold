@@ -10,7 +10,7 @@ It contains:
 - image-baked standard AKM plugins for OpenCode, Codex and Claude Code;
 - pinned native Codex and Claude Code workers, experimental with default-on supervisors;
 - supercronic;
-- Playwright 1.64.0, its matching Chromium and fonts/system libraries; and
+- Playwright 1.64.1, its matching Chromium and fonts/system libraries; and
 - ripgrep, jq, Python with pip/venv, SQLite, zip/unzip, Poppler PDF tools,
   file, less and process utilities.
 
