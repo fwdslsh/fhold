@@ -382,7 +382,10 @@ export class SlackPortal {
 							return { id: sent.ts };
 						}, (ts, text) => this.app.client.chat.update({ channel: message.channel, ts, ...(text === last ? this.promptPayload(prompt) : { text, blocks: [] }) }));
 						await promptReply.update(view, true);
-						const ts = delivery.record.messages.prompt.at(-1)!.id!;
+						const lastIndex = splitMessage(view, 2_900).length - 1;
+						for (const receipt of delivery.record.messages.prompt.slice(lastIndex + 1))
+							await this.app.client.chat.update({ channel: message.channel, ts: receipt.id!, text: 'Previous controls closed. Use the current controls above.', blocks: [] });
+						const ts = delivery.record.messages.prompt[lastIndex].id!;
 						delivery.prompt(ts, prompt.questionIndex);
 						this.actionLocations.set(prompt.id, {
 							key,

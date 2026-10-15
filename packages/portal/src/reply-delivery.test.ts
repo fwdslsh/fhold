@@ -901,10 +901,11 @@ describe('Portal process replacement', () => {
 		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
 		const id = recoveryFixture('slack', first.ts);
 		const previous = await fixture.say({ text: 'Stale permission controls' });
+		const previousTail = await fixture.say({ text: 'Previous long question tail', blocks: [{ type: 'actions', elements: [] }] });
 		const store = new ConversationStore();
 		const record = store.delivery('slack', id)!;
-		record.messages.prompt = [{ id: previous.ts, text: 'Stale permission controls' }];
-		record.prompt = { message: previous.ts, questionIndex: 0 };
+		record.messages.prompt = [{ id: previous.ts, text: 'Stale permission controls' }, { id: previousTail.ts, text: 'Previous long question tail' }];
+		record.prompt = { message: previousTail.ts, questionIndex: 0 };
 		store.saveDelivery(record); store.close();
 		let approved = false;
 		const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request) => {
@@ -914,6 +915,8 @@ describe('Portal process replacement', () => {
 		});
 		await new SlackPortal().start();
 		await until(() => fixture.replies[1].blocks?.some((block) => (block as { type: string }).type === 'actions') === true);
+		await until(() => fixture.replies[2].text.includes('Previous controls closed'));
+		expect(fixture.replies[2].blocks).toEqual([]);
 		expect(approved).toBe(false);
 		await slackAction(slackButton(fixture.replies[1], previous.ts, 'Allow once', 'UOTHER'));
 		expect(approved).toBe(false);
@@ -921,7 +924,32 @@ describe('Portal process replacement', () => {
 		await settledDelivery('slack', id);
 		expect(calls.mock.calls.filter(([request]) => request.name === 'fhold.interaction.respond')).toHaveLength(1);
 		expect(calls.mock.calls.some(([request]) => request.name === 'fhold.agent.run')).toBe(false);
-		expect(fixture.replies).toHaveLength(2);
+		expect(fixture.replies).toHaveLength(3);
 		expect(fixture.replies[0].text).toBe('Approved result');
+	});
+
+	it('restores shorter Discord prompts on the current message and closes surplus old controls', async () => {
+		const fixture = discordFixture(); const first = await fixture.post({ content: 'Working…' });
+		const id = recoveryFixture('discord', first.id);
+		const previous = await fixture.post({ content: 'Old question' });
+		const tail = await fixture.post({ content: 'Old question tail' });
+		const store = new ConversationStore(); const record = store.delivery('discord', id)!;
+		record.messages.prompt = [{ id: previous.id, text: previous.content }, { id: tail.id, text: tail.content }];
+		record.prompt = { message: tail.id, questionIndex: 0 }; store.saveDelivery(record); store.close();
+		let approved = false;
+		const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request) => {
+			if (request.name === 'fhold.interaction.respond') { approved = true; return { content: [] }; }
+			if (request.name !== 'fhold.job.get') throw new Error('Native submission must not be replayed');
+			return approved ? response('completed', 'Approved Discord result') : response('input_required', '', { interactions: [permission] });
+		});
+		const portal = new DiscordPortal(); await portal.start();
+		await until(() => tail.content.includes('Previous controls closed'));
+		expect(tail.components).toEqual([]);
+		await (portal as unknown as { onInteraction(value: unknown): Promise<void> }).onInteraction(discordButton(previous, fixture.thread, 'Allow once'));
+		await settledDelivery('discord', id);
+		expect(approved).toBe(true);
+		expect(calls.mock.calls.filter(([request]) => request.name === 'fhold.interaction.respond')).toHaveLength(1);
+		expect(fixture.post).toHaveBeenCalledTimes(3);
+		expect(first.content).toBe('Approved Discord result');
 	});
 });

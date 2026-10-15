@@ -1,6 +1,6 @@
 # Beta.12 reliability qualification
 
-Candidate `0.2.2610151-beta.12` addresses
+Candidate `0.2.2610152-beta.12` addresses
 [Codex startup activity coverage (#38)](https://github.com/fwdslsh/fhold/issues/38)
 and [Portal restart recovery (#39)](https://github.com/fwdslsh/fhold/issues/39).
 The source starts from canonical main
@@ -39,7 +39,7 @@ job and edit known messages; current identity, credential fingerprint and access
 rules are checked before delivery. Refreshed controls require the original requester
 and call Guardian's native interaction API. Approval decisions are never saved.
 
-The Portal suites pass 69 tests, including adapter replacement for Slack and
+The Portal suites pass 70 tests, including adapter replacement for Slack and
 Discord, recovery of pending permission and Stop controls, cached final delivery,
 repeated replacement, access revocation, expired handles and uncertain sends or
 submissions. A native Node process is killed with SIGKILL after its synchronized
@@ -59,7 +59,7 @@ and native history remain intact.
 
 ## Local candidate checks
 
-- Six package type checks and full source suite: 853 passed, zero failed.
+- Six package type checks and full source suite: 854 passed, zero failed.
   Five opt-in native provider/history cases are skipped in that source invocation;
   the canonical full CI runs them separately against its built Assistant.
 - Lint: passed with warnings; strict docs check and docs build: passed.
@@ -83,3 +83,8 @@ No existing stack, account credential or user conversation was used for destruct
 tests. No fleet update or release publication is claimed here. Native ARM64 Admin
 startup remains a separate unqualified item tracked by
 [issue #40](https://github.com/fwdslsh/fhold/issues/40).
+
+The first unpublished build, `0.2.2610151-beta.12`, was superseded before completing
+CI when final review found a shorter-prompt recovery edge case. Build 2 adds Slack
+and Discord regressions proving surplus old controls are closed and the current
+message owns the new controls. The earlier run is not qualification for build 2.

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2610151-beta.12 — native idle coverage and Portal restart recovery
+## 0.2.2610152-beta.12 — native idle coverage and Portal restart recovery
 
 Fix Codex idle observability before its first native session (#38). The existing
 supervisor makes a bounded read-only connection to the running app-server,
@@ -14,6 +14,8 @@ SQLite receipts retain queued requests, accepted Guardian jobs, final answers an
 acknowledged message IDs. Recovery checks current identity/access, inspects the
 existing job, edits known messages and recreates requester-owned question,
 permission and Slack Stop controls. Work and decisions are never blindly replayed.
+Shorter restored prompts retire surplus old controls and bind actions to the
+current message.
 Unknown submissions/posts produce an explicit blocked receipt and a notice on an
 acknowledged message when available. This is bounded duplicate prevention rather
 than an exactly-once transaction across external services.

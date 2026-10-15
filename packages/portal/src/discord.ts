@@ -311,7 +311,10 @@ export class DiscordPortal {
 						}, async (id, content) => (await fetchReply(id)).edit({ content, components: content === last ? this.promptComponents(prompt) : [], allowedMentions: { parse: [] } }));
 						await promptReply.update(view, true);
 						const receipts = delivery.record.messages.prompt;
-						const sent = await fetchReply(receipts.at(-1)!.id!);
+						const lastIndex = splitMessage(view, 1_900).length - 1;
+						for (const receipt of receipts.slice(lastIndex + 1))
+							await (await fetchReply(receipt.id!)).edit({ content: 'Previous controls closed. Use the current controls above.', components: [], allowedMentions: { parse: [] } });
+						const sent = await fetchReply(receipts[lastIndex].id!);
 						delivery.prompt(sent.id, prompt.questionIndex);
 						this.promptMessages.set(prompt.id, {
 							message: sent,
