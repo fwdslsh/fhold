@@ -4,8 +4,8 @@ Review all tracked workspace dependencies/overrides, transitive resolutions,
 container tools and bases, native AKM marketplace archives, workflow actions,
 scanner/signing tools and the documentation renderer/template before merging
 [PR #41](https://github.com/fwdslsh/fhold/pull/41).
-The refreshed full candidate is `0.2.2610153-beta.12`; it supersedes the earlier
-unpublished build 2. That build's successful CI does not qualify changed inputs.
+The refreshed full candidate is `0.2.2610154-beta.12`; it supersedes the earlier
+unpublished builds 2 and 3. Their CI does not qualify changed inputs.
 
 ## Updated pins
 
@@ -59,12 +59,22 @@ The dependency audit passes with the two existing reviewed exclusions. Image
 critical/fixable-high gates retain the same policy and exact npm exceptions;
 no exception is added or widened. The final candidate must pass source checks,
 builds and native amd64/arm64 image/harness/recovery gates after these changes.
-CI results are recorded on the PR; do not reuse the earlier build 2 result.
+CI results are recorded on the PR; do not reuse an earlier build's result.
+
+Build 3's native CI exposed OpenCode 2.0.29's promotion of `experimental.policies`
+to top-level `policies`: the engine correctly applied provider disable rules, but
+fhold checked the former normalized response field and refused confirmation.
+This reproduced on both architectures and locally. Build 4 updates the owning
+provider-settings reader, uses the current native field for new preferences, and
+preserves the supported legacy form in existing files. Regressions cover both
+input formats and retention of unrelated denial rules and credentials. The full
+native provider test now passes live edits, restart preservation, disable/re-enable,
+Guardian interactions and scheduled execution. No vendor package or policy is patched.
 
 Local Linux x64 checks passed on the refreshed dependency set:
 
 - Frozen install, six package type checks, lint and shell syntax.
-- Full source suite: 854 passed, zero failed. Five opt-in provider/history cases
+- Full source suite: 855 passed, zero failed. Five opt-in provider/history cases
   are skipped in this source invocation and must run against CI's native images.
 - CLI build, Admin bundle, unsigned MCPB pack, docs tests (2/2), strict docs check
   and docs build. A fresh compiled-CLI installation validates all Compose profiles.
@@ -77,6 +87,8 @@ Local Linux x64 checks passed on the refreshed dependency set:
   work, idle requests stop and user scheduling remains disabled.
 - Electron 44.7.2 x64 AppImage packaging and actual packaged renderer/native-bridge
   startup with a disposable home.
+- Native OpenCode 2.0.29 provider/Guardian/scheduler integration: 1/1 passed after
+  the normalized-policy update, using the existing disposable integration test.
 
 Local image tags are `fhold/{assistant,guardian,portal}:beta12-deps-dev`, with
 `ci`/`development` metadata, not public release identities. Final native amd64/arm64

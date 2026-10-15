@@ -154,6 +154,11 @@ bash scripts/smoke-image.sh fhold/portal:dependency-check portal
 node scripts/smoke-keepalive.mjs fhold/assistant:dependency-check
 node scripts/smoke-workload-environment.mjs fhold/assistant:dependency-check
 node scripts/smoke-managed-policy.mjs fhold/assistant:dependency-check
+docker tag fhold/assistant:dependency-check fhold/fhold-assistant:dependency-check
+FH_NATIVE_PROVIDER_TESTS=1 \
+  FH_NATIVE_PROVIDER_CLI="$PWD/packages/cli/dist/fhold-cli" \
+  FH_NATIVE_PROVIDER_IMAGE=fhold/fhold-assistant:dependency-check \
+  bun test scripts/provider-settings-native.test.ts
 FH_RECOVERY_TEST_IMAGE=fhold/assistant:dependency-check node scripts/smoke-recovery.mjs
 ```
 
@@ -166,6 +171,10 @@ and exercise upgrade/recovery from the previously published runtime using
 private copies. Use disposable accounts/data and explicit free ports.
 Materialize an isolated home with `install --no-start` and validate Compose
 with all three profiles: `gateway`, `discord`, `slack`.
+Run the local native provider regression before freezing source for full CI. It
+checks normalized API fields, live editing, restart preservation, provider
+disable/re-enable, Guardian and scheduled execution; a successful hook smoke alone
+does not cover those compatibility boundaries.
 
 The reusable [.github/workflows/gates.yml](../../.github/workflows/gates.yml)
 is the full gate inventory, including raw/reviewed image scans, native x64 and

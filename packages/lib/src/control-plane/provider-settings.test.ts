@@ -82,7 +82,7 @@ function nativeFixture(home: string, configPath: string, override: Record<string
 			name?: string; models?: Record<string, { name?: string }>;
 		}>;
 		const auth = readConfiguration(authPath);
-		const policy = (configuration.experimental as { policies?: Array<{ action: string; resource: string; effect: string }> } | undefined)?.policies ?? [];
+		const policy = (configuration.policies ?? (configuration.experimental as { policies?: unknown } | undefined)?.policies ?? []) as Array<{ action: string; resource: string; effect: string }>;
 		const disabled = (provider: string) => policy.filter(rule => rule.action === 'provider.use' && rule.resource === provider).at(-1)?.effect === 'deny';
 		const providerIds = ['native-catalog', ...Object.keys(definitions ?? {})];
 		const nativeModel = configuration.model as { providerID?: string; model?: string } | undefined;
@@ -91,9 +91,12 @@ function nativeFixture(home: string, configPath: string, override: Record<string
 		const separator = selection.indexOf('/');
 		const preferred = separator > 0 ? { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) } : null;
 		const data = (value: unknown) => Response.json({ data: value });
-		if (path === '/api/info') return Response.json({ version: '2.0.26' });
+		if (path === '/api/info') return Response.json({ version: '2.0.29' });
 		if (path === '/api/config') return Response.json([{ type: 'document', info: {
 			...configuration,
+			// 2.0.29 normalizes both accepted input forms to top-level policies.
+			experimental: undefined,
+			policies: policy,
 			...(preferred ? { model: { providerID: preferred.providerID, model: preferred.id } } : {})
 		} }]);
 		if (path === '/api/model/default') return data(preferred);
@@ -334,7 +337,7 @@ describe('Native provider manager settings', () => {
 		);
 		const saved = readConfiguration(current.configPath);
 		const settings = await removeProviderSetup(current.home, 'remove-me', { ...native, endpoint: true });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, experimental: { policies: [{ action: 'provider.use', resource: 'remove-me', effect: 'deny' }] } });
+		expect(readConfiguration(current.configPath)).toEqual({ ...saved, policies: [{ action: 'provider.use', resource: 'remove-me', effect: 'deny' }] });
 		expect(settings.providers.find((provider) => provider.id === 'remove-me')).toMatchObject({
 			disabled: true, connected: false, models: [], endpoint: { editable: true }
 		});
@@ -370,7 +373,7 @@ describe('Native provider manager settings', () => {
 		const saved = readConfiguration(current.configPath);
 		await removeProviderSetup(current.home, 'endpoint-only', { ...native, endpoint: true });
 		expect(readConfiguration(authPath)).toEqual({ 'endpoint-only': account });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, experimental: { policies: [{ action: 'provider.use', resource: 'endpoint-only', effect: 'deny' }] } });
+		expect(readConfiguration(current.configPath)).toEqual({ ...saved, policies: [{ action: 'provider.use', resource: 'endpoint-only', effect: 'deny' }] });
 	});
 
 	it('refuses an incompatible explicit default before writing or invoking a model', async () => {
@@ -449,16 +452,18 @@ describe('Native provider manager settings', () => {
 		expect(native.modelRequests).toHaveLength(0);
 	}, 15_000);
 
-	it('re-enables exactly the chosen endpoint and preserves other disabled IDs and auth', async () => {
+	it.each(['top-level', 'legacy'] as const)('re-enables exactly the chosen endpoint and preserves other disabled IDs and auth in %s preferences', async (format) => {
 		const current = fixture();
-		writeFileSync(current.configPath, JSON.stringify({ ...current.configuration, experimental: { policies: [{ action: 'provider.use', resource: 'existing', effect: 'deny' }, { action: 'provider.use', resource: 'another', effect: 'deny' }] } }));
+		const policies = [{ action: 'provider.use', resource: 'existing', effect: 'deny' }, { action: 'provider.use', resource: 'another', effect: 'deny' }, { action: 'tool.use', resource: 'shell:forbidden', effect: 'deny' }];
+		writeFileSync(current.configPath, JSON.stringify({ ...current.configuration, ...(format === 'legacy' ? { experimental: { policies } } : { policies }) }));
 		const authPath = join(current.home, 'synthetic-native-credentials.json');
 		writeFileSync(authPath, JSON.stringify({ existing: { type: 'key', key: 'synthetic-preserved' } }));
 		const native = nativeFixture(current.home, current.configPath);
 		const settings = await saveProviderEndpoint(current.home, {
 			provider: 'existing', name: 'Existing operator provider', url: 'http://192.0.2.20:8080/v1', model: 'team/model'
 		}, native);
-		expect(readConfiguration(current.configPath).experimental).toEqual({ policies: [{ action: 'provider.use', resource: 'another', effect: 'deny' }, { action: 'provider.use', resource: 'existing', effect: 'allow' }] });
+		const saved = readConfiguration(current.configPath);
+		expect(format === 'legacy' ? (saved.experimental as { policies: unknown }).policies : saved.policies).toEqual([policies[1], policies[2], { action: 'provider.use', resource: 'existing', effect: 'allow' }]);
 		expect(settings.providers.find((provider) => provider.id === 'existing')?.disabled).toBe(false);
 		expect(readConfiguration(authPath)).toEqual({ existing: { type: 'key', key: 'synthetic-preserved' } });
 		expect(native.modelRequests).toHaveLength(0);

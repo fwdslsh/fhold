@@ -193,7 +193,7 @@ export async function listProviderSettings(
 function providerPolicies(
 	config: Record<string, unknown>
 ): Array<{ action: string; resource: string; effect: 'allow' | 'deny' }> {
-	const policies = record(config.experimental)?.policies;
+	const policies = config.policies ?? record(config.experimental)?.policies;
 	return Array.isArray(policies)
 		? policies.flatMap((item) => {
 				const rule = record(item);
@@ -210,21 +210,18 @@ function activation(
 	provider: string,
 	enabled: boolean
 ): Record<string, unknown> {
-	const policies = record(config.experimental)?.policies;
+	// New preferences use the promoted native field. Preserve existing files'
+	// still-supported experimental form instead of rewriting unrelated settings.
+	const legacy = !Object.hasOwn(config, 'policies') && Array.isArray(record(config.experimental)?.policies);
+	const policies = legacy ? record(config.experimental)?.policies : config.policies;
 	const remaining = Array.isArray(policies)
 		? policies.filter((item) => {
 				const rule = record(item);
 				return rule?.action !== 'provider.use' || rule.resource !== provider;
 			})
 		: [];
-	return {
-		experimental: {
-			policies: [
-				...remaining,
-				{ action: 'provider.use', resource: provider, effect: enabled ? 'allow' : 'deny' }
-			]
-		}
-	};
+	const next = [...remaining, { action: 'provider.use', resource: provider, effect: enabled ? 'allow' : 'deny' }];
+	return legacy ? { experimental: { policies: next } } : { policies: next };
 }
 async function withSettingsLock<T>(home: string, run: () => Promise<T>): Promise<T> {
 	const lock = acquireStackLock(join(home, 'data'));

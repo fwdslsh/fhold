@@ -8,7 +8,7 @@ The source starts from canonical main
 This report records local Linux x64 evidence collected October 15, 2026;
 the PR's canonical push CI must additionally qualify its final commit.
 The subsequent [dependency review](dependency-refresh-2026-10-15.md) advances the
-candidate to build 3 and records qualification of the refreshed dependency set.
+candidate to build 4 and records qualification of the refreshed dependency set.
 
 ## Codex startup coverage
 
