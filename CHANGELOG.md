@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.2610211-beta.13 — recovery diagnostics and Portal access checks
+
+Retain bounded checkpoint failure phase, filesystem operation/path and publication
+outcome in the existing private recovery status (#42). Public status and logs
+remain sanitized. Confirmed descriptor acceptance now advances the checkpoint
+clock before receipt/cleanup, and cleanup errors cannot mask the primary failure.
+Separate regressions cover capture loss, uncertain publication, receipt and cleanup
+failures. Native directory/Blob recovery checks compare complete final reply records
+after normal Stop and fresh writable-layer restore.
+
+Require Codex's explicit completed-inventory cursor before establishing initial
+idle coverage (#38); malformed or partial observations remain conservative.
+Portal rechecks delivery access for every answer chunk and interaction, including
+typed question replies (#39). Credential revocation blocks further delivery and
+cannot become a recoverable render error or reconnect. Shorter recovered answers
+retire stale message tails using retryable edits against acknowledged IDs.
+
+Update AKM CLI to 0.10.261009-beta and all three plugins to 0.10.261008-beta,
+OpenCode to 2.0.32, Codex to 0.163.0, Claude Code to 2.1.306, Electron to 44.9.3,
+electron-builder to 26.18.0, JOSE to 6.2.13, Go to 1.27.3, Supercronic to v0.2.50
+and cosign to v3.1.4. Refresh compatible transitive dependencies, including the
+markdown-it advisory fix. Existing reviewed security exceptions are unchanged.
+See the [dependency review](docs/operations/dependency-refresh-2026-10-21.md)
+for provenance and explicit OpenCode 2.1/Effect/Electron compatibility holds.
+
+This beta does **not** establish the original hosted ENOENT root cause (#42).
+Signed-in vendor reconnect/long quiet-work (#38), live Slack/Discord replacement
+and interactions (#39), actual hosted Azure/CIFS behavior, and native ARM64 Admin
+startup (#40) remain separately unqualified. These issues stay open. Publishing
+does not upgrade existing instances or change recovery settings.
+
 ## 0.2.2610154-beta.12 — native idle coverage and Portal restart recovery
 
 Fix Codex idle observability before its first native session (#38). The existing

@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.2.2610154-beta.12",
+  "version": "0.2.2610211-beta.13",
   "description": "Built-in fhold runtime skills and activity reporting for conditional HTTP keep-alive",
   "author": {
     "name": "fhold"
