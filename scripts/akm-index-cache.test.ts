@@ -125,6 +125,62 @@ async function fixture() {
 }
 
 describe('experimental AKM cache using the pinned native CLI', () => {
+	for (const inference of [
+		'missing-components',
+		'missing-adapter',
+		'implicit-primary',
+		'component-root-does-not-describe-primary'
+	])
+		test(`${inference} declines caching without forcing native adapter detection`, async () => {
+			const f = await fixture();
+			const bundle =
+				inference === 'missing-components'
+					? { path: f.bundle }
+					: inference === 'missing-adapter'
+						? { path: f.bundle, components: { main: {} } }
+						: inference === 'component-root-does-not-describe-primary'
+							? { path: f.bundle, components: { main: { root: 'knowledge', adapter: 'akm' } } }
+							: f.config.bundles.fixture;
+			if (inference === 'implicit-primary') {
+				f.env.AKM_BUNDLE_DIR = path.join(f.dir, 'undeclared-primary');
+				await fs.mkdir(f.env.AKM_BUNDLE_DIR);
+			}
+			const configFile = path.join(f.roots.akmConfig, 'config.json');
+			const configBefore = JSON.stringify({ ...f.config, bundles: { fixture: bundle } });
+			await fs.writeFile(configFile, configBefore);
+			const source = f.engine();
+			await source.initialize();
+			await source.acquireRestore();
+			await source.checkpoint();
+			expect(source.status().ready).toBe(true);
+			expect(source.status().akmIndexCache.reason).toBe('unsupported-source-policy');
+			expect((await f.saved()).manifest.akmIndexCache).toBeUndefined();
+			expect(await fs.readFile(configFile, 'utf8')).toBe(configBefore);
+			await source.release();
+		});
+
+	test('primary matching an explicitly supported component content root remains eligible', async () => {
+		const f = await fixture();
+		f.env.AKM_BUNDLE_DIR = path.join(f.bundle, 'knowledge');
+		await fs.writeFile(
+			path.join(f.roots.akmConfig, 'config.json'),
+			JSON.stringify({
+				...f.config,
+				bundles: {
+					fixture: { path: f.bundle, components: { main: { root: 'knowledge', adapter: 'akm' } } }
+				}
+			})
+		);
+		await f.native();
+		const source = f.engine();
+		await source.initialize();
+		await source.acquireRestore();
+		await source.checkpoint();
+		expect(source.status().akmIndexCache.state).toBe('captured');
+		expect((await f.saved()).manifest.akmIndexCache).toBeDefined();
+		await source.release();
+	});
+
 	for (const capture of [false, true])
 		for (const restore of [false, true])
 			test(`independent switches capture=${capture} restore=${restore}`, async () => {

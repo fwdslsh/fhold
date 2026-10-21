@@ -441,6 +441,19 @@ async function qualifyAkmIndexCache() {
 		);
 	};
 	const first = await startCache('first');
+	await docker([
+		'exec',
+		first.id,
+		'akm',
+		'bundle',
+		'add',
+		'/cache-bundle',
+		'--adapter',
+		'akm',
+		'--format',
+		'json',
+		'-q'
+	]);
 	await docker(['exec', first.id, 'akm', 'index', '--clean', '--format', 'json', '-q']);
 	await poll(
 		async () =>
@@ -453,7 +466,13 @@ async function qualifyAkmIndexCache() {
 	await rm(join(cacheBundle, 'knowledge/cache-deleted.md'));
 	await knowledge('cache-added', 'Synthetic cache smoke added content');
 	const second = await startCache('second');
-	const status = JSON.parse(await docker(['exec', second.id, 'fhold-recovery', 'status']));
+	// Authenticated core readiness can precede writer admission and the first
+	// checkpoint. Wait for recovery's own ready status before inspecting its
+	// per-boot cache result; optional diagnostics are not a core health gate.
+	const status = await poll(
+		async () => JSON.parse(await docker(['exec', second.id, 'fhold-recovery', 'status'])),
+		'replacement recovery writer admission'
+	);
 	assert.equal(
 		status.akmIndexCache.restored,
 		true,
@@ -469,13 +488,15 @@ async function qualifyAkmIndexCache() {
 			'Synthetic cache smoke',
 			'--format',
 			'json',
+			'--detail',
+			'full',
 			'-q'
 		])
 	);
-	const serialized = JSON.stringify(result);
-	assert.ok(serialized.includes('cache-keep') && serialized.includes('CHANGED'));
-	assert.ok(serialized.includes('cache-added'));
-	assert.ok(!serialized.includes('cache-deleted'));
+	assert.ok(Array.isArray(result.hits));
+	assert.ok(result.hits.find((hit) => hit.name === 'cache-keep')?.description.includes('CHANGED'));
+	assert.ok(result.hits.some((hit) => hit.name === 'cache-added'));
+	assert.ok(!result.hits.some((hit) => hit.name === 'cache-deleted'));
 	report.akmIndexCache = {
 		firstCoreReadyMs: first.coreReadyMs,
 		replacementCoreReadyMs: second.coreReadyMs,
@@ -488,7 +509,7 @@ async function qualifyAkmIndexCache() {
 	report.checks.experimentalAkmCacheNativeReplacement = true;
 }
 
-try {
+async function qualifyRuntimeRecovery() {
 	report.imageId = await docker(['image', 'inspect', image, '--format', '{{.Id}}']);
 	report.sourceImageId = await docker(['image', 'inspect', sourceImage, '--format', '{{.Id}}']);
 	const initName = `fhold-recovery-smoke-${instance}-init`;
@@ -816,6 +837,10 @@ try {
 		240_000
 	);
 	report.checks.realNativeAkmHarnesses = true;
+}
+
+try {
+	if (!process.argv.includes('--akm-index-cache-only')) await qualifyRuntimeRecovery();
 	await qualifyAkmIndexCache();
 	report.ok = true;
 } catch (error) {

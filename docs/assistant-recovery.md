@@ -458,8 +458,11 @@ SQLite selection of `index.db` retains its ordinary **required** semantics; remo
 that selection if the intent is best-effort caching.
 
 The first experimental scope supports plain JSON AKM configuration and materialized filesystem bundles with
-the native `akm` or `agent-skills` adapter, including readable persistent and
-read-only source mounts. Inherited AKM configuration, other source providers or
+one explicitly configured native `akm` or `agent-skills` component adapter per
+bundle, including a declared component whose effective content root matches the
+primary `AKM_BUNDLE_DIR` path. Inferred adapters and undeclared primary sources skip
+caching without changing native detection or indexing behavior. Readable persistent and
+read-only source mounts are supported. Inherited AKM configuration, other source providers or
 adapters, missing/unreadable roots, and source roots overlapping explicit recovery
 `excludePaths` skip the optional cache. Ordinary `externalMounts` and automatic
 network-mount exclusion do not prohibit the cache. Opting in explicitly permits

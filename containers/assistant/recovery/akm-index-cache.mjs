@@ -167,17 +167,21 @@ export function createAkmIndexCache({
 			throw new Error('unsupported-source-policy');
 		const sources = [env.AKM_BUNDLE_DIR || roots.stash];
 		const bundles = [];
+		let primaryDeclared = false;
 		for (const [id, bundle] of Object.entries(config.bundles ?? {})) {
 			if (bundle.enabled === false) continue;
 			if (!canonicalPath(bundle.path) || bundle.git || bundle.npm || bundle.website)
 				throw new Error('unsupported-source-policy');
-			const components = Object.values(bundle.components ?? { main: {} });
+			const components = Object.values(bundle.components ?? {});
 			if (components.length !== 1) throw new Error('unsupported-source-policy');
 			const component = components[0];
-			if (component.adapter && !['akm', 'agent-skills'].includes(component.adapter))
+			// Native auto-detection can select other adapter families. Decline
+			// caching rather than forcing a different adapter or widening consent.
+			if (!['akm', 'agent-skills'].includes(component.adapter))
 				throw new Error('unsupported-source-policy');
 			const root = path.resolve(bundle.path, component.root ?? '.');
 			if (!containsPath(bundle.path, root)) throw new Error('unsupported-source-policy');
+			if (root === sources[0]) primaryDeclared = true;
 			sources.push(root);
 			bundles.push({
 				id,
@@ -187,6 +191,7 @@ export function createAkmIndexCache({
 				component: pick(component, ['root', 'adapter', 'writable'])
 			});
 		}
+		if (!primaryDeclared) throw new Error('unsupported-source-policy');
 		const policy = [...catalog.policy.excludePaths, ...catalog.protectedPaths];
 		const sourceStats = [];
 		for (const root of [...new Set(sources)]) {
