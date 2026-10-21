@@ -18,8 +18,8 @@
         "@opencode/cli": "2.0.32",
         "@opencode/client": "2.0.32",
         "@opencode/plugin": "2.0.32",
-        "akm-cli": "0.10.261008-beta",
-        "akm-opencode-v2": "0.10.261007-beta",
+        "akm-cli": "0.10.261009-beta",
+        "akm-opencode-v2": "0.10.261008-beta",
         "playwright": "1.64.1",
       },
     },
@@ -109,7 +109,7 @@
       "name": "@fhold/harness-hooks",
       "dependencies": {
         "@opencode/plugin": "2.0.32",
-        "akm-opencode-v2": "0.10.261007-beta",
+        "akm-opencode-v2": "0.10.261008-beta",
         "effect": "4.0.1",
       },
     },
@@ -752,9 +752,9 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.10.261008-beta", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/transformers": "4.2.0", "@opencode-ai/sdk": "1.2.20", "@opencode/client": "2.0.26", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^3.23.0" }, "optionalDependencies": { "better-sqlite3": "12.11.1", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-CbcZ6YH0OFh6x8iLHnospqzLudytrrzkK7Owck4lo3otSDDgiBimgyKHN/f2sYyy9q6bmXVH5og4t4M5zqqc0w=="],
+    "akm-cli": ["akm-cli@0.10.261009-beta", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/transformers": "4.2.0", "@opencode-ai/sdk": "1.2.20", "@opencode/client": "2.0.26", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^3.23.0" }, "optionalDependencies": { "better-sqlite3": "12.11.1", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-5oiLk0xv3wAyR3rD9bA4XY3Df73CMG3NEHfnY4VIt7lSJpy4DoDjwBDGhh0oKfVQdKgAZw114ll2ZJTzKaX6SQ=="],
 
-    "akm-opencode-v2": ["akm-opencode-v2@0.10.261007-beta", "", { "dependencies": { "akm-cli": "0.10.261008-beta" }, "peerDependencies": { "@opencode/plugin": "2.0.26", "effect": "4.0.0-rc.112" } }, "sha512-FKYNun9WWjM0diMd7Fs6R356hni7xUU0iYisGILXPkFqlPvWONMD3ahPheZONXuL6Pk8jWdSnn870ozAq+dTIg=="],
+    "akm-opencode-v2": ["akm-opencode-v2@0.10.261008-beta", "", { "dependencies": { "akm-cli": "0.10.261009-beta" }, "peerDependencies": { "@opencode/plugin": "2.0.26", "effect": "4.0.0-rc.112" } }, "sha512-ePY60Rn1rxCO45krm6W4KHtC4H6wGX0Qnps51+P4b5F1aosjj/hSx0mBsLisabWn2B4VG/zEh0T3Bb/1WsXE+w=="],
 
     "ansi-escapes": ["ansi-escapes@4.3.2", "", { "dependencies": { "type-fest": "^0.21.3" } }, "sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ=="],
 
@@ -1243,6 +1243,8 @@
     "make-fetch-happen": ["make-fetch-happen@15.0.6", "", { "dependencies": { "@gar/promise-retry": "^1.0.0", "@npmcli/agent": "^4.0.0", "@npmcli/redact": "^4.0.0", "cacache": "^20.0.1", "http-cache-semantics": "^4.1.1", "minipass": "^7.0.2", "minipass-fetch": "^5.0.0", "minipass-flush": "^1.0.5", "minipass-pipeline": "^1.2.4", "negotiator": "^1.0.0", "proc-log": "^6.0.0", "ssri": "^13.0.0" } }, "sha512-Je0fLJ0F5atA7F+eIlLzk+Wkcl57JDf4kf+EW8xiP5E31xOQxkIxTbgf1Oi1Lw9tRI9UEMRdI5Vz2xTzoNU1Jw=="],
 
     "markdown-it": ["markdown-it@14.3.3", "", { "dependencies": { "argparse": "^2.0.1", "entities": "^4.5.0", "linkify-it": "^5.0.2", "mdurl": "^2.0.0", "punycode.js": "^2.3.1", "uc.micro": "^2.1.0" }, "bin": { "markdown-it": "bin/markdown-it.mjs" } }, "sha512-L//tDAkjTjJCU6pBUSBTgs3Kg4InVaZuUZog/b6V12UKhcDQ7S78877ibbCanRExwPuYP1CZD7Gd2dxSy1GXRg=="],
+
+    "marked": ["marked@18.1.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg=="],
 
     "matcher": ["matcher@4.0.0", "", { "dependencies": { "escape-string-regexp": "^4.0.0" } }, "sha512-S6x5wmcDmsDRRU/c2dkccDwQPXoFczc5+HpQ2lON8pnvHlnvHAHj5WlLVvw6n6vNyHuVugYrFohYxbS+pvFpKQ=="],
 

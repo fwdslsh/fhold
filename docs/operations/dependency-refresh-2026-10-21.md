@@ -9,8 +9,8 @@ new release or a claim that published beta.12 contains these versions.
 
 | Component | Previous | Selected |
 | --- | --- | --- |
-| AKM CLI | 0.10.261005-beta | 0.10.261008-beta (`next`) |
-| All three AKM harness plugins | 0.10.261004-beta | 0.10.261007-beta (`next`) |
+| AKM CLI | 0.10.261005-beta | 0.10.261009-beta (`next`) |
+| All three AKM harness plugins | 0.10.261004-beta | 0.10.261008-beta (`next`) |
 | OpenCode CLI, client and plugin SDK | 2.0.29 | 2.0.32 (compatible 2.0 branch) |
 | Codex | 0.162.1 | 0.163.0 (`latest`) |
 | Claude Code | 2.1.300 | 2.1.306 (`latest`) |
@@ -21,15 +21,23 @@ new release or a claim that published beta.12 contains these versions.
 | Supercronic | v0.2.49 | v0.2.50 |
 | cosign | v3.1.3 | v3.1.4 |
 
-The [AKM release](https://github.com/itlackey/akm/releases/tag/v0.10.261008-beta)
-and [plugin release](https://github.com/itlackey/akm-plugins/releases/tag/v0.10.261007-beta)
-were published October 20. The selected plugin requires AKM CLI
-`0.10.261008-beta`; npm's AKM CLI `latest` still selects 0.9.32. Plugin `latest`
+The [AKM release](https://github.com/itlackey/akm/releases/tag/v0.10.261009-beta)
+and [plugin release](https://github.com/itlackey/akm-plugins/releases/tag/v0.10.261008-beta)
+were published October 21 at 06:35 and 06:44 UTC, during the initial qualification.
+The dependency review was repeated to include both before merge. The selected plugin requires AKM CLI
+`0.10.261009-beta`; npm's AKM CLI `latest` still selects 0.9.32. Plugin `latest`
 also lags its published `next` release. All three selected plugin manifests agree.
 The immutable native marketplace commit is
-`8ff402c74d8c1e76e21de9dff718ac3eb279ba92`, with archive SHA-256
-`7bcebfbd6ab9cfebaa4e5a4c6c4b25ef1eb0b106b4c0b14aab1492e56f2ec090`.
+`880677362943f13a8f83cf0f07cbf0ed13631250`, with archive SHA-256
+`3522fa33b331f156821b87108bf924429bc4de42833228cbfc6aa13242e952d7`.
 The Dockerfile URL, checksum and extraction prefixes change together.
+
+The new plugin archive changes manifests and version requirements, with no native
+hook code changes. CLI 0.10.261009 adds current-belief recall filtering, retains
+proposal evidence/scopes and uses complete claims for consolidation checks. It
+requires no state migration; this refresh does not reindex user libraries or
+change pending proposal decisions. Upstream's release notes call for review of
+older pending/staged retirements before unattended proposal draining.
 
 OpenCode's ordinary GitHub release listing still presents the separate 1.x line.
 The selected published `@opencode` packages advance together to the latest 2.0
