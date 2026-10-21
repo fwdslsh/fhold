@@ -68,6 +68,194 @@ async function savedManifest(f: Awaited<ReturnType<typeof fixture>>) {
 	return { head, manifest };
 }
 
+describe('AKM process lock recovery boundary', () => {
+	const uuid = '12345678-1234-1234-1234-123456789abc';
+	const locks = [
+		['akmData', 'index.rebuild.lock'],
+		['akmData', 'index.db.write.lock'],
+		['akmData', 'akm.lock.lck'],
+		['akmData', `index.rebuild.lock.tmp-123-${uuid}`],
+		['akmData', `akm.lock.lck.stale-123-${uuid}`],
+		['akmData', 'state/locks/bundle/improve.lock'],
+		['akmData', 'state/locks/scheduler.lock'],
+		['akmData', 'secret-locks/secret.lock'],
+		['akmData', 'extract-locks/extract-session.lock'],
+		['akmData', 'workflow-run-locks/run.lock'],
+		['akmConfig', 'config.json.lck'],
+		['akmConfig', `config.json.lck.tmp-123-${uuid}`]
+	];
+	const durable = [
+		['akmData', 'akm.lock'],
+		['akmData', 'index.rebuild.lock.notes'],
+		['akmData', 'akm.lock.lck.backup'],
+		['akmData', 'state/locks-notes/improve.lock'],
+		['akmData', 'state/notes.lock'],
+		['akmConfig', 'config.json'],
+		['akmConfig', 'config.json.lck.notes'],
+		['work', 'index.rebuild.lock']
+	];
+	for (const explicitParents of [false, true])
+		test(`capture prunes native locks before traversal and preserves durable state (parents ${explicitParents})`, async () => {
+			const f = await fixture();
+			const config = {
+				...f.config,
+				selection: explicitParents ? { paths: [f.roots.akmData, f.roots.akmConfig] } : {}
+			};
+			for (const [root, name] of durable) {
+				const target = path.join(f.roots[root], name);
+				await mkdir(path.dirname(target), { recursive: true });
+				await writeFile(target, `durable ${name}`);
+			}
+			for (const [root, name] of locks) {
+				const target = path.join(f.roots[root], name);
+				await mkdir(path.dirname(target), { recursive: true });
+				// Links would fail ordinary traversal; native lock paths must be pruned first.
+				await symlink('/does-not-exist', target);
+				for (const key of ['paths', 'sqlite'])
+					expect(() =>
+						createEngine({ ...f.config, selection: { [key]: [target] } }, f.options)
+					).toThrow('protected state');
+			}
+			const db = new Database(path.join(f.roots.akmData, 'state.db'));
+			db.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('durable-state')");
+			db.close();
+			const engine = createEngine(config, f.options);
+			await engine.initialize();
+			await engine.acquireRestore();
+			await engine.checkpoint();
+			await engine.release();
+			const { manifest } = await savedManifest(f);
+			expect(manifest.members.filter((m) => m.kind === 'file')).toHaveLength(durable.length);
+			await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			const replacement = createEngine(config, f.options);
+			await replacement.acquireRestore();
+			for (const [root, name] of locks)
+				expect(await stat(path.join(f.roots[root], name)).catch(() => null)).toBeNull();
+			for (const [root, name] of durable)
+				expect(await readFile(path.join(f.roots[root], name), 'utf8')).toBe(`durable ${name}`);
+			const restored = new Database(path.join(f.roots.akmData, 'state.db'), { readonly: true });
+			expect(restored.query('SELECT value FROM marker').get()).toEqual({ value: 'durable-state' });
+			restored.close();
+			await replacement.release();
+		});
+
+	for (const variant of ['default', 'exact', 'sqlite', 'alias', 'versioned'])
+		test(`old ${variant} checkpoints omit locks without losing required state`, async () => {
+			const f = await fixture();
+			await writeFile(path.join(f.roots.akmData, 'akm.lock'), 'resolved-bundles');
+			const original = f.engine();
+			await original.initialize();
+			await original.acquireRestore();
+			await original.checkpoint();
+			await original.release();
+			const { head, manifest } = await savedManifest(f);
+			const selection =
+				variant === 'exact'
+					? { paths: [path.join(f.roots.akmData, 'index.rebuild.lock')] }
+					: variant === 'sqlite'
+						? { sqlite: [path.join(f.roots.akmData, 'index.rebuild.lock')] }
+						: variant === 'alias'
+							? { paths: [path.join(f.dir, 'live')] }
+							: variant === 'versioned'
+								? { version: 1, paths: [f.roots.akmData] }
+								: {};
+			const saved = createCatalog(f.roots, selection, { historicalProcessLocks: true });
+			Object.assign(manifest, saved.metadata);
+			if (manifest.catalog !== 1) manifest.selection = saved.selection;
+			if (manifest.catalog === 3) manifest.networkMounts = [];
+			for (const [root, name] of locks) {
+				// index writer lock only had historical coverage through an explicit parent.
+				if (name.startsWith('index.db.') && variant !== 'versioned' && variant !== 'alias')
+					continue;
+				const registered = saved.databases.find(
+					([, dbRoot, dbName]) => dbRoot === root && dbName === name
+				);
+				let bytes = Buffer.from('synthetic-native-lock');
+				if (registered) {
+					const database = path.join(f.dir, 'synthetic-lock.sqlite');
+					const db = new Database(database);
+					db.exec('CREATE TABLE fixture(value TEXT)');
+					db.close();
+					bytes = await readFile(database);
+					manifest.presence[registered[0]] = true;
+				}
+				const hash = createHash('sha256').update(bytes).digest('hex');
+				await writeFile(path.join(f.dir, 'backup/objects', hash), bytes);
+				const customRoot = Object.keys(saved.roots).find((key) => key.startsWith('custom-'));
+				const location =
+					variant === 'alias'
+						? {
+								root: customRoot,
+								path: path.relative(saved.roots[customRoot], path.join(f.roots[root], name))
+							}
+						: { root, path: name };
+				manifest.members.push({
+					...location,
+					kind: registered ? 'sqlite' : 'file',
+					...(registered ? { id: registered[0] } : {}),
+					mode: 0o600,
+					hash,
+					bytes: bytes.length
+				});
+			}
+			const bytes = JSON.stringify(manifest);
+			const generation = createHash('sha256').update(bytes).digest('hex');
+			await writeFile(path.join(f.dir, 'backup/manifests', generation), bytes);
+			await writeFile(
+				path.join(f.dir, 'backup/descriptor.json'),
+				JSON.stringify({ ...head.value, ...saved.metadata, generation })
+			);
+			await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			const replacement = f.engine();
+			await replacement.acquireRestore();
+			expect(await readFile(path.join(f.roots.akmData, 'akm.lock'), 'utf8')).toBe(
+				'resolved-bundles'
+			);
+			for (const [root, name] of locks)
+				expect(await stat(path.join(f.roots[root], name)).catch(() => null)).toBeNull();
+			await replacement.checkpoint();
+			await replacement.release();
+			expect((await savedManifest(f)).manifest.members.map((m) => m.path)).toEqual(['akm.lock']);
+		});
+
+	for (const fault of ['mode', 'protected', 'object'])
+		test(`historical lock compatibility still fails closed on invalid ${fault}`, async () => {
+			const f = await fixture();
+			await writeFile(path.join(f.roots.akmData, 'akm.lock'), 'durable');
+			const original = f.engine();
+			await original.initialize();
+			await original.acquireRestore();
+			await original.checkpoint();
+			await original.release();
+			const { head, manifest } = await savedManifest(f);
+			const lock = { ...manifest.members[0], path: 'index.rebuild.lock' };
+			manifest.members.push(lock);
+			if (fault === 'mode') lock.mode = 0o777;
+			if (fault === 'protected') manifest.members.push({ ...lock, path: 'locks/process' });
+			if (fault === 'object')
+				await writeFile(path.join(f.dir, 'backup/objects', lock.hash), 'corrupt');
+			const bytes = JSON.stringify(manifest);
+			const generation = createHash('sha256').update(bytes).digest('hex');
+			await writeFile(path.join(f.dir, 'backup/manifests', generation), bytes);
+			await writeFile(
+				path.join(f.dir, 'backup/descriptor.json'),
+				JSON.stringify({ ...head.value, generation })
+			);
+			await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			const replacement = f.engine();
+			await expect(replacement.acquireRestore()).rejects.toThrow(
+				fault === 'mode'
+					? 'mode rejected'
+					: fault === 'protected'
+						? 'catalog mismatch'
+						: 'checksum mismatch'
+			);
+			expect(replacement.status().ready).toBe(false);
+			expect(replacement.status().owned).toBe(false);
+			expect(await stat(path.join(f.roots.akmData, 'akm.lock')).catch(() => null)).toBeNull();
+		});
+});
+
 	describe('ordinary recovery image upgrades', () => {
 	test('retrying an interrupted ownership claim does not invalidate a surviving receipt', async () => {
 		const f = await fixture();

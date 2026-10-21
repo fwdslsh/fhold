@@ -346,7 +346,14 @@ export function createEngine(config, options = {}) {
 				throw new Error('recovery selection identity rejected');
 		} else if (manifest.networkMounts !== undefined || selection.version !== undefined)
 			throw new Error('recovery selection identity rejected');
-		const saved = createCatalog(roots, selection, { ...catalogOptions, networkMounts });
+		// Older checkpoints may contain native AKM process locks. Validate their
+		// original catalog/identity normally, then omit them through the current
+		// catalog before staging. Other excluded members remain invalid.
+		const saved = createCatalog(roots, selection, {
+			...catalogOptions,
+			networkMounts,
+			historicalProcessLocks: true
+		});
 		if (
 			saved.metadata.catalog !== manifest.catalog ||
 			saved.metadata.selectionHash !== manifest.selectionHash ||
@@ -359,7 +366,9 @@ export function createEngine(config, options = {}) {
 	}
 	const selectedForRestore = (member, saved) => {
 		const target = saved.native(member.root, member.path);
-		return catalog.dbPaths.has(target) || catalog.allowsPath(target);
+		return (
+			!catalog.excludedPath(target) && (catalog.dbPaths.has(target) || catalog.allowsPath(target))
+		);
 	};
 	async function preparePrivate() {
 		await assertNoLinks(privateDir);
@@ -634,7 +643,8 @@ export function createEngine(config, options = {}) {
 					// Keep journal-owned partial restore evidence; all other generated
 					// staging is disposable. Cleanup failures remain operation failures.
 					try {
-						if (path.basename(stage).startsWith('restore-') && (await exists(journalPath))) continue;
+						if (path.basename(stage).startsWith('restore-') && (await exists(journalPath)))
+							continue;
 						await fs.rm(stage, { recursive: true, force: true });
 						stages.delete(stage);
 					} catch (error) {
