@@ -363,6 +363,11 @@ public issues without removing pairing links and account details.
 
 ## Acceptance checklist
 
+For cold recovery, signed-in reconnect and quiet-work acceptance, use the
+[live native-client qualification protocol](operations/native-remote-live-qualification.md).
+It separates real account/client evidence from the credential-free image smokes;
+the latter do not close issue #38's live acceptance gate.
+
 1. Fresh install: both supervisors default on. Without subscription sign-in,
    both report `sign-in-needed` and neither remote worker starts. Once OpenCode
    activity is idle, enabled keep-alive sends no requests.

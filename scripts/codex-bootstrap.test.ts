@@ -15,9 +15,13 @@ test('only managed ready hooks plus an empty complete native session inventory p
 	const inspect = async (check: (rpc: (method: string) => Promise<unknown>) => Promise<boolean>) => check(async (method) => { methods.push(method); return loaded; });
 	expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(true);
 	expect(methods).toEqual(['thread/loaded/list']);
-	for (loaded of [{ data: ['existing-thread'] }, { data: [], nextCursor: 'more' }, {}, { data: null }])
+	for (loaded of [
+		{ data: ['existing-thread'] },
+		...['more', '', false, 0, {}].map((nextCursor) => ({ data: [], nextCursor })),
+		{}, { data: null }, { data: [] }
+	])
 		expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
-	loaded = { data: [] }; alive = false;
+	loaded = { data: [], nextCursor: null }; alive = false;
 	expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
 	alive = true;
 	for (const hooks of [{ status: 'approval-needed', managed: true }, { status: 'ready', managed: false }]) {
@@ -48,4 +52,22 @@ test('native control RPC is bounded, initializes normally and never starts anoth
 		const abort = new AbortController(); abort.abort();
 		await expect(recall.withCodexControl(async () => {}, { env: { CODEX_HOME: root }, signal: abort.signal })).rejects.toThrow('coverage');
 	} finally { server.stop(true); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('worker replacement during native inventory cannot establish coverage', async () => {
+	spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready', managed: true });
+	let sameWorker = true;
+	const inspect = async (check: (rpc: () => Promise<unknown>) => Promise<boolean>) => check(async () => {
+		// Model an exit/restart while the asynchronous native inventory is in flight.
+		await Bun.sleep(1);
+		sameWorker = false;
+		return { data: [], nextCursor: null };
+	});
+	expect(await bootstrapCodexActivity({ inspect, alive: () => sameWorker })).toBe(false);
+	await expect(bootstrapCodexActivity({
+		alive: () => true,
+		inspect: async (check: (rpc: () => Promise<unknown>) => Promise<boolean>) => check(async () => {
+			throw Error('Native inventory unavailable');
+		})
+	})).rejects.toThrow('Native inventory unavailable');
 });
