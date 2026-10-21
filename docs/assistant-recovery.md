@@ -442,7 +442,7 @@ of searchable knowledge and ordinary shared workspaces.
 ### Experimental optional AKM index cache
 
 Both cache settings default off and may change or be removed. For a managed
-installation, save `fhold recovery configure --akmIndexCapture 1 --akmIndexRestore 1`
+installation, save `fhold recovery configure --akm-index-capture 1 --akm-index-restore 1`
 and apply through the normal restart. Admin exposes the two experimental switches
 under advanced checkpoint settings. Standalone deployments can set the two
 `FH_RECOVERY_AKM_INDEX_*` variables above. Set both to `0` to stop new captures
@@ -522,6 +522,9 @@ their existing protection.
 
 Small local lexical fixtures demonstrate correctness and an unchanged-index
 benefit, not hosted performance or embedding/CIFS/Blob capacity qualification.
+The native semantic fixture uses a local fake endpoint and an environment-referenced
+key; it verifies vector reuse, changed-document refresh and profile rejection,
+without qualifying other native credential-store configurations.
 Measure core-ready and first-correct-knowledge-ready time separately, including
 full artifact transfer, provider requests, checkpoint duration and retained-object
 growth before enabling this optimization for a workload.
