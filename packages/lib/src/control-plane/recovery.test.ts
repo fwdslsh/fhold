@@ -48,6 +48,18 @@ async function fixture() {
 }
 
 describe('managed runtime recovery', () => {
+	it('experimental index settings default off, validate booleans and derive environment and shutdown grace independently', () => {
+		const base = defaultStackConfig('/tmp/experimental-akm-cache');
+		expect(base.recovery).toMatchObject({ akmIndexCapture: false, akmIndexRestore: false });
+		for (const capture of [false, true]) for (const restore of [false, true]) {
+			const settings = { ...base.recovery, enabled: true, destination: 'file:///tmp/cache-artifacts', akmIndexCapture: capture, akmIndexRestore: restore };
+			expect(recoveryEnvironment(settings)).toMatchObject({ FH_RECOVERY_AKM_INDEX_CAPTURE: capture ? '1' : '0', FH_RECOVERY_AKM_INDEX_RESTORE: restore ? '1' : '0' });
+			expect(recoveryStopGrace(settings)).toBe(capture ? 307 : 297);
+			expect(parseStackConfig({ ...base, recovery: settings }).ok).toBe(true);
+		}
+		for (const key of ['akmIndexCapture', 'akmIndexRestore'])
+			expect(parseStackConfig({ ...base, recovery: { ...base.recovery, [key]: '1' } }).ok).toBe(false);
+	});
 	it('reads earlier intent with recovery off without mutating it', async () => {
 		const { home } = await fixture();
 		const old = JSON.parse(readFileSync(join(home, 'state/stack.json'), 'utf8'));

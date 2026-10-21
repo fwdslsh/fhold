@@ -11,6 +11,9 @@ export type RecoverySettings = {
 	intervalSeconds: number;
 	maxUnsavedSeconds: number;
 	operationTimeoutSeconds: number;
+	/** Experimental: optional derived cache, subject to change or removal. */
+	akmIndexCapture: boolean;
+	akmIndexRestore: boolean;
 	authentication: 'connection-string' | 'managed-identity';
 	clientId: string;
 };
@@ -23,6 +26,8 @@ export function defaultRecoverySettings(projectName: string): RecoverySettings {
 		intervalSeconds: 60,
 		maxUnsavedSeconds: 300,
 		operationTimeoutSeconds: 120,
+		akmIndexCapture: false,
+		akmIndexRestore: false,
 		authentication: 'connection-string',
 		clientId: ''
 	};
@@ -45,6 +50,8 @@ export function parseRecoverySettings(value: unknown, projectName: string): Reco
 	const result = { ...defaults, ...source };
 	if (
 		typeof result.enabled !== 'boolean' ||
+		typeof result.akmIndexCapture !== 'boolean' ||
+		typeof result.akmIndexRestore !== 'boolean' ||
 		typeof result.destination !== 'string' ||
 		typeof result.instanceId !== 'string' ||
 		!/^[a-z0-9][a-z0-9-]{0,62}$/.test(result.instanceId)
@@ -140,6 +147,8 @@ export function recoveryEnvironment(config: RecoverySettings): Record<string, st
 		FH_RECOVERY_INTERVAL_SECONDS: String(config.intervalSeconds),
 		FH_RECOVERY_MAX_UNSAVED_SECONDS: String(config.maxUnsavedSeconds),
 		FH_RECOVERY_OPERATION_TIMEOUT_SECONDS: String(config.operationTimeoutSeconds),
+		FH_RECOVERY_AKM_INDEX_CAPTURE: config.akmIndexCapture ? '1' : '0',
+		FH_RECOVERY_AKM_INDEX_RESTORE: config.akmIndexRestore ? '1' : '0',
 		FH_RECOVERY_INCLUDE_FILE: '/run/fhold-recovery/include.json',
 		FH_RECOVERY_CREDENTIAL_FILE:
 			config.enabled &&
@@ -153,5 +162,7 @@ export function recoveryEnvironment(config: RecoverySettings): Record<string, st
 }
 
 export function recoveryStopGrace(config: RecoverySettings): number {
-	return config.enabled ? 25 + 2 + 2 * config.operationTimeoutSeconds + 30 : 30;
+	return config.enabled
+		? 25 + 2 + 2 * (config.operationTimeoutSeconds + (config.akmIndexCapture ? 5 : 0)) + 30
+		: 30;
 }

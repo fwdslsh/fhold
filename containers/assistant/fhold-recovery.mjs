@@ -41,6 +41,17 @@ export function recoveryConfig(env = process.env) {
 	if (includeFile !== undefined && !canonicalPath(includeFile))
 		throw new Error('recovery include file must be an absolute path');
 	const warnings = [];
+	const optionalSwitch = (name) => {
+		if (env[name] === '1') return true;
+		if (env[name] !== undefined && env[name] !== '0') {
+			const warning = `${name} is invalid; experimental AKM cache action disabled.`;
+			warnings.push(warning);
+			console.error(`fhold: degraded: ${warning}`);
+		}
+		return false;
+	};
+	const akmIndexCapture = optionalSwitch('FH_RECOVERY_AKM_INDEX_CAPTURE');
+	const akmIndexRestore = optionalSwitch('FH_RECOVERY_AKM_INDEX_RESTORE');
 	const intervalSeconds = integerSetting(
 		env,
 		'FH_RECOVERY_INTERVAL_SECONDS',
@@ -99,6 +110,8 @@ export function recoveryConfig(env = process.env) {
 		intervalSeconds,
 		maxUnsavedSeconds,
 		operationSeconds,
+		akmIndexCapture,
+		akmIndexRestore,
 		probePort,
 		warnings,
 		versions: Object.fromEntries([
@@ -189,7 +202,7 @@ async function configuredEngine(config, env) {
 	const store = await createRecoveryStore(config.url, { env });
 	return createEngine(
 		{ ...config, selection },
-		{ store, limits: { operationTimeoutMs: config.operationSeconds * 1_000 } }
+		{ store, env, limits: { operationTimeoutMs: config.operationSeconds * 1_000 } }
 	);
 }
 
@@ -216,6 +229,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	let statusWrite = Promise.resolve();
 	let probe;
 	let statusReportingFailed = false;
+	let lastCacheDiagnostic;
 	const warnings = [...(config.warnings ?? [])];
 	const stop = () => {
 		stopping = true;
@@ -232,6 +246,14 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 	const healthy = () => owner && !failure && !stopping && state === 'running';
 	const publishStatus = () => {
 		const checkpoint = engine.status();
+		const cache = checkpoint.akmIndexCache;
+		const cacheDiagnostic =
+			cache?.state === 'degraded'
+				? `Experimental AKM index cache unavailable (${cache.reason}); native first use can rebuild. Settings may change or be removed.`
+				: null;
+		if (cacheDiagnostic && cacheDiagnostic !== lastCacheDiagnostic)
+			console.error(`fhold: degraded: ${cacheDiagnostic}`);
+		lastCacheDiagnostic = cacheDiagnostic;
 		const value = {
 			format: 1,
 			state,
@@ -247,10 +269,22 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 			warnings,
 			failure: failureCause ? sanitizeRecoveryError(failureCause) : engine.status().failure,
 			checkpointFailure: checkpoint.checkpointFailure ?? null,
+			akmIndexCache: checkpoint.akmIndexCache ?? null,
 			maxUnsavedSeconds: config.maxUnsavedSeconds
 		};
 		// Observation must not masquerade as storage-ownership loss.
 		statusWrite = statusWrite
+			.then(async () => {
+				const diagnostic = join(config.runtimeDir, 'degraded-akm-index-cache');
+				try {
+					await assertNoLinks(diagnostic);
+					if (cacheDiagnostic) await fs.writeFile(diagnostic, cacheDiagnostic, { mode: 0o600 });
+					else await fs.rm(diagnostic, { force: true });
+				} catch {
+					// Console and structured status retain this optional warning even
+					// when its health-log marker cannot be written or removed.
+				}
+			})
 			.then(() => writeStatus(statusFile, value))
 			.then(() => {
 				statusReportingFailed = false;

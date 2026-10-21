@@ -186,7 +186,7 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 		'FH_KEEPALIVE_URL',
 		'FH_KEEPALIVE_AUTH',
 		'FH_KEEPALIVE_AUTHORIZATION_FILE',
-		...Object.keys(recoveryEnvironment({ enabled: false, destination: '', instanceId: 'fhold', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, authentication: 'connection-string', clientId: '' }))
+		...Object.keys(recoveryEnvironment({ enabled: false, destination: '', instanceId: 'fhold', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, akmIndexCapture: false, akmIndexRestore: false, authentication: 'connection-string', clientId: '' }))
 	]),
 	guardian: new Set([
 		'GUARDIAN_ALLOWED_ORIGINS',

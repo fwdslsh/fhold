@@ -106,6 +106,8 @@ members. A different home or image does not make a checkpoint portable.
 | `FH_RECOVERY_INTERVAL_SECONDS` | `60`; capture cadence, 1–86,400 seconds. |
 | `FH_RECOVERY_MAX_UNSAVED_SECONDS` | `300`; warn when the last accepted checkpoint is older than this threshold. Does not stop the agent; independent of the capture interval. |
 | `FH_RECOVERY_OPERATION_TIMEOUT_SECONDS` | `120`; monotonic between-step/SQLite budget, 1–3,600 seconds. |
+| `FH_RECOVERY_AKM_INDEX_CAPTURE` | `0`; exact `1` enables EXPERIMENTAL optional AKM cache capture. May change or be removed. |
+| `FH_RECOVERY_AKM_INDEX_RESTORE` | `0`; exact `1` enables EXPERIMENTAL eligible AKM cache restoration. May change or be removed. |
 | `FH_RECOVERY_PROBE_PORT` | `0` (off); private health-only probe, not the native API port. |
 | `FH_RECOVERY_STATE_DIR` | `/home/fhold/.fhold-recovery`; private staging/receipt, no arbitrary native-tree overlap. |
 | `FH_RECOVERY_INCLUDE_FILE` | Unset keeps the native catalog; externally supplied absolute JSON file for additional paths, SQLite registrations and optional mount policy. |
@@ -436,6 +438,93 @@ for example, `/home/fhold/.my-client` and `/home/fhold/.npm` are not selected.
 Adding a file under `/work` or `/stash` needs no catalog change, subject to the
 existing bounds, link rules and SQLite checks. Keep third-party credentials out
 of searchable knowledge and ordinary shared workspaces.
+
+### Experimental optional AKM index cache
+
+Both cache settings default off and may change or be removed. For a managed
+installation, save `fhold recovery configure --akmIndexCapture 1 --akmIndexRestore 1`
+and apply through the normal restart. Admin exposes the two experimental switches
+under advanced checkpoint settings. Standalone deployments can set the two
+`FH_RECOVERY_AKM_INDEX_*` variables above. Set both to `0` to stop new captures
+and ignore retained caches on the next restart. This preserves local indexes,
+essential state, credentials, recovery identity and historical checkpoints;
+switching off is not erasure. Settings have no effect without ordinary recovery.
+
+Capture-only produces optional artifacts without restoring them. Restore-only
+can consume and carry forward an already accepted eligible reference without
+creating a new cache snapshot. Both off omit the optional reference from future
+checkpoints. Native first use can build an absent index as usual. Explicit custom
+SQLite selection of `index.db` retains its ordinary **required** semantics; remove
+that selection if the intent is best-effort caching.
+
+The first experimental scope supports plain JSON AKM configuration and materialized filesystem bundles with
+the native `akm` or `agent-skills` adapter, including readable persistent and
+read-only source mounts. Inherited AKM configuration, other source providers or
+adapters, missing/unreadable roots, and source roots overlapping explicit recovery
+`excludePaths` skip the optional cache. Ordinary `externalMounts` and automatic
+network-mount exclusion do not prohibit the cache. Opting in explicitly permits
+copying indexed document/Markdown content, paths and embeddings from those
+independently persistent bundles into private recovery artifacts. Review their
+data sensitivity and backup access/retention policies first.
+
+Candidates bind to this instance and current enabled source IDs, roots,
+components, adapters, indexing/redaction and semantic profile, plus the recovery
+selection policy. Credentials are not fingerprinted; equivalent embedding
+endpoint/credential relocation alone does not invalidate the semantic identity.
+Source/configuration revocation or a changed embedding profile rejects the old
+reference. Supported older SQLite layouts can migrate through the native CLI;
+newer/incompatible layouts rebuild without an exact package-version requirement.
+Cache age is recorded as artifact provenance, never evidence of freshness or
+permission. There is no separate maximum-age setting.
+
+Capture uses consistent SQLite snapshots and runs the shipped native
+`akm index --clean --format json` against private candidate data/state/config.
+It never refreshes or rewrites live databases or source configuration and never
+starts a build when the live index is absent, empty or not initialized for this
+source. Only an actual completed source scan, clean and successful native
+verification produces a cache; `builtAt` and successful lock skips are not
+completion proof. Configured semantic indexing may make ordinary embedding
+requests; it does not run extract/improve/LLM enrichment or hydrate remote bundle
+providers. A failed/incomplete candidate is discarded, and later checkpoint
+attempts retry through the existing recovery timer, independently of scheduling.
+
+An unchanged completed candidate can reuse the latest accepted object when its
+live source-snapshot hash, source/profile identity and counts also match. Capture
+still performs a bounded snapshot and native validation before deciding to reuse;
+it does not promise free unchanged checkpoints or delta database transfer.
+Immutable whole-cache objects increase retained storage whenever their contents
+change. Native first-use/indexing can run concurrently against its own live DB;
+private candidates use native coordination without a second lock or scheduler.
+
+After essential restoration, an eligible cache is downloaded, verified and
+incrementally cleaned in private before any cached result is admitted. Only the
+completed standalone database is published with exclusive atomic creation. A
+surviving local database or WAL/SHM is preserved. Invalid/missing/corrupt/oversized
+caches and incomplete refreshes leave the core able to start without a restored
+index; native first use can rebuild. This prevents deleted/revoked cached content
+being exposed while a background refresh is pending. Cache admission adds a
+bounded startup delay; no cache means no full index build in core startup.
+Surviving local indexes retain native AKM migration/freshness behavior; these
+switches do not repair, replace or erase them.
+
+Experimental limits are 64 MiB for each SQLite input including its WAL/SHM and
+for each artifact, and a separate five-second normal-operation budget per cache
+capture/admission attempt. Essential work keeps its configured operation allowance.
+Capture-enabled managed shutdown therefore adds ten seconds to the existing
+derived termination grace, covering an in-flight and a final capture. Standalone
+hosts must do the same. These limits bound accepted data and subprocess work,
+not total RAM/disk or kernel-hung filesystem I/O: private candidate/state copies,
+native temporary files, buffers and application growth need external resource
+headroom/quotas. Cleanup or uncancellable filesystem I/O can exceed wall-clock
+budgets. Optional cache errors warn through existing recovery/health diagnostics;
+actual ownership loss, topology changes and essential-state failures still retain
+their existing protection.
+
+Small local lexical fixtures demonstrate correctness and an unchanged-index
+benefit, not hosted performance or embedding/CIFS/Blob capacity qualification.
+Measure core-ready and first-correct-knowledge-ready time separately, including
+full artifact transfer, provider requests, checkpoint duration and retained-object
+growth before enabling this optimization for a workload.
 
 ### Additional files, directories and SQLite databases
 

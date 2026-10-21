@@ -11,6 +11,18 @@ const base = { FH_RECOVERY_URL: 'file:///tmp/synthetic-backup', FH_INSTANCE_ID: 
 const wrapper = join(import.meta.dir, '../containers/assistant/fhold-recovery.mjs');
 
 describe('recovery wrapper configuration and private status', () => {
+	it('experimental cache switches default off and malformed values disable only the affected action', () => {
+		expect(recoveryConfig(base)).toMatchObject({ akmIndexCapture: false, akmIndexRestore: false });
+		expect(recoveryConfig({ ...base, FH_RECOVERY_AKM_INDEX_CAPTURE: '1', FH_RECOVERY_AKM_INDEX_RESTORE: '0' })).toMatchObject({ akmIndexCapture: true, akmIndexRestore: false });
+		for (const name of ['FH_RECOVERY_AKM_INDEX_CAPTURE', 'FH_RECOVERY_AKM_INDEX_RESTORE']) {
+			for (const value of ['true', 'false', '', '01', 'invalid']) {
+				const config = recoveryConfig({ ...base, FH_RECOVERY_AKM_INDEX_CAPTURE: '1', FH_RECOVERY_AKM_INDEX_RESTORE: '1', [name]: value });
+				expect(config.akmIndexCapture).toBe(name !== 'FH_RECOVERY_AKM_INDEX_CAPTURE');
+				expect(config.akmIndexRestore).toBe(name !== 'FH_RECOVERY_AKM_INDEX_RESTORE');
+				expect(config.warnings).toContain(`${name} is invalid; experimental AKM cache action disabled.`);
+			}
+		}
+	});
 	it('retains checkpoint operation/path evidence privately and omits it from ordinary status', () => {
 		const runtimeDir = mkdtempSync(join(tmpdir(), 'fhold-wrapper-private-failure-'));
 		const diagnostic = {

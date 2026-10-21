@@ -30,8 +30,21 @@ const configure = defineCommand({
 		to: { type: 'string', description: 'credential-free file: or azblob: recovery URL' },
 		instanceId: { type: 'string', description: 'stable recovery instance ID' },
 		interval: { type: 'string', description: 'checkpoint cadence in seconds' },
-		maxUnsaved: { type: 'string', description: 'warn when the last checkpoint is older than this many seconds' },
+		maxUnsaved: {
+			type: 'string',
+			description: 'warn when the last checkpoint is older than this many seconds'
+		},
 		timeout: { type: 'string', description: 'operation timeout in seconds' },
+		akmIndexCapture: {
+			type: 'string',
+			description:
+				'EXPERIMENTAL: 0 or 1 captures an optional AKM index cache; may change or be removed'
+		},
+		akmIndexRestore: {
+			type: 'string',
+			description:
+				'EXPERIMENTAL: 0 or 1 restores an eligible AKM index cache; may change or be removed'
+		},
 		selectionFile: {
 			type: 'string',
 			description: 'reviewed recovery include/mount policy JSON file'
@@ -60,6 +73,11 @@ const configure = defineCommand({
 			settings.enabled = true;
 		}
 		if (args.instanceId) settings.instanceId = String(args.instanceId);
+		for (const key of ['akmIndexCapture', 'akmIndexRestore'] as const) {
+			if (args[key] === undefined) continue;
+			if (!['0', '1'].includes(String(args[key]))) throw new Error(`--${key} must be 0 or 1.`);
+			settings[key] = args[key] === '1';
+		}
 		for (const [flag, key] of [
 			['interval', 'intervalSeconds'],
 			['maxUnsaved', 'maxUnsavedSeconds'],

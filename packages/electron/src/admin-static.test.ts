@@ -1274,6 +1274,8 @@ describe('Admin instance picker and automatic status', () => {
 	}
 	it('defaults off, hides advanced storage fields and refuses offline operations while writers run', () => {
 		const snapshot = fixture();
+		expect(control('runtime-recovery-akm-capture').checked).toBe(false);
+		expect(control('runtime-recovery-akm-restore').checked).toBe(false);
 		expect(control('runtime-recovery-settings').hidden).toBe(true);
 		expect(control('runtime-recovery-status').children[0].textContent).toContain('off');
 		snapshot.config.recovery.enabled = true;
@@ -1305,11 +1307,14 @@ describe('Admin instance picker and automatic status', () => {
 	it('supports a directory with spaces and arbitrary path/database lists without copying credentials into the payload', () => {
 		fixture();
 		control('runtime-recovery-enabled').checked = true;
+		control('runtime-recovery-akm-capture').checked = true;
+		control('runtime-recovery-akm-restore').checked = false;
 		control('runtime-recovery-directory').value = '/private/my backups#1?test';
 		control('runtime-recovery-paths').value = '/home/fhold/.my-client\n/work/additional';
 		control('runtime-recovery-sqlite').value = '/home/fhold/.my-client/state.sqlite';
 		control('runtime-recovery-connection-string').value = 'secret must not enter settings';
 		const value = recoveryInput();
+		expect(value.settings).toMatchObject({ akmIndexCapture: true, akmIndexRestore: false });
 		expect(value.settings.destination).toBe('file:///private/my%20backups%231%3Ftest');
 		expect(value.selection.paths).toEqual(['/home/fhold/.my-client', '/work/additional']);
 		expect(value.selection.sqlite).toEqual(['/home/fhold/.my-client/state.sqlite']);
