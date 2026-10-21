@@ -15,7 +15,7 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
+import { withCodexControl, withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
 import { bootstrapCodexActivity } from '/usr/local/bin/fhold-remote.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
@@ -376,8 +376,22 @@ function recalled(file, harness) {
 			await waitFor(() => existsSync(join(f.env.CODEX_HOME, 'app-server-control/app-server-control.sock')), 'native Codex control socket');
 			assert.equal(await bootstrapCodexActivity({ env: f.env, alive: () => server.exitCode === null }), true);
 			assert.equal(existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')), false, 'Inspection must not fabricate a SessionStart event');
+			if (boot === 1) {
+				// Only this disposable test creates a thread; the production bootstrap
+				// remains read-only. No prompt, model request or account is involved.
+				await withCodexControl(async (rpc) => {
+					const started = await rpc('thread/start', { cwd: f.cwd, ephemeral: true });
+					assert.equal(typeof started.thread?.id, 'string');
+					const loaded = await rpc('thread/loaded/list', {});
+					assert.ok(loaded.data.includes(started.thread.id), 'Native thread must really be loaded');
+					assert.equal(await bootstrapCodexActivity({ env: f.env, alive: () => server.exitCode === null }), false,
+						'A real loaded native thread cannot prove initial idle coverage');
+				}, { env: f.env });
+			}
 		} finally { server.kill(); await server.exited; }
 	}
+	await assert.rejects(bootstrapCodexActivity({ env: f.env, alive: () => true }), /coverage/,
+		'A missing native server cannot prove coverage, even with a stale live-worker observation');
 	writeFileSync(
 		join(f.env.CODEX_HOME, 'hooks.json'),
 		JSON.stringify({

@@ -98,7 +98,7 @@ export async function bootstrapCodexActivity({ env, alive, signal, inspect } = {
 		const hooks = await reviewRecall(rpc, 'fhold@fhold-plugins');
 		if (hooks.status !== 'ready' || hooks.managed !== true) return false;
 		const loaded = await rpc('thread/loaded/list', {});
-		if (!Array.isArray(loaded?.data) || loaded.data.length || loaded.nextCursor) return false;
+		if (!Array.isArray(loaded?.data) || loaded.data.length || loaded.nextCursor !== null) return false;
 		if (!alive()) return false;
 		return true;
 	};
