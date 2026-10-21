@@ -7,6 +7,23 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 
 describe("release version validation", () => {
+  test("monthly full stamping advances October daily defaults and preserves schemas", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "fhold-monthly-release-"));
+    try {
+      mkdirSync(join(fixture, ".github"));
+      writeFileSync(join(fixture, ".github/release-manifest.json"), JSON.stringify({ manifests: ["package.json", "plugin.json"], compose: ["stack.yml"] }));
+      for (const file of ["package.json", "plugin.json"]) writeFileSync(join(fixture, file), JSON.stringify({ version: "0.2.2610211-beta.13", schemaVersion: 3 }));
+      writeFileSync(join(fixture, "stack.yml"), 'image: fwdslsh/fhold-assistant:${FH_ASSISTANT_VERSION:-0.2.2610211-beta.13}\n');
+      const run = (value: string) => spawnSync(process.execPath, [join(ROOT, "scripts/bump-release.mjs")], { cwd: fixture, env: { ...process.env, STAMP: "true", VERSION: value }, encoding: "utf8" });
+      expect(run("0.3.261000-beta").status).toBe(0);
+      for (const file of ["package.json", "plugin.json"]) expect(JSON.parse(readFileSync(join(fixture, file), "utf8"))).toEqual({ version: "0.3.261000-beta", schemaVersion: 3 });
+      expect(readFileSync(join(fixture, "stack.yml"), "utf8")).toContain("0.3.261000-beta");
+      expect(run("0.3.261000-beta").status).toBe(0);
+      expect(run("0.3.261000-rc").status).toBe(1);
+      expect(JSON.parse(readFileSync(join(fixture, "package.json"), "utf8")).version).toBe("0.3.261000-beta");
+      expect(run("0.3.261001-rc").status).toBe(0);
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
+  });
   test("tooling stamping preserves runtime manifests and Compose defaults", () => {
     const fixture = mkdtempSync(join(tmpdir(), "fhold-release-preview-"));
     try {

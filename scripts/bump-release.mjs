@@ -9,7 +9,7 @@
 // Preview locally: VERSION='<candidate-version>' node scripts/bump-release.mjs
 
 import { existsSync, readFileSync } from 'node:fs';
-import { compareVersions, parseSemver, setComposeImageTags, setVersion } from './set-version.mjs';
+import { assertReleaseAdvance, parseSemver, setComposeImageTags, setVersion } from './set-version.mjs';
 
 const RELEASE = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
 const scope = process.env.SCOPE ?? 'full';
@@ -34,8 +34,7 @@ for (const file of [...manifests, ...composeFiles]) {
 	if (manifests.includes(file)) {
 		const current = JSON.parse(content).version;
 		if (!parseSemver(current)) throw new Error(`Invalid current release in ${file}`);
-		if (parseSemver(version).date < parseSemver(current).date) throw new Error(`Release date regression in ${file}`);
-		if (compareVersions(version, current) < 0) throw new Error(`Release precedence/clock regression in ${file}`);
+		if (version !== current) assertReleaseAdvance(version, current);
 	}
 	else if (!/\$\{FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION:-[^}]*\}/.test(content))
 		throw new Error(`No image-tag defaults found to stamp in ${file}`);

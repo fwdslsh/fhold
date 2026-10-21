@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { parseSemver } from './release-version.mjs';
-export { SEMVER_RE, parseSemver, compareVersions, releaseIntent } from './release-version.mjs';
+export { SEMVER_RE, parseSemver, compareVersions, assertReleaseAdvance, releaseIntent } from './release-version.mjs';
 /** Stamp only image-tag defaults; schema versions stay independent. */
 /*
  * Compose fallback tags match the release. StackConfig owns actual image intent;

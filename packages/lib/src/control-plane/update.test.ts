@@ -90,12 +90,11 @@ test('a late missing candidate asset leaves every existing managed asset untouch
 	expect(existsSync(join(home, 'state/update-receipts'))).toBe(false);
 });
 
-test('update advances managed release tags while preserving explicit pins, project, namespace, authority and scheduling intent', async () => {
+test.each(['0.1.2610011200-alpha.1', '0.2.2610211-beta.13'])('update advances historical %s managed tags while preserving explicit pins, project, namespace, authority and scheduling intent', async (prior) => {
 	const { home } = await fixture();
 	const read = readStackConfig(home);
 	if (!read.ok) throw new Error(read.error);
 	const config = read.config;
-	const prior = '0.1.2610011200-alpha.1';
 	config.deployment = {
 		projectName: 'reviewed-instance',
 		imageNamespace: 'local-review',

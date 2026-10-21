@@ -550,6 +550,21 @@ describe('release completeness gate', () => {
 		expect(() => requiredReleaseAssets('0.1.2602300000')).toThrow('Invalid');
 	});
 
+	test('monthly artifacts retain exact versions and reject changed retry bytes', () => {
+		withDir((dir) => {
+			const version = '0.3.261000-beta';
+			const required = writeCompleteDist(dir, version);
+			expect(required).toContain(`fhold-admin-${version}-x86_64-linux.AppImage`);
+			expect(required).toContain(`fhold-claude-desktop-${version}.mcpb`);
+			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
+			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
+			writeFileSync(join(dir, CLI_BINARIES[0]), 'changed frozen candidate');
+			expect(() => writeReleaseAssetManifest(dir, version, productName)).toThrow('Immutable');
+		});
+		expect(() => requiredReleaseAssets('0.3.261000-beta.1')).toThrow('Invalid');
+		expect(() => requiredReleaseAssets('0.3.2610100')).toThrow('Invalid');
+	});
+
 	test('validateReleaseAssets fails closed when every Admin artifact is missing', () => {
 		withDir((dir) => {
 			writeCompleteDist(dir, '0.1.2610020008-alpha.1');

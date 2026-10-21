@@ -1,12 +1,15 @@
-export const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.([1-9]\d{6,})(?:-(alpha|beta|rc)(?:\.([1-9]\d*))?)?$/;
+export const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.([1-9]\d{5,})(?:-(alpha|beta|rc)(?:\.([1-9]\d*))?)?$/;
 
 export function parseSemver(version) {
 	const match = String(version).match(SEMVER_RE);
 	if (!match) return null;
 	const ma = Number(match[1]), mi = Number(match[2]), pa = Number(match[3]);
 	const legacy = ma === 0 && mi < 2;
-	if (legacy ? match[3].length !== 10 : !/^[1-9]\d*$/.test(match[3].slice(6))) return null;
-	const [yy, month, day] = match[3].slice(0, 6).match(/\d{2}/g).map(Number);
+	const monthly = ma > 0 || mi >= 3;
+	if (monthly ? match[3].length !== 6 || Boolean(match[5]) :
+		legacy ? match[3].length !== 10 : !/^[1-9]\d*$/.test(match[3].slice(6))) return null;
+	const [yy, month] = match[3].slice(0, 4).match(/\d{2}/g).map(Number);
+	const day = monthly ? 1 : Number(match[3].slice(4, 6));
 	const hour = legacy ? Number(match[3].slice(6, 8)) : 0;
 	const minute = legacy ? Number(match[3].slice(8, 10)) : 0;
 	const date = new Date(Date.UTC(2000 + yy, month - 1, day, hour, minute));
@@ -16,7 +19,8 @@ export function parseSemver(version) {
 	if (![ma, mi, pa, ...(serial === null ? [] : [serial])].every(Number.isSafeInteger)) return null;
 	return { ma, mi, pa, pre: match[4] ? `${match[4]}${match[5] ? `.${match[5]}` : ''}` : null,
 		channel: match[4] ?? null, serial, timestamp: date.toISOString(),
-		date: date.toISOString().slice(0, 10), build: legacy ? null : Number(match[3].slice(6)) };
+		date: date.toISOString().slice(0, 10), format: monthly ? 'monthly' : legacy ? 'timestamp' : 'daily',
+		build: legacy ? null : Number(match[3].slice(monthly ? 4 : 6)) };
 }
 
 export function compareVersions(left, right) {
@@ -31,6 +35,21 @@ export function compareVersions(left, right) {
 	return Math.sign((a.serial ?? 0) - (b.serial ?? 0));
 }
 
+/** Compare clocks at their shared precision when crossing historical formats. */
+export function assertReleaseAdvance(version, previous) {
+	const parsed = parseSemver(version), prior = parseSemver(previous);
+	if (!parsed || !prior) throw new Error('Invalid release version');
+	const precision = parsed.format === 'monthly' || prior.format === 'monthly' ? 7 :
+		parsed.format === 'timestamp' && prior.format === 'timestamp' ? 24 : 10;
+	if (parsed.timestamp.slice(0, precision) < prior.timestamp.slice(0, precision))
+		throw new Error('Release clock regressed');
+	if (compareVersions(version, previous) <= 0) throw new Error('Release collision or precedence regression');
+	// Every new monthly candidate consumes a counter, including a channel promotion.
+	if (parsed.format === 'monthly' && prior.format === 'monthly' &&
+		parsed.ma === prior.ma && parsed.mi === prior.mi && parsed.pa === prior.pa)
+		throw new Error('Monthly release counter must advance across channels');
+}
+
 /** Establish once; persist this result with the release, and never recalculate on retry. */
 export function releaseIntent({ version, revision, contentSha256, previous = null, existing = null }) {
 	const parsed = parseSemver(version);
@@ -43,12 +62,7 @@ export function releaseIntent({ version, revision, contentSha256, previous = nul
 		return existing;
 	}
 	if (previous) {
-		const prior = parseSemver(previous);
-		if (!prior) throw new Error('Invalid previous release version');
-		if (parsed.date < prior.date ||
-			(parsed.build === null && prior.build === null && parsed.timestamp < prior.timestamp))
-			throw new Error('Release clock regressed');
-		if (compareVersions(version, previous) <= 0) throw new Error('Release collision or precedence regression');
+		assertReleaseAdvance(version, previous);
 	}
 	return intent;
 }
