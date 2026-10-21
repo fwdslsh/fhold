@@ -9,6 +9,7 @@ import {
 	symlink,
 	chmod,
 	stat,
+	readdir,
 	rename,
 	copyFile
 } from 'node:fs/promises';
@@ -21,6 +22,7 @@ import { createServer } from 'node:net';
 // Image-baked ESM runtime is also exercised directly by Bun fixtures.
 import { createEngine, DEFAULT_LIMITS } from '../containers/assistant/recovery/engine.mjs';
 import { createDirectoryStore } from '../containers/assistant/recovery/directory-store.mjs';
+import { readMountInfo } from '../containers/assistant/recovery/mounts.mjs';
 import {
 	normalizeSelection,
 	readSelection,
@@ -1263,6 +1265,60 @@ describe('same-instance local recovery engine', () => {
 			expect(replacement.status().checkpointFailure).toBeNull();
 			await replacement.release();
 		});
+	test('reports outer operation cleanup failure after successful publication, receipt and explicit staging removal', async () => {
+		const f = await fixture();
+		await writeFile(path.join(f.roots.work, 'note'), 'old accepted content');
+		const store = createDirectoryStore(f.config.url);
+		let inject = false;
+		let stage: string | undefined;
+		const engine = createEngine(f.config, {
+			...f.options,
+			store: {
+				...store,
+				async compareAndSwap(...args) {
+					const result = await store.compareAndSwap(...args);
+					if (inject) {
+						const name = (await readdir(f.config.privateDir)).find((entry) => entry.startsWith('capture-'));
+						if (!name) throw new Error('Fixture requires capture staging before publication');
+						stage = path.join(f.config.privateDir, name);
+					}
+					return result;
+				}
+			},
+			async readMounts() {
+				// The final boundary check runs after explicit stage removal, but
+				// before the outer operation's force-cleanup of its tracked paths.
+				if (inject && stage && !(await stat(stage).catch(() => null))) {
+					inject = false;
+					await chmod(f.config.privateDir, 0o000);
+				}
+				return readMountInfo();
+			}
+		});
+		await engine.initialize();
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		const previous = engine.status().generation;
+		const previousTick = engine.status().lastCheckpointTick;
+		await writeFile(path.join(f.roots.work, 'note'), 'new accepted content');
+		inject = true;
+		try {
+			await expect(engine.checkpoint()).rejects.toThrow('EACCES');
+			expect(inject).toBe(false);
+			const { head, manifest } = await savedManifest(f);
+			expect(head.value.generation).not.toBe(previous);
+			expect(engine.status()).toMatchObject({
+				ready: true, owned: true, generation: head.value.generation,
+				lastCheckpointAt: manifest.finishedAt,
+				checkpointFailure: { phase: 'operation-cleanup', publication: 'accepted', code: 'EACCES', previousGeneration: previous, attemptedGeneration: head.value.generation }
+			});
+			expect(engine.status().lastCheckpointTick).toBeGreaterThan(previousTick);
+		} finally {
+			await chmod(f.config.privateDir, 0o700);
+		}
+		expect(JSON.parse(await readFile(path.join(f.config.privateDir, 'receipt.json'), 'utf8')).generation).toBe(engine.status().generation);
+		await engine.release();
+	});
 	test('bounds private paths and preserves the original failure when cleanup also fails', async () => {
 		const f = await fixture();
 		await writeFile(path.join(f.roots.work, 'note'), 'private data');
