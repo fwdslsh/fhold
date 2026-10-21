@@ -499,6 +499,10 @@ For example, mount it read-only; it contains paths, not authentication keys:
   integrity checks before any target is written. Historical objects are retained;
   the next successful checkpoint omits them. Surviving local locks are neither
   removed nor overwritten; AKM retains ownership of their live lifecycle.
+  If an older include file explicitly registered a now-protected lock path in
+  `paths` or `sqlite`, remove that transient registration before restarting;
+  retaining it is rejected as protected state. Other selections and historical
+  essential state remain usable. Selecting a parent directory needs no change.
 - Custom catalogs record the normalized lists in the immutable manifest and bind
   their hash into the descriptor/receipt. Restore never adopts paths from a backup
   that the current operator configuration does not cover. The external tooling
