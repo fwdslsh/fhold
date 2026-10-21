@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ConversationStore } from './conversations.js';
-import { PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
+import { DeliveryAccess, PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
 
 const roots: string[] = [];
 const stores: ConversationStore[] = [];
@@ -56,6 +56,37 @@ test('an unacknowledged send survives reopening and is never automatically poste
 	expect(posts).toBe(1);
 });
 
+test('a second replacement retries interrupted stale-tail edits using persisted message receipts', async () => {
+	const { path, store, delivery } = fixture();
+	let posts = 0;
+	const messages = new Map<string, string>();
+	await delivery.liveReply('answer', 70, async (text) => {
+		const id = `reply.${++posts}`; messages.set(id, text); return { id };
+	}, async (id, text) => { messages.set(id, text); }).update('Old partial answer '.repeat(10), true);
+	delivery.submitting(); delivery.accepted('private.job', 'private.session');
+	delivery.complete('Final answer'); close(store);
+	const next = open(path);
+	const restored = new PortalDelivery(next.delivery('slack', 'C123:1')!, next);
+	await expect(restored.liveReply('answer', 70, async () => { posts++; return { id: 'duplicate' }; }, async (id, text) => {
+		if (id === 'reply.2') throw new Error('Interrupted tail edit');
+		messages.set(id, text);
+	}).update('Final answer', true)).rejects.toThrow('Interrupted tail edit');
+	close(next);
+	const reopened = open(path);
+	const retried = new PortalDelivery(reopened.delivery('slack', 'C123:1')!, reopened);
+	expect(retried.record.state).toBe('complete');
+	expect(retried.record.messages.answer[0].text).toBe('Final answer');
+	const edits: string[] = [];
+	await retried.liveReply('answer', 70, async () => { posts++; return { id: 'duplicate' }; }, async (id, text) => {
+		edits.push(id); messages.set(id, text);
+	}).update('Final answer', true);
+	retried.finish();
+	expect(posts).toBe(3);
+	expect(edits).toEqual(['reply.2', 'reply.3']);
+	expect([...messages.values()]).toEqual(['Final answer', 'Previous response replaced. Use the current response above.', 'Previous response replaced. Use the current response above.']);
+	expect(reopened.pendingDeliveries('slack')).toEqual([]);
+});
+
 test('an ambiguous submission cannot be submitted twice, and changed credentials cannot recover work', () => {
 	const { path, store, delivery } = fixture();
 	delivery.submitting(); close(store);
@@ -72,6 +103,22 @@ test('recovery preserves request arrival order even when older work publishes ne
 	PortalDelivery.create(store, { ...delivery.record, id: 'C123:2', input: 'Second request' }, credential);
 	delivery.accepted('first.job', 'first.session');
 	expect(store.pendingDeliveries('slack').map((record) => record.id)).toEqual(['C123:1', 'C123:2']);
+});
+
+test('a failed credential lookup blocks publishing permanently for that delivery, even if credentials reappear', async () => {
+	const { store, delivery } = fixture();
+	let available = false;
+	let writes = 0;
+	const access = new DeliveryAccess(delivery, () => {
+		if (!available) throw new Error('Credential bundle unavailable');
+		return credential;
+	});
+	await expect(access.write(async () => { writes++; })).rejects.toThrow('connection key is no longer valid');
+	available = true;
+	await expect(access.write(async () => { writes++; })).rejects.toThrow('revoked');
+	expect(access.revoked).toBe(true);
+	expect(store.delivery('slack', delivery.record.id)?.state).toBe('blocked');
+	expect(writes).toBe(0);
 });
 
 test('new permission controls reuse their known message without persisting decisions or posting duplicates', async () => {

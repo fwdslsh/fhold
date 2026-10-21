@@ -1,7 +1,7 @@
 import { App, SocketModeReceiver, type SayFn, type types } from '@slack/bolt';
 
 import { GuardianChatClient, PortalConnectionError, portalFailureText, type ChatUpdate, type ChatResult } from './chat-client.js';
-import { PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
+import { DeliveryAccess, PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry, credentialConversationKey, type PortalCredential } from './credential-registry.js';
 import { ConversationQueue } from './queue.js';
@@ -40,6 +40,7 @@ export class SlackPortal {
 		string,
 		{
 			key: string;
+			access: DeliveryAccess;
 			channel: string;
 			ts: string;
 			questionIndex?: number;
@@ -116,7 +117,10 @@ export class SlackPortal {
 				}
 				if (!this.permitted({ user: body.user.id, channel, ts: location.ts }))
 					throw new Error('You do not have permission to use this bot.');
-				const credential = this.credentials.forUser(body.user.id);
+				const selectedCredential = this.credentials.forUser(body.user.id);
+				const credential = location.access.credential();
+				if (selectedCredential.username !== credential.username)
+					throw new Error('Only the person who requested this work can answer.');
 				if (action.action_id === 'fh:stop') {
 					await this.interactions.stop(id, location.key, body.user.id, credential);
 					return;
@@ -215,7 +219,9 @@ export class SlackPortal {
 		if (pending) {
 			try {
 				const prompt = this.interactions.get(pending.id, message.user, credential, key);
-				await this.interactions.answer(prompt, credential, [text]);
+				const location = this.actionLocations.get(prompt.id);
+				if (!location) throw new Error('This prompt is no longer active.');
+				await this.interactions.answer(prompt, location.access.credential(), [text]);
 				await this.refreshPrompt(prompt).catch((error) =>
 					log.warn('prompt_update_failed', { error: errorMessage(error) })
 				);
@@ -245,7 +251,12 @@ export class SlackPortal {
 	private async runConversation(message: SlackMessage, say: SayFn, key: string, credential: PortalCredential, delivery: PortalDelivery): Promise<void> {
 		const threadTs = message.thread_ts ?? message.ts;
 		await this.queue.run(key, async () => {
-			delivery.assertCredential(this.credentials.forUser(message.user));
+			const access = new DeliveryAccess(delivery, () => this.credentials.forUser(message.user));
+			const currentCredential = () => access.credential();
+			// Progress render failures are intentionally tolerated by the MCP client.
+			// Recheck at every platform write, including cached and terminal replies.
+			const withAccess = <T>(action: () => Promise<T>) => access.write(action);
+			currentCredential();
 			if (delivery.record.state === 'submitted' || delivery.record.state === 'blocked') {
 				await this.blockDelivery(delivery, message.channel, 'Submission could not be confirmed. Check the original session in OpenCode; it was not repeated.');
 				log.warn('delivery_recovery_blocked', { message: delivery.record.reason });
@@ -277,23 +288,23 @@ export class SlackPortal {
 			let live: LiveReply;
 			try { live = delivery.liveReply('answer', 2_900, async (text) => {
 				const first = !head;
-				const posted = await this.deliverAnswer(() =>
+				const posted = await this.deliverAnswer(() => withAccess(() =>
 					say({
 						text,
 						thread_ts: threadTs,
 						blocks: first ? stopBlocks(text) : this.answerBlocks(text)
 					})
-				);
+				));
 				if (!posted.ts) throw new Error('Slack did not return the posted message timestamp.');
 				const ts = posted.ts;
 				if (first) {
 					head = { ts, text };
-					this.actionLocations.set(stopId, { key, channel: message.channel, ts });
+					this.actionLocations.set(stopId, { key, access, channel: message.channel, ts });
 				}
 				return { id: ts };
 			}, async (ts, text) => {
 				const first = head?.ts === ts;
-				await this.deliverAnswer(() => this.app.client.chat.update({ channel: message.channel, ts, text, blocks: first ? stopBlocks(text) : this.answerBlocks(text) }));
+				await this.deliverAnswer(() => withAccess(() => this.app.client.chat.update({ channel: message.channel, ts, text, blocks: first ? stopBlocks(text) : this.answerBlocks(text) })));
 				if (first) head = { ts, text };
 			}); } catch (error) {
 				await this.blockDelivery(delivery, message.channel, errorMessage(error));
@@ -302,30 +313,30 @@ export class SlackPortal {
 			}
 			const activity = new LiveReply(async (text) => {
 				const blocks: SlackBlocks = [{ type: 'context', elements: [{ type: 'mrkdwn', text }] }];
-				const posted = await say({ text, thread_ts: threadTs, blocks });
+				const posted = await withAccess(() => say({ text, thread_ts: threadTs, blocks }));
 				if (!posted.ts) throw new Error('Slack did not return the activity message timestamp.');
 				return {
 					edit: (text) =>
-						this.app.client.chat.update({
+						withAccess(() => this.app.client.chat.update({
 							channel: message.channel,
 							ts: posted.ts as string,
 							text,
 							blocks: [{ type: 'context', elements: [{ type: 'mrkdwn', text }] }]
-						})
+						}))
 				};
 			}, 2_800);
 			const reacted = new Set<string>();
 			let lastActivity = '';
 			const onUpdate = async (update: ChatUpdate) => {
-				delivery.assertCredential(this.credentials.forUser(message.user));
+				currentCredential();
 				delivery.accepted(update.job, update.conversation);
 				if (update.text) lastText = update.text;
 				this.conversations.set('slack', key, update.conversation);
 				stopId = this.interactions.working(key, message.user, credential, update.job);
 				if (head) {
-					this.actionLocations.set(stopId, { key, channel: message.channel, ts: head.ts });
+					this.actionLocations.set(stopId, { key, access, channel: message.channel, ts: head.ts });
 					if (!restoredControls) {
-						await this.deliverAnswer(() => this.app.client.chat.update({ channel: message.channel, ts: head!.ts, text: head!.text, blocks: stopBlocks(head!.text) }));
+						await this.deliverAnswer(() => withAccess(() => this.app.client.chat.update({ channel: message.channel, ts: head!.ts, text: head!.text, blocks: stopBlocks(head!.text) })));
 						restoredControls = true;
 					}
 				}
@@ -365,6 +376,7 @@ export class SlackPortal {
 					result = await this.chat.chat(input, credential, this.conversations.get('slack', key), onUpdate);
 				}
 				while (result.pending) {
+					currentCredential();
 					this.conversations.set('slack', key, result.conversation);
 					const previous = this.interactions.forKey(key);
 					const prompt = this.interactions.open(key, message.user, credential, result);
@@ -372,23 +384,24 @@ export class SlackPortal {
 					if (previous && previous.id !== prompt.id)
 						await this.refreshPrompt(previous).catch(() => {});
 					if (!this.actionLocations.has(prompt.id)) {
-						const post = (text: string) => say({ text, thread_ts: threadTs });
+						const post = (text: string) => withAccess(() => say({ text, thread_ts: threadTs }));
 						const view = promptView(prompt).text;
 						const last = splitMessage(view, 2_900).at(-1);
 						delivery.refreshPrompt();
 						const promptReply = delivery.liveReply('prompt', 2_900, async (text) => {
-							const sent = await say({ ...(text === last ? this.promptPayload(prompt) : { text }), thread_ts: threadTs });
+							const sent = await withAccess(() => say({ ...(text === last ? this.promptPayload(prompt) : { text }), thread_ts: threadTs }));
 							if (!sent.ts) throw new Error('Slack did not return the question message timestamp.');
 							return { id: sent.ts };
-						}, (ts, text) => this.app.client.chat.update({ channel: message.channel, ts, ...(text === last ? this.promptPayload(prompt) : { text, blocks: [] }) }));
+						}, (ts, text) => withAccess(() => this.app.client.chat.update({ channel: message.channel, ts, ...(text === last ? this.promptPayload(prompt) : { text, blocks: [] }) })));
 						await promptReply.update(view, true);
 						const lastIndex = splitMessage(view, 2_900).length - 1;
 						for (const receipt of delivery.record.messages.prompt.slice(lastIndex + 1))
-							await this.app.client.chat.update({ channel: message.channel, ts: receipt.id!, text: 'Previous controls closed. Use the current controls above.', blocks: [] });
+							await withAccess(() => this.app.client.chat.update({ channel: message.channel, ts: receipt.id!, text: 'Previous controls closed. Use the current controls above.', blocks: [] }));
 						const ts = delivery.record.messages.prompt[lastIndex].id!;
 						delivery.prompt(ts, prompt.questionIndex);
 						this.actionLocations.set(prompt.id, {
 							key,
+							access,
 							channel: message.channel,
 							ts,
 							questionIndex: prompt.questionIndex,
@@ -396,11 +409,9 @@ export class SlackPortal {
 						});
 					}
 					if ((await this.interactions.wait(prompt)) === 'cancelled') break;
-					const currentCredential = this.credentials.forUser(message.user);
-					if (currentCredential.username !== credential.username)
-						throw new Error('The access mapping changed during this conversation.');
-					result = await this.chat.resume(prompt.job, currentCredential, onUpdate);
+					result = await this.chat.resume(prompt.job, currentCredential(), onUpdate);
 				}
+				currentCredential();
 				this.conversations.set('slack', key, result.conversation);
 				lastText = result.text;
 				const text = this.interactions.cancelled(key) ? 'Work stopped.' : result.text;
@@ -413,6 +424,7 @@ export class SlackPortal {
 					channelId: message.channel,
 					error: errorMessage(error)
 				});
+				if (access.revoked) return;
 				if (error instanceof UnconfirmedDeliveryError) {
 					await this.blockDelivery(delivery, message.channel, error.message);
 				}
@@ -426,39 +438,45 @@ export class SlackPortal {
 			} finally {
 				const prompt = this.interactions.forKey(key);
 				this.interactions.close(key);
-				if (prompt)
-					await this.refreshPrompt(prompt).catch((error) =>
-						log.warn('prompt_update_failed', { error: errorMessage(error) })
-					);
-				await activity
-					.update(lastActivity, true)
-					.catch((error) => log.warn('activity_delivery_failed', { error: errorMessage(error) }));
 				this.actionLocations.delete(stopId);
-				if (head && delivery.record.reason) head.text = delivery.record.reason;
-				const finalHead = head;
-				if (finalHead)
-					await this.deliverAnswer(() =>
-						this.app.client.chat.update({
-							channel: message.channel,
-							ts: finalHead.ts,
-							text: finalHead.text,
-							blocks: this.answerBlocks(finalHead.text)
-						})
-					).catch((error) =>
-						log.warn('stop_control_cleanup_failed', { error: errorMessage(error) })
-					);
-				if (!prompt && delivery.record.prompt)
-					await this.app.client.chat.update({ channel: message.channel, ts: delivery.record.prompt.message, text: 'Previous controls closed. Use the current response or controls.', blocks: [] })
-						.catch((error) => log.warn('prompt_update_failed', { error: errorMessage(error) }));
-				if (delivered) delivery.finish();
+				try { currentCredential(); } catch { /* No private cleanup writes after access revocation. */ }
+				if (!access.revoked) {
+					if (prompt)
+						await this.refreshPrompt(prompt).catch((error) =>
+							log.warn('prompt_update_failed', { error: errorMessage(error) })
+						);
+					await activity
+						.update(lastActivity, true)
+						.catch((error) => log.warn('activity_delivery_failed', { error: errorMessage(error) }));
+					if (head && delivery.record.reason) head.text = delivery.record.reason;
+					const finalHead = head;
+					if (finalHead)
+						await this.deliverAnswer(() => withAccess(() =>
+							this.app.client.chat.update({
+								channel: message.channel,
+								ts: finalHead.ts,
+								text: finalHead.text,
+								blocks: this.answerBlocks(finalHead.text)
+							})
+						)).catch((error) =>
+							log.warn('stop_control_cleanup_failed', { error: errorMessage(error) })
+						);
+					const savedPrompt = delivery.record.prompt;
+					if (!prompt && savedPrompt)
+						await withAccess(() => this.app.client.chat.update({ channel: message.channel, ts: savedPrompt.message, text: 'Previous controls closed. Use the current response or controls.', blocks: [] }))
+							.catch((error) => log.warn('prompt_update_failed', { error: errorMessage(error) }));
+					if (delivered && !access.revoked) delivery.finish();
+				}
+				if (prompt && access.revoked) this.actionLocations.delete(prompt.id);
 			}
 		});
 	}
 
 	private async blockDelivery(delivery: PortalDelivery, channel: string, reason: string): Promise<void> {
 		delivery.blocked(reason);
+		const access = new DeliveryAccess(delivery, () => this.credentials.forUser(delivery.record.user));
 		const ts = delivery.record.messages.answer?.[0]?.id;
-		if (ts) await this.deliverAnswer(() => this.app.client.chat.update({ channel, ts, text: reason, blocks: this.answerBlocks(reason) }))
+		if (ts) await this.deliverAnswer(() => access.write(() => this.app.client.chat.update({ channel, ts, text: reason, blocks: this.answerBlocks(reason) })))
 			.catch((error) => log.warn('delivery_notice_failed', { error: errorMessage(error) }));
 	}
 
@@ -494,7 +512,7 @@ export class SlackPortal {
 				await location.post?.(chunk);
 			location.questionIndex = prompt.questionIndex;
 		}
-		await this.app.client.chat.update({
+		await location.access.write(() => this.app.client.chat.update({
 			channel: location.channel,
 			ts: location.ts,
 			...(pending
@@ -503,7 +521,7 @@ export class SlackPortal {
 						text: prompt.outcome === 'answered' ? 'Response recorded.' : 'Request closed.',
 						blocks: []
 					})
-		});
+		}));
 		if (!pending) this.actionLocations.delete(prompt.id);
 	}
 }

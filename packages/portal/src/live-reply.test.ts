@@ -43,6 +43,25 @@ describe('live portal replies', () => {
 		expect(chunks.every((chunk) => !/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/.test(chunk))).toBe(true);
 	});
 
+	it('replaces stale tail messages when the final snapshot shrinks and retries interrupted cleanup', async () => {
+		const messages: string[] = [];
+		let interrupt = true;
+		const post = mock(async (text: string, index: number) => {
+			messages.push(text);
+			return { edit: async (next: string) => {
+				if (index === 1 && interrupt) { interrupt = false; throw new Error('Interrupted final edit'); }
+				messages[index] = next;
+			} };
+		});
+		const live = new LiveReply(post, 70);
+		await live.update('Old answer '.repeat(15));
+		await expect(live.update('Final answer', true)).rejects.toThrow('Interrupted final edit');
+		await live.update('Final answer', true);
+		await live.update('Final answer', true);
+		expect(post).toHaveBeenCalledTimes(3);
+		expect(messages).toEqual(['Final answer', 'Previous response replaced. Use the current response above.', 'Previous response replaced. Use the current response above.']);
+	});
+
 	it('uses matching Discord and Slack reactions for knowledge, files and commands', () => {
 		expect(toolEmoji('akm_search')).toEqual({ discord: '🔎', slack: 'mag' });
 		expect(toolEmoji('akm_remember').discord).toBe('🧠');

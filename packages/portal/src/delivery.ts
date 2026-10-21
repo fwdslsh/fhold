@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { ConversationStore } from './conversations.js';
 import type { PortalCredential } from './credential-registry.js';
+import { PortalAccessError } from './credential-registry.js';
 import { LiveReply, type EditableReply } from './live-reply.js';
 
 export type DeliveryDestination =
@@ -148,11 +149,49 @@ export class PortalDelivery {
 			this.save();
 			let posted;
 			try { posted = await post(text); }
-			catch { throw new UnconfirmedDeliveryError(); }
+			catch (error) {
+				// Access guards run before invoking the platform send. This typed
+				// failure is authoritative, not an ambiguous external transaction.
+				if (error instanceof PortalAccessError) {
+					receipts.splice(index, 1);
+					this.save();
+					throw error;
+				}
+				throw new UnconfirmedDeliveryError();
+			}
 			if (!posted.id || posted.id.length > 128) throw new Error('Platform did not acknowledge the message ID.');
 			receipt.id = posted.id;
 			this.save();
 			return editable(index);
 		}, maxLength, Date.now, receipts.map((receipt, index) => ({ reply: editable(index), text: receipt.text })));
+	}
+}
+
+/** Authorization is independent of best-effort progress rendering. Once a
+ * credential lookup fails or changes, this delivery cannot resume publishing.
+ */
+export class DeliveryAccess {
+	private rejected = false;
+	get revoked(): boolean { return this.rejected; }
+
+	constructor(private readonly delivery: PortalDelivery, private readonly resolve: () => PortalCredential) {}
+
+	credential(): PortalCredential {
+		if (this.rejected) throw new PortalAccessError('Access to this pending delivery was revoked.');
+		try {
+			const credential = this.resolve();
+			this.delivery.assertCredential(credential);
+			return credential;
+		} catch {
+			this.rejected = true;
+			const reason = 'The access mapping or connection key is no longer valid; pending delivery was blocked. Check the original session in OpenCode.';
+			this.delivery.blocked(reason);
+			throw new PortalAccessError(reason);
+		}
+	}
+
+	async write<T>(action: () => Promise<T>): Promise<T> {
+		this.credential();
+		return action();
 	}
 }

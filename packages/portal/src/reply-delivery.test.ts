@@ -5,6 +5,7 @@ import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry } from './credential-registry.js';
 import * as runtime from './runtime.js';
 import { PortalDelivery } from './delivery.js';
+import { PortalInteractions } from './interactions.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -798,6 +799,99 @@ describe('Slack conversation UX', () => {
 });
 
 describe('Portal process replacement', () => {
+	for (const adapter of ['slack', 'discord'] as const) {
+		it(`blocks typed ${adapter} question answers after same-owner key rotation`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first);
+			const release = Promise.withResolvers<void>();
+			spyOn(PortalInteractions.prototype, 'wait').mockImplementation(async () => { await release.promise; return undefined; });
+			const close = spyOn(PortalInteractions.prototype, 'close');
+			const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request) => {
+				if (request.name !== 'fhold.job.get') throw new Error('Responses and submissions must not be sent');
+				return response('input_required', '', { interactions: [question] });
+			});
+			const portal = adapter === 'slack' ? new SlackPortal() : new DiscordPortal();
+			await portal.start();
+			await until(() => slack ? slack.replies.some((reply) => reply.text.includes('Which target?')) : discord!.posts.some((post) => post.content.includes('Which target?')));
+			spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			try {
+				if (slack) await slackMessage('message', { event: { ...slack.event, text: 'Custom answer', ts: '2.000001', thread_ts: slack.event.ts }, say: slack.say });
+				else await (portal as unknown as DiscordInternals).onMessage({ ...discord!.message, id: '222222', channel: discord!.thread, content: 'Custom answer', mentions: { has: () => false } });
+				await settledDelivery(adapter, id, 'blocked');
+			} finally { release.resolve(); }
+			await until(() => close.mock.calls.length === 1);
+			expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+		});
+
+		it(`blocks ${adapter} final delivery when its credential is rotated during recovered work`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first);
+			const finish = Promise.withResolvers<ReturnType<typeof response>>();
+			const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request, options) => {
+				if (request.name !== 'fhold.job.get') throw new Error('Native submission must not be replayed');
+				notify(options, { text: 'Still working' });
+				return finish.promise;
+			});
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await until(() => calls.mock.calls.length === 1);
+			spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			finish.resolve(response('completed', 'Private result after credential rotation'));
+			await settledDelivery(adapter, id, 'blocked');
+			expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+			expect(JSON.stringify(slack?.replies ?? discord!.posts)).not.toContain('Private result');
+		});
+
+		it(`rechecks ${adapter} access between chunks of a saved final answer`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first, 'complete');
+			const store = new ConversationStore();
+			const record = store.delivery(adapter, id)!;
+			record.result = `${'a'.repeat(adapter === 'slack' ? 2900 : 1900)}Private tail after revocation`;
+			store.saveDelivery(record); store.close();
+			const revoke = () => spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			if (slack) slackUpdate.mockImplementationOnce(async (args) => {
+				slackPosts.get(args.ts as string)!.text = args.text as string;
+				revoke();
+				return {};
+			});
+			else discord!.posts[0].edit.mockImplementationOnce(async (args: { content: string }) => {
+				discord!.posts[0].content = args.content;
+				revoke();
+				return discord!.posts[0];
+			});
+			const calls = spyOn(McpClient.prototype, 'callTool');
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await settledDelivery(adapter, id, 'blocked');
+			expect(calls).not.toHaveBeenCalled();
+			expect(slack?.say ?? discord!.post).toHaveBeenCalledTimes(1);
+			expect(JSON.stringify(slack?.replies ?? discord!.posts)).not.toContain('Private tail');
+		});
+
+		it(`retires stale ${adapter} answer tails when the recovered final snapshot is shorter`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first, 'complete');
+			const tail = slack ? (await slack.say({ text: 'Obsolete partial answer' })).ts : (await discord!.post({ content: 'Obsolete partial answer' })).id;
+			const store = new ConversationStore();
+			const record = store.delivery(adapter, id)!;
+			record.messages.answer.push({ id: tail, text: 'Obsolete partial answer' });
+			store.saveDelivery(record); store.close();
+			const calls = spyOn(McpClient.prototype, 'callTool');
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await settledDelivery(adapter, id);
+			expect(calls).not.toHaveBeenCalled();
+			expect(slack?.say ?? discord!.post).toHaveBeenCalledTimes(2);
+			expect(slack ? slack.replies[1].text : discord!.posts[1].content).toBe('Previous response replaced. Use the current response above.');
+		});
+	}
+
 	it('does not rerun an expired Guardian job when restoring a pending reply', async () => {
 		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
 		const id = recoveryFixture('slack', first.ts);

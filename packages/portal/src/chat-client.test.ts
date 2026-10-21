@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { Client, SdkError, SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 
 import { GuardianChatClient } from './chat-client.js';
+import { PortalAccessError } from './credential-registry.js';
+import { ConversationStore } from './conversations.js';
+import { DeliveryAccess, PortalDelivery } from './delivery.js';
 
 type ToolResult = Awaited<ReturnType<Client['callTool']>>;
 const credential = { username: 'test-user', key: 'unit-test-key' };
@@ -29,6 +32,49 @@ afterEach(async () => {
 });
 
 describe('Guardian portal job tracking', () => {
+	it('does not reconnect after multipart post access revocation followed by MCP interruption', async () => {
+		const { chat, callTool } = fixture();
+		const store = new ConversationStore(':memory:');
+		let current = credential;
+		let posts = 0;
+		const delivery = PortalDelivery.create(store, {
+			id: 'C123:1', key: 'credential:test-user:thread:C123:1', user: 'U123', bot: 'UBOT', input: 'Original request',
+			destination: { adapter: 'slack', channel: 'C123', ts: '1', thread: '1' }
+		}, credential);
+		delivery.record.messages.answer = [{ id: 'known.1', text: 'Working' }];
+		delivery.submitting(); delivery.accepted('test.job', 'test.session');
+		const access = new DeliveryAccess(delivery, () => current);
+		const live = delivery.liveReply('answer', 1900,
+			() => access.write(async () => { posts++; return { id: 'must-not-post' }; }),
+			() => access.write(async () => { current = { ...credential, key: 'rotated' }; }));
+		callTool.mockImplementation(async (_request, options) => {
+			options?.onprogress?.({ progress: 1, _meta: { 'io.fwdslsh.fhold/agent': response('running', { text: `${'a'.repeat(1900)}Private tail` }).structuredContent } });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			throw new SdkError(SdkErrorCode.ConnectionClosed, 'Interrupted after progress');
+		});
+		try {
+			await expect(chat.resume('test.job', credential, (update) => live.update(update.text, true))).rejects.toBeInstanceOf(PortalAccessError);
+			expect(callTool.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+			expect(posts).toBe(0);
+			expect(store.delivery('slack', delivery.record.id)?.state).toBe('blocked');
+			expect(store.delivery('slack', delivery.record.id)?.messages.answer).toHaveLength(1);
+		} finally { store.close(); }
+	});
+
+	for (const notify of [false, true]) {
+		it(`stops inspection after access revocation in a ${notify ? 'progress notification' : 'response snapshot'}`, async () => {
+			const { chat, callTool } = fixture();
+			callTool.mockImplementation(async (_request, options) => {
+				if (notify) options?.onprogress?.({ progress: 1, _meta: { 'io.fwdslsh.fhold/agent': response('running').structuredContent } });
+				return response('running');
+			});
+			const onUpdate = mock(async () => { throw new PortalAccessError('Access revoked'); });
+			await expect(chat.resume('test.job', credential, onUpdate)).rejects.toThrow('Access revoked');
+			expect(callTool.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+			expect(onUpdate).toHaveBeenCalledTimes(1);
+		});
+	}
+
 	it('returns actionable input, records an explicit response and resumes the existing job', async () => {
 		const { chat, callTool } = fixture();
 		const prompt = {

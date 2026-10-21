@@ -9,6 +9,9 @@ const USERNAME_RE = /^[a-z][a-z0-9._-]{0,63}$/;
 export type PortalAdapter = 'discord' | 'slack';
 export type PortalCredential = { username: string; key: string };
 
+/** Unlike a temporary renderer failure, loss of access must stop job inspection. */
+export class PortalAccessError extends Error {}
+
 type CredentialBundle = {
 	default: string;
 	users: Record<string, string>;
