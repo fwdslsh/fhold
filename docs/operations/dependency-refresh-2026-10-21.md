@@ -11,7 +11,7 @@ new release or a claim that published beta.12 contains these versions.
 | --- | --- | --- |
 | AKM CLI | 0.10.261005-beta | 0.10.261008-beta (`next`) |
 | All three AKM harness plugins | 0.10.261004-beta | 0.10.261007-beta (`next`) |
-| OpenCode CLI, client and plugin SDK | 2.0.29 | 2.1.2 (`latest`) |
+| OpenCode CLI, client and plugin SDK | 2.0.29 | 2.0.32 (compatible 2.0 branch) |
 | Codex | 0.162.1 | 0.163.0 (`latest`) |
 | Claude Code | 2.1.300 | 2.1.306 (`latest`) |
 | JOSE | 6.2.12 | 6.2.13 |
@@ -31,18 +31,30 @@ The immutable native marketplace commit is
 `7bcebfbd6ab9cfebaa4e5a4c6c4b25ef1eb0b106b4c0b14aab1492e56f2ec090`.
 The Dockerfile URL, checksum and extraction prefixes change together.
 
-OpenCode 2.1.2 is the current published `@opencode/cli`, `@opencode/client` and
-`@opencode/plugin` release. Its source tag resolves to
-`a517687fde98a7329ada3ae644a01a9fc6c4e99e`; the repository's ordinary GitHub release
-listing still presents the separate 1.x line. Review the
-[version comparison](https://github.com/anomalyco/opencode/compare/v2.0.29...v2.1.2)
+OpenCode's ordinary GitHub release listing still presents the separate 1.x line.
+The selected published `@opencode` packages advance together to the latest 2.0
+patch, 2.0.32. Review the
+[version comparison](https://github.com/anomalyco/opencode/compare/v2.0.29...v2.0.32)
 and published SDK types rather than substituting a 1.x update. Native provider,
 permissions, scheduler, recovery and AKM harness tests qualify the selected 2.x
 combination; type checks alone do not establish runtime compatibility.
 
 ## Current pins and explicit holds
 
-Effect remains **4.0.1**, which OpenCode 2.1.2's SDK requires exactly; standalone
+OpenCode **2.1.2** is available on npm's `latest` channel but is held for a verified
+history-import compatibility boundary. Its
+[minor breaking change](https://github.com/anomalyco/opencode/commit/acdcdb8dd9)
+moves compaction continuation state into `metadata.recent` or `metadata.keepID`.
+The existing fhold history importer deliberately discards arbitrary message
+metadata to remove runtime authority; adopting 2.1 without a reviewed, narrowly
+validated preservation policy can drop that continuation context. This is a
+source-derived compatibility finding, not a claim that a live user's history was
+lost. The exact 2.0.32 schema and v1 migration retain top-level `recent`, which
+the existing importer preserves. Keep the latest compatible 2.0 patch for these
+fixes; qualify the 2.1 import boundary separately rather than patching vendor code
+or silently weakening authority filtering.
+
+Effect remains **4.0.1**, which OpenCode 2.0.32's SDK requires exactly; standalone
 Effect is 4.0.5. AKM still declares older OpenCode 2.0.26 / Effect rc.112 peers.
 Those upstream-owned nested packages are not patched or overridden to hide a
 compatibility failure. Actual native harness recall remains a required gate.
@@ -67,10 +79,12 @@ Official npm metadata for every workspace dependency and override, upstream
 release/tag metadata, the native archive's manifests and checksum, supported
 Node/Go release indexes, and all workflow action releases were checked October 21.
 `bun update --recursive --no-cache` refreshes compatible transitive resolutions in
-the one root lockfile. `bun outdated --recursive` reports only the two intentional
-Effect/Electron holds above. Frozen installation and all six TypeScript checks
-pass; the reviewed dependency audit passes with the two existing exclusions.
-No advisory exception is added or expanded.
+the one root lockfile, including markdown-it 14.3.3, which fixes the new high/low
+advisories reported against 14.3.2 in the initial issue PR's CI.
+`bun outdated --recursive` must report only the intentional OpenCode, Effect and
+Electron holds above. Frozen installation, all six TypeScript checks and the
+reviewed dependency audit are required on this final set, retaining only the two
+existing exclusions. No advisory exception is added or expanded.
 
 The final combined issue-fix commit must pass the source, artifact and native
 amd64/arm64 image gates after integration. PRs record that exact CI result and
