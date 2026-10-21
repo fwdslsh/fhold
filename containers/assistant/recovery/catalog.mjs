@@ -64,13 +64,45 @@ function defaultExcluded(root, name) {
 	);
 }
 
+// Native AKM v0.10.261009-beta paths with the image's AKM_STATE_DIR=data/state.
+// akm.lock is durable bundle metadata; only its .lck sentinel is transient.
+// The atomic lock helper also creates exact PID/UUID temporary/quarantine names.
+const AKM_LOCK_FILES = ['index.db.write.lock', 'index.rebuild.lock', 'akm.lock.lck'];
+const LOCK_COMPANION = /^\.(?:tmp|stale)-[1-9][0-9]*-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+function nativeProcessLocks(baseRoots) {
+	const directories = ['state/locks', 'secret-locks', 'extract-locks', 'workflow-run-locks'].map(
+		(name) => path.join(baseRoots.akmData, name)
+	);
+	const files = [
+		...AKM_LOCK_FILES.map((name) => path.join(baseRoots.akmData, name)),
+		path.join(baseRoots.akmConfig, 'config.json.lck')
+	];
+	return {
+		paths: [...directories, ...files],
+		contains: (target) =>
+			directories.some((root) => containsPath(root, target)) ||
+			files.some(
+				(file) =>
+					containsPath(file, target) ||
+					(target.startsWith(file) && LOCK_COMPANION.test(target.slice(file.length).split('/')[0]))
+			)
+	};
+}
+
 /** Roots in manifests are derived from the reviewed selection, never accepted
  * from the backup itself. External paths get stable IDs and the exact same
  * container destination on restore. Overlapping selections are deduplicated. */
 export function createCatalog(
 	baseRoots,
 	value,
-	{ privateDir, runtimeDir, store, includeFile, networkMounts = [] } = {}
+	{
+		privateDir,
+		runtimeDir,
+		store,
+		includeFile,
+		networkMounts = [],
+		historicalProcessLocks = false
+	} = {}
 ) {
 	const selection = normalizeSelection(value);
 	const policy = boundaryPolicy(selection);
@@ -78,6 +110,10 @@ export function createCatalog(
 	if (networkRoots.length && !policy.autoExcludeNetworkMounts)
 		throw new Error('recovery selection identity rejected');
 	const exclusions = [...policy.excludePaths, ...policy.externalMounts, ...networkRoots];
+	// Historical catalogs validate the original coverage only. Their transient
+	// members are never eligible for restoration through today's catalog.
+	const processLocks = nativeProcessLocks(baseRoots);
+	const processLockExcluded = (target) => !historicalProcessLocks && processLocks.contains(target);
 	// Process coordination is never durable data. Selecting a native home may
 	// include plugin caches, but must not opt into command wrappers or live locks.
 	const blocked = [
@@ -97,6 +133,7 @@ export function createCatalog(
 		if (
 			['/proc', '/sys', '/dev'].some((root) => overlapsPath(root, selected)) ||
 			blocked.some((root) => containsPath(root, selected)) ||
+			processLockExcluded(selected) ||
 			outside.some((item) => overlapsPath(item, selected))
 		)
 			throw new Error('recovery include path overlaps protected state or destination');
@@ -140,10 +177,12 @@ export function createCatalog(
 	const excludedPath = (target) => {
 		return (
 			exclusions.some((item) => containsPath(item, target)) ||
+			processLockExcluded(target) ||
 			blocked.some((item) => containsPath(item, target)) ||
 			outside.some((item) => containsPath(item, target)) ||
-			(Object.entries(baseRoots).some(([root, base]) =>
-				containsPath(base, target) && defaultExcluded(root, path.relative(base, target))
+			(Object.entries(baseRoots).some(
+				([root, base]) =>
+					containsPath(base, target) && defaultExcluded(root, path.relative(base, target))
 			) &&
 				!selection.paths.some((item) => containsPath(item, target)) &&
 				!selection.sqlite.includes(target))
@@ -165,13 +204,18 @@ export function createCatalog(
 		dbPaths,
 		sqliteFiles,
 		excluded,
+		excludedPath,
 		allowsPath,
 		allowsFile,
 		metadata,
 		selection,
 		networkMounts: networkRoots,
 		policy,
-		protectedPaths: [...blocked, ...outside],
+		protectedPaths: [
+			...blocked,
+			...outside,
+			...(!historicalProcessLocks ? processLocks.paths : [])
+		],
 		exclusions
 	};
 }

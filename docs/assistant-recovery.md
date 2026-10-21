@@ -485,6 +485,24 @@ For example, mount it read-only; it contains paths, not authentication keys:
   These are process coordination, not plugin/account data. Ordinary native control
   metadata and operator-selected plugin caches remain recoverable; arbitrary links
   elsewhere are still refused, never dereferenced as a shortcut.
+  For the image's AKM data/state layout, the reserved transient paths are
+  `/opt/akm/data/index.db.write.lock`, `index.rebuild.lock`, `akm.lock.lck`,
+  `state/locks/`, `secret-locks/`, `extract-locks/`, `workflow-run-locks/`, and
+  `/etc/akm/config.json.lck`. Native PID/UUID temporary and stale-lock companions
+  of those sentinels are also excluded. Durable `/opt/akm/data/akm.lock`, native
+  state/log databases and configuration are preserved. These are specific native
+  locations, not a general rule to omit files ending in `.lock`.
+  Older checkpoints containing these previously captured AKM locks remain usable:
+  their original manifest/selection identity, member metadata and budgets are
+  validated, but current coverage omits the transient members before staging or
+  reading their objects. All restored content still passes checksum and SQLite
+  integrity checks before any target is written. Historical objects are retained;
+  the next successful checkpoint omits them. Surviving local locks are neither
+  removed nor overwritten; AKM retains ownership of their live lifecycle.
+  If an older include file explicitly registered a now-protected lock path in
+  `paths` or `sqlite`, remove that transient registration before restarting;
+  retaining it is rejected as protected state. Other selections and historical
+  essential state remain usable. Selecting a parent directory needs no change.
 - Custom catalogs record the normalized lists in the immutable manifest and bind
   their hash into the descriptor/receipt. Restore never adopts paths from a backup
   that the current operator configuration does not cover. The external tooling

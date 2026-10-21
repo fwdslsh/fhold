@@ -143,7 +143,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: fhold/${{ matrix.image }}:ci
-          version: v0.76.0
+          version: v0.76.1
           scanners: vuln
           severity: CRITICAL,HIGH
           exit-code: '0'
@@ -151,7 +151,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: fhold/${{ matrix.image }}:ci
-          version: v0.76.0
+          version: v0.76.1
           scanners: vuln
           severity: CRITICAL
           ignore-unfixed: false
@@ -162,7 +162,7 @@ jobs:
           TRIVY_IGNOREFILE: .github/trivy-ignore.yaml
         with:
           image-ref: fhold/${{ matrix.image }}:ci
-          version: v0.76.0
+          version: v0.76.1
           scanners: vuln
           severity: HIGH
           ignore-unfixed: true

@@ -1,4 +1,4 @@
-FROM node:24.22.0-bookworm-slim AS node-runtime
+FROM node:24.22.1-bookworm-slim AS node-runtime
 ARG NPM_VERSION=12.2.0
 # Use npm's supported self-upgrade at build time, without altering its bundle.
 # This upgrade fixes several bundled advisories; remaining findings still block CI.
@@ -6,9 +6,9 @@ RUN npm install --global "npm@${NPM_VERSION}" \
     && test "$(npm --version)" = "${NPM_VERSION}"
 
 # Build the unchanged upstream scheduler with a patched supported Go runtime.
-# The latest prebuilt release still embeds Go 1.26.6; no vendor code is patched.
+# Keep the compiler runtime explicit; no vendor code is patched.
 FROM golang:1.27.3-bookworm AS scheduler-build
-ARG SUPERCRONIC_VERSION=v0.2.50
+ARG SUPERCRONIC_VERSION=v0.2.51
 RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"

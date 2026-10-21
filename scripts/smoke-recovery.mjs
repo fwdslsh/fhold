@@ -32,6 +32,16 @@ const network = process.env.FH_RECOVERY_TEST_DOCKER_NETWORK;
 const credentialFile = process.env.FH_RECOVERY_TEST_CREDENTIAL_FILE;
 const instance = `smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-recovery-smoke-only';
+const lockMarker = `synthetic-process-lock-${randomUUID()}`;
+const processLockFiles = [
+	'/opt/akm/data/index.rebuild.lock',
+	'/opt/akm/data/akm.lock.lck',
+	'/opt/akm/data/state/locks/fhold-recovery-fixture/improve.lock',
+	'/opt/akm/data/secret-locks/fhold-recovery-fixture.lock',
+	'/opt/akm/data/extract-locks/fhold-recovery-fixture.lock',
+	'/opt/akm/data/workflow-run-locks/fhold-recovery-fixture.lock',
+	'/etc/akm/config.json.lck'
+];
 const envFile = join(root, 'runtime.env');
 const includeFile = join(root, 'include.json');
 const customSelection = {
@@ -476,6 +486,12 @@ try {
 		}
 	`
 	);
+	await execBun(first.id, `import{mkdir,writeFile}from'node:fs/promises';import path from'node:path';
+	for(const file of ${JSON.stringify(processLockFiles)}){
+		await mkdir(path.dirname(file),{recursive:true});
+		await writeFile(file,JSON.stringify({pid:1,fixture:${JSON.stringify(lockMarker)}}),{flag:'wx',mode:0o600});
+	}
+	await writeFile('/opt/akm/data/akm.lock.lck.notes',${JSON.stringify(lockMarker)}, {mode:0o600});`);
 	const initial = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status']));
 	await poll(async () => {
 		const current = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status']));
@@ -511,6 +527,13 @@ try {
 		await writeFile(join(directory, 'external.txt'), `newer-${name}`, { mode: 0o644 });
 	report.checks.gracefulFinalCheckpointAndRelease = true;
 	const second = await start('replacement');
+	await execBun(second.id, `import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
+	for(const file of ${JSON.stringify(processLockFiles)}){
+		const value=await readFile(file,'utf8').catch(error=>{if(error.code==='ENOENT')return '';throw error;});
+		assert.equal(value.includes(${JSON.stringify(lockMarker)}),false,'historical process lock must not be restored');
+	}
+	assert.equal(await readFile('/opt/akm/data/akm.lock.lck.notes','utf8'),${JSON.stringify(lockMarker)});`);
+	report.checks.nativeProcessLocksNotRestoredAndSimilarDurableFilesPreserved = true;
 	if (survivingHome) {
 		await execBun(
 			second.id,
