@@ -270,6 +270,34 @@ export function createEngine(config, options = {}) {
 	let lastCheckpointAt = null;
 	let lastCheckpointTick = null;
 	let failure = null;
+	let checkpointFailure = null;
+	let checkpointAttempt;
+	// Keep filenames in the existing private status only. Never retain arbitrary
+	// transport messages, response bodies or credential-bearing URLs.
+	function checkpointDiagnostic(error) {
+		const { memberPath, ...context } = checkpointAttempt;
+		const detail = { ...context, failedAt: Date.now() };
+		for (const key of ['code', 'syscall'])
+			if (typeof error?.[key] === 'string' && /^[\w -]{1,64}$/.test(error[key]))
+				detail[key] = error[key];
+		for (const [key, text] of Object.entries({
+			path: error?.path,
+			dest: error?.dest,
+			memberPath
+		})) {
+			if (typeof text !== 'string' || !path.isAbsolute(text)) continue;
+			// Bound JSON-encoded size as status has a fixed read budget. A long
+			// pathname remains explicitly truncated rather than hiding status.
+			let value = text.slice(0, 1_024);
+			if (value !== text) detail.truncated = true;
+			while (Buffer.byteLength(JSON.stringify(value)) > 1_024) {
+				value = value.slice(0, -1);
+				detail.truncated = true;
+			}
+			detail[key] = value;
+		}
+		return detail;
+	}
 	let operationDeadline = 0;
 	function checkDeadline() {
 		if (busy && performance.now() >= operationDeadline)
@@ -477,7 +505,7 @@ export function createEngine(config, options = {}) {
 				// Upstream tools and workspace apps can create new SQLite files. Detect
 				// their content, not their extension, and snapshot them natively.
 				if (/-wal$|-shm$/.test(name) && (await isSQLite(target.slice(0, -4)))) return;
-				await add(root, name, await isSQLite(target) ? 'sqlite' : 'file');
+				await add(root, name, (await isSQLite(target)) ? 'sqlite' : 'file');
 			} else throw new Error('recovery special file rejected');
 		}
 		for (const [root, name] of catalog.trees) await walk(root, name);
@@ -541,10 +569,7 @@ export function createEngine(config, options = {}) {
 				throw new Error('recovery SQLite catalog mismatch');
 			if (member.kind === 'file' && !saved.allowsFile(member.root, member.path))
 				throw new Error('recovery file catalog mismatch');
-			if (
-				member.kind === 'file' &&
-				(member.id !== undefined || saved.sqliteFiles.has(key))
-			)
+			if (member.kind === 'file' && (member.id !== undefined || saved.sqliteFiles.has(key)))
 				throw new Error('recovery file cannot be SQLite');
 			if (
 				!Number.isInteger(member.mode) ||
@@ -594,20 +619,35 @@ export function createEngine(config, options = {}) {
 		operationDeadline = performance.now() + limits.operationTimeoutMs;
 		try {
 			failure = null;
+			checkpointAttempt = undefined;
+			let result;
+			let cleanupError;
 			try {
-				const result = await task();
+				result = await task();
 				await checkMounts();
 				checkDeadline();
-				return result;
+			} catch (error) {
+				if (checkpointAttempt) checkpointFailure = checkpointDiagnostic(error);
+				throw error;
 			} finally {
 				for (const stage of stages) {
 					// Keep journal-owned partial restore evidence; all other generated
 					// staging is disposable. Cleanup failures remain operation failures.
-					if (path.basename(stage).startsWith('restore-') && (await exists(journalPath))) continue;
-					await fs.rm(stage, { recursive: true, force: true });
-					stages.delete(stage);
+					try {
+						if (path.basename(stage).startsWith('restore-') && (await exists(journalPath))) continue;
+						await fs.rm(stage, { recursive: true, force: true });
+						stages.delete(stage);
+					} catch (error) {
+						// Cleanup must not replace the original capture failure.
+						cleanupError ??= error;
+					}
 				}
 			}
+			if (cleanupError) {
+				if (checkpointAttempt) checkpointAttempt.phase = 'operation-cleanup';
+				throw cleanupError;
+			}
+			return result;
 		} catch (error) {
 			if (startup) {
 				ready = false;
@@ -621,6 +661,7 @@ export function createEngine(config, options = {}) {
 				}
 			}
 			failure = sanitizeRecoveryError(error);
+			if (checkpointAttempt && !checkpointFailure) checkpointFailure = checkpointDiagnostic(error);
 			throw error;
 		} finally {
 			busy = false;
@@ -705,8 +746,10 @@ export function createEngine(config, options = {}) {
 						if (!selectedForRestore(member, saved)) continue;
 						const target = saved.native(member.root, member.path);
 						if (receiptBytes && (await exists(target))) continue;
-						if (member.kind === 'sqlite' &&
-							((await exists(`${target}-wal`)) || (await exists(`${target}-shm`))))
+						if (
+							member.kind === 'sqlite' &&
+							((await exists(`${target}-wal`)) || (await exists(`${target}-shm`)))
+						)
 							throw new Error('SQLite input type rejected');
 						restoreMembers.push(member);
 					}
@@ -777,19 +820,28 @@ export function createEngine(config, options = {}) {
 		},
 		async checkpoint() {
 			return operation(async () => {
+				checkpointAttempt = {
+					phase: 'inventory',
+					publication: 'not-attempted',
+					previousGeneration: head?.value.generation ?? null
+				};
+				checkpointFailure = null;
 				if (!ready) throw new Error('recovery startup not complete');
 				await owned(true);
 				const previous = head.value.generation ? await manifestAt(head.value.generation) : null;
 				const { members, presence } = await inventory(previous?.presence);
 				const startedAt = Date.now();
+				checkpointAttempt.phase = 'staging-create';
 				const stage = await fs.mkdtemp(path.join(privateDir, 'capture-'));
 				stages.add(stage);
 				const captured = [];
 				let total = 0;
 				for (const member of members) {
+					checkpointAttempt.phase = member.kind === 'sqlite' ? 'sqlite-capture' : 'file-capture';
 					await owned();
 					const captureStartedAt = Date.now();
 					const source = native(member.root, member.path);
+					checkpointAttempt.memberPath = source;
 					let bytes;
 					if (member.kind === 'sqlite') {
 						const target = path.join(
@@ -807,6 +859,7 @@ export function createEngine(config, options = {}) {
 					if (total > limits.maxTotalBytes) throw new Error('recovery capture budget exceeded');
 					checkDeadline();
 					const hash = digest(bytes);
+					checkpointAttempt.phase = 'object-upload';
 					await store.createImmutable(`objects/${hash}`, bytes, ownership);
 					captured.push({
 						...member,
@@ -835,23 +888,43 @@ export function createEngine(config, options = {}) {
 					finishedAt: Date.now(),
 					consistency: 'individual-sqlite-transactions-and-files-not-one-transaction'
 				};
+				delete checkpointAttempt.memberPath;
+				checkpointAttempt.phase = 'manifest-validation';
 				validateManifest(manifest);
 				const bytes = serialize(manifest);
 				if (bytes.length > limits.maxManifestBytes)
 					throw new Error('recovery manifest exceeds budget');
 				const generation = digest(bytes);
+				checkpointAttempt.attemptedGeneration = generation;
 				checkDeadline();
+				checkpointAttempt.phase = 'manifest-upload';
 				await store.createImmutable(`manifests/${generation}`, bytes, ownership);
 				await owned(true);
+				checkpointAttempt.phase = 'descriptor-publication';
+				// A transport/readback error can follow a successful CAS. Until its
+				// response arrives, publication is unknown rather than "not published".
+				checkpointAttempt.publication = 'unconfirmed';
 				head = await store.compareAndSwap(
 					head.token,
-					{ ...head.value, ...catalog.metadata, versions, generation, checkpointAt: manifest.finishedAt },
+					{
+						...head.value,
+						...catalog.metadata,
+						versions,
+						generation,
+						checkpointAt: manifest.finishedAt
+					},
 					ownership
 				);
-				await writeReceipt(generation);
+				checkpointAttempt.publication = 'accepted';
+				// Acceptance is independent of local receipt/cleanup success. Report
+				// the new durable generation even if either subsequent step fails.
 				lastCheckpointAt = manifest.finishedAt;
 				lastCheckpointTick = performance.now();
+				checkpointAttempt.phase = 'receipt';
+				await writeReceipt(generation);
+				checkpointAttempt.phase = 'staging-cleanup';
 				await fs.rm(stage, { recursive: true });
+				checkpointAttempt.phase = 'completion';
 				return this.status();
 			});
 		},
@@ -875,7 +948,8 @@ export function createEngine(config, options = {}) {
 				generation: head?.value.generation ?? null,
 				lastCheckpointAt,
 				lastCheckpointTick,
-				failure
+				failure,
+				checkpointFailure
 			};
 		},
 		async release() {
