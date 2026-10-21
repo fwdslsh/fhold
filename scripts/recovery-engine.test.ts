@@ -1139,6 +1139,168 @@ describe('same-instance local recovery engine', () => {
 		await rm(path.join(f.dir, 'backup/descriptor-mutation'), { recursive: true });
 		await engine.release();
 	});
+	test('a disappearing captured member retains its private ENOENT and the previous accepted checkpoint', async () => {
+		const f = await fixture();
+		const first = path.join(f.roots.work, 'a-note');
+		const missing = path.join(f.roots.work, 'b-private-note');
+		await writeFile(first, 'first');
+		await writeFile(missing, 'preserved old note');
+		const store = createDirectoryStore(f.config.url);
+		let disappear = false;
+		const engine = createEngine(f.config, {
+			...f.options,
+			store: {
+				...store,
+				async createImmutable(...args) {
+					const result = await store.createImmutable(...args);
+					if (disappear && args[0].startsWith('objects/')) {
+						disappear = false;
+						await rm(missing);
+					}
+					return result;
+				}
+			}
+		});
+		await engine.initialize();
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		const accepted = engine.status().generation;
+		const publishedAt = engine.status().lastCheckpointAt;
+		await writeFile(first, 'newer content');
+		disappear = true;
+		await expect(engine.checkpoint()).rejects.toThrow('ENOENT');
+		expect(engine.status()).toMatchObject({
+			ready: true,
+			owned: true,
+			generation: accepted,
+			lastCheckpointAt: publishedAt,
+			failure: 'recovery filesystem failure (ENOENT)',
+			checkpointFailure: {
+				phase: 'file-capture',
+				publication: 'not-attempted',
+				previousGeneration: accepted,
+				code: 'ENOENT',
+				syscall: 'open',
+				path: missing,
+				memberPath: missing
+			}
+		});
+		expect((await savedManifest(f)).head.value.generation).toBe(accepted);
+		await engine.release();
+		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+		const replacement = f.engine();
+		await replacement.acquireRestore();
+		expect(await readFile(missing, 'utf8')).toBe('preserved old note');
+		await replacement.release();
+	});
+	for (const failurePoint of ['receipt', 'cleanup', 'cas-response'])
+		test(`reports ${failurePoint} failure truthfully after descriptor acceptance and restores the accepted content`, async () => {
+			const f = await fixture();
+			const note = path.join(f.roots.work, 'note');
+			await writeFile(note, 'old accepted content');
+			const store = createDirectoryStore(f.config.url);
+			let inject = false;
+			const engine = createEngine(f.config, {
+				...f.options,
+				store: {
+					...store,
+					async compareAndSwap(...args) {
+						const result = await store.compareAndSwap(...args);
+						if (inject) {
+							inject = false;
+							if (failurePoint === 'receipt')
+								await rename(f.config.privateDir, path.join(f.dir, 'retained-private'));
+							else if (failurePoint === 'cas-response')
+								throw new Error('recovery publication readback failed');
+							else {
+								// Remove the real capture staging directory after CAS. The
+								// explicit non-force cleanup must still report its ENOENT.
+								const { readdir } = await import('node:fs/promises');
+								for (const name of await readdir(f.config.privateDir))
+									if (name.startsWith('capture-'))
+										await rm(path.join(f.config.privateDir, name), { recursive: true });
+							}
+						}
+						return result;
+					}
+				}
+			});
+			await engine.initialize();
+			await engine.acquireRestore();
+			await engine.checkpoint();
+			const previous = engine.status().generation;
+			const previousTick = engine.status().lastCheckpointTick;
+			await writeFile(note, 'newly accepted complete content');
+			inject = true;
+			await expect(engine.checkpoint()).rejects.toThrow(
+				failurePoint === 'cas-response' ? 'readback' : 'ENOENT'
+			);
+			const { head, manifest } = await savedManifest(f);
+			expect(head.value.generation).not.toBe(previous);
+			expect(engine.status().checkpointFailure).toMatchObject({
+				phase:
+					failurePoint === 'cleanup'
+						? 'staging-cleanup'
+						: failurePoint === 'receipt'
+							? 'receipt'
+							: 'descriptor-publication',
+				publication: failurePoint === 'cas-response' ? 'unconfirmed' : 'accepted',
+				previousGeneration: previous,
+				attemptedGeneration: head.value.generation
+			});
+			if (failurePoint !== 'cas-response') {
+				expect(engine.status().lastCheckpointAt).toBe(manifest.finishedAt);
+				expect(engine.status().lastCheckpointTick).toBeGreaterThan(previousTick);
+				expect(engine.status().generation).toBe(head.value.generation);
+			} else expect(engine.status().generation).toBe(previous);
+			await engine.release();
+			expect(await stat(path.join(f.dir, 'backup/owner/nonce')).catch(() => null)).toBeNull();
+			await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+			const replacement = f.engine();
+			await replacement.acquireRestore();
+			expect(await readFile(note, 'utf8')).toBe('newly accepted complete content');
+			await replacement.checkpoint();
+			expect(replacement.status().checkpointFailure).toBeNull();
+			await replacement.release();
+		});
+	test('bounds private paths and preserves the original failure when cleanup also fails', async () => {
+		const f = await fixture();
+		await writeFile(path.join(f.roots.work, 'note'), 'private data');
+		const store = createDirectoryStore(f.config.url);
+		const original = Object.assign(new Error('transport-secret-must-not-be-recorded'), {
+			code: 'ENOSPC', syscall: 'write', path: `/${'private-'.repeat(2_000)}`,
+			dest: 'https://user:secret@example.invalid/path'
+		});
+		let inject = true;
+		const engine = createEngine(f.config, { ...f.options, store: {
+			...store,
+			async createImmutable(...args) {
+				if (inject) {
+					inject = false;
+					await chmod(f.config.privateDir, 0o000);
+					throw original;
+				}
+				return store.createImmutable(...args);
+			}
+		} });
+		await engine.initialize();
+		await engine.acquireRestore();
+		try {
+			await expect(engine.checkpoint()).rejects.toBe(original);
+			expect(engine.status().checkpointFailure).toMatchObject({
+				phase: 'object-upload', publication: 'not-attempted', code: 'ENOSPC', syscall: 'write', truncated: true
+			});
+			const detail = JSON.stringify(engine.status().checkpointFailure);
+			expect(Buffer.byteLength(detail)).toBeLessThan(8_192);
+			expect(detail).not.toContain('transport-secret');
+			expect(detail).not.toContain('https:');
+		} finally {
+			await chmod(f.config.privateDir, 0o700);
+		}
+		await engine.checkpoint();
+		expect(engine.status().checkpointFailure).toBeNull();
+		await engine.release();
+	});
 	test('bounded SQLite subprocess rejects a busy source without publishing', async () => {
 		const f = await fixture();
 		const db = new Database(path.join(f.roots.akmData, 'state.db'));

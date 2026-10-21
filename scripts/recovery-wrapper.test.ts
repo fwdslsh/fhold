@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +11,47 @@ const base = { FH_RECOVERY_URL: 'file:///tmp/synthetic-backup', FH_INSTANCE_ID: 
 const wrapper = join(import.meta.dir, '../containers/assistant/fhold-recovery.mjs');
 
 describe('recovery wrapper configuration and private status', () => {
+	it('retains checkpoint operation/path evidence privately and omits it from ordinary status', () => {
+		const runtimeDir = mkdtempSync(join(tmpdir(), 'fhold-wrapper-private-failure-'));
+		const diagnostic = {
+			phase: 'file-capture',
+			publication: 'not-attempted',
+			code: 'ENOENT',
+			syscall: 'open',
+			path: '/work/private-filename'
+		};
+		const code = `
+		import {runRecovery} from ${JSON.stringify(wrapper)};
+		import {writeFile} from 'node:fs/promises';
+		const runtimeDir=${JSON.stringify(runtimeDir)};let checkpointFailure=null;
+		const engine={status(){return {lastCheckpointAt:null,lastCheckpointTick:null,failure:checkpointFailure?'recovery filesystem failure (ENOENT)':null,checkpointFailure};},
+			async acquireRestore(){await writeFile(runtimeDir+'/recovery-writers-started','fixture');},async renew(){},
+			async checkpoint(){checkpointFailure=${JSON.stringify(diagnostic)};process.kill(process.pid,'SIGTERM');throw Object.assign(new Error('private raw failure'),{code:'ENOENT',path:'/work/private-filename'});},async release(){}};
+		try{await runRecovery({runtimeDir,intervalSeconds:60,maxUnsavedSeconds:300,probePort:0},{env:{},engine});}catch{}
+		`;
+		const run = spawnSync(process.execPath, ['--no-env-file', '--eval', code], {
+			encoding: 'utf8',
+			timeout: 5_000
+		});
+		expect(run.status).toBe(0);
+		expect(run.stderr).toBe(
+			'fhold recovery: checkpoint failed (recovery filesystem failure (ENOENT)).\n'
+		);
+		const file = join(runtimeDir, 'recovery-status.json');
+		expect(statSync(file).mode & 0o777).toBe(0o600);
+		expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({
+			state: 'failed',
+			checkpointFailure: diagnostic
+		});
+		const status = spawnSync(process.execPath, ['--no-env-file', wrapper, 'status'], {
+			env: { ...process.env, FH_RUNTIME_DIR: runtimeDir },
+			encoding: 'utf8'
+		});
+		expect(status.status).toBe(1);
+		expect(status.stdout).not.toContain('private-filename');
+		expect(status.stdout).not.toContain('checkpointFailure');
+		expect(status.stderr).not.toContain('private-filename');
+	});
 	it('reads coherent private status while publications are atomically replaced', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-wrapper-status-publication-'));
 		const statusFile = join(root, 'recovery-status.json');

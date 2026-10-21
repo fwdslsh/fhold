@@ -197,6 +197,79 @@ async function api(container, route, options = {}, authenticated = true) {
 }
 const execBun = (id, source) =>
 	docker(['exec', id, 'bun', '--no-env-file', '--config=/dev/null', '-e', source]);
+const nativeClient = `import {OpenCode} from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
+const client=OpenCode.make({baseUrl:'http://127.0.0.1:4096',headers:{authorization:'Basic '+Buffer.from('opencode:'+process.env.OPENCODE_SERVER_PASSWORD).toString('base64')}});`;
+async function nativeMessages(container, sessionID) {
+	return JSON.parse(
+		await execBun(
+			container.id,
+			`${nativeClient}
+console.log(JSON.stringify((await client.message.list({sessionID:${JSON.stringify(sessionID)},order:'asc',limit:200})).data));`
+		)
+	);
+}
+async function completeNativeReply(container, sessionID) {
+	const marker = `synthetic-complete-recovery-reply-${randomUUID()}`;
+	// Only the disposable fixture supplies an HTTP model. Use native configuration,
+	// prompting and persistence rather than inserting rows or patching vendor code.
+	const server = `import http from 'node:http';import{writeFileSync}from'node:fs';
+http.createServer(async(req,res)=>{for await(const _chunk of req){};
+const chunk=(delta,finish_reason)=>({id:'recovery',object:'chat.completion.chunk',created:1,model:'marker',choices:[{index:0,delta,finish_reason}]});
+res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: '+JSON.stringify(chunk({role:'assistant',content:${JSON.stringify(marker)}},null))+'\\n\\ndata: '+JSON.stringify(chunk({},'stop'))+'\\n\\ndata: [DONE]\\n\\n');
+}).listen(0,'127.0.0.1',function(){writeFileSync('/tmp/fhold-recovery-model-port',String(this.address().port));});`;
+	await docker(['exec', '-d', container.id, 'node', '--input-type=module', '-e', server]);
+	const port = await poll(
+		async () =>
+			Number(
+				await execBun(
+					container.id,
+					`import{readFileSync}from'node:fs';console.log(readFileSync('/tmp/fhold-recovery-model-port','utf8'));`
+				)
+			),
+		'controlled model listener'
+	);
+	await execBun(
+		container.id,
+		`import{readFileSync,writeFileSync,renameSync}from'node:fs';
+const file=process.env.OPENCODE_CONFIG;const settings=JSON.parse(readFileSync(file,'utf8'));
+settings.model='recovery-fixture/marker';settings.providers={...settings.providers,'recovery-fixture':{name:'Recovery fixture',package:'@opencode/ai/providers/openai-compatible',settings:{baseURL:'http://127.0.0.1:${port}/v1',apiKey:'synthetic-fixture'},models:{marker:{capabilities:{tools:true,input:['text'],output:['text']}}}}};
+writeFileSync(file+'.fixture',JSON.stringify(settings));renameSync(file+'.fixture',file);`
+	);
+	await poll(
+		async () =>
+			JSON.parse(
+				await execBun(
+					container.id,
+					`${nativeClient}
+console.log(JSON.stringify((await client.model.default({location:{directory:'/work'}})).data?.id==='marker'));`
+				)
+			),
+		'native model configuration'
+	);
+	await execBun(
+		container.id,
+		`${nativeClient}
+await client.session.prompt({sessionID:${JSON.stringify(sessionID)},text:'Return the synthetic recovery marker.'});`
+	);
+	await poll(
+		async () =>
+			(await nativeMessages(container, sessionID)).some(
+				(message) =>
+					message.type === 'assistant' &&
+					message.time.completed &&
+					message.content.some((part) => part.type === 'text' && part.text === marker)
+			),
+		'completed native final reply'
+	);
+	// Match the reported short reply-to-Stop interval. Compare complete native
+	// records, including IDs, parts and completion fields, immediately before Stop.
+	await new Promise((resolve) => setTimeout(resolve, 7_000));
+	const messages = await nativeMessages(container, sessionID);
+	await writeFile(join(root, 'native-messages-before-stop.json'), JSON.stringify(messages), {
+		mode: 0o600
+	});
+	return messages;
+}
 async function stop(container) {
 	await docker(['stop', '--time', '360', container.id], 380_000);
 	const status = JSON.parse(await docker(['inspect', container.id, '--format', '{{json .State}}']));
@@ -425,6 +498,7 @@ try {
 		)
 	);
 	report.checks.realPinnedCatalogInspected = true;
+	const nativeBeforeStop = first.v2 ? await completeNativeReply(first, session.id) : null;
 	await stop(first);
 	await released();
 	if (survivingHome)
@@ -462,6 +536,20 @@ try {
 		sessions.some((value) => value.id === session.id),
 		'native session recovered into empty writable layer'
 	);
+	if (nativeBeforeStop) {
+		const restoredMessages = await nativeMessages(second, session.id);
+		await writeFile(
+			join(root, 'native-messages-after-restore.json'),
+			JSON.stringify(restoredMessages),
+			{ mode: 0o600 }
+		);
+		assert.deepEqual(
+			restoredMessages,
+			nativeBeforeStop,
+			'complete native messages survive final checkpoint and fresh restore'
+		);
+		report.checks.completedNativeReplyAndFullMessageRecordsRestored = true;
+	}
 	await execBun(
 		second.id,
 		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/fhold/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/fhold/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid','reconciliation.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`

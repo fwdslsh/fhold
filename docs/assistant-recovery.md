@@ -304,6 +304,26 @@ checkpoint and exact-owner release. A genuine renewal failure still prevents
 an unsafe final checkpoint. No pre-stop command,
 automatic unlock, sidecar or hosting-specific runtime is needed.
 
+If a checkpoint fails, preserve the existing private
+`$FH_RUNTIME_DIR/recovery-status.json` before restarting or replacing the writable
+layer (default `/tmp/fhold-runtime/recovery-status.json`). Its `checkpointFailure`
+records the capture/publication phase, filesystem code and syscall/path when
+available, the current member path, previous generation and attempted generation.
+Each path is bounded to 1 KiB of encoded JSON; `truncated: true` marks shortening.
+The file is mode 0600 and may contain private filenames. Do not paste it into
+public issues or ordinary logs. Normal `fhold-recovery status`, CLI/Admin status,
+health probes and console failures omit this detail.
+
+`publication: "not-attempted"` means this attempt had not called descriptor CAS;
+`"accepted"` means the store confirmed the new descriptor before a later receipt,
+cleanup or completion failure. `"unconfirmed"` means CAS was attempted but its
+response did not confirm acceptance; inspect the private accepted descriptor
+externally after stopping all writers before drawing conclusions. Neither an
+`ENOENT` nor a nonzero final checkpoint exit proves the old generation remained
+accepted. `lastPublishedAt` advances on confirmed descriptor acceptance, while
+`lastAttemptFailed` and the nonzero shutdown result still report any subsequent
+failure. There is no automatic fallback, unlock or omission of missing state.
+
 If deployment setup runs before the assistant, prefer a one-shot setup followed
 by `exec /usr/local/bin/fhold-assistant` under the image's init process. A parent
 that remains running must forward TERM/INT and wait for the assistant's actual
@@ -655,8 +675,14 @@ and backup warnings without stopping the agent. Entrypoint tests cover scheduler
 writer/final-checkpoint budgets, deterministic process exit between `/proc`
 check/read, and visible nonzero final-recovery failures. Exact-image directory and Blob-emulator smokes
 exercise native session/shell/file APIs, restored state and all three offline
-AKM harnesses without copying host accounts or repairing image behavior. Upgrade
-smokes replace a published image in cold-storage and surviving-home modes, then
+AKM harnesses without copying host accounts or repairing image behavior. Native
+smokes on OpenCode 2 also complete a synthetic native assistant reply, wait seven
+seconds before normal Stop, and compare full native message records after fresh
+restore. Both directory and Blob-emulator runs cover the independent read-only
+configuration file and required read-only/writable drive boundaries. Bind mounts
+do not qualify actual CIFS behavior, live managed identity or signed-in workers.
+These tests do not reproduce the hosted ENOENT reported in issue #42.
+Upgrade smokes replace a published image in cold-storage and surviving-home modes, then
 restore a checkpoint produced by the replacement image on its next restart.
 Candidate-image stops also verify PID 1's ordered shutdown/completion logs;
 the Blob smoke verifies the final accepted generation and cleared owner.

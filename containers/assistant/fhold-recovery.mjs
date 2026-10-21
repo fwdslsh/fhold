@@ -159,7 +159,8 @@ export async function readRecoveryStatus(path) {
 async function nativeReady(env) {
 	try {
 		const password =
-			env.OPENCODE_PASSWORD || env.OPENCODE_SERVER_PASSWORD ||
+			env.OPENCODE_PASSWORD ||
+			env.OPENCODE_SERVER_PASSWORD ||
 			(
 				await readRegular(
 					env.OPENCODE_SERVER_PASSWORD_FILE || '/run/secrets/opencode_server_password',
@@ -245,6 +246,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 			lastAttemptFailed,
 			warnings,
 			failure: failureCause ? sanitizeRecoveryError(failureCause) : engine.status().failure,
+			checkpointFailure: checkpoint.checkpointFailure ?? null,
 			maxUnsavedSeconds: config.maxUnsavedSeconds
 		};
 		// Observation must not masquerade as storage-ownership loss.
@@ -397,6 +399,9 @@ async function main() {
 		const status = await readRecoveryStatus(
 			join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'recovery-status.json')
 		);
+		// Path-bearing failure evidence stays in the mode-0600 runtime file;
+		// ordinary CLI/Admin status and public diagnostics remain sanitized.
+		delete status.checkpointFailure;
 		const now = Date.now();
 		const healthy =
 			status.healthy === true &&
