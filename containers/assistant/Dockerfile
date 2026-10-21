@@ -7,8 +7,8 @@ RUN npm install --global "npm@${NPM_VERSION}" \
 
 # Build the unchanged upstream scheduler with a patched supported Go runtime.
 # The latest prebuilt release still embeds Go 1.26.6; no vendor code is patched.
-FROM golang:1.27.2-bookworm AS scheduler-build
-ARG SUPERCRONIC_VERSION=v0.2.49
+FROM golang:1.27.3-bookworm AS scheduler-build
+ARG SUPERCRONIC_VERSION=v0.2.50
 RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
@@ -63,17 +63,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:b448332d9c237aa36d89d3cef03c13f60a1649a81cd29ab511601d0e0b251193 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/3461257250277f25f2a17c1701aa6ed468541851 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:7bcebfbd6ab9cfebaa4e5a4c6c4b25ef1eb0b106b4c0b14aab1492e56f2ec090 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/8ff402c74d8c1e76e21de9dff718ac3eb279ba92 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/claude \
+    && plugin_root=akm-plugins-8ff402c74d8c1e76e21de9dff718ac3eb279ba92/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/.agents/plugins/marketplace.json \
-      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/.claude-plugin/marketplace.json \
-      akm-plugins-3461257250277f25f2a17c1701aa6ed468541851/LICENSE
+      akm-plugins-8ff402c74d8c1e76e21de9dff718ac3eb279ba92/.agents/plugins/marketplace.json \
+      akm-plugins-8ff402c74d8c1e76e21de9dff718ac3eb279ba92/.claude-plugin/marketplace.json \
+      akm-plugins-8ff402c74d8c1e76e21de9dff718ac3eb279ba92/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node

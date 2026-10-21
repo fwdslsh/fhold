@@ -454,7 +454,7 @@ describe('release completeness gate', () => {
 			step.uses?.startsWith('sigstore/cosign-installer@')
 		);
 		expect(cosign?.if).toBe('inputs.dry_run != true');
-		expect(cosign?.with?.['cosign-release']).toBe('v3.1.3');
+		expect(cosign?.with?.['cosign-release']).toBe('v3.1.4');
 		expect(
 			workflow.jobs.release.steps.find(
 				(step) => step.name === 'Publish the verified GitHub release'

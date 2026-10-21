@@ -22,8 +22,8 @@
   "devDependencies": {
     "@fhold/lib": "workspace:*",
     "axe-core": "4.14.0",
-    "electron": "44.7.2",
-    "electron-builder": "^26.17.0",
+    "electron": "44.9.3",
+    "electron-builder": "^26.18.0",
     "typescript": "^7.0.2",
     "@types/node": "^26.6.5"
   }
