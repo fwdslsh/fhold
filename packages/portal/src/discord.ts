@@ -176,7 +176,9 @@ export class DiscordPortal {
 		if (pending) {
 			try {
 				const prompt = this.interactions.get(pending.id, message.author.id, credential, key);
-				await this.interactions.answer(prompt, credential, [text]);
+				const rendered = this.promptMessages.get(prompt.id);
+				if (!rendered) throw new Error('This prompt is no longer active.');
+				await this.interactions.answer(prompt, rendered.access.credential(), [text]);
 				await this.refreshPrompt(prompt).catch((error) =>
 					log.warn('prompt_update_failed', { error: errorMessage(error) })
 				);
@@ -479,14 +481,14 @@ export class DiscordPortal {
 			);
 			const [, id, value, page] = interaction.customId.split(':');
 			const prompt = this.interactions.get(id, interaction.user.id, credential, key);
-			this.promptMessages.get(id)?.access.credential();
+			const rendered = this.promptMessages.get(id);
 			if (
-				this.promptMessages.get(id)?.message.id !== interaction.message.id ||
+				!rendered || rendered.message.id !== interaction.message.id ||
 				Number(page) !== prompt.questionIndex
 			) {
 				throw new Error('This question has changed. Use its current buttons.');
 			}
-			await this.interactions.action(prompt, credential, value);
+			await this.interactions.action(prompt, rendered.access.credential(), value);
 			await this.refreshPrompt(prompt).catch((error) =>
 				log.warn('prompt_update_failed', { error: errorMessage(error) })
 			);

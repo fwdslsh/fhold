@@ -5,6 +5,7 @@ import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry } from './credential-registry.js';
 import * as runtime from './runtime.js';
 import { PortalDelivery } from './delivery.js';
+import { PortalInteractions } from './interactions.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -799,6 +800,31 @@ describe('Slack conversation UX', () => {
 
 describe('Portal process replacement', () => {
 	for (const adapter of ['slack', 'discord'] as const) {
+		it(`blocks typed ${adapter} question answers after same-owner key rotation`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first);
+			const release = Promise.withResolvers<void>();
+			spyOn(PortalInteractions.prototype, 'wait').mockImplementation(async () => { await release.promise; return undefined; });
+			const close = spyOn(PortalInteractions.prototype, 'close');
+			const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request) => {
+				if (request.name !== 'fhold.job.get') throw new Error('Responses and submissions must not be sent');
+				return response('input_required', '', { interactions: [question] });
+			});
+			const portal = adapter === 'slack' ? new SlackPortal() : new DiscordPortal();
+			await portal.start();
+			await until(() => slack ? slack.replies.some((reply) => reply.text.includes('Which target?')) : discord!.posts.some((post) => post.content.includes('Which target?')));
+			spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			try {
+				if (slack) await slackMessage('message', { event: { ...slack.event, text: 'Custom answer', ts: '2.000001', thread_ts: slack.event.ts }, say: slack.say });
+				else await (portal as unknown as DiscordInternals).onMessage({ ...discord!.message, id: '222222', channel: discord!.thread, content: 'Custom answer', mentions: { has: () => false } });
+				await settledDelivery(adapter, id, 'blocked');
+			} finally { release.resolve(); }
+			await until(() => close.mock.calls.length === 1);
+			expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+		});
+
 		it(`blocks ${adapter} final delivery when its credential is rotated during recovered work`, async () => {
 			const slack = adapter === 'slack' ? slackFixture() : undefined;
 			const discord = adapter === 'discord' ? discordFixture() : undefined;

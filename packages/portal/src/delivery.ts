@@ -149,7 +149,16 @@ export class PortalDelivery {
 			this.save();
 			let posted;
 			try { posted = await post(text); }
-			catch { throw new UnconfirmedDeliveryError(); }
+			catch (error) {
+				// Access guards run before invoking the platform send. This typed
+				// failure is authoritative, not an ambiguous external transaction.
+				if (error instanceof PortalAccessError) {
+					receipts.splice(index, 1);
+					this.save();
+					throw error;
+				}
+				throw new UnconfirmedDeliveryError();
+			}
 			if (!posted.id || posted.id.length > 128) throw new Error('Platform did not acknowledge the message ID.');
 			receipt.id = posted.id;
 			this.save();

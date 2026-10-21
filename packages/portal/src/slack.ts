@@ -117,8 +117,10 @@ export class SlackPortal {
 				}
 				if (!this.permitted({ user: body.user.id, channel, ts: location.ts }))
 					throw new Error('You do not have permission to use this bot.');
-				const credential = this.credentials.forUser(body.user.id);
-				location.access.credential();
+				const selectedCredential = this.credentials.forUser(body.user.id);
+				const credential = location.access.credential();
+				if (selectedCredential.username !== credential.username)
+					throw new Error('Only the person who requested this work can answer.');
 				if (action.action_id === 'fh:stop') {
 					await this.interactions.stop(id, location.key, body.user.id, credential);
 					return;
@@ -217,7 +219,9 @@ export class SlackPortal {
 		if (pending) {
 			try {
 				const prompt = this.interactions.get(pending.id, message.user, credential, key);
-				await this.interactions.answer(prompt, credential, [text]);
+				const location = this.actionLocations.get(prompt.id);
+				if (!location) throw new Error('This prompt is no longer active.');
+				await this.interactions.answer(prompt, location.access.credential(), [text]);
 				await this.refreshPrompt(prompt).catch((error) =>
 					log.warn('prompt_update_failed', { error: errorMessage(error) })
 				);

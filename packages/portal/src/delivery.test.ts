@@ -56,6 +56,37 @@ test('an unacknowledged send survives reopening and is never automatically poste
 	expect(posts).toBe(1);
 });
 
+test('a second replacement retries interrupted stale-tail edits using persisted message receipts', async () => {
+	const { path, store, delivery } = fixture();
+	let posts = 0;
+	const messages = new Map<string, string>();
+	await delivery.liveReply('answer', 70, async (text) => {
+		const id = `reply.${++posts}`; messages.set(id, text); return { id };
+	}, async (id, text) => { messages.set(id, text); }).update('Old partial answer '.repeat(10), true);
+	delivery.submitting(); delivery.accepted('private.job', 'private.session');
+	delivery.complete('Final answer'); close(store);
+	const next = open(path);
+	const restored = new PortalDelivery(next.delivery('slack', 'C123:1')!, next);
+	await expect(restored.liveReply('answer', 70, async () => { posts++; return { id: 'duplicate' }; }, async (id, text) => {
+		if (id === 'reply.2') throw new Error('Interrupted tail edit');
+		messages.set(id, text);
+	}).update('Final answer', true)).rejects.toThrow('Interrupted tail edit');
+	close(next);
+	const reopened = open(path);
+	const retried = new PortalDelivery(reopened.delivery('slack', 'C123:1')!, reopened);
+	expect(retried.record.state).toBe('complete');
+	expect(retried.record.messages.answer[0].text).toBe('Final answer');
+	const edits: string[] = [];
+	await retried.liveReply('answer', 70, async () => { posts++; return { id: 'duplicate' }; }, async (id, text) => {
+		edits.push(id); messages.set(id, text);
+	}).update('Final answer', true);
+	retried.finish();
+	expect(posts).toBe(3);
+	expect(edits).toEqual(['reply.2', 'reply.3']);
+	expect([...messages.values()]).toEqual(['Final answer', 'Previous response replaced. Use the current response above.', 'Previous response replaced. Use the current response above.']);
+	expect(reopened.pendingDeliveries('slack')).toEqual([]);
+});
+
 test('an ambiguous submission cannot be submitted twice, and changed credentials cannot recover work', () => {
 	const { path, store, delivery } = fixture();
 	delivery.submitting(); close(store);
