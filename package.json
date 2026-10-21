@@ -53,7 +53,7 @@
     "format": "biome format --write package.json .github/release-manifest.json packages scripts/*.mjs scripts/*.ts containers/assistant/*.mjs containers/assistant/recovery/*.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15"
+    "@biomejs/biome": "^2.6.2"
   },
   "overrides": {
     "@discordjs/rest": "2.6.3",
