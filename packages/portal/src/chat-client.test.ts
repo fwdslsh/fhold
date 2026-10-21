@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { Client, SdkError, SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 
 import { GuardianChatClient } from './chat-client.js';
+import { PortalAccessError } from './credential-registry.js';
 
 type ToolResult = Awaited<ReturnType<Client['callTool']>>;
 const credential = { username: 'test-user', key: 'unit-test-key' };
@@ -29,6 +30,20 @@ afterEach(async () => {
 });
 
 describe('Guardian portal job tracking', () => {
+	for (const notify of [false, true]) {
+		it(`stops inspection after access revocation in a ${notify ? 'progress notification' : 'response snapshot'}`, async () => {
+			const { chat, callTool } = fixture();
+			callTool.mockImplementation(async (_request, options) => {
+				if (notify) options?.onprogress?.({ progress: 1, _meta: { 'io.fwdslsh.fhold/agent': response('running').structuredContent } });
+				return response('running');
+			});
+			const onUpdate = mock(async () => { throw new PortalAccessError('Access revoked'); });
+			await expect(chat.resume('test.job', credential, onUpdate)).rejects.toThrow('Access revoked');
+			expect(callTool.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+			expect(onUpdate).toHaveBeenCalledTimes(1);
+		});
+	}
+
 	it('returns actionable input, records an explicit response and resumes the existing job', async () => {
 		const { chat, callTool } = fixture();
 		const prompt = {

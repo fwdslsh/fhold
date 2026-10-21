@@ -6,6 +6,7 @@ import {
 } from '@modelcontextprotocol/client';
 
 import type { PortalCredential } from './credential-registry.js';
+import { PortalAccessError } from './credential-registry.js';
 import { createLogger, errorMessage } from './runtime.js';
 
 export type PortalQuestion = {
@@ -249,6 +250,7 @@ export class GuardianChatClient {
 		for (let attempt = 0; ; attempt++) {
 			let client: Client | undefined;
 			let delivery = Promise.resolve();
+			let accessFailure: PortalAccessError | undefined;
 			try {
 				client = await this.clientFor(credential);
 				const result = await client.callTool(
@@ -265,18 +267,22 @@ export class GuardianChatClient {
 							if (!onUpdate) return;
 							delivery = delivery
 								.then(async () => {
+									if (accessFailure) return;
 									await onUpdate(snapshot);
 								})
 								.catch((error) => {
+									if (error instanceof PortalAccessError) { accessFailure = error; return; }
 									log.warn('progress_delivery_failed', { error: errorMessage(error) });
 								});
 						}
 					}
 				);
 				await delivery;
+				if (accessFailure) throw accessFailure;
 				const snapshot = !result.isError ? update(result.structuredContent) : undefined;
 				if (snapshot && onUpdate) {
 					await onUpdate(snapshot).catch((error) => {
+						if (error instanceof PortalAccessError) throw error;
 						log.warn('progress_delivery_failed', { error: errorMessage(error) });
 					});
 				}
@@ -286,6 +292,7 @@ export class GuardianChatClient {
 				const slot = this.connections.get(credential.username);
 				if (client && slot?.client === client) this.connections.delete(credential.username);
 				await client?.close().catch(() => {});
+				if (accessFailure) throw accessFailure;
 				if (!interrupted(error)) throw error;
 				if (!canRecover || !job || attempt >= 2) throw new PortalConnectionError();
 				log.warn('job_tracking_reconnecting', { attempt: attempt + 1 });

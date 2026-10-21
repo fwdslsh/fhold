@@ -798,6 +798,74 @@ describe('Slack conversation UX', () => {
 });
 
 describe('Portal process replacement', () => {
+	for (const adapter of ['slack', 'discord'] as const) {
+		it(`blocks ${adapter} final delivery when its credential is rotated during recovered work`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first);
+			const finish = Promise.withResolvers<ReturnType<typeof response>>();
+			const calls = spyOn(McpClient.prototype, 'callTool').mockImplementation(async (request, options) => {
+				if (request.name !== 'fhold.job.get') throw new Error('Native submission must not be replayed');
+				notify(options, { text: 'Still working' });
+				return finish.promise;
+			});
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await until(() => calls.mock.calls.length === 1);
+			spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			finish.resolve(response('completed', 'Private result after credential rotation'));
+			await settledDelivery(adapter, id, 'blocked');
+			expect(calls.mock.calls.map(([request]) => request.name)).toEqual(['fhold.job.get']);
+			expect(JSON.stringify(slack?.replies ?? discord!.posts)).not.toContain('Private result');
+		});
+
+		it(`rechecks ${adapter} access between chunks of a saved final answer`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first, 'complete');
+			const store = new ConversationStore();
+			const record = store.delivery(adapter, id)!;
+			record.result = `${'a'.repeat(adapter === 'slack' ? 2900 : 1900)}Private tail after revocation`;
+			store.saveDelivery(record); store.close();
+			const revoke = () => spyOn(PortalCredentialRegistry.prototype, 'forUser').mockReturnValue({ username: 'test-user', key: 'rotated-key' });
+			if (slack) slackUpdate.mockImplementationOnce(async (args) => {
+				slackPosts.get(args.ts as string)!.text = args.text as string;
+				revoke();
+				return {};
+			});
+			else discord!.posts[0].edit.mockImplementationOnce(async (args: { content: string }) => {
+				discord!.posts[0].content = args.content;
+				revoke();
+				return discord!.posts[0];
+			});
+			const calls = spyOn(McpClient.prototype, 'callTool');
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await settledDelivery(adapter, id, 'blocked');
+			expect(calls).not.toHaveBeenCalled();
+			expect(slack?.say ?? discord!.post).toHaveBeenCalledTimes(1);
+			expect(JSON.stringify(slack?.replies ?? discord!.posts)).not.toContain('Private tail');
+		});
+
+		it(`retires stale ${adapter} answer tails when the recovered final snapshot is shorter`, async () => {
+			const slack = adapter === 'slack' ? slackFixture() : undefined;
+			const discord = adapter === 'discord' ? discordFixture() : undefined;
+			const first = slack ? (await slack.say({ text: 'Working…' })).ts : (await discord!.post({ content: 'Working…' })).id;
+			const id = recoveryFixture(adapter, first, 'complete');
+			const tail = slack ? (await slack.say({ text: 'Obsolete partial answer' })).ts : (await discord!.post({ content: 'Obsolete partial answer' })).id;
+			const store = new ConversationStore();
+			const record = store.delivery(adapter, id)!;
+			record.messages.answer.push({ id: tail, text: 'Obsolete partial answer' });
+			store.saveDelivery(record); store.close();
+			const calls = spyOn(McpClient.prototype, 'callTool');
+			await (adapter === 'slack' ? new SlackPortal() : new DiscordPortal()).start();
+			await settledDelivery(adapter, id);
+			expect(calls).not.toHaveBeenCalled();
+			expect(slack?.say ?? discord!.post).toHaveBeenCalledTimes(2);
+			expect(slack ? slack.replies[1].text : discord!.posts[1].content).toBe('Previous response replaced. Use the current response above.');
+		});
+	}
+
 	it('does not rerun an expired Guardian job when restoring a pending reply', async () => {
 		const fixture = slackFixture(); const first = await fixture.say({ text: 'Working…' });
 		const id = recoveryFixture('slack', first.ts);

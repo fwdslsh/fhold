@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ConversationStore } from './conversations.js';
-import { PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
+import { DeliveryAccess, PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
 
 const roots: string[] = [];
 const stores: ConversationStore[] = [];
@@ -72,6 +72,22 @@ test('recovery preserves request arrival order even when older work publishes ne
 	PortalDelivery.create(store, { ...delivery.record, id: 'C123:2', input: 'Second request' }, credential);
 	delivery.accepted('first.job', 'first.session');
 	expect(store.pendingDeliveries('slack').map((record) => record.id)).toEqual(['C123:1', 'C123:2']);
+});
+
+test('a failed credential lookup blocks publishing permanently for that delivery, even if credentials reappear', async () => {
+	const { store, delivery } = fixture();
+	let available = false;
+	let writes = 0;
+	const access = new DeliveryAccess(delivery, () => {
+		if (!available) throw new Error('Credential bundle unavailable');
+		return credential;
+	});
+	await expect(access.write(async () => { writes++; })).rejects.toThrow('connection key is no longer valid');
+	available = true;
+	await expect(access.write(async () => { writes++; })).rejects.toThrow('revoked');
+	expect(access.revoked).toBe(true);
+	expect(store.delivery('slack', delivery.record.id)?.state).toBe('blocked');
+	expect(writes).toBe(0);
 });
 
 test('new permission controls reuse their known message without persisting decisions or posting duplicates', async () => {

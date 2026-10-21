@@ -15,7 +15,7 @@ import {
 import { GuardianChatClient, portalFailureText } from './chat-client.js';
 import type { ChatUpdate, ChatResult } from './chat-client.js';
 import { PortalConnectionError } from './chat-client.js';
-import { PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
+import { DeliveryAccess, PortalDelivery, UnconfirmedDeliveryError } from './delivery.js';
 import type { PortalCredential } from './credential-registry.js';
 import { ConversationStore } from './conversations.js';
 import { PortalCredentialRegistry, credentialConversationKey } from './credential-registry.js';
@@ -52,6 +52,7 @@ export class DiscordPortal {
 		string,
 		{
 			message: Message;
+			access: DeliveryAccess;
 			questionIndex: number;
 			post: (content: string, components?: ActionRowBuilder<ButtonBuilder>[]) => Promise<Message>;
 		}
@@ -228,16 +229,21 @@ export class DiscordPortal {
 
 	private async runConversation(message: Message, channel: Message['channel'], key: string, credential: PortalCredential, delivery: PortalDelivery): Promise<void> {
 		await this.queue.run(key, async () => {
-			delivery.assertCredential(this.credentials.forUser(message.author.id));
+			const access = new DeliveryAccess(delivery, () => this.credentials.forUser(message.author.id));
+			const currentCredential = () => access.credential();
+			// Renderer failures may be tolerated by MCP; authorization failures must
+			// still block every write, including cached and terminal answers.
+			const withAccess = <T>(action: () => Promise<T>) => access.write(action);
+			currentCredential();
 			if (delivery.record.state === 'submitted' || delivery.record.state === 'blocked') {
 				await this.blockDelivery(delivery, channel, 'Submission could not be confirmed. Check the original session in OpenCode; it was not repeated.');
 				log.warn('delivery_recovery_blocked', { message: delivery.record.reason });
 				return;
 			}
 			const post = async (content: string, components?: ActionRowBuilder<ButtonBuilder>[]) =>
-				channel.isThread()
+				withAccess(() => channel.isThread()
 					? channel.send({ content, components, allowedMentions: { parse: [] } })
-					: message.reply({ content, components, allowedMentions: { parse: [] } });
+					: message.reply({ content, components, allowedMentions: { parse: [] } }));
 			const replies = new Map<string, Message>();
 			const fetchReply = async (id: string) => replies.get(id) ?? channel.messages.fetch(id);
 			let delivered = false;
@@ -247,7 +253,10 @@ export class DiscordPortal {
 					const reply = await post(text);
 					replies.set(reply.id, reply);
 					return { id: reply.id };
-				}, async (id, text) => (await fetchReply(id)).edit({ content: text, allowedMentions: { parse: [] } }));
+				}, async (id, text) => {
+					const reply = await fetchReply(id);
+					return withAccess(() => reply.edit({ content: text, allowedMentions: { parse: [] } }));
+				});
 			} catch (error) {
 				await this.blockDelivery(delivery, channel, errorMessage(error));
 				log.warn('delivery_recovery_blocked', { error: errorMessage(error) });
@@ -256,7 +265,7 @@ export class DiscordPortal {
 			const reacted = new Set<string>();
 			let stopTyping: (() => void) | undefined = this.startTyping(channel);
 			const onUpdate = async (update: ChatUpdate) => {
-				delivery.assertCredential(this.credentials.forUser(message.author.id));
+				currentCredential();
 				delivery.accepted(update.job, update.conversation);
 				this.conversations.set('discord', key, update.conversation);
 				this.interactions.working(key, message.author.id, credential, update.job);
@@ -290,6 +299,7 @@ export class DiscordPortal {
 					result = await this.chat.chat(input, credential, this.conversations.get('discord', key), onUpdate);
 				}
 				while (result.pending) {
+					currentCredential();
 					stopTyping?.();
 					stopTyping = undefined;
 					this.conversations.set('discord', key, result.conversation);
@@ -308,26 +318,30 @@ export class DiscordPortal {
 							const sent = await post(content, content === last ? this.promptComponents(prompt) : []);
 							replies.set(sent.id, sent);
 							return { id: sent.id };
-						}, async (id, content) => (await fetchReply(id)).edit({ content, components: content === last ? this.promptComponents(prompt) : [], allowedMentions: { parse: [] } }));
+						}, async (id, content) => {
+							const reply = await fetchReply(id);
+							return withAccess(() => reply.edit({ content, components: content === last ? this.promptComponents(prompt) : [], allowedMentions: { parse: [] } }));
+						});
 						await promptReply.update(view, true);
 						const receipts = delivery.record.messages.prompt;
 						const lastIndex = splitMessage(view, 1_900).length - 1;
-						for (const receipt of receipts.slice(lastIndex + 1))
-							await (await fetchReply(receipt.id!)).edit({ content: 'Previous controls closed. Use the current controls above.', components: [], allowedMentions: { parse: [] } });
+						for (const receipt of receipts.slice(lastIndex + 1)) {
+							const reply = await fetchReply(receipt.id!);
+							await withAccess(() => reply.edit({ content: 'Previous controls closed. Use the current controls above.', components: [], allowedMentions: { parse: [] } }));
+						}
 						const sent = await fetchReply(receipts[lastIndex].id!);
 						delivery.prompt(sent.id, prompt.questionIndex);
 						this.promptMessages.set(prompt.id, {
 							message: sent,
+							access,
 							questionIndex: prompt.questionIndex,
 							post
 						});
 					}
 					if ((await this.interactions.wait(prompt)) === 'cancelled') break;
-					const currentCredential = this.credentials.forUser(message.author.id);
-					if (currentCredential.username !== credential.username)
-						throw new Error('The access mapping changed during this conversation.');
-					result = await this.chat.resume(prompt.job, currentCredential, onUpdate);
+					result = await this.chat.resume(prompt.job, currentCredential(), onUpdate);
 				}
+				currentCredential();
 				if (!this.interactions.cancelled(key)) {
 					this.conversations.set('discord', key, result.conversation);
 					delivery.complete(result.text, result.conversation);
@@ -340,6 +354,7 @@ export class DiscordPortal {
 				}
 			} catch (error) {
 				log.warn('conversation_failed', { userId: message.author.id, error: errorMessage(error) });
+				if (access.revoked) return;
 				if (error instanceof UnconfirmedDeliveryError) {
 					await this.blockDelivery(delivery, channel, error.message);
 				}
@@ -354,23 +369,29 @@ export class DiscordPortal {
 				stopTyping?.();
 				const pending = this.interactions.forKey(key);
 				this.interactions.close(key);
-				if (pending)
-					await this.refreshPrompt(pending).catch((error) =>
-						log.warn('prompt_update_failed', { error: errorMessage(error) })
-					);
-				if (!pending && delivery.record.prompt) {
-					await (await fetchReply(delivery.record.prompt.message)).edit({ content: 'Previous controls closed. Use the current response or controls.', components: [], allowedMentions: { parse: [] } })
-						.catch((error) => log.warn('prompt_update_failed', { error: errorMessage(error) }));
+				try { currentCredential(); } catch { /* Never edit private replies after revocation. */ }
+				if (!access.revoked) {
+					if (pending)
+						await this.refreshPrompt(pending).catch((error) =>
+							log.warn('prompt_update_failed', { error: errorMessage(error) })
+						);
+					if (!pending && delivery.record.prompt) {
+						const reply = await fetchReply(delivery.record.prompt.message);
+						await withAccess(() => reply.edit({ content: 'Previous controls closed. Use the current response or controls.', components: [], allowedMentions: { parse: [] } }))
+							.catch((error) => log.warn('prompt_update_failed', { error: errorMessage(error) }));
+					}
+					if (delivered && !access.revoked) delivery.finish();
 				}
-				if (delivered) delivery.finish();
+				if (pending && access.revoked) this.promptMessages.delete(pending.id);
 			}
 		});
 	}
 
 	private async blockDelivery(delivery: PortalDelivery, channel: Message['channel'], reason: string): Promise<void> {
 		delivery.blocked(reason);
+		const access = new DeliveryAccess(delivery, () => this.credentials.forUser(delivery.record.user));
 		const head = delivery.record.messages.answer?.[0]?.id;
-		if (head) await channel.messages.fetch(head).then((message) => message.edit({ content: reason, components: [], allowedMentions: { parse: [] } }))
+		if (head) await channel.messages.fetch(head).then((message) => access.write(() => message.edit({ content: reason, components: [], allowedMentions: { parse: [] } })))
 			.catch((error) => log.warn('delivery_notice_failed', { error: errorMessage(error) }));
 	}
 
@@ -423,7 +444,7 @@ export class DiscordPortal {
 			rendered.questionIndex = prompt.questionIndex;
 		}
 		const components = pending ? this.promptComponents(prompt) : [];
-		await rendered.message.edit({
+		await rendered.access.write(() => rendered.message.edit({
 			content: pending
 				? (chunks.at(-1) ?? 'Agent input required.')
 				: prompt.outcome === 'answered'
@@ -431,7 +452,7 @@ export class DiscordPortal {
 					: 'Request closed.',
 			components,
 			allowedMentions: { parse: [] }
-		});
+		}));
 		if (!pending) this.promptMessages.delete(prompt.id);
 	}
 
@@ -458,6 +479,7 @@ export class DiscordPortal {
 			);
 			const [, id, value, page] = interaction.customId.split(':');
 			const prompt = this.interactions.get(id, interaction.user.id, credential, key);
+			this.promptMessages.get(id)?.access.credential();
 			if (
 				this.promptMessages.get(id)?.message.id !== interaction.message.id ||
 				Number(page) !== prompt.questionIndex

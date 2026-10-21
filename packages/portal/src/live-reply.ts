@@ -28,6 +28,16 @@ export class LiveReply {
 				this.messages.push({ reply: await this.post(chunk, index), text: chunk });
 			}
 		}
+		// A recovered or final snapshot may be shorter than streamed progress.
+		// Retire only our acknowledged messages; never leave obsolete answer text.
+		if (final) {
+			const retired = 'Previous response replaced. Use the current response above.'.slice(0, this.maxLength);
+			for (const previous of this.messages.slice(chunks.length)) {
+				if (previous.text === retired) continue;
+				await previous.reply.edit(retired);
+				previous.text = retired;
+			}
+		}
 		this.nextUpdate = final ? 0 : this.now() + 1_200;
 	}
 }
