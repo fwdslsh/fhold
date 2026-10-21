@@ -63,8 +63,8 @@ image and MCPB versions; tooling-only releases retain those published versions.
 `releaseIntent` binds version to revision/content hash, rejects regressed
 clocks/collisions and accepts retries only for the same identity.
 For historical 0.1 releases, at the same minute use a higher prerelease serial;
-stable collisions require another minute. Current releases use the daily build
-counter below.
+stable collisions require another minute. Historical 0.2 releases use the daily
+build counter below; current releases use the monthly counter.
 
 `VERSION=<frozen-version> node scripts/bump-release.mjs` previews stamping;
 `STAMP=true` explicitly writes. It must preflight every listed input first.
@@ -84,16 +84,16 @@ that hostile `/work/bunfig.toml` preloads do not execute through managed helpers
 using the real-image/native-harness smoke. This is an image runtime option,
 not a replacement launcher or configuration service.
 
-### Date and daily build from 0.2
+### Historical 0.2 date and daily build
 
-Starting with the **0.2 release line**, replace the hour/minute timestamp with
+The **0.2 release line** replaced the hour/minute timestamp with
 `X.Y.yyMMdd<build>`: two-digit year, month, day, then an unpadded positive daily
 build number. Keep the date in UTC; start the build counter at `1` each day and
 increment it for each new release build. Existing immutable-version and
 identical-content retry rules still apply.
 
 Examples: `0.2.2610081` is build 1 on October 8, 2026;
-`0.3.2612225-beta.1` is build 5 on December 22, 2026, marked beta 1.
+`0.2.2612225-beta.1` is build 5 on December 22, 2026, marked beta 1.
 Alpha, beta and rc suffixes remain supported, including their optional positive
 serials. No existing 0.1 versions, tags or artifacts will be renamed.
 
@@ -106,6 +106,41 @@ Do not use an ordinary SemVer patch comparison to select the newest daily build.
 Changing the minor version from 0.1 to 0.2 on the same UTC date is valid; the
 shorter patch is not a clock regression. Publication does not rewrite existing
 tags, recovery formats or instance identities.
+
+### Monthly versions from 0.3
+
+From **0.3 onward**, use `X.Y.YYMMNN[-alpha|-beta|-rc]`, with UTC year/month
+and a two-digit monthly counter `NN`. The first October 2026 candidate is
+`0.3.261000-beta`. There is no additional prerelease serial. The patch is a
+canonical SemVer integer (no leading zero); this calendar format covers 2010–2099.
+Month must be 01–12, and counter must be exactly 00–99.
+
+For each major/minor line, start at `00` each UTC month and increment for every
+new candidate, sharing the counter across alpha, beta, rc and stable. Promoting
+`0.3.261000-beta` therefore consumes `0.3.261001-rc` or `0.3.261001`;
+do not reuse counter 00 for another channel. Abandoned frozen candidates also
+consume their counter. Check tags, releases, receipts and reserved candidates
+before choosing the next unused counter. Gaps are allowed; reuse is not.
+After 99, refuse further candidates in that month: wait for the next UTC month
+or explicitly review a new minor line. Never widen/wrap the counter or change
+the date to evade overflow. A new month/year resets the counter to 00.
+
+Comparison uses major/minor, UTC month, counter, then channel
+`alpha < beta < rc < stable`. Channel ordering remains defined even though new
+release intent requires advancing the counter. Exact retries retain the frozen
+version, revision and content identity; changed bytes require another counter.
+Historical 0.1 timestamps and 0.2 daily builds remain readable and immutable.
+Cross-format clock checks use shared month precision, so moving from an October
+21 daily release to October's monthly line is valid. Moving to a prior month
+is refused, including across minor lines.
+
+All stamping, release workflow and artifact validation use the shared parser.
+CLI/Admin derive their own, runtime and MCPB versions from the owning manifests;
+updates advance only previously managed image defaults, preserving explicit pins.
+Download names, native plugin manifests, Compose defaults and release asset
+receipts retain the exact frozen string. No native database, recovery schema,
+credentials, instance identity or checkpoint authority changes with this naming
+transition.
 
 ## Linux acceptance
 

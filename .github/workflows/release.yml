@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Frozen X.Y.yyMMdd<build> version (for example 0.2.2610081-beta.1; historical 0.1 timestamps remain valid)'
+        description: 'Frozen X.Y.YYMMNN version (for example 0.3.261000-beta; historical 0.1/0.2 versions remain valid)'
         required: true
         type: string
       dry_run:

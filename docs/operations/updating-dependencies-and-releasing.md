@@ -188,15 +188,18 @@ Dependency changes that affect containers require a **full** release. A
 tooling-only release retains the existing published runtime and cannot ship
 pending container or dependency-resolution changes.
 
-Choose an unused UTC version using `X.Y.yyMMdd<build>-beta.<serial>` (or the
-explicit alpha/rc/stable channel). Start the daily build at 1 and increment it
-for each new candidate. Check existing tags/releases first:
+From 0.3, choose an unused UTC version using `X.Y.YYMMNN-beta` (or alpha/rc/stable).
+Start the monthly counter at 00 and consume a new counter for each candidate,
+including channel promotion. No prerelease serial is used. Check existing
+tags/releases and frozen candidate receipts first; see the
+[monthly version policy](release.md#monthly-versions-from-03) for retries,
+overflow and historical 0.1/0.2 compatibility:
 
 ```sh
 git fetch origin --tags
 gh release list --repo fwdslsh/fhold --limit 20
-# Example only: select an unused date/build/channel for the actual candidate.
-VERSION=0.2.2610134-beta.11
+# Example only: select an unused month/counter/channel for the actual candidate.
+VERSION=0.3.261000-beta
 SCOPE=full VERSION="$VERSION" bun scripts/bump-release.mjs
 SCOPE=full VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
 bun install --lockfile-only

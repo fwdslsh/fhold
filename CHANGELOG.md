@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.261000-beta — monthly versions and updated AKM
+
+Adopt monthly `X.Y.YYMMNN[-alpha|-beta|-rc]` release versions (#46). Start the
+two-digit counter at 00, share it across channels and reset each UTC month.
+Historical 0.1 timestamps and 0.2 daily builds remain readable and immutable;
+this transition does not migrate native data or recovery authority.
+
+Update AKM CLI to 0.10.261010-beta and all three AKM plugins to 0.10.261009-beta,
+including the immutable Claude/Codex marketplace. Refresh compatible transitive
+dependencies; see the [0.3 dependency review](docs/operations/dependency-refresh-0.3.md)
+for provenance and retained compatibility holds.
+
+Exclude native AKM process locks and temporary lock companions from runtime
+recovery while preserving durable `akm.lock` (#49). Add independently controlled,
+default-off experimental AKM index capture and restore (#48). Cache admission
+requires bounded private native validation; optional failures rebuild on demand
+and never replace surviving local index/WAL state. These settings and their format
+may change or be removed. Real CIFS, hosted Blob/embedding performance and other
+credential-store qualification remain open under #48.
+
+Existing live vendor reconnect, Portal interaction/replacement, hosted ENOENT
+root-cause and ARM64 Admin startup qualification remain separate open work.
+Publication does not upgrade existing instances or enable recovery/cache settings.
+
 ## 0.2.2610211-beta.13 — recovery diagnostics and Portal access checks
 
 Retain bounded checkpoint failure phase, filesystem operation/path and publication

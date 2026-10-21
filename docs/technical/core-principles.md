@@ -487,11 +487,15 @@ host. GitHub builds Linux standalone CLI and Admin AppImage downloads and
 publishes Assistant/Guardian/Portal images to public Docker Hub. Every candidate
 needs its own artifact and runtime gates; earlier artifacts do not qualify changed source.
 The 0.1 release line uses real UTC `X.Y.yyMMddHHmm` timestamps and explicit
-alpha/beta/rc channels. From 0.2, the patch format is `yyMMdd<build>`:
+alpha/beta/rc channels. The historical 0.2 patch format is `yyMMdd<build>`:
 UTC year/month/day plus an unpadded daily build number starting at 1, with the
-same prerelease suffixes. See the [release runbook](../operations/release.md#date-and-daily-build-from-02)
-for examples and date/build ordering. Historical 0.1 versions remain valid and
-immutable. This changes release naming, not recovery or runtime schemas.
+same prerelease suffixes. From 0.3 onward use `X.Y.YYMMNN[-alpha|-beta|-rc]`:
+UTC year/month and exactly two counter digits starting at 00. Every new candidate,
+including channel promotion, consumes a counter; there is no additional serial.
+See the [release runbook](../operations/release.md#monthly-versions-from-03)
+for ordering, UTC reset, immutable retries and refusal after counter 99.
+Historical 0.1/0.2 versions remain valid and immutable. This changes release
+naming, not recovery or runtime schemas.
 The CLI remains a standalone executable,
 not an npm bootstrap package.
 Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
