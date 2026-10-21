@@ -44,6 +44,8 @@ export function renderRecovery(snapshot) {
 	const settings = recovery?.settings || snapshot.config.recovery;
 	if (!settings) return;
 	byId(id('enabled')).checked = settings.enabled;
+	byId(id('akm-capture')).checked = settings.akmIndexCapture === true;
+	byId(id('akm-restore')).checked = settings.akmIndexRestore === true;
 	byId(id('storage')).value = settings.destination.startsWith('azblob:') ? 'blob' : 'directory';
 	byId(id('directory')).value = settings.destination.startsWith('file:')
 		? decodeURIComponent(new URL(settings.destination).pathname)
@@ -87,6 +89,8 @@ export function recoveryInput() {
 	settings.intervalSeconds = Number(byId(id('interval')).value);
 	settings.maxUnsavedSeconds = Number(byId(id('max-unsaved')).value);
 	settings.operationTimeoutSeconds = Number(byId(id('timeout')).value);
+	settings.akmIndexCapture = byId(id('akm-capture')).checked;
+	settings.akmIndexRestore = byId(id('akm-restore')).checked;
 	settings.authentication = byId(id('auth')).value;
 	settings.clientId = byId(id('client-id')).value.trim();
 	const selection = Object.fromEntries(
@@ -119,7 +123,9 @@ export function renderRecoveryStatus(status) {
 		detail.textContent = 'Local persistence is unchanged. Import / export remains available above.';
 	} else if (status.state === 'ready' && (status.durable === false || status.lastAttemptFailed)) {
 		title.textContent = 'Agent is running; backups need attention.';
-		detail.textContent = status.failure || 'The last checkpoint is overdue. Recovery will retry without stopping your agent. Check the backup destination and instance logs.';
+		detail.textContent =
+			status.failure ||
+			'The last checkpoint is overdue. Recovery will retry without stopping your agent. Check the backup destination and instance logs.';
 	} else if (status.state === 'ready') {
 		title.textContent = 'Checkpoint accepted.';
 		detail.textContent = `Last publication: ${new Date(status.lastPublishedAt).toLocaleString()}. This is same-instance recovery, not a portable archive.`;

@@ -1579,6 +1579,12 @@ async function blobFaultFixture() {
 	let alreadyAborted = false;
 	let uploads = 0;
 	let renewals = 0;
+	let blockOptionalUpload = false;
+	let blockRenewal = false;
+	const waitForAbort = (signal) => new Promise((_resolve, reject) => {
+		if (signal.aborted) reject({ name: 'AbortError' });
+		else signal.addEventListener('abort', () => reject({ name: 'AbortError' }), { once: true });
+	});
 	const client = {
 		async download() {
 			if (failRead) throw { statusCode: 500 };
@@ -1598,6 +1604,8 @@ async function blobFaultFixture() {
 			};
 		},
 		async upload(bytes, _length, options) {
+			if (blockOptionalUpload && options.conditions.ifNoneMatch === '*')
+				return waitForAbort(options.abortSignal);
 			if (options.conditions.ifMatch !== String(token)) throw { statusCode: 412 };
 			uploads++;
 			value = JSON.parse(bytes.toString());
@@ -1610,8 +1618,9 @@ async function blobFaultFixture() {
 		getBlobLeaseClient() {
 			return {
 				async acquireLease() {},
-				async renewLease() {
+				async renewLease(options) {
 					renewals++;
+					if (blockRenewal) await waitForAbort(options.abortSignal);
 				},
 				async releaseLease() {}
 			};
@@ -1635,6 +1644,8 @@ async function blobFaultFixture() {
 		value: () => value,
 		uploads: () => uploads,
 		renewals: () => renewals,
+		blockOptionalUpload: () => { blockOptionalUpload = true; },
+		blockRenewal: () => { blockRenewal = true; },
 		failRead: (enabled) => {
 			failRead = enabled;
 		},
@@ -1648,6 +1659,25 @@ async function blobFaultFixture() {
 }
 
 describe('Blob ownership fault regressions (no-network unit evidence)', () => {
+	test('optional transfers do not wait on a hanging essential renewal; later ownership uncertainty stays fail-closed', async () => {
+		const fixture = await blobFaultFixture();
+		let now = 0;
+		const monotonic = spyOn(performance, 'now').mockImplementation(() => now);
+		try {
+			const store = await fixture.create(30);
+			const owner = await store.acquire(); const head = await store.readDescriptor(); await store.claim(head.token, owner);
+			now = 11_000; fixture.blockRenewal(); fixture.blockOptionalUpload();
+			const bytes = Buffer.from('optional-cache'); const hash = createHash('sha256').update(bytes).digest('hex');
+			const began = Date.now();
+			await expect(store.createImmutable(`objects/${hash}`, bytes, owner, { signal: AbortSignal.timeout(5) })).rejects.toThrow();
+			expect(Date.now() - began).toBeLessThan(500);
+			expect(fixture.renewals()).toBe(0);
+			await expect(store.renew(owner)).rejects.toThrow();
+			expect(fixture.renewals()).toBe(1);
+			await expect(store.compareAndSwap(String(head.token), { ...head.value, generation: 'unsafe' }, owner)).rejects.toThrow('ownership lost');
+			expect(fixture.value().generation).toBeNull();
+		} finally { monotonic.mockRestore(); fixture.restore(); }
+	});
 	test('a paused owner crossing its monotonic safety window cannot publish, clear HEAD or reacquire', async () => {
 		const fixture = await blobFaultFixture();
 		let now = 0;

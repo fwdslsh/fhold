@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 const [operation, source, destination, maxBytesText] = process.argv.slice(2);
 const maxBytes = Number(maxBytesText);
 if (
-	!['capture', 'verify'].includes(operation) ||
+	!['capture', 'verify', 'describe'].includes(operation) ||
 	!source ||
 	!Number.isSafeInteger(maxBytes) ||
 	maxBytes < 1
@@ -18,6 +18,18 @@ if (!sourceStat.isFile() || sourceStat.isSymbolicLink() || sourceStat.size > max
 const database = new Database(source, { readonly: true, strict: true });
 try {
 	database.exec('PRAGMA busy_timeout = 1000');
+	if (operation === 'describe') {
+		const schema = Number(
+			database.query("SELECT value FROM index_meta WHERE key='version'").get()?.value
+		);
+		const entries = database.query('SELECT count(*) AS count FROM entries').get().count;
+		const builtAt = database.query("SELECT value FROM index_meta WHERE key='builtAt'").get()?.value;
+		const stashDir = database
+			.query("SELECT value FROM index_meta WHERE key='stashDir'")
+			.get()?.value;
+		if (!Number.isSafeInteger(schema) || schema < 1) throw new Error('unsupported index metadata');
+		console.log(JSON.stringify({ schema, entries, builtAt, stashDir }));
+	}
 	if (operation === 'capture') {
 		if (!destination || fs.existsSync(destination)) throw new Error('SQLite output must be new');
 		database.exec(`VACUUM INTO '${destination.replaceAll("'", "''")}'`);

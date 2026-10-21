@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -351,7 +351,165 @@ async function released() {
 	};
 }
 
-try {
+async function qualifyAkmIndexCache() {
+	const cacheBackup = join(root, 'akm-cache-backup');
+	const cacheBundle = join(root, 'akm-cache-bundle');
+	await mkdir(cacheBackup, { mode: 0o700 });
+	await mkdir(join(cacheBundle, 'knowledge'), { recursive: true, mode: 0o755 });
+	const knowledge = async (name, description) =>
+		writeFile(
+			join(cacheBundle, 'knowledge', `${name}.md`),
+			`---\nname: ${name}\ndescription: ${description}\n---\n\n${description}\n`,
+			{ mode: 0o644 }
+		);
+	await knowledge('cache-keep', 'Synthetic cache smoke surviving original content');
+	await knowledge('cache-deleted', 'Synthetic cache smoke deleted original content');
+	const cacheCommon = [
+		'--user',
+		runtimeUser,
+		'--mount',
+		`type=bind,source=${cacheBackup},target=/backup`,
+		'--mount',
+		`type=bind,source=${cacheBundle},target=/cache-bundle,readonly`,
+		'--env',
+		`FH_RECOVERY_URL=${url.startsWith('file:') ? 'file:///backup' : `${url}/akm-cache`}`,
+		'--env',
+		`FH_INSTANCE_ID=${instance}-cache`,
+		'--env',
+		'FH_RECOVERY_AKM_INDEX_CAPTURE=1',
+		'--env',
+		'FH_RECOVERY_AKM_INDEX_RESTORE=1',
+		'--env',
+		'FH_RECOVERY_INTERVAL_SECONDS=2',
+		'--env',
+		'FH_RECOVERY_MAX_UNSAVED_SECONDS=120',
+		'--env',
+		'FH_SCHEDULER_ENABLED=0',
+		'--env',
+		'FH_AUTOMATIC_MEMORY=0',
+		'--env',
+		'FH_CODEX_REMOTE=0',
+		'--env',
+		'FH_CLAUDE_REMOTE=0',
+		'--env',
+		'AKM_BUNDLE_DIR=/cache-bundle',
+		'--env',
+		`OPENCODE_SERVER_PASSWORD=${password}`,
+		...(network ? ['--network', network] : []),
+		...(credentialFile
+			? [
+					'--mount',
+					`type=bind,source=${credentialFile},target=/run/secrets/recovery-storage,readonly`,
+					'--env',
+					'FH_RECOVERY_CREDENTIAL_FILE=/run/secrets/recovery-storage'
+				]
+			: []),
+		...(process.env.FH_RECOVERY_TEST_ALLOW_INSECURE === '1'
+			? ['--env', 'FH_RECOVERY_ALLOW_INSECURE=1']
+			: [])
+	];
+	const initName = `fhold-recovery-smoke-${instance}-cache-init`;
+	created.add(initName);
+	await docker([
+		'run',
+		'--rm',
+		'--name',
+		initName,
+		...cacheCommon,
+		'--entrypoint',
+		'fhold-recovery',
+		image,
+		'init',
+		'--confirm-new-instance'
+	]);
+	const startCache = async (suffix) => {
+		const began = Date.now();
+		const name = `fhold-recovery-smoke-${instance}-cache-${suffix}`;
+		const id = await docker(['run', '-d', '--name', name, ...cacheCommon, image]);
+		created.add(id);
+		await poll(async () => {
+			await docker(['exec', id, 'fhold-healthcheck'], 15_000);
+			return true;
+		}, `cache ${suffix} authenticated core readiness`);
+		return { id, coreReadyMs: Date.now() - began };
+	};
+	const stopCache = async (id) => {
+		await docker(['stop', '--time', '360', id], 380_000);
+		assert.equal(
+			JSON.parse(await docker(['inspect', id, '--format', '{{json .State}}'])).ExitCode,
+			0
+		);
+	};
+	const first = await startCache('first');
+	await docker([
+		'exec',
+		first.id,
+		'akm',
+		'bundle',
+		'add',
+		'/cache-bundle',
+		'--adapter',
+		'akm',
+		'--format',
+		'json',
+		'-q'
+	]);
+	await docker(['exec', first.id, 'akm', 'index', '--clean', '--format', 'json', '-q']);
+	await poll(
+		async () =>
+			JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status'])).akmIndexCache
+				?.state === 'captured',
+		'native optional cache capture'
+	);
+	await stopCache(first.id);
+	await knowledge('cache-keep', 'Synthetic cache smoke surviving CHANGED content');
+	await rm(join(cacheBundle, 'knowledge/cache-deleted.md'));
+	await knowledge('cache-added', 'Synthetic cache smoke added content');
+	const second = await startCache('second');
+	// Authenticated core readiness can precede writer admission and the first
+	// checkpoint. Wait for recovery's own ready status before inspecting its
+	// per-boot cache result; optional diagnostics are not a core health gate.
+	const status = await poll(
+		async () => JSON.parse(await docker(['exec', second.id, 'fhold-recovery', 'status'])),
+		'replacement recovery writer admission'
+	);
+	assert.equal(
+		status.akmIndexCache.restored,
+		true,
+		'replacement must admit a cleaned cache before native readers'
+	);
+	const beganKnowledge = Date.now();
+	const result = JSON.parse(
+		await docker([
+			'exec',
+			second.id,
+			'akm',
+			'search',
+			'Synthetic cache smoke',
+			'--format',
+			'json',
+			'--detail',
+			'full',
+			'-q'
+		])
+	);
+	assert.ok(Array.isArray(result.hits));
+	assert.ok(result.hits.find((hit) => hit.name === 'cache-keep')?.description.includes('CHANGED'));
+	assert.ok(result.hits.some((hit) => hit.name === 'cache-added'));
+	assert.ok(!result.hits.some((hit) => hit.name === 'cache-deleted'));
+	report.akmIndexCache = {
+		firstCoreReadyMs: first.coreReadyMs,
+		replacementCoreReadyMs: second.coreReadyMs,
+		firstCorrectKnowledgeQueryMs: Date.now() - beganKnowledge,
+		restored: true,
+		qualification:
+			'synthetic native image/read-only bind only; no embedding provider or CIFS performance qualification'
+	};
+	await stopCache(second.id);
+	report.checks.experimentalAkmCacheNativeReplacement = true;
+}
+
+async function qualifyRuntimeRecovery() {
 	report.imageId = await docker(['image', 'inspect', image, '--format', '{{.Id}}']);
 	report.sourceImageId = await docker(['image', 'inspect', sourceImage, '--format', '{{.Id}}']);
 	const initName = `fhold-recovery-smoke-${instance}-init`;
@@ -486,12 +644,15 @@ try {
 		}
 	`
 	);
-	await execBun(first.id, `import{mkdir,writeFile}from'node:fs/promises';import path from'node:path';
+	await execBun(
+		first.id,
+		`import{mkdir,writeFile}from'node:fs/promises';import path from'node:path';
 	for(const file of ${JSON.stringify(processLockFiles)}){
 		await mkdir(path.dirname(file),{recursive:true});
 		await writeFile(file,JSON.stringify({pid:1,fixture:${JSON.stringify(lockMarker)}}),{flag:'wx',mode:0o600});
 	}
-	await writeFile('/opt/akm/data/akm.lock.lck.notes',${JSON.stringify(lockMarker)}, {mode:0o600});`);
+	await writeFile('/opt/akm/data/akm.lock.lck.notes',${JSON.stringify(lockMarker)}, {mode:0o600});`
+	);
 	const initial = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status']));
 	await poll(async () => {
 		const current = JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status']));
@@ -527,12 +688,15 @@ try {
 		await writeFile(join(directory, 'external.txt'), `newer-${name}`, { mode: 0o644 });
 	report.checks.gracefulFinalCheckpointAndRelease = true;
 	const second = await start('replacement');
-	await execBun(second.id, `import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
+	await execBun(
+		second.id,
+		`import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
 	for(const file of ${JSON.stringify(processLockFiles)}){
 		const value=await readFile(file,'utf8').catch(error=>{if(error.code==='ENOENT')return '';throw error;});
 		assert.equal(value.includes(${JSON.stringify(lockMarker)}),false,'historical process lock must not be restored');
 	}
-	assert.equal(await readFile('/opt/akm/data/akm.lock.lck.notes','utf8'),${JSON.stringify(lockMarker)});`);
+	assert.equal(await readFile('/opt/akm/data/akm.lock.lck.notes','utf8'),${JSON.stringify(lockMarker)});`
+	);
 	report.checks.nativeProcessLocksNotRestoredAndSimilarDurableFilesPreserved = true;
 	if (survivingHome) {
 		await execBun(
@@ -673,6 +837,11 @@ try {
 		240_000
 	);
 	report.checks.realNativeAkmHarnesses = true;
+}
+
+try {
+	if (!process.argv.includes('--akm-index-cache-only')) await qualifyRuntimeRecovery();
+	await qualifyAkmIndexCache();
 	report.ok = true;
 } catch (error) {
 	report.ok = false;

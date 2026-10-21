@@ -166,14 +166,18 @@ export async function createBlobStore(
 			throw failure('invalid recovery object key');
 		return container.getBlockBlobClient(`${destination.prefix}${value}`);
 	};
-	const request = async (operation) => {
+	const request = async (operation, signal) => {
 		try {
-			return await operation(AbortSignal.timeout(operationTimeoutMs));
+			return await operation(
+				signal
+					? AbortSignal.any([signal, AbortSignal.timeout(operationTimeoutMs)])
+					: AbortSignal.timeout(operationTimeoutMs)
+			);
 		} catch (error) {
 			throw classified(error);
 		}
 	};
-	async function download(client, limit) {
+	async function download(client, limit, signal) {
 		return request(async (abortSignal) => {
 			const response = await client.download(0, undefined, { abortSignal, maxRetryRequests: 0 });
 			const stream = response.readableStreamBody;
@@ -204,7 +208,7 @@ export async function createBlobStore(
 			if (bytes !== response.contentLength || !response.etag)
 				throw failure('recovery Blob incomplete read');
 			return { bytes: Buffer.concat(chunks, bytes), token: response.etag };
-		});
+		}, signal);
 	}
 	async function readDescriptor() {
 		try {
@@ -376,29 +380,39 @@ export async function createBlobStore(
 			);
 		},
 		compareAndSwap: publish,
-		async read(name, limit = maxReadBytes) {
-			return (await download(key(name), Math.min(limit, maxReadBytes))).bytes;
+		async read(name, limit = maxReadBytes, { signal } = {}) {
+			return (await download(key(name), Math.min(limit, maxReadBytes), signal)).bytes;
 		},
-		async createImmutable(name, bytes, owner) {
-			await renew(owner);
+		async createImmutable(name, bytes, owner, { signal } = {}) {
+			signal?.throwIfAborted();
+			// Optional immutable objects do not publish authority. Use the existing
+			// monotonic lease safety window without starting/waiting for a longer
+			// essential renewal request. The timer still renews independently; the
+			// engine rechecks ordinary ownership before manifest/HEAD publication.
+			if (signal) assertOwned(owner);
+			else await renew(owner);
 			if (bytes.length > maxReadBytes || hash(bytes) !== name.split('/')[1])
 				throw failure('recovery Blob object size/hash rejected');
 			const client = key(name);
 			try {
-				await request((abortSignal) =>
-					client.upload(bytes, bytes.length, { abortSignal, conditions: { ifNoneMatch: '*' } })
+				await request(
+					(abortSignal) =>
+						client.upload(bytes, bytes.length, { abortSignal, conditions: { ifNoneMatch: '*' } }),
+					signal
 				);
 			} catch {
 				// Existing identical content is the only valid immutable retry, including
 				// an unknown-success response. Never replace an existing object.
-				const existing = await download(client, maxReadBytes);
+				const existing = await download(client, maxReadBytes, signal);
 				if (!existing.bytes.equals(bytes)) throw failure('immutable object conflict');
-				await renew(owner);
+				if (signal) assertOwned(owner);
+				else await renew(owner);
 				return;
 			}
-			const stored = await download(client, maxReadBytes);
+			const stored = await download(client, maxReadBytes, signal);
 			if (!stored.bytes.equals(bytes)) throw failure('recovery Blob checksum mismatch');
-			await renew(owner);
+			if (signal) assertOwned(owner);
+			else await renew(owner);
 		},
 		async release(owner) {
 			if (active?.nonce === owner?.nonce) clearInterval(active.timer);

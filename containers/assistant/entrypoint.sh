@@ -45,7 +45,9 @@ export FH_RECOVERY_OPERATION_TIMEOUT_SECONDS="$RECOVERY_OPERATION_SECONDS"
 # separate stopped-writer checkpoint and release ownership. The writer budget
 # must not truncate these two operations. External hosts must allow the sum of
 # both phases (plus the two-second killed-writer settling interval).
-readonly RECOVERY_SHUTDOWN_SECONDS=$((2 * RECOVERY_OPERATION_SECONDS + 30))
+RECOVERY_CACHE_SECONDS=0
+if [ "${FH_RECOVERY_AKM_INDEX_CAPTURE:-0}" = 1 ]; then RECOVERY_CACHE_SECONDS=5; fi
+readonly RECOVERY_SHUTDOWN_SECONDS=$((2 * (RECOVERY_OPERATION_SECONDS + RECOVERY_CACHE_SECONDS) + 30))
 writer_pids=()
 descendant_pids=()
 essential_pids=()
@@ -359,7 +361,7 @@ mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
 rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults akm-index-cache; do
   rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
 done
 if [ "$configuration_degraded" = 1 ]; then

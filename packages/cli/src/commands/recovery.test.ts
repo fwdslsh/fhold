@@ -37,16 +37,23 @@ test('recovery CLI saves directory/policy/credentials without starting, claiming
 		'--interval',
 		'30',
 		'--instance-id',
-		'cli-agent'
+		'cli-agent',
+		'--akm-index-capture', '1',
+		'--akm-index-restore', '0'
 	]);
 	expect(recoverySnapshot(home).settings).toMatchObject({
 		enabled: true,
 		instanceId: 'cli-agent',
-		intervalSeconds: 30
+		intervalSeconds: 30,
+		akmIndexCapture: true,
+		akmIndexRestore: false
 	});
 	expect(recoverySnapshot(home).selection.sqlite).toEqual(['/work/extra/state.sqlite']);
 	expect(restartStatus(home).required).toBe(true);
 	expect(existsSync(join(root, 'checkpoints/descriptor.json'))).toBe(false);
+	await main(['--name', home, 'recovery', 'configure', '--akm-index-capture', '0', '--akm-index-restore', '1']);
+	expect(recoverySnapshot(home).settings).toMatchObject({ akmIndexCapture: false, akmIndexRestore: true });
+	await expect(main(['--name', home, 'recovery', 'configure', '--akm-index-restore', 'invalid'])).rejects.toThrow('0 or 1');
 	await expect(main(['--name', home, 'recovery', 'init'])).rejects.toThrow('Confirm');
 	await expect(main(['--name', home, 'recovery', 'restore'])).rejects.toThrow('Confirm');
 	const credential = join(root, 'private-connection');

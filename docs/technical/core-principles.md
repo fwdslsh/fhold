@@ -104,6 +104,11 @@ and diagnostics do not become whole-container restart gates. Core readiness is
 the authenticated native API with its required recovery restoration and owner.
 Only an unusable core or unsafe continuation stops startup/writers, including
 missing authentication, incomplete restore or actual loss of recovery ownership.
+Experimental, default-off AKM cache recovery is separate from essential state.
+Only a private candidate with completed native incremental clean is admitted;
+cache failures rebuild on demand. Its bounded optional budget may add startup
+latency without consuming the essential recovery allowance. Cache settings and
+format may change or be removed; see the recovery contract for scope and bounds.
 
 Host-specific deployment/qualification tooling and third-party addon installers
 are not part of the image or product test suite. fhold retains generic

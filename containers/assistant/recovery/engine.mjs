@@ -18,6 +18,7 @@ import {
 	validPathCharacters
 } from './catalog.mjs';
 import { inspectMounts, readMountInfo } from './mounts.mjs';
+import { createAkmIndexCache } from './akm-index-cache.mjs';
 
 export const FORMAT_VERSION = 1;
 export { CATALOG_VERSION, DEFAULT_ROOTS };
@@ -235,6 +236,17 @@ export function createEngine(config, options = {}) {
 	)
 		throw new Error('recovery include paths must be canonical absolute paths');
 	let catalog = createCatalog(roots, config.selection, catalogOptions);
+	const akmIndexCache = createAkmIndexCache({
+		roots,
+		privateDir,
+		instanceId,
+		env: options.env ?? process.env,
+		bunPath: options.bunPath,
+		akmCommand: options.akmCommand,
+		limits: options.akmIndexCacheLimits,
+		checkStorage: checkSQLiteStorage
+	});
+	let akmIndexReference;
 	let mountBoundary;
 	async function checkMounts() {
 		const reviewed = await inspectMounts(catalog, await (options.readMounts ?? readMountInfo)());
@@ -390,6 +402,22 @@ export function createEngine(config, options = {}) {
 			},
 			await (options.readMounts ?? readMountInfo)()
 		);
+	}
+	async function optionalCache(task) {
+		const started = performance.now();
+		let result = null;
+		try {
+			result = await task();
+		} catch {
+			akmIndexCache.unavailable();
+		} finally {
+			// Cache work has its own bounded budget. Preserve the essential
+			// operation's remaining allowance, including descriptor publication.
+			operationDeadline += performance.now() - started;
+		}
+		// A cache-only error is soft; actual ownership/topology loss is not.
+		await owned(true);
+		return result;
 	}
 	async function sqlite(operation, source, destination) {
 		await checkMounts();
@@ -818,6 +846,11 @@ export function createEngine(config, options = {}) {
 					}
 					await writeReceipt(generation);
 					lastCheckpointAt = manifest?.finishedAt ?? null;
+					akmIndexReference = manifest?.akmIndexCache;
+					if (config.akmIndexRestore)
+						await optionalCache(() =>
+							akmIndexCache.restore({ catalog, store, reference: akmIndexReference })
+						);
 					ready = true;
 					return this.status();
 				} catch (error) {
@@ -879,6 +912,20 @@ export function createEngine(config, options = {}) {
 						captureFinishedAt: Date.now()
 					});
 				}
+				if (config.akmIndexCapture)
+					akmIndexReference = await optionalCache(() =>
+						akmIndexCache.capture({
+							catalog,
+							store,
+							ownership,
+							previous: previous?.akmIndexCache
+						})
+					);
+				else if (config.akmIndexRestore)
+					akmIndexReference = await optionalCache(() =>
+						akmIndexCache.retain({ catalog, reference: previous?.akmIndexCache })
+					);
+				else akmIndexReference = undefined;
 				const manifest = {
 					format: FORMAT_VERSION,
 					product: 'fhold',
@@ -893,6 +940,7 @@ export function createEngine(config, options = {}) {
 					...(config.image ? { image: config.image } : {}),
 					presence,
 					members: captured,
+					...(akmIndexReference ? { akmIndexCache: akmIndexReference } : {}),
 					epoch: head.value.epoch,
 					startedAt,
 					finishedAt: Date.now(),
@@ -959,7 +1007,8 @@ export function createEngine(config, options = {}) {
 				lastCheckpointAt,
 				lastCheckpointTick,
 				failure,
-				checkpointFailure
+				checkpointFailure,
+				akmIndexCache: akmIndexCache.status()
 			};
 		},
 		async release() {

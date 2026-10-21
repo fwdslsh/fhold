@@ -18,9 +18,10 @@ export async function assertNoLinks(target) {
 		}
 	}
 }
-export async function readRegular(target, limit) {
+export async function readRegular(target, limit, signal) {
+	signal?.throwIfAborted();
 	await assertNoLinks(target);
-	const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+	const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
 	try {
 		const before = await handle.stat();
 		if (!before.isFile() || before.size > limit)
@@ -28,6 +29,7 @@ export async function readRegular(target, limit) {
 		const chunks = [];
 		let length = 0;
 		while (true) {
+			signal?.throwIfAborted();
 			const buffer = Buffer.alloc(Math.min(64 * 1024, limit - length + 1));
 			const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
 			if (!bytesRead) break;
@@ -226,10 +228,11 @@ export function createDirectoryStore(url, { maxReadBytes = 256 * 1024 * 1024 } =
 				await fs.rmdir(ownerDir);
 			});
 		},
-		async read(key, limit = maxReadBytes) {
-			return readRegular(keyPath(key), Math.min(limit, maxReadBytes));
+		async read(key, limit = maxReadBytes, { signal } = {}) {
+			return readRegular(keyPath(key), Math.min(limit, maxReadBytes), signal);
 		},
-		async createImmutable(key, bytes, owner) {
+		async createImmutable(key, bytes, owner, { signal } = {}) {
+			signal?.throwIfAborted();
 			await renew(owner);
 			if (bytes.length > maxReadBytes) throw new Error('recovery object exceeds limit');
 			const target = keyPath(key);
@@ -244,6 +247,7 @@ export function createDirectoryStore(url, { maxReadBytes = 256 * 1024 * 1024 } =
 				await handle.close();
 			}
 			try {
+				signal?.throwIfAborted();
 				await fs.link(temporary, target);
 			} catch (error) {
 				if (error.code !== 'EEXIST') throw error;
@@ -256,7 +260,7 @@ export function createDirectoryStore(url, { maxReadBytes = 256 * 1024 * 1024 } =
 			} finally {
 				await directory.close();
 			}
-			const stored = await readRegular(target, maxReadBytes);
+			const stored = await readRegular(target, maxReadBytes, signal);
 			if (!stored.equals(bytes)) throw new Error('immutable object conflict');
 			await renew(owner);
 		},
