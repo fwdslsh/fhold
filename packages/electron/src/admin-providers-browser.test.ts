@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
+import { FH_RUNTIME_VERSION } from '../../lib/src/control-plane/release.js';
 
 type DebuggerResult = {
 	result?: { value?: unknown };
@@ -240,6 +241,44 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			if (typeof result.data !== 'string') throw new Error('Missing screenshot');
 			writeFileSync(join(root, name), Buffer.from(result.data, 'base64'));
 		};
+		// Actual Overview renderer, with synthetic read-only status rather than a live instance.
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
+			state.currentView='overview';
+			const overview=window.overviewQa={...${JSON.stringify(snapshot)},
+				homeDir:'/home/user/fhold/instances/april', updateImageTag:${JSON.stringify(FH_RUNTIME_VERSION)},
+				connectionDetails:{opencode:{url:'http://127.0.0.1:3810'},mcp:{url:'http://127.0.0.1:3830/mcp'},claude:{url:'http://127.0.0.1:3830/mcp'}},
+				services:[
+					{name:'assistant',state:'running',health:'healthy',image:'fwdslsh/fhold-assistant:0.2.2610211-beta.13'},
+					{name:'guardian',state:'running',health:'healthy',image:'fwdslsh/fhold-guardian:${FH_RUNTIME_VERSION}'},
+					{name:'discord',state:'running',health:'healthy',image:'fwdslsh/fhold-portal:${FH_RUNTIME_VERSION}'}]};
+			overview.config.deployment.projectName='april'; overview.config.gateway.enabled=true;
+			overview.config.portals.discord.enabled=true; render(overview,{preserveDirty:false});
+		})()`);
+		expect(await evaluate("document.querySelector('#update-image-tag').textContent")).toBe(FH_RUNTIME_VERSION);
+		expect(await evaluate("[...document.querySelectorAll('#services .service-image code')].map(item=>item.textContent)")).toEqual(['0.2.2610211-beta.13', FH_RUNTIME_VERSION, FH_RUNTIME_VERSION]);
+		expect(await evaluate("document.querySelector('#services .service-image').title")).toBe('fwdslsh/fhold-assistant:0.2.2610211-beta.13');
+		expect(await evaluate("document.querySelector('#update-stack').closest('.runtime-update-action').contains(document.querySelector('#update-image-tag'))")).toBe(true);
+		expect(await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")).toBeNull();
+		await capture('overview-desktop.png');
+		await evaluate(`window.overviewQa.services[0].image='registry.example.com:5000/team/assistant:long-custom-image-tag-for-multiple-release-channels-2026';
+			import('./runtime.js').then(({renderServices})=>renderServices(window.overviewQa));`);
+		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
+		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		await capture('overview-narrow.png');
+		await evaluate("document.documentElement.style.fontSize='200%'");
+		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		await capture('overview-200pct.png');
+		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await evaluate(`(async()=>{
+			document.documentElement.style.fontSize=''; const {renderServices}=await import('./runtime.js');
+			renderServices({...window.overviewQa,services:[],dockerError:'Cannot connect to Docker.'});
+		})()`);
+		expect(await evaluate("document.querySelector('#assistant-summary').textContent")).toBe('Status unavailable');
+		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
+		await capture('overview-unavailable.png');
+		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
+			state.currentView='provider';render(${JSON.stringify(snapshot)},{preserveDirty:false});})()`);
 		expect(await evaluate("document.querySelector('#provider-default-service').textContent")).toBe(
 			'current-service'
 		);

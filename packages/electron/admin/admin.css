@@ -657,6 +657,38 @@ code {
 	gap: 10px;
 }
 
+.runtime-update {
+	margin-bottom: 16px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--border-soft);
+}
+
+.runtime-update-action {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px 16px;
+	color: var(--ink-soft);
+	font-size: 0.8125rem;
+}
+
+.runtime-update-action > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.runtime-update-action > button {
+	flex-shrink: 0;
+}
+
+.runtime-update > .help-text {
+	margin: 8px 0 0;
+}
+
+#runtime-status-detail {
+	overflow-wrap: anywhere;
+}
+
 .service,
 .empty-state {
 	display: flex;
@@ -672,6 +704,24 @@ code {
 .service-name {
 	display: grid;
 	gap: 2px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.service {
+	flex-wrap: wrap;
+}
+
+.service-image {
+	color: var(--ink-soft);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.service > .status-badge {
+	flex-shrink: 0;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .service-name small,
@@ -1211,6 +1261,12 @@ input[type="checkbox"] {
 	margin-top: 20px;
 }
 @media (max-width: 520px) {
+	.service {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 8px;
+	}
+
 	.saved-access-list .mapping-row > button {
 		justify-self: start;
 	}

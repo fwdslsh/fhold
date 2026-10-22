@@ -14,6 +14,36 @@ used repository source and public documentation only: no SSH connection, Docker
 host operation, Azure account, credential file or live instance was inspected.
 AKM was unavailable, so no curate/show/feedback commands were run.
 
+### October 21 implementation refinement
+
+Azure now has native browser onboarding, subscription/resource-group choices,
+layered connection diagnostics, revision-aware console logs, interactive CLI
+console access and confirmed single-active-revision restart. Read-only inventory
+and status remain distinct from opening an agent or restarting it. See the user
+guide for supported operations; creation, image replacement, deployment templates
+and recovery ownership remain outside this slice.
+
+The provider composition root is `packages/lib/src/hosting/provider.ts`. Adapters
+own discovery, typed target selection, lifecycle and diagnostics. Optional
+connection onboarding, interactive console and full instance-file management are
+separate capabilities, not methods that every cloud must pretend to implement.
+CLI's common remote verbs use `InstanceSession`; Admin chooses instance-file
+administration by the presence of `management`, not a provider-name check. Named
+operation lists replace ambiguous `capabilities(restart, local)` flags and remove
+ACA-specific error text from the generic capability helper.
+SSH transport primitives are separate from its adapter/domain, eliminating the
+adapter-to-management import cycle. Remote directory setup is an optional provider
+interface rather than SSH RPC construction inside Electron.
+
+To add another provider, define its connection/target locator and parser, supply
+an adapter and register it in this composition root. Add only its necessary
+connection fields to the chooser. Implement optional interfaces only where the
+platform genuinely supports them; ordinary status/log/lifecycle/console dispatch
+and diagnostic rendering need no new vendor switch. Test native argument arrays,
+scope/target separation, partial diagnostics, confirmation and no mutation replay.
+This is a small built-in adapter boundary, not a configurable plugin framework or
+a remote instance-settings mirror.
+
 ## Recommendation
 
 Keep local Docker as the primary, default installation and management path.

@@ -5,106 +5,30 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { FH_RELEASE_VERSION } from '../control-plane/release.js';
-import { localDockerProvider } from './local-docker.js';
-import { azureContainerAppsProvider } from './azure-container-apps.js';
+import { hostingProvider } from './provider.js';
 import { runHostingProcess, type HostingProcess } from './process.js';
-import { sshArgs, SSH_RPC_COMMAND, HOSTING_WIRE_VERSION, sshDockerProvider } from './ssh-docker.js';
-import type { HostingConnection, InstanceSummary } from './types.js';
-
-export type ConnectionCheck = {
-	ok: boolean;
-	repairable: boolean;
-	checks: Array<{ name: string; ok: boolean; detail: string }>;
-	instances: InstanceSummary[];
-};
+import { sshArgs } from './ssh-native.js';
+import type { HostingConnection, ConnectionCheck } from './types.js';
 export async function checkHostingConnection(
 	connection: HostingConnection,
 	run: HostingProcess = runHostingProcess
 ): Promise<ConnectionCheck> {
+	const provider = hostingProvider(connection, run);
+	if (provider.check) return provider.check();
 	const result: ConnectionCheck = { ok: false, repairable: false, checks: [], instances: [] };
-	const parseResponse = (raw: string): unknown => {
-		try {
-			return JSON.parse(raw);
-		} catch {
-			throw new Error(
-				'The remote CLI returned unexpected output. Repair the CLI, and keep shell startup messages off stdout.'
-			);
-		}
-	};
 	try {
-		if (connection.kind === 'ssh-docker') {
-			const platform = (await run('ssh', [...sshArgs(connection), 'uname -sm'])).trim();
-			result.checks.push({
-				name: 'SSH',
-				ok: true,
-				detail: `Connected to ${connection.host} (${platform}).`
-			});
-			result.repairable = /^Linux (?:x86_64|aarch64|arm64)$/.test(platform);
-			const raw = await run('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
-				input: JSON.stringify({ version: HOSTING_WIRE_VERSION, action: 'hello' })
-			});
-			const hello = parseResponse(raw) as {
-				version?: number;
-				ok?: boolean;
-				value?: { actions?: string[]; release?: string; management?: string[] };
-			};
-			if (
-				hello.version !== HOSTING_WIRE_VERSION ||
-				hello.ok !== true ||
-				!Array.isArray(hello.value?.actions) ||
-				!hello.value.actions.includes('list')
-			)
-				throw new Error(
-					'Remote CLI lacks compatible hosting support. Repair remote CLI to update it.'
-				);
-			result.checks.push({
-				name: 'Remote CLI',
-				ok: true,
-				detail: hello.value.release || 'Compatible hosting protocol.'
-			});
-			const management = hello.value.management?.includes('snapshot') === true;
-			result.checks.push({
-				name: 'Instance management',
-				ok: management,
-				detail: management
-					? 'Settings, apps, updates and import/export are available.'
-					: 'Update the remote fhold CLI to enable full management. Discovery and supported lifecycle commands remain available.'
-			});
-			if (hello.value.actions.includes('diagnose')) {
-				const response = parseResponse(
-					await run('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
-						input: JSON.stringify({
-							version: 1,
-							action: 'diagnose',
-							roots: connection.roots.length ? connection.roots : undefined
-						})
-					})
-				) as { ok?: boolean; value?: { docker?: { ok: boolean; message?: string } } };
-				if (response.ok && response.value?.docker)
-					result.checks.push({
-						name: 'Docker',
-						ok: response.value.docker.ok,
-						detail: response.value.docker.message || 'Docker and Compose are ready.'
-					});
-			}
-		}
-		result.instances = await (connection.kind === 'ssh-docker'
-			? sshDockerProvider(connection, run)
-			: connection.kind === 'azure-container-apps'
-				? azureContainerAppsProvider(connection, run)
-				: localDockerProvider
-		).listInstances();
+		result.instances = await provider.listInstances();
 		result.checks.push({
 			name: 'Discovery',
 			ok: true,
 			detail: result.instances.length
 				? `Found ${result.instances.length} instance(s).`
-				: 'No instances found. Add the exact home or its parent to Instance roots; stopped installations are supported.'
+				: provider.emptyHint || 'No instances found on this connection.'
 		});
 		result.ok = result.checks.every((item) => item.ok);
 	} catch (error) {
 		result.checks.push({
-			name: result.checks.length ? 'Remote CLI / discovery' : 'Connection',
+			name: 'Connection / discovery',
 			ok: false,
 			detail: error instanceof Error ? error.message : 'Connection check failed.'
 		});

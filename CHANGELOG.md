@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.261001-beta — Admin Overview and Azure host management
+
+Tooling-only release of the Linux Admin and CLI. Runtime images remain pinned to
+`0.3.261000-beta`; no container upgrade is required.
+
+Overview displays each container's observed image tag, independently of saved
+configuration and runtime health. Show the runtime image tag included with the
+managing tool beside Update, separate from Start/Restart/Stop. Preserve custom
+image pins and native restart confirmation. Improve service ordering, tag wrapping
+and narrow/200%-text layouts, with designer-reviewed screenshots and regressions.
+Missing metadata stays unavailable instead of guessing a version.
+
+PRs targeting main independently build and launch-smoke a Linux x86_64 Admin
+AppImage, named by PR/commit and downloadable for 14 days without publishing a
+release or container images.
+
+Host connections can sign in through Azure CLI's native browser flow and choose
+subscriptions/resource groups without pasting IDs. Connection checks separately
+report the CLI, account, scope and discovery. Existing Container Apps expose
+native revision status, confirmed single-active-revision restart, selected
+platform/console logs, OpenCode and Azure portal links. CLI adds an interactive
+native console and a direct OpenCode connection address. Observation never calls
+the agent or changes Azure's global account selection.
+Fix system-log requests to use Azure's required JSONL format and render native
+messages as text. Recognize `ScaledToZero` and preserve unavailable replica
+counts as unknown rather than inventing zero.
+
+Hosting capabilities use named operations rather than positional flags. The
+adapter owns its diagnostics and optional onboarding/console; common CLI verbs
+and Admin select supported interfaces rather than assuming every remote is SSH
+or has a Docker home. Native auth errors remain actionable without logging raw
+responses. No container changes, runtime management service, provisioning,
+deployment-template editing or recovery ownership changes are introduced.
+
 ## 0.3.261000-beta — monthly versions and updated AKM
 
 Adopt monthly `X.Y.YYMMNN[-alpha|-beta|-rc]` release versions (#46). Start the
@@ -393,7 +427,7 @@ UTC year/month/day plus a daily build number starting at 1. Examples:
 `0.2.2610081` and `0.3.2612225-beta.1`. Alpha, beta and rc suffixes remain
 supported. Release tools compare date and daily counter separately, including
 multi-digit builds and next-day resets, and accept the 0.1 → 0.2 boundary without
-rewriting historical tags. See the [release runbook](docs/operations/release.md#date-and-daily-build-from-02).
+rewriting historical tags. See the [release runbook](docs/operations/release.md#historical-02-date-and-daily-build).
 
 The Assistant now ships AKM 0.9.30 and matching 0.9.30202610090106 plugins for
 OpenCode, Claude and Codex, installed through their standard native mechanisms.

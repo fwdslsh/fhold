@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, connect, isIP } from 'node:net';
-import { sshArgs } from '../hosting/ssh-docker.js';
+import { sshArgs } from '../hosting/ssh-native.js';
 import { hostingFailure } from '../hosting/process.js';
 import type { HostingConnection } from '../hosting/types.js';
 

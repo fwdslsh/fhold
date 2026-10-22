@@ -152,6 +152,7 @@ export async function refresh({ statusOnly = false } = {}) {
 				state.currentSnapshot = {
 					...state.currentSnapshot,
 					services: snapshot.services,
+					updateImageTag: snapshot.updateImageTag,
 					dockerError: snapshot.dockerError,
 					pendingRestart: snapshot.pendingRestart,
 					connectionDetails: snapshot.connectionDetails,

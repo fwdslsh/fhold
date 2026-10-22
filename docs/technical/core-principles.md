@@ -142,6 +142,15 @@ subprocesses pin a local socket from the selected native context, never send loc
 bind paths to a remote daemon or mutate the global context. ACA reports platform
 observations and accepted lifecycle requests honestly, separately from readiness,
 replica drain, runtime recovery ownership and external deployment intent.
+Azure onboarding uses native browser sign-in and read-only account/scope choices.
+The adapter owns scoped diagnostics, logs and its explicit interactive console.
+Confirmed restart addresses the one active revision through Azure's native API;
+it does not apply Docker intent, edit deployment templates or establish recovery
+completion. Native management credentials stay on the user's computer, and
+status/discovery never contact the agent or implicitly wake an idle replica.
+Provider capabilities are named operations; diagnostics and optional onboarding,
+console and file-management interfaces remain adapter-owned. Common CLI/Admin
+dispatch does not assume every remote target is SSH or has a local instance home.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped
@@ -173,6 +182,10 @@ Admin restarts and instance switches. Only successful healthy activation clears
 the pending state; updates also verify their selected image identities first.
 The existing lifecycle lock and Compose path own application. No background
 service, automatic restart or second configuration store is introduced.
+Overview shows observed container image tags independently of saved intent and
+runtime health. The available image tag comes from the managing tool's bundled
+runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
+latest version. Update preserves explicit custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.

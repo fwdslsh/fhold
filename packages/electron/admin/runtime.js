@@ -1,4 +1,4 @@
-import { friendlyServiceName, isHealthy, isRunning } from './model.js';
+import { friendlyServiceName, isHealthy, isRunning, serviceImageDetails } from './model.js';
 import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { renderRestartStatus, requestStackAction } from './restart.js';
@@ -48,6 +48,7 @@ export function renderRuntimeControls(snapshot) {
 }
 
 export function renderServices(snapshot) {
+	setText('update-image-tag', snapshot.updateImageTag || 'Unavailable');
 	renderConnectionStatus(snapshot);
 	updateGuardianGuide();
 	const unavailable = !!snapshot.dockerError;
@@ -69,16 +70,27 @@ export function renderServices(snapshot) {
 		empty.textContent = snapshot.dockerError || 'fhold is stopped.';
 		services.append(empty);
 	} else {
-		for (const service of snapshot.services) {
+		const order = { assistant: 0, guardian: 1, discord: 2, slack: 3 };
+		const orderedServices = [...snapshot.services].sort((a, b) =>
+			(order[a.name] ?? 4) - (order[b.name] ?? 4) || a.name.localeCompare(b.name)
+		);
+		for (const service of orderedServices) {
 			const row = document.createElement('div');
 			row.className = 'service';
 			const identity = document.createElement('div');
 			identity.className = 'service-name';
 			const name = document.createElement('strong');
 			name.textContent = friendlyServiceName(service.name);
-			const technical = document.createElement('small');
-			technical.textContent = service.name;
-			identity.append(name, technical);
+			const image = document.createElement('small');
+			image.className = 'service-image';
+			image.title = service.image || 'Docker did not report an image reference.';
+			const details = serviceImageDetails(service.image);
+			const label = document.createElement('span');
+			label.textContent = `${details.label} `;
+			const tag = document.createElement('code');
+			tag.textContent = details.value;
+			image.append(label, tag);
+			identity.append(name, image);
 			const status = document.createElement('span');
 			const healthy = isHealthy(service);
 			const degraded = healthy && service.warnings?.length > 0;

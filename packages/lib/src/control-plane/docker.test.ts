@@ -6,12 +6,23 @@ import { join } from 'node:path';
 import {
 	assertProjectOwnership,
 	containerWarnings,
+	parseComposePsRows,
 	composeProcessEnvironment,
 	runComposeStreaming
 } from './docker.js';
 
 const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
+
+it('retains actual image references from Compose JSON, without substituting configured tags', () => {
+	const assistant = { Service: 'assistant', State: 'running', Image: 'registry.test:5000/team/assistant:old-tag' };
+	const guardian = { Service: 'guardian', State: 'exited', Image: 'fwdslsh/fhold-guardian:new-tag' };
+	for (const output of [JSON.stringify([assistant, guardian]), [assistant, guardian].map(item => JSON.stringify(item)).join('\n')]) {
+		expect(parseComposePsRows(output).map(row => row.image)).toEqual([assistant.Image, guardian.Image]);
+	}
+	for (const Image of [undefined, null, { tag: 'not-a-reference' }])
+		expect(parseComposePsRows(JSON.stringify({ Service: 'assistant', Image }))[0]?.image).toBeUndefined();
+});
 
 afterEach(() => {
 	if (originalDocker === undefined) delete process.env.FH_DOCKER_BIN;

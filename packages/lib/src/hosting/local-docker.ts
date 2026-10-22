@@ -95,7 +95,7 @@ export async function inspectLocalInstance(homeDir: string): Promise<HostingSnap
 		ref: { kind: 'local-docker', connectionId: 'local', homeDir: state.homeDir },
 		name: config.config.deployment.projectName,
 		location: state.homeDir,
-		capabilities: capabilities(true, true),
+		capabilities: capabilities(['start', 'stop', 'restart', 'settings', 'transfer']),
 		config: config.config,
 		pendingRestart: restartStatus(state.homeDir),
 		clientUrl: assistantEndpoint(state.homeDir),
@@ -104,6 +104,7 @@ export async function inspectLocalInstance(homeDir: string): Promise<HostingSnap
 			? await Promise.all(
 					parseComposePsRows(result.stdout).map(async (row) => ({
 						name: row.service,
+						image: row.image,
 						state: row.state,
 						health: row.health,
 						id: row.id,
@@ -137,6 +138,8 @@ export async function localInstanceLogs(
 	homeDir: string,
 	options: HostingLogOptions = {}
 ): Promise<string> {
+	if (Object.entries(options).some(([key, value]) => key !== 'tail' && value !== undefined))
+		throw new Error('Docker logs support --tail; deployment revision/replica selection is not available.');
 	const state = createFholdState(homeDir);
 	requireInstall(state.homeDir);
 	const result = await composeLogs(buildComposeOptions(state), options.tail ?? 100);
@@ -159,7 +162,8 @@ export const localDockerProvider: HostingProvider = {
 			management: (options) => localInstanceManagement(ref.homeDir, options),
 			inspect: () => inspectLocalInstance(ref.homeDir),
 			logs: (options) => localInstanceLogs(ref.homeDir, options),
-			async operate(action, confirmed) {
+			async operate(action, confirmed, options) {
+				if (options?.revision !== undefined) throw new Error('This instance has no deployment revision selector.');
 				if (!confirmed)
 					throw new Error('Confirm this lifecycle operation before changing containers.');
 				await operateLocalInstance(ref.homeDir, action);

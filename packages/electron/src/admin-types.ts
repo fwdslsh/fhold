@@ -16,6 +16,7 @@ import type {
 	InstanceSummary,
 	ConnectionCheck
 } from '@fhold/lib';
+import type { HostingChoice, HostingLogOptions } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
 import type { ManagedSnapshot } from '@fhold/lib';
@@ -45,6 +46,13 @@ export type AdminWelcome = {
 };
 
 export type AdminApi = {
+	hostingFeatures(id: string): Promise<{ installation: boolean; emptyHint?: string }>;
+	hostingSetup(value: {
+		provider: HostingConnection['kind'];
+		action: 'sign-in' | 'choices';
+		field?: string;
+		values?: Record<string, string>;
+	}): Promise<HostingChoice[] | undefined>;
 	directory(value?: string): Promise<import('@fhold/lib').DirectoryListing>;
 	hostingInfo(id: string): Promise<{ instancesDirectory: string; defaultHome: string }>;
 	hostingDirectory(value: {
@@ -85,7 +93,7 @@ export type AdminApi = {
 	saveConfig(value: { config: StackConfig; baseConfig: StackConfig }): Promise<AdminSnapshot>;
 	confirmRestart(action: InterruptingAction): Promise<boolean>;
 	action(action: StackAction, confirmed?: boolean): Promise<AdminViewSnapshot>;
-	logs(): Promise<string>;
+	logs(options?: HostingLogOptions): Promise<string>;
 	providers(): Promise<ProviderSettings>;
 	providerKey(value: { provider: string; key: string }): Promise<void>;
 	providerEndpoint(value: ProviderEndpointInput): Promise<ProviderSettings>;
@@ -155,6 +163,8 @@ export type AdminApi = {
 };
 
 export const ADMIN_CHANNELS = {
+	hostingFeatures: 'admin:hosting-features',
+	hostingSetup: 'admin:hosting-setup',
 	directory: 'admin:directory',
 	hostingInfo: 'admin:hosting-info',
 	hostingDirectory: 'admin:hosting-directory',

@@ -52,6 +52,7 @@ export function changeScope(files, readBefore, readAfter) {
 		if (
 			[
 				'.github/workflows/ci.yml',
+				'.github/workflows/pr-admin.yml',
 				'.github/workflows/gates.yml',
 				'.github/workflows/release.yml',
 				'.github/release-manifest.json',

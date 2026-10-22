@@ -43,10 +43,7 @@ export function renderHosted(snapshot) {
 	byId('sidebar-alerts').append(byId('notification-area'));
 	setSkipTarget('main-content');
 	setText('view-title', hosted.name);
-	setText(
-		'view-description',
-		hosted.ref.kind === 'ssh-docker' ? 'Remote Docker host' : 'Azure Container App · experimental'
-	);
+	setText('view-description', hosted.providerLabel || 'Hosted instance');
 	setText('hosted-location', hosted.location);
 	setText(
 		'hosted-state',
@@ -64,17 +61,20 @@ export function renderHosted(snapshot) {
 	setText('hosted-settings-detail', hosted.capabilities.settings.reason);
 	setText('hosted-transfer-detail', hosted.capabilities.transfer.reason);
 	setText(
+		'hosted-access-detail',
+		hosted.guidance?.access ||
+			'Use the agent’s native interface for account setup and agent configuration.'
+	);
+	setText(
 		'hosted-client-detail',
-		hosted.ref.kind === 'azure-container-apps'
-			? 'Status checks do not wake a scaled-to-zero agent. Opening OpenCode may wake it.'
-			: 'The native API stays on the Docker host. Use a native SSH port forward to open a loopback-only address.'
+		hosted.guidance?.client || 'Opening the agent uses its native authentication.'
 	);
 	setText(
 		'hosted-revisions',
 		(hosted.revisions || [])
 			.map(
 				(item) =>
-					`${item.name}: ${item.active ? 'active' : 'inactive'}, ${item.replicas} replica(s), ${item.health}`
+					`${item.name}: ${item.active ? 'active' : 'inactive'}, ${item.replicas ?? 'unknown'} replica(s), ${item.health}`
 			)
 			.join('\n')
 	);
@@ -82,6 +82,32 @@ export function renderHosted(snapshot) {
 	const client = byId('hosted-open-agent');
 	client.hidden = !hosted.clientUrl;
 	client.href = hosted.clientUrl || 'about:blank';
+	const portal = byId('hosted-open-portal');
+	portal.hidden = !hosted.portalUrl;
+	portal.href = hosted.portalUrl || 'about:blank';
+	for (const [id, choices, placeholder] of [
+		[
+			'hosted-log-revision',
+			(hosted.revisions || []).map((item) => ({
+				value: item.name,
+				label: `${item.name}${item.active ? ' · active' : ''}`
+			})),
+			'Latest revision'
+		],
+		[
+			'hosted-log-container',
+			(hosted.containers || []).map((item) => ({ value: item.name, label: item.name })),
+			'Default container'
+		]
+	]) {
+		const field = byId(id);
+		const selected = field.value;
+		setOptions(
+			field,
+			[{ value: '', label: placeholder }, ...choices],
+			choices.some((item) => item.value === selected) ? selected : ''
+		);
+	}
 	for (const button of all('[data-hosted-action]')) {
 		const capability = hosted.capabilities[button.dataset.hostedAction];
 		button.disabled = state.operationInFlight || !capability.supported;
@@ -90,7 +116,8 @@ export function renderHosted(snapshot) {
 	setText(
 		'hosted-restart-detail',
 		hosted.capabilities.restart.reason ||
-			'Restart applies saved Docker-host settings and can interrupt current work.'
+			hosted.guidance?.restart ||
+			'Restart may interrupt current work.'
 	);
 	renderInstancePicker(snapshot);
 }
@@ -150,14 +177,16 @@ async function discover() {
 		}
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		const list = byId('hosting-instance-list');
-		const connection = savedConnections.find((item) => item.id === id);
+		const features = await state.api.hostingFeatures(id);
+		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
-			byId(button).hidden = connection?.kind !== 'ssh-docker';
+			byId(button).hidden = !features.installation;
 		list.replaceChildren();
 		hostingStatus(
 			instances.length
 				? ''
-				: 'No instances found. Open Manage host connections to check sign-in and the remote CLI, or add an instance root.'
+				: features.emptyHint ||
+						'No instances found. Check this connection in Manage host connections.'
 		);
 		for (const instance of instances) {
 			const button = document.createElement('button');
@@ -194,19 +223,58 @@ export async function showHostingChooser(id) {
 	await discover();
 }
 function providerFields() {
-	const ssh = byId('hosting-provider').value === 'ssh-docker';
+	const kind = byId('hosting-provider').value;
+	const ssh = kind === 'ssh-docker';
+	const azure = kind === 'azure-container-apps';
 	byId('hosting-ssh-fields').hidden = !ssh;
 	byId('hosting-ssh-advanced').hidden = !ssh;
-	byId('hosting-azure-fields').hidden = ssh;
+	byId('hosting-azure-fields').hidden = !azure;
 	byId('hosting-host').required = ssh;
-	byId('hosting-subscription').required = !ssh;
-	byId('hosting-group').required = !ssh;
+	byId('hosting-subscription').required = azure;
+	byId('hosting-group').required = azure;
 	byId('hosting-port').disabled = !ssh;
+}
+function savedChoice(id, value, placeholder) {
+	setOptions(
+		byId(id),
+		[{ value: '', label: placeholder }, ...(value ? [{ value, label: value }] : [])],
+		value || ''
+	);
+}
+async function loadAzureChoices(field) {
+	const id = field === 'subscriptionId' ? 'hosting-subscription' : 'hosting-group';
+	const select = byId(id);
+	const saved = select.value;
+	const choices = await state.api.hostingSetup({
+		provider: 'azure-container-apps',
+		action: 'choices',
+		field,
+		values: { subscriptionId: byId('hosting-subscription').value }
+	});
+	if (!choices) return;
+	const preserved =
+		saved && !choices.some((item) => item.value === saved)
+			? [{ value: saved, label: `${saved} · saved` }]
+			: [];
+	setOptions(
+		select,
+		[
+			{
+				value: '',
+				label: field === 'subscriptionId' ? 'Choose a subscription' : 'Choose a resource group'
+			},
+			...choices,
+			...preserved
+		],
+		saved
+	);
 }
 function editConnection(connection) {
 	if (state.operationInFlight) return;
 	editingId = connection?.id;
 	byId('hosting-add-form').reset();
+	savedChoice('hosting-subscription', connection?.subscriptionId, 'Choose a subscription');
+	savedChoice('hosting-group', connection?.resourceGroup, 'Choose a resource group');
 	delete byId('hosting-id').dataset.manual;
 	byId('hosting-add-form').hidden = false;
 	byId('hosting-new').hidden = true;
@@ -349,6 +417,32 @@ export async function manageHostingConnections() {
 	});
 }
 export function bindHostingEvents() {
+	byId('hosting-sign-in').addEventListener(
+		'click',
+		() =>
+			void connectionOperation('Waiting for Azure sign-in in your browser', async () => {
+				await state.api.hostingSetup({ provider: 'azure-container-apps', action: 'sign-in' });
+				await loadAzureChoices('subscriptionId');
+				hostingStatus('Signed in. Choose a subscription and resource group.');
+			})
+	);
+	byId('hosting-load-scopes').addEventListener(
+		'click',
+		() =>
+			void connectionOperation('Loading subscriptions', async () => {
+				await loadAzureChoices('subscriptionId');
+				if (byId('hosting-subscription').value) await loadAzureChoices('resourceGroup');
+				hostingStatus('Choose a subscription and resource group.');
+			})
+	);
+	byId('hosting-subscription').addEventListener('change', () => {
+		savedChoice('hosting-group', '', 'Choose a resource group');
+		if (byId('hosting-subscription').value)
+			void connectionOperation('Loading resource groups', async () => {
+				await loadAzureChoices('resourceGroup');
+				hostingStatus('Choose a resource group.');
+			});
+	});
 	byId('hosting-open-folder').addEventListener('click', async () => {
 		const connection = savedConnections.find(
 			(item) => item.id === byId('hosting-connection').value
@@ -507,7 +601,11 @@ export function bindHostingEvents() {
 		'click',
 		() =>
 			void operation('Reading logs', async () => {
-				byId('hosted-logs').value = await state.api.logs();
+				byId('hosted-logs').value = await state.api.logs({
+					type: byId('hosted-log-type').value,
+					revision: byId('hosted-log-revision').value || undefined,
+					container: byId('hosted-log-container').value || undefined
+				});
 			})
 	);
 }
