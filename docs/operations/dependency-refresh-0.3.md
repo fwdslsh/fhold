@@ -81,3 +81,24 @@ Tooling versions advance only the root, library, CLI and Admin manifests and the
 lockfile workspace versions. Container pins, Skeleton and extension versions,
 existing instance homes/data and native account state remain untouched. Qualify
 the final stamped SHA using the normal tooling and native artifact gates.
+
+## Admin settings/updater review
+
+Rechecked October 22, 2026 at **05:02 UTC** against official npm metadata for all
+33 workspace dependency/override names, selected AKM/electron-builder channels,
+every pinned Action, native marketplace tag, Node/Go indexes, Supercronic, Trivy,
+cosign and docs renderer/template. Add the current supported **electron-updater
+6.8.9** to Admin only. The existing compatible dependency versions are retained;
+Bun adds its four missing packages and rehoists existing YAML/argparse entries
+without changing their per-consumer versions. Frozen installation and the
+763-package audit pass with the two existing reviewed exceptions only.
+
+Existing OpenCode 2.1, Effect and Electron 45 compatibility holds remain. AKM
+CLI `next` 0.10.261010-beta and all three plugins 0.10.261009-beta remain current,
+with the same immutable native marketplace commit. All pinned Actions, Bun 1.4.3,
+Node 24 LTS, Go, Supercronic, Trivy and cosign remain current on selected channels.
+Claude Code **2.1.308** has now superseded the 2.1.307 noted at 03:30; it and npm
+12.2.1 remain explicit next-full-runtime refresh items, not part of a desktop
+settings/updater feature. No runtime pin, container source, new advisory exception
+or vendor implementation is changed here. This branch does not stamp or publish
+a release or upgrade any installed instance.
