@@ -9,13 +9,17 @@ import {
 	updatePortalTokenFields
 } from './connections.js';
 import { isHealthy } from './model.js';
-import { loadProviders, renderReadiness } from './providers.js';
+import { loadProviders, renderReadiness, resetProviderState } from './providers.js';
 import { renderPhase, renderServices } from './runtime.js';
 import { renderInstallationReadiness, renderInstancePicker } from './instances.js';
 import { renderRemoteStatus } from './remote.js';
 import { renderRecovery, updateRecoveryFields } from './recovery.js';
 import { state } from './state.js';
-import { renderHosted } from './hosting.js';
+import {
+	renderInstanceCapabilities,
+	renderInstanceDetails,
+	renderPlatformAccess
+} from './instance-presentation.js';
 import {
 	byId,
 	captureDirtyForms,
@@ -30,15 +34,11 @@ import {
 let statusReadInFlight = false;
 
 export function render(snapshot, options = {}) {
-	if (snapshot.phase === 'remote') {
-		renderHosted(snapshot);
-		return;
-	}
-	byId('view-hosted').hidden = true;
 	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
 	const previousPhase = state.currentSnapshot?.phase;
 	state.currentSnapshot = snapshot;
-	state.currentConfig = snapshot.config;
+	state.currentConfig = snapshot.config || null;
+	if (snapshot.phase === 'remote' && previousPhase !== 'remote') resetProviderState();
 	state.renderingSnapshot = true;
 	if (snapshot.phase === 'not_installed' && previousPhase !== 'not_installed') {
 		byId('install-instance-name').value = snapshot.config.deployment.projectName;
@@ -49,19 +49,32 @@ export function render(snapshot, options = {}) {
 		byId('install-gateway-port').value = String(snapshot.config.gateway.port);
 	}
 	renderInstancePicker(snapshot);
+	renderPhase(snapshot.phase);
+	renderInstanceCapabilities(snapshot);
+	if (snapshot.phase === 'remote') {
+		if (previousPhase !== 'remote') {
+			// Never present an old instance's secrets or settings as cloud state.
+			for (const fields of document.querySelectorAll('[data-instance-feature]'))
+				for (const control of fields.querySelectorAll('input, select, textarea')) {
+					control.value = '';
+					if (control instanceof HTMLInputElement) control.checked = false;
+				}
+		}
+		renderInstanceDetails(snapshot);
+		renderPlatformAccess(snapshot);
+		renderServices(snapshot);
+		state.renderingSnapshot = false;
+		return;
+	}
 	byId('recovery-assistant-port').value = String(snapshot.config.assistant.port);
 	byId('recovery-gateway-port').value = String(snapshot.config.gateway.port);
-	renderPhase(snapshot.phase);
 	if (snapshot.phase === 'not_installed') {
 		renderInstallationReadiness(snapshot.installationReadiness);
 		state.renderingSnapshot = false;
 		return;
 	}
 
-	setText('home', snapshot.homeDir);
-	setText('overview-home', snapshot.homeDir);
-	setText('instance-name', snapshot.config.deployment?.projectName || '—');
-	setText('config-path', snapshot.configPath);
+	renderInstanceDetails(snapshot);
 	renderNetworkDetails(snapshot);
 
 	byId('gateway').checked = snapshot.config.gateway.enabled;
@@ -116,11 +129,17 @@ export async function showFatalError(error) {
 	byId('app-shell').hidden = true;
 	byId('error-state').hidden = false;
 	setText('error-message', message(error));
+	setText('error-home', '');
+	byId('error-home').hidden = true;
 	setSkipTarget('error-state');
 	try {
-		setText('error-home', await state.api.selectedHome());
+		const location = await state.api.selectedHome();
+		if (location) {
+			setText('error-home', location);
+			byId('error-home').hidden = false;
+		}
 	} catch {
-		setText('error-home', 'Selected fhold home');
+		/* An unavailable location is omitted, never replaced with a fake path. */
 	}
 	byId('error-state').focus();
 }
@@ -139,7 +158,7 @@ export async function refresh({ statusOnly = false } = {}) {
 			const snapshot = await state.api.snapshot();
 			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
 			if (snapshot.phase === 'remote') {
-				renderHosted(snapshot);
+				render(snapshot);
 				return;
 			}
 			if (
@@ -172,8 +191,8 @@ export async function refresh({ statusOnly = false } = {}) {
 		} catch (error) {
 			if (statusOnly && (state.operationInFlight || state.currentSnapshot !== previous)) return;
 			if (state.currentSnapshot?.phase === 'remote') {
-				setText('hosted-warnings', `Status is unavailable: ${message(error)}`);
-				byId('hosted-warnings').hidden = false;
+				setText('runtime-status-detail', `Status is unavailable: ${message(error)}`);
+				byId('runtime-status-detail').hidden = false;
 			} else if (state.currentSnapshot?.phase !== 'not_installed' && state.currentSnapshot) {
 				state.currentSnapshot = {
 					...state.currentSnapshot,
@@ -200,6 +219,7 @@ export async function refresh({ statusOnly = false } = {}) {
 export async function refreshVisibleStatus() {
 	if (
 		document.hidden ||
+		state.adminSettingsOpen ||
 		state.operationInFlight ||
 		!state.currentSnapshot ||
 		byId('app-shell').hidden ||

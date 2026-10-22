@@ -2,6 +2,7 @@ import { isRunning } from './model.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { byId, message, notice, operation, setBusy, setText } from './ui.js';
+import { instanceCapability, instancePresentation } from './instance-presentation.js';
 
 export function renderRestartStatus(snapshot) {
 	const pending = snapshot.pendingRestart;
@@ -16,12 +17,15 @@ export function renderRestartStatus(snapshot) {
 				: 'Saved changes will apply when the instance starts.')
 	);
 	setText('apply-pending-restart', running ? 'Restart to apply' : 'Start to apply');
-	byId('apply-pending-restart').disabled = state.operationInFlight || Boolean(snapshot.dockerError);
+	byId('apply-pending-restart').disabled =
+		state.operationInFlight ||
+		Boolean(snapshot.dockerError) ||
+		!instanceCapability(running ? 'restart' : 'start').supported;
 }
 
 /** Native dialog: postponing is the default and Escape never applies changes. */
 export async function requestStackAction(action) {
-	if (state.operationInFlight) return;
+	if (state.operationInFlight || !instanceCapability(action).supported) return;
 	setBusy(true);
 	let confirmed = false;
 	try {
@@ -40,7 +44,9 @@ export async function requestStackAction(action) {
 	const result = await operation(
 		labels[action][0],
 		() => state.api.action(action, true),
-		labels[action][1]
+		instancePresentation(state.currentSnapshot).managed
+			? labels[action][1]
+			: 'Request submitted. Check platform status.'
 	);
 	if (!result) await refresh();
 	return result;

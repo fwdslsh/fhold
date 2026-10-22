@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Validate the complete Linux-only, updater-free fhold release asset set. */
+/** Validate the complete Linux-only fhold release asset set, including Admin feeds. */
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -13,6 +13,7 @@ export const CLI_BINARIES = [
 	'fhold-cli-linux-x64',
 	'fhold-cli-linux-arm64'
 ];
+export const ADMIN_UPDATE_FEEDS = ['latest-linux.yml', 'latest-linux-arm64.yml'];
 
 const ADMIN_TARGETS = [
 	{ platform: 'linux', arch: 'x64', extension: 'AppImage' },
@@ -60,6 +61,7 @@ export function requiredReleaseAssets(version, productName = readElectronProduct
 	return [
 		...CLI_BINARIES,
 		...expectedAdminAssets(version, productName),
+		...ADMIN_UPDATE_FEEDS,
 		...(scope === 'full' ? [expectedClaudeExtensionAsset(version)] : []),
 		'checksums-sha256.txt'
 	];

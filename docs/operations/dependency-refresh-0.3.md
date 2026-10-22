@@ -81,3 +81,51 @@ Tooling versions advance only the root, library, CLI and Admin manifests and the
 lockfile workspace versions. Container pins, Skeleton and extension versions,
 existing instance homes/data and native account state remain untouched. Qualify
 the final stamped SHA using the normal tooling and native artifact gates.
+
+## Admin settings/updater review
+
+Rechecked October 22, 2026 at **05:02 UTC** against official npm metadata for all
+33 workspace dependency/override names, selected AKM/electron-builder channels,
+every pinned Action, native marketplace tag, Node/Go indexes, Supercronic, Trivy,
+cosign and docs renderer/template. Add the current supported **electron-updater
+6.8.9** to Admin only. The existing compatible dependency versions are retained;
+Bun adds its four missing packages and rehoists existing YAML/argparse entries
+without changing their per-consumer versions. Frozen installation and the
+763-package audit pass with the two existing reviewed exceptions only.
+
+Existing OpenCode 2.1, Effect and Electron 45 compatibility holds remain. AKM
+CLI `next` 0.10.261010-beta and all three plugins 0.10.261009-beta remain current,
+with the same immutable native marketplace commit. All pinned Actions, Bun 1.4.3,
+Node 24 LTS, Go, Supercronic, Trivy and cosign remain current on selected channels.
+Claude Code **2.1.308** has now superseded the 2.1.307 noted at 03:30; it and npm
+12.2.1 remain explicit next-full-runtime refresh items, not part of a desktop
+settings/updater feature. No runtime pin, container source, new advisory exception
+or vendor implementation is changed here. This branch does not stamp or publish
+a release or upgrade any installed instance.
+
+## Tooling-only 0.3.261002-beta final review
+
+Rechecked official metadata on **October 22, 2026 at 16:46 UTC** for all 33
+workspace dependency/override names, selected channels, native marketplace,
+Actions, base/tool indexes and documentation dependencies. Admin's updater 6.8.9,
+Electron's supported 44.9.3 line, electron-builder's `v26` 26.18.0, TypeScript,
+Biome, accessibility and CLI/library dependencies remain current on the selected
+compatible channels. No dependency resolution or runtime pin changes in this
+release preparation; the updater addition already passed PR #54's full native
+amd64/ARM64 image gates.
+
+New AKM `next` CLI **0.10.261011-beta** / plugins **0.10.261010-beta**, Bun/types
+**1.4.4**, Claude Code **2.1.308** and npm **12.2.1** are deferred to the next
+full runtime/dependency-cohort qualification. The image still contains the exact
+versions recorded for 0.3.261000-beta above. OpenCode is now **2.1.3**, retaining
+the documented 2.1 migration hold; Effect **4.0.5** retains the selected OpenCode
+SDK's exact 4.0.1 compatibility hold, and Electron 45 remains a separate major
+qualification. No runtime update is claimed by this Admin-only beta. Actions,
+Node 24 LTS, Go, Supercronic, Trivy, cosign and docs remain current as reviewed.
+
+Tooling-only lock classification now compares resolved non-tooling dependency
+edges, package metadata and integrity, allowing the Admin-only updater addition
+and unchanged YAML/argparse rehoisting. Runtime source/resolution changes still
+require full publication; unknown formats and unexplained changed records retain
+full gates. Regression tests cover shared upgrades, wrong hoists, workspaces,
+scoped packages, optional/peer edges, cycles and changed integrity.

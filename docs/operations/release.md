@@ -36,7 +36,8 @@ to an unpublished image or extension tag.
 
 The release workflow defaults to `scope=auto`: matching tooling/runtime versions
 publish the full stack; different versions publish only Linux x64/arm64 CLI and
-Admin downloads, checksums and the asset manifest. Tooling releases run library,
+Admin downloads, standard `latest-linux.yml` / `latest-linux-arm64.yml` update
+feeds, checksums and the asset manifest. Tooling releases run library,
 CLI, Admin and release-helper checks and native artifact smokes. They do not build,
 scan, sign or publish containers, build the unchanged extension, or move Docker
 channel tags. Release notes disclose the retained runtime version.
@@ -44,8 +45,11 @@ channel tags. Release notes disclose the retained runtime version.
 PR CI uses the same input classification. Changes to runtime sources, Skeleton,
 plugins, seed inputs or dependency resolution select full gates; unknown inputs
 also select full gates. Tooling workspace version/dependency declarations can
-reuse already locked packages without full gates; any package-resolution change
-still selects full qualification.
+reuse already locked packages without full gates. Tooling-only package additions
+and rehoisting also use tooling gates when every non-tooling consumer's resolved
+dependency graph (including peer/optional edges and integrity) is unchanged.
+Runtime resolution changes, unexplained changed lock records and unknown lock
+formats still select full qualification.
 Publication compares runtime inputs with the pinned runtime release tag so a
 tooling release cannot accidentally omit pending container changes. A full release
 still uses the default `SCOPE=full` stamping and the complete existing gates.
@@ -151,10 +155,24 @@ Build Assistant/Guardian/Portal from locked dependencies for Linux amd64/arm64,
 smoke/scans on native architecture, validate non-root/capability/mount boundaries,
 and run real AKM checks in all three harnesses.
 
-Required distribution is Linux x64/arm64 CLI and AppImage Admin, optional MCPB,
-checksums and a versioned asset manifest. `validate-release-assets.mjs` rejects
+Required distribution is Linux x64/arm64 CLI and AppImage Admin, both architecture
+update feeds, optional MCPB, checksums and a versioned asset manifest.
+`validate-admin-update-feeds.mjs` verifies the exact version, architecture-specific
+filename, size and SHA-512 of each generated feed before and after upload.
+`validate-release-assets.mjs` rejects
 missing/unexpected/empty/symlink/corrupt artifacts. A checksum set is not proof of
 runtime readiness. Record live provider/schedule/MCP/portal results separately.
+
+Electron-builder generates GitHub feed metadata but never publishes directly:
+packaging commands use `--publish never`; only this release workflow uploads.
+GitHub uses `latest-linux*.yml` even for prereleases; electron-updater resolves the
+selected release by channel and falls back to that release's standard feed.
+Stable is the Admin default regardless of the installed build's suffix. Beta
+includes stable; Alpha includes beta and stable. RC remains a valid product tag,
+but is not an Admin update channel and is not offered by these preview channels.
+PR AppImages carry `fholdPreview: true` build metadata and do not self-update away
+from the reviewed PR. Existing updater-free versions require one manual install
+of an updater-enabled release. Never add feeds to or replace older public tags.
 
 The retained local alpha may be qualified for the actual Linux x64 host while
 ARM64 runtime qualification remains deferred without native hardware. Cross-build

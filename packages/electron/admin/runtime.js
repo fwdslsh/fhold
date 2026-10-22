@@ -6,10 +6,11 @@ import { updateRecoveryFields } from './recovery.js';
 import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
 import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
-import { renderHosted } from './hosting.js';
+import { instanceCapability, instancePresentation } from './instance-presentation.js';
 
 export function renderPhase(phase) {
 	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
+	const ready = phase === 'ready' || phase === 'remote';
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
@@ -17,42 +18,86 @@ export function renderPhase(phase) {
 	byId('instance-import-section').hidden = true;
 	byId('app-shell').hidden = phase === 'not_installed';
 	for (const element of all('.setup-only')) element.hidden = !setup;
-	for (const element of all('.ready-only')) element.hidden = phase !== 'ready' || setup;
-	document.body.dataset.phase = setup ? 'setup_incomplete' : phase;
+	for (const element of all('.ready-only')) element.hidden = !ready || setup;
+	document.body.dataset.phase = setup ? 'setup_incomplete' : ready ? 'ready' : phase;
 	const notifications = byId('notification-area');
-	const alertLocation = byId(phase === 'ready' && !setup ? 'sidebar-alerts' : 'setup-alerts');
+	const alertLocation = byId(ready && !setup ? 'sidebar-alerts' : 'setup-alerts');
 	if (notifications.parentElement !== alertLocation) alertLocation.append(notifications);
 	setSkipTarget(phase === 'not_installed' ? 'install-section' : 'main-content');
 	if (setup) {
 		showView('provider');
-	} else if (phase === 'ready') {
+	} else if (ready) {
 		showView(state.currentView);
 	}
 }
 
 export function renderRuntimeControls(snapshot) {
-	if (snapshot.phase === 'remote') {
-		renderHosted(snapshot);
-		return;
-	}
-	const assistant = snapshot.services.find((service) => service.name === 'assistant');
+	const view = instancePresentation(snapshot);
+	const assistant = view.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
 	const unavailable = !!snapshot.dockerError;
-	byId('start-stack').disabled = state.operationInFlight || unavailable || running;
-	byId('restart-stack').disabled = state.operationInFlight || unavailable || !running;
-	byId('stop-stack').disabled =
-		state.operationInFlight || unavailable || snapshot.services.length === 0;
-	byId('update-stack').disabled = state.operationInFlight || unavailable;
-	renderRestartStatus(snapshot);
-	updateRecoveryFields();
+	const reasons = [];
+	for (const action of ['start', 'restart', 'stop', 'update']) {
+		const capability = instanceCapability(action, snapshot);
+		const button = byId(`${action}-stack`);
+		button.disabled =
+			state.operationInFlight ||
+			unavailable ||
+			!capability.supported ||
+			(view.managed &&
+				(action === 'start'
+					? running
+					: action === 'restart'
+						? !running
+						: action === 'stop'
+							? view.services.length === 0
+							: false));
+		button.title = capability.supported ? '' : capability.reason;
+		if (!capability.supported && action !== 'update')
+			reasons.push(`${action[0].toUpperCase()}${action.slice(1)}: ${capability.reason}`);
+	}
+	setText('runtime-action-help', reasons.join(' '));
+	byId('runtime-action-help').hidden = reasons.length === 0;
+	renderRestartStatus(view.platform || snapshot);
+	if (view.managed) updateRecoveryFields();
 }
 
 export function renderServices(snapshot) {
-	setText('update-image-tag', snapshot.updateImageTag || 'Unavailable');
-	renderConnectionStatus(snapshot);
-	updateGuardianGuide();
+	const view = instancePresentation(snapshot);
+	const reportedServices = view.platform?.containers?.length
+		? view.platform.containers.map((container) => ({
+				...container,
+				state: view.platform.platformState || 'Not reported',
+				health: 'Platform observation'
+			}))
+		: view.services;
+	const missingHostVersion = !snapshot.updateImageTag && snapshot.target?.kind === 'ssh-docker';
+	setText(
+		'update-image-tag',
+		snapshot.updateImageTag || (view.managed ? 'Not reported' : 'Managed externally')
+	);
+	setText(
+		'runtime-version-help',
+		!view.managed
+			? `${instanceCapability('update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
+			: missingHostVersion
+				? 'This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.'
+				: snapshot.updateImageTag
+					? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
+					: 'The managing tool did not report an update version. Update the fhold tools to restore version information. Your agent keeps running.'
+	);
+	byId('runtime-version-settings').hidden = !missingHostVersion;
+	if (view.managed) {
+		renderConnectionStatus(snapshot);
+		updateGuardianGuide();
+	}
+	setText('instance-client-guidance', view.platform?.guidance?.client || '');
+	byId('instance-client-guidance').hidden = !view.platform?.guidance?.client;
 	const unavailable = !!snapshot.dockerError;
-	const warnings = snapshot.services.flatMap((service) => service.warnings ?? []);
+	const warnings = [
+		...(view.platform?.warnings || []),
+		...view.services.flatMap((service) => service.warnings ?? [])
+	];
 	if (snapshot.connectionError)
 		warnings.push(`Browser connection unavailable. ${snapshot.connectionError}`);
 	setText(
@@ -64,15 +109,19 @@ export function renderServices(snapshot) {
 	byId('runtime-status-detail').hidden = !unavailable && warnings.length === 0;
 	const services = byId('services');
 	services.replaceChildren();
-	if (snapshot.services.length === 0) {
+	if (reportedServices.length === 0) {
 		const empty = document.createElement('div');
 		empty.className = 'empty-state';
-		empty.textContent = snapshot.dockerError || 'fhold is stopped.';
+		empty.textContent =
+			snapshot.dockerError ||
+			(view.platform
+				? view.platform.platformState || 'No service status reported.'
+				: 'fhold is stopped.');
 		services.append(empty);
 	} else {
 		const order = { assistant: 0, guardian: 1, discord: 2, slack: 3 };
-		const orderedServices = [...snapshot.services].sort((a, b) =>
-			(order[a.name] ?? 4) - (order[b.name] ?? 4) || a.name.localeCompare(b.name)
+		const orderedServices = [...reportedServices].sort(
+			(a, b) => (order[a.name] ?? 4) - (order[b.name] ?? 4) || a.name.localeCompare(b.name)
 		);
 		for (const service of orderedServices) {
 			const row = document.createElement('div');
@@ -83,16 +132,21 @@ export function renderServices(snapshot) {
 			name.textContent = friendlyServiceName(service.name);
 			const image = document.createElement('small');
 			image.className = 'service-image';
-			image.title = service.image || 'Docker did not report an image reference.';
+			image.title =
+				service.image ||
+				(missingHostVersion
+					? 'Update the remote fhold CLI to report this container’s image reference.'
+					: 'This connection did not report an image reference.');
 			const details = serviceImageDetails(service.image);
 			const label = document.createElement('span');
+			label.className = 'visually-hidden';
 			label.textContent = `${details.label} `;
 			const tag = document.createElement('code');
 			tag.textContent = details.value;
 			image.append(label, tag);
-			identity.append(name, image);
+			identity.append(name);
 			const status = document.createElement('span');
-			const healthy = isHealthy(service);
+			const healthy = view.managed && isHealthy(service);
 			const degraded = healthy && service.warnings?.length > 0;
 			setBadge(
 				status,
@@ -103,55 +157,32 @@ export function renderServices(snapshot) {
 						: [service.state, service.health].filter(Boolean).join(' · '),
 				degraded ? 'warning' : healthy ? 'success' : 'neutral'
 			);
-			row.append(identity, status);
+			row.append(identity, image, status);
 			services.append(row);
 		}
 	}
-	const assistant = snapshot.services.find((service) => service.name === 'assistant');
-	const guardian = snapshot.services.find((service) => service.name === 'guardian');
+	const assistant = view.services.find((service) => service.name === 'assistant');
 	const degraded = isHealthy(assistant) && assistant.warnings?.length > 0;
-	setText(
-		'overview-heading',
-		unavailable
-			? 'Container status is unavailable.'
-			: isHealthy(assistant)
-				? degraded
-					? 'Your agent is running; some features need attention.'
-					: 'Your personal agent is ready.'
-				: assistant
-					? 'Your agent needs attention.'
-					: 'Your agent is stopped.'
-	);
-	setText(
-		'assistant-summary',
+	setBadge(
+		byId('assistant-summary'),
 		unavailable
 			? 'Status unavailable'
-			: isHealthy(assistant)
-				? degraded
-					? 'Running · needs attention'
-					: 'Running normally'
-				: assistant
-					? 'Needs attention'
-					: 'Stopped'
-	);
-	setText(
-		'guardian-summary',
-		snapshot.config.gateway.enabled
-			? unavailable
-				? 'Status unavailable'
-				: isHealthy(guardian)
-					? 'Enabled and healthy'
-					: 'Enabled · needs attention'
-			: 'Not enabled'
-	);
-	const enabledPortals = ['discord', 'slack'].filter(
-		(portal) => snapshot.config.portals[portal].enabled
-	);
-	setText(
-		'portal-summary',
-		enabledPortals.length
-			? enabledPortals.map((portal) => portal[0].toUpperCase() + portal.slice(1)).join(' and ')
-			: 'None enabled'
+			: view.platform
+				? view.platform.platformState || 'Not reported'
+				: isHealthy(assistant)
+					? degraded
+						? 'Running · needs attention'
+						: 'Running'
+					: assistant
+						? 'Needs attention'
+						: 'Stopped',
+		unavailable || view.platform
+			? 'neutral'
+			: degraded
+				? 'warning'
+				: isHealthy(assistant)
+					? 'success'
+					: 'neutral'
 	);
 	renderRuntimeControls(snapshot);
 	const needsRecovery = snapshot.phase === 'setup_incomplete' && !isHealthy(assistant);
@@ -183,7 +214,7 @@ export function renderServices(snapshot) {
 
 export function bindRuntimeEvents() {
 	byId('update-stack').addEventListener('click', async () => {
-		if (state.operationInFlight) return;
+		if (state.operationInFlight || !instanceCapability('update').supported) return;
 		if (!(await state.api.confirmRestart('update'))) return;
 		const result = await operation(
 			'Updating instance',

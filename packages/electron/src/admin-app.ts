@@ -14,9 +14,13 @@ import {
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { AdminInstances } from './admin-instances.js';
+import electronUpdater from 'electron-updater';
+import { AdminSettingsStore } from './admin-settings.js';
+import { AdminUpdates } from './admin-updates.js';
 
 import {
 	ADMIN_CHANNELS,
@@ -35,6 +39,7 @@ const adminDirectory = fileURLToPath(new URL('../admin', import.meta.url));
 const adminIndexPath = join(adminDirectory, 'index.html');
 const adminIndexUrl = pathToFileURL(adminIndexPath).href;
 let instances: AdminInstances;
+let updates: AdminUpdates;
 let activeManagement: { key: string; api: InstanceManagement } | undefined;
 function management() {
 	const target = instances.current();
@@ -141,6 +146,58 @@ export async function runAdminAction(action: StackAction): Promise<AdminViewSnap
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
+	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
+		version: app.getVersion(),
+		unavailableReason:
+			!app.isPackaged || process.argv.includes('--fhold-release-smoke')
+				? 'Automatic updates are available in the installed Linux AppImage, not development or preview smoke tests.'
+				: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
+						true
+					? 'Automatic updates are disabled in PR previews. Use a released AppImage to receive updates.'
+					: process.platform !== 'linux' || !process.env.APPIMAGE
+						? 'Run the Linux AppImage to enable automatic updates, or download Admin from GitHub.'
+						: undefined,
+		createUpdater: () => new electronUpdater.AppImageUpdater(),
+		changed: (snapshot) => {
+			for (const window of BrowserWindow.getAllWindows())
+				if (!window.isDestroyed())
+					window.webContents.send(ADMIN_CHANNELS.appUpdateChanged, snapshot);
+		}
+	});
+	for (const [channel, operation] of [
+		[ADMIN_CHANNELS.appSettings, () => updates.snapshot()],
+		[ADMIN_CHANNELS.checkAppUpdate, () => updates.check()],
+		[ADMIN_CHANNELS.downloadAppUpdate, () => updates.download()]
+	] as const)
+		ipcMain.handle(channel, (event) => {
+			requireAdminSender(event);
+			return operation();
+		});
+	ipcMain.handle(ADMIN_CHANNELS.saveAppSettings, (event, value: unknown) => {
+		requireAdminSender(event);
+		return updates.save(value);
+	});
+	ipcMain.handle(ADMIN_CHANNELS.installAppUpdate, async (event) => {
+		requireAdminSender(event);
+		requireSwitchable();
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		const options = {
+			type: 'question' as const,
+			buttons: ['Later', 'Restart Admin'],
+			defaultId: 0,
+			cancelId: 0,
+			message: 'Restart Admin to install its update?',
+			detail:
+				'Unsaved forms and unfinished sign-in steps in Admin will close. Your agents and containers keep running. No instance configuration or remote CLI is updated.'
+		};
+		const result = owner
+			? await dialog.showMessageBox(owner, options)
+			: await dialog.showMessageBox(options);
+		if (result.response !== 1) return;
+		requireSwitchable();
+		updates.install();
+	});
+	updates.start();
 	ipcMain.handle(ADMIN_CHANNELS.hostingFeatures, (event, id: string) => {
 		requireAdminSender(event);
 		const provider = hostingProvider(instances.hosting.connection(id));
@@ -464,6 +521,9 @@ export function createAdminWindow(options: { show?: boolean } = {}): BrowserWind
 	});
 	window.on('closed', () => {
 		void discardManagement();
+	});
+	window.on('focus', () => {
+		void updates?.backgroundCheck();
 	});
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		try {

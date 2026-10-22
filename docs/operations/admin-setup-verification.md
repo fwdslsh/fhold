@@ -1,10 +1,53 @@
 # Admin verification
 
+Apply the [Admin interface standards](../technical/admin-design-system.md) to all
+screens and reusable components. Do not qualify a design from only the library
+or Overview, or treat an axe pass as visual approval.
+
+## Admin settings and app updates
+
+**Settings** on Welcome, the sidebar and the error view opens
+the app's own settings page, without changing the selected instance or its
+drafts. Host connections now live on this page, not in a modal or the instance
+picker. Add/Edit/Check/Remove and confirmed SSH CLI repair retain their native
+backends. Save stays on the page; Open explicitly returns to instance discovery.
+Returning from Settings leaves the prior page and all running agents alone.
+
+The implementation follows Gutterpress's standard
+[Electron updater and GitHub packaging pattern](https://github.com/dimm-city/gutterpress/blob/849ab469bc2a477214583469ba782de7d6e3c55e/packages/desktop/electron/updater.ts),
+reviewed with its builder configuration. fhold uses public updater APIs and a new
+native updater when changing channels, not Gutterpress's private channel-field
+assignment. fhold also enables automatic downloads by default, as requested.
+The preference remains **Stable** even in an installed beta. Beta receives beta
+and stable releases; Alpha also receives alphas. Automatic checks/downloads run
+at launch and every four hours while Admin is open, with throttled focus checks.
+Manual mode retains Check now and Download update. No standalone service runs.
+
+A ready download has a quiet Settings badge. It installs when Admin normally
+closes; **Restart Admin to update** additionally requires native confirmation
+explaining unsaved forms/sign-in and that agents remain running. Channel changes
+disable the old staged install and do not downgrade. Missing feeds (including
+before the first stable release), rate limiting, offline downloads and unwritable
+AppImage locations remain actionable update errors, not whole-app failures.
+Source runs, extracted installs and PR previews explain why self-updating is
+unavailable. Old updater-free releases need one manual AppImage install.
+
+Qualification: test Settings from Welcome, a local instance, SSH, an ACA view
+and a failed instance; edit/check a connection; go Back with a dirty instance
+form; exercise stable/beta/alpha, disabled automatic checks, progress, ready
+download, cancelled/confirmed restart and failed downloads. Check narrow/200%
+text layouts and keyboard focus. Use temporary profiles only. The packaged
+startup smoke verifies default preferences and real Settings IPC; renderer/unit
+fixtures do not prove a public-to-public update installation. Both generated
+Linux architecture feeds must identify their exact AppImage bytes and ship in
+the release. See [release gates](release.md).
+
 ## Overview image information
 
 Overview shows each existing container's image tag from Docker's Compose status,
-not the tag saved in instance settings. Stopped containers retain their reported
-image tag; missing metadata says Unavailable. Digest-only images show their digest,
+with one bounded image-only inspection when Compose omits it, not the tag saved
+in instance settings. Stopped containers retain their reported image tag; missing
+metadata says **Not reported**. Digest-only images show their digest,
 and an untagged reference is shown as-is without inventing a `latest` tag. The full
 reported reference is available on hover. Status and image version remain separate.
 
@@ -13,12 +56,65 @@ with the CLI managing that instance. SSH instances report the remote CLI's cohor
 not the desktop app's version. This is not a live registry lookup; custom image
 pins remain preserved by the existing update operation. Matching tags do not
 disable Update or establish that mutable tags/content are current. Missing version
-metadata does not block management. No new automatic update or restart is added.
+metadata does not block management. No automatic container update or restart is added.
+An older SSH CLI that omits these fields gets an explanation and **Open host
+connections** action. Choose **Check → Install / update remote CLI**, explicitly
+confirm, then reopen the instance to use the new host process. This updates the
+host CLI only, not containers. Updating Admin alone cannot add metadata to an
+already-running remote CLI.
 
 Manually check mixed container versions, stopped/unhealthy services, missing Docker
 metadata, long custom tags, narrow widths and 200% text size. Confirm Update remains
 adjacent to its available tag, lifecycle actions are separate, refresh does not
 replace observed tags with saved intent, and cancelling Update performs no mutation.
+
+## Selecting, opening and creating instances
+
+Recent assistants open directly. **Open another instance…** in the sidebar goes
+straight to a location chooser, preserving the selected instance and unsaved forms;
+Back returns to it. First launch shows an assistant library: locations and separate
+**New assistant** / **Import assistant…** actions in a task rail, with recent
+assistants in a compact list. **Browse locations** opens existing installations.
+An empty recent list does not imply no installations exist. The chooser uses the
+same layout, discovers the selected location automatically and offers the appropriate
+local/SSH folder picker. Creation/import are separate actions for that location;
+remote setup identifies its destination. Host connections live first in **Settings**,
+with a primary **Open instances** action and Edit/Check/Remove. Returning to the
+chooser refreshes the list but never opens an instance automatically.
+
+Verify first use, named local/SSH recents, local folder cancellation, unavailable
+homes, discovery failure/retry, host Edit/Check/repair/remove, and an in-flight
+status read before browsing. In particular, finishing discovery from an ACA view
+must not reopen it over the chooser. Back preserves target/drafts and focus; an
+explicit Open still uses native switch validation. Import review keeps its
+source/destination on Back and never applies without confirmation. Test desktop,
+narrow and 200% text layouts, keyboard order, visible errors and unchanged window size.
+
+The refined desktop layout uses a stable, top-aligned library rather than a
+centered launcher card. New/import retain distinct, consistently anchored wizard
+steps; compact task identifiers do not reintroduce the removed Welcome/Create
+headings. Overview groups the named assistant, observed status, location, path and
+OpenCode action in one identity block, followed by a single service/image/status
+inventory. There are no duplicate status summary cards. Settings uses connection
+and update-preference rows, with successful diagnostic detail collapsed. Small
+windows use compact navigation and wrapping lists, not window resizing. Instrument
+Sans and its OFL license ship locally; typography needs no network/font service.
+
+Visual qualification must inspect the actual renderer screenshots for first use,
+recents, local/SSH discovery, errors, new/import choose/review, Overview, Settings,
+the connection editor, narrow layouts and 200% text. The Chromium walkthrough uses
+synthetic IPC responses, not real SSH/Azure connectivity or provider readiness.
+Packaged startup remains a separate native preload/settings check.
+
+Repeat the four management pages for local Docker, SSH and a capability-limited
+platform snapshot. Navigation, Apps order and System disclosure order must match.
+Unsupported fieldsets must stay visible and natively disabled, with adjacent
+reasons; image/lifecycle actions must stay in place rather than disappear. Verify
+an unavailable field cannot invoke IPC by pointer or keyboard, while logs and
+supported lifecycle controls still work through the selected connection. Refresh
+must preserve the selected page/log filters and never access local provider
+credentials or wake an idle agent. An opening error omits an unknown location
+instead of showing “Selected fhold home”; Choose another instance remains usable.
 
 ## Current wizard and Apps
 
@@ -28,8 +124,8 @@ collapsed Advanced for folder/ports, Install below Advanced, and a single
 Cancel action on the first step. After installation, Finish later leaves the
 agent running. Successful prerequisite checks
 are hidden; failures show guidance, official Docker/Compose links and retry.
-The sidebar combines the slash/picker and disclosures use filled headers and
-chevrons. Welcome offers a separate **Import an instance…** choice. Import has
+The sidebar uses a full-width picker without a brand mark; disclosures use filled headers and
+chevrons. Welcome offers a separate **Import assistant…** choice. Import has
 Choose folders → Review & import steps, independent export/destination controls
 and a separate review screen. Back exists only on review, keeps both choices
 and requires a new preview; Cancel exits. No installation control is moved,
@@ -117,7 +213,7 @@ inside the wizard. Native restart confirmation and postponement remain unchanged
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
-Check that the slash/picker stays on one row, disclosure headers are clearly
+Check that the picker fills the sidebar without a brand mark, disclosure headers are clearly
 interactive, and the requirement guides open normally before selecting a home.
 After installing in a disposable home, Finish later must not stop the agent;
 reopening must resume account setup. Review full import with a disposable export:

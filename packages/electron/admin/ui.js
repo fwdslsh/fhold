@@ -4,6 +4,7 @@ import { renderRuntimeControls } from './runtime.js';
 import { refresh, render } from './snapshot.js';
 import { managedFormIds, state, viewMeta } from './state.js';
 import { renderInstallationReadiness } from './instances.js';
+import { instancePresentation, selectedLogOptions } from './instance-presentation.js';
 
 export const byId = (id) => document.getElementById(id);
 
@@ -64,13 +65,15 @@ export function notice(value, tone = 'success', options = {}) {
 export function setBusy(value) {
 	state.operationInFlight = value;
 	document.body.dataset.busy = String(value);
-	const busyRegion = !byId('install-section').hidden
-		? byId('install-section')
-		: !byId('instance-import-section').hidden
-			? byId('instance-import-section')
-			: !state.currentSnapshot
-				? byId('instance-welcome')
-				: byId('main-content');
+	const busyRegion = state.adminSettingsOpen
+		? byId('admin-settings')
+		: !byId('install-section').hidden
+			? byId('install-section')
+			: !byId('instance-import-section').hidden
+				? byId('instance-import-section')
+				: !byId('instance-welcome').hidden
+					? byId('instance-welcome')
+					: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
 	byId('instance-picker').disabled = value;
 	byId('hosting-connection').disabled = value;
@@ -165,7 +168,8 @@ export function setSkipTarget(id) {
 
 export function showView(name, options = {}) {
 	if (!viewMeta[name]) return;
-	if (state.currentSnapshot?.phase !== 'ready' && name !== 'provider') return;
+	const ready = ['ready', 'remote'].includes(state.currentSnapshot?.phase);
+	if (!ready && name !== 'provider') return;
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;
 	for (const panel of all('[data-view-panel]')) panel.hidden = panel.dataset.viewPanel !== name;
@@ -174,6 +178,13 @@ export function showView(name, options = {}) {
 		button.setAttribute('aria-current', active ? 'page' : 'false');
 	}
 	const meta = viewMeta[name];
+	const overview = name === 'overview' && ready;
+	byId('instance-page-header').hidden = overview;
+	if (overview) {
+		const instance = instancePresentation(state.currentSnapshot);
+		setText('overview-name', instance.name);
+		setText('overview-location', instance.location);
+	}
 	setText('mobile-navigation-label', `Navigation · ${meta.title}`);
 	if (window.matchMedia?.('(max-width: 700px)').matches) byId('mobile-navigation').open = false;
 	setText(
@@ -190,7 +201,7 @@ export function showView(name, options = {}) {
 			? 'Choose a provider and verify that your agent can respond.'
 			: meta.description
 	);
-	if (options.focus === true) byId('view-title').focus();
+	if (options.focus === true) byId(overview ? 'overview-name' : 'view-title').focus();
 }
 
 export function showConnectionApp(name) {
@@ -240,7 +251,7 @@ export function bindUiEvents() {
 	byId('load-logs').addEventListener('click', async () => {
 		const logs = await operation(
 			'Loading recent logs',
-			() => state.api.logs(),
+			() => state.api.logs(selectedLogOptions()),
 			'Recent logs loaded.'
 		);
 		if (typeof logs === 'string') byId('logs').value = logs || 'No recent log entries.';

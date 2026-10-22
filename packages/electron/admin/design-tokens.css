@@ -1,0 +1,71 @@
+/* fhold Admin's shared visual contract. See docs/technical/admin-design-system.md.
+ * Keep values here; component styles consume semantic roles, not local palettes. */
+@font-face {
+	font-family: "Instrument Sans";
+	src: url("instrument-sans.ttf") format("truetype");
+	font-weight: 400 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	color-scheme: dark;
+	font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: 16px;
+	--text-caption: 0.75rem;
+	--text-label: 0.8125rem;
+	--text-body: 0.875rem;
+	--text-section: 1rem;
+	--text-model: 1.25rem;
+	--text-title: 1.75rem;
+	--weight-normal: 400;
+	--weight-medium: 500;
+	--weight-emphasis: 600;
+	--leading-body: 1.5;
+	--leading-heading: 1.25;
+	--space-xs: 4px;
+	--space-sm: 8px;
+	--space-control: 12px;
+	--space-md: 16px;
+	--space-lg: 24px;
+	--space-xl: 32px;
+	--space-section: 48px;
+	--space-page: 64px;
+	--control-height: 40px;
+	--control-radius: 4px;
+	--panel-radius: 8px;
+	--canvas: #191c1d;
+	--surface: #212526;
+	--surface-raised: #2b3030;
+	--surface-muted: #151819;
+	--ink: #f0f2ed;
+	--ink-soft: #b7bfb9;
+	--ink-faint: #9da9a1;
+	--accent: #6cba83;
+	--accent-hover: #84ca98;
+	--accent-soft: #283d30;
+	--on-accent: #102017;
+	--border: #7b877e;
+	--border-soft: #39403d;
+	--border-danger: #b97b73;
+	--border-warning: #a08760;
+	--success: #a0d8af;
+	--success-soft: #263b2d;
+	--danger: #f0b5ad;
+	--danger-soft: #382a29;
+	--warning: #e8c897;
+	--warning-soft: #383225;
+	--focus: #c3d4c7;
+	--overlay: #080b0cd9;
+	--shadow: 0 16px 48px #0005;
+	--duration-feedback: 120ms;
+	--ease-feedback: cubic-bezier(0.22, 1, 0.36, 1);
+	background: var(--canvas);
+	color: var(--ink);
+}
+
+@media (pointer: coarse) {
+	:root {
+		--control-height: 44px;
+	}
+}

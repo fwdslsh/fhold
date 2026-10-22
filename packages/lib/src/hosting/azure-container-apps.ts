@@ -380,6 +380,10 @@ export function azureContainerAppsProvider(
 						health: item.properties.healthState || item.properties.runningState || 'Unknown'
 					})),
 					containers: app.properties.template?.containers ?? [],
+					logSources: [
+						{ type: 'system', label: 'Platform' },
+						{ type: 'console', label: 'Agent console' }
+					],
 					portalUrl: `https://portal.azure.com/#resource${encodeURI(app.id)}`,
 					...(ingress?.external && ingress.fqdn ? { clientUrl: `https://${ingress.fqdn}` } : {})
 				};

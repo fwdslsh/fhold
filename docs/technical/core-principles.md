@@ -14,7 +14,9 @@ CLI/Admin may publish independently of the runtime. Their build version comes
 from the library manifest; the Skeleton and Claude Desktop manifests retain the
 last published runtime and extension versions. Tooling-only releases preserve
 those image/download defaults and run tooling/artifact gates, not unchanged
-container gates. Runtime or dependency-resolution changes require a full release.
+container gates. Runtime source or runtime dependency-resolution changes require
+a full release. Tooling-only dependency changes may rehoist unchanged packages;
+compare non-tooling consumers' resolved dependencies rather than lockfile paths.
 
 ## Product and ownership
 
@@ -26,7 +28,11 @@ tool names, configuration and licenses are not renamed.
 Assistant is the only default container and includes OpenCode, AKM and
 supercronic. Guardian and the single Discord/Slack Portal image are optional.
 CLI is the primary installer/orchestrator; Admin is a local settings utility
-with no server, chat, updater, tray or background control plane. The optional
+with no server, chat, tray or background control plane. Its standard Electron
+AppImage updater checks/downloads while Admin is open, defaults to the Stable
+channel (even in a prerelease build), and applies on ordinary quit or an explicitly
+confirmed Admin restart. It never restarts agents, updates container images or
+repairs remote CLIs. Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
@@ -128,6 +134,14 @@ managed Compose labels and bounded root/child/home candidates. Host-CLI repair i
 explicitly confirmed, checksum-verified and atomic; it never changes Docker,
 SSH trust or instance files. Connection editing/removal affects metadata only,
 clearing scoped recents on endpoint changes rather than silently retargeting them.
+Admin's own Settings page owns host-connection management and app-update
+preferences. These remain accessible without a selected or healthy instance.
+Update preferences live in Admin's local user-data `settings.json`, separate
+from shared hosting metadata and all instance files. Beta and Alpha are explicit
+opt-ins; switching back to Stable discards any staged prerelease update and waits
+for a newer stable release without downgrading. GitHub releases carry the standard
+electron-builder Linux feed for each architecture, verified alongside installers.
+There is no custom release protocol, updater service or startup installer.
 
 SSH opens a session-scoped management facade over stdin/stdout, preserving native
 sign-in and model-verification state. Local and SSH Admin use the same instance
@@ -151,6 +165,13 @@ status/discovery never contact the agent or implicitly wake an idle replica.
 Provider capabilities are named operations; diagnostics and optional onboarding,
 console and file-management interfaces remain adapter-owned. Common CLI/Admin
 dispatch does not assume every remote target is SSH or has a local instance home.
+Admin always uses the same Overview, Agent settings, Apps and System screens,
+navigation and section order, regardless of hosting provider. Unsupported sections
+remain visible, natively disabled and explained; unknown configuration is never
+shown as absent or off. Cloud observations use the ordinary service inventory and
+System logs/details, without a separate hosted-instance page or a fake StackConfig.
+No unsupported action falls back to local files, credentials or containers, and
+viewing these pages does not wake an idle agent.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped
@@ -169,7 +190,9 @@ default is `~/fhold/instances/default`. CLI home selection is an explicit
 `FH_HOME`, then cwd. Admin reopens the last-used compatible instance once per app
 launch, using its existing recent-folder list. First launch or an unavailable/
 incompatible previous home shows Welcome without seeding or adopting a folder.
-Manual switching keeps Welcome open across renderer reloads. `~/fhold`
+Browsing other instances preserves the selected instance and drafts; Back returns
+without switching. Only explicit Open replaces the target. Cancelling setup/import
+returns to Welcome without starting a stack. `~/fhold`
 may also hold backups/docs; it is not itself an instance or a new configuration layer.
 Home selection is canonical; default changes never relocate existing homes or
 rename their persisted project identity. Each home has stable independent project
@@ -185,12 +208,20 @@ service, automatic restart or second configuration store is introduced.
 Overview shows observed container image tags independently of saved intent and
 runtime health. The available image tag comes from the managing tool's bundled
 runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
-latest version. Update preserves explicit custom image pins and native confirmation.
+latest version. If Compose omits a reference, a bounded, image-only Docker inspect
+fills it from the actual container. Optional metadata failures never block management.
+Older SSH CLIs explain missing metadata and offer explicit host-tool repair, never
+invent versions from saved intent or the desktop release. Update preserves explicit
+custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
 Welcome starts with setup/open choices, or a compact named recent list, without
-a redundant welcome heading. New setup is an Install → Connect → Ready wizard;
+a redundant welcome heading. Open another instance leads directly to one location
+chooser for local/SSH/cloud discovery; local and remote folders use their native
+pickers. Host connections live in app Settings, separately from agent Apps. Returning
+from Settings refreshes discovery without selecting a target. Button-state updates
+never navigate between screens. New setup is an Install → Connect → Ready wizard;
 naming is requested once and optional folder/port settings share collapsed Advanced.
 The setup screen omits a redundant creation heading. Import has a separate Welcome
 entry point and a Choose folders → Review & import workflow, not an accordion
@@ -200,7 +231,7 @@ and invalidates the preview; Cancel exits the flow. First steps have one Cancel
 action, not duplicate Back/Cancel navigation. After installation, Finish later
 leaves the agent running. Native import protection remains the same. Disclosure controls
 share the ordinary filled control styling and explicit chevrons. The management
-sidebar combines the slash and named picker on one row without a second wordmark.
+sidebar uses a full-width named instance picker without a brand mark or wordmark.
 Read-only Docker/Compose checks run independently of instance selection so they
 do not block naming or create a home. Successful checks add no status clutter;
 missing prerequisites show actionable guidance and an explicit retry. Each stage has explicit navigation out of

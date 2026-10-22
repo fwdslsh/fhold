@@ -22,7 +22,10 @@ test('tooling changes do not require container qualification', () => {
 				'packages/lib/src/hosting/ssh-docker.ts',
 				'packages/electron/admin/hosting.js',
 				'packages/cli/src/commands/hosting.ts',
-				'.github/workflows/pr-admin.yml'
+				'.github/workflows/pr-admin.yml',
+				'scripts/validate-admin-update-feeds.mjs',
+				'scripts/admin-update-feeds.test.ts',
+				'scripts/README.md'
 			],
 			() => '',
 			() => ''
@@ -76,6 +79,105 @@ test('tooling declarations can reuse locked packages; changed resolutions still 
 		)
 	).toBe('full');
 });
+test('Admin-only lock additions and rehoisting do not change runtime consumers', () => {
+	const before = {
+		lockfileVersion: 1,
+		configVersion: 1,
+		workspaces: {
+			'': { name: 'root' },
+			'packages/electron': { name: '@fhold/electron', dependencies: { builder: '1' } },
+			'packages/guardian': { name: '@fhold/guardian', dependencies: { '@scope/client': '1' } }
+		},
+		packages: {
+			builder: ['builder@1', '', { dependencies: { yaml: '1' } }, 'builder-hash'],
+			'@scope/client': ['@scope/client@1', '', { dependencies: { yaml: '2' } }, 'client-hash'],
+			yaml: ['yaml@2', '', {}, 'yaml-2-hash'],
+			'builder/yaml': ['yaml@1', '', {}, 'yaml-1-hash']
+		} as Record<string, unknown>
+	};
+	const after = structuredClone(before);
+	after.workspaces['packages/electron'].dependencies = { builder: '1', updater: '1' } as {
+		builder: string;
+	};
+	after.packages.updater = ['updater@1', '', { dependencies: { yaml: '1' } }, 'updater-hash'];
+	after.packages.yaml = before.packages['builder/yaml'];
+	after.packages['@scope/client/yaml'] = before.packages.yaml;
+	delete after.packages['builder/yaml'];
+	const scope = (value = after) =>
+		changeScope(
+			['bun.lock'],
+			() => JSON.stringify(before),
+			() => JSON.stringify(value)
+		);
+	expect(scope()).toBe('tools');
+	const runtimeUpgrade = structuredClone(after);
+	runtimeUpgrade.packages['@scope/client/yaml'] = ['yaml@3', '', {}, 'yaml-3-hash'];
+	expect(scope(runtimeUpgrade)).toBe('full');
+	const wrongHoist = structuredClone(after);
+	delete wrongHoist.packages['@scope/client/yaml'];
+	expect(scope(wrongHoist)).toBe('full');
+	const tampered = structuredClone(after);
+	tampered.packages['@scope/client/yaml'] = ['yaml@2', '', {}, 'different-integrity'];
+	expect(scope(tampered)).toBe('full');
+	const orphan = structuredClone(after);
+	orphan.packages.unexplained = ['unexplained@1', '', {}, 'orphan-hash'];
+	expect(scope(orphan)).toBe('full');
+	const unknown = { ...after, configVersion: 2 };
+	expect(
+		changeScope(
+			['bun.lock'],
+			() => JSON.stringify(before),
+			() => JSON.stringify(unknown)
+		)
+	).toBe('full');
+});
+test('lock comparison follows workspace, peer, optional and cyclic dependency edges', () => {
+	const before = {
+		lockfileVersion: 1,
+		configVersion: 1,
+		workspaces: {
+			'': { name: 'root' },
+			'packages/electron': { name: '@fhold/electron', dependencies: {} },
+			'packages/lib': { name: '@fhold/lib', dependencies: { shared: '1' } },
+			'packages/guardian': {
+				name: '@fhold/guardian',
+				dependencies: { '@fhold/lib': 'workspace:*' }
+			}
+		},
+		packages: {
+			'@fhold/lib': ['@fhold/lib@workspace:packages/lib'],
+			shared: [
+				'shared@1',
+				'',
+				{ peerDependencies: { peer: '1' }, optionalDependencies: { platform: '1' } },
+				'shared-hash'
+			],
+			peer: ['peer@1', '', { dependencies: { shared: '1' } }, 'peer-hash'],
+			platform: ['platform@1', '', { os: 'linux', cpu: 'arm64' }, 'platform-hash']
+		} as Record<string, unknown>
+	};
+	const after = structuredClone(before);
+	after.workspaces['packages/electron'].dependencies = { updater: '1' };
+	after.packages.updater = ['updater@1', '', {}, 'updater-hash'];
+	const scope = (value = after) =>
+		changeScope(
+			['bun.lock'],
+			() => JSON.stringify(before),
+			() => JSON.stringify(value)
+		);
+	expect(scope()).toBe('tools');
+	for (const name of ['shared', 'peer', 'platform']) {
+		const changed = structuredClone(after);
+		changed.packages[name] = [`${name}@2`, '', {}, 'new-hash'];
+		expect(scope(changed)).toBe('full');
+	}
+	const missing = structuredClone(after);
+	delete missing.packages.platform;
+	expect(scope(missing)).toBe('full');
+	const workspaceChanged = structuredClone(after);
+	workspaceChanged.workspaces['packages/lib'].dependencies.shared = '2';
+	expect(scope(workspaceChanged)).toBe('full');
+});
 test('root build scripts can change without runtime qualification, but install hooks cannot', () => {
 	const before = { version: 'old', scripts: { check: 'old check' } };
 	const after = {
@@ -99,7 +201,7 @@ test('root build scripts can change without runtime qualification, but install h
 	).toBe('full');
 });
 test('tooling assets omit the bridge and fresh installs use the published runtime cohort', () => {
-	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(5);
+	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(7);
 	expect(
 		requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools').some((name) =>
 			name.endsWith('.mcpb')

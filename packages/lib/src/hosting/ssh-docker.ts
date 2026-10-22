@@ -85,7 +85,7 @@ export function sshDockerProvider(
 					!value.management?.includes('snapshot')
 				)
 					throw new Error(
-						'Update the remote fhold CLI from Connections before managing this computer.'
+						'Update the remote fhold CLI from Settings → Host connections before managing this computer.'
 					);
 				return {
 					instancesDirectory: value.instancesDirectory,

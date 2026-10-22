@@ -151,9 +151,14 @@ async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Tab');
 	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'skip-link'"), 'Welcome skip link was not first in keyboard order.');
 	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.matches('[data-admin-settings]')"), 'Welcome settings was not keyboard reachable.');
+	await press('Tab');
 	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'First launch did not prioritize new setup in keyboard order.');
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'choose-instance'"), 'Existing instance choice was not reachable after setup.');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-instance-import'"), 'Import was not next to new setup.');
+	await press('Tab');
+	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'connect-host'"), 'Existing instance browse was not keyboard reachable.');
+	await press('Tab', ['shift']);
 	await press('Tab', ['shift']);
 	await press('Return');
 	assert(await window.webContents.executeJavaScript("!document.querySelector('#install-section').hidden && document.activeElement.id === 'install-instance-name'"), 'Setup did not reveal the one install form and move focus to its name.');
@@ -162,6 +167,7 @@ async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Return', [], false);
 	await waitForRenderer(window, "document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.body.dataset.phase==='welcome'", 'Cancel returns to Welcome through the normal renderer reload', 10_000);
 	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus()');
+	await press('Tab');
 	await press('Tab');
 	await press('Tab');
 	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'Setup was not keyboard reachable after cancelling.');
@@ -753,6 +759,8 @@ async function run(): Promise<Record<string, unknown>> {
 			dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
 			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
 			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
+			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+			await waitForRenderer(window, "!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'", 'local instance discovery completed', 10000);
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
 			);
@@ -763,6 +771,7 @@ async function run(): Promise<Record<string, unknown>> {
 				await window.webContents.executeJavaScript("document.body.dataset.phase === 'welcome'"),
 				'Cancelled folder selection left welcome.'
 			);
+			await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
 			await window.webContents.executeJavaScript("document.querySelector('#begin-new-instance').click(); document.querySelector('#install-advanced > summary').click()");
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#install-browse').click()"
@@ -780,6 +789,8 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
 			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
+			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+			await waitForRenderer(window, "!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'", 'local instance discovery completed', 10000);
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [incompatibleHome] });
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
@@ -798,6 +809,7 @@ async function run(): Promise<Record<string, unknown>> {
 				"document.body.dataset.busy === 'false' && document.querySelector('#notice-message').textContent.includes('No fhold instance was found')",
 				'empty folder rejected as an existing instance', 10_000, true);
 			assert(!existsSync(join(otherHome, 'state')), 'Opening an empty folder began installation.');
+			await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
 			await window.webContents.executeJavaScript(`(() => {
 				document.querySelector('#begin-new-instance').click();
 				document.querySelector('#install-home').value = ${JSON.stringify(incompatibleHome)};
@@ -1455,11 +1467,11 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.phase === 'welcome'",
-			'return to Welcome with saved changes'
+			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
+			'browse instances with saved changes'
 		);
 		await window.webContents.executeJavaScript(
-			`[...document.querySelectorAll('#recent-instances .instance-choice')].find(button => button.dataset.homeDir === ${JSON.stringify(homeDir)}).click()`
+			`[...document.querySelectorAll('#hosting-instance-list .instance-choice')].find(button => button.getAttribute('aria-label').endsWith(${JSON.stringify(` at ${homeDir}`)})).click()`
 		);
 		await waitForRenderer(
 			window,
@@ -1898,8 +1910,8 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.phase === 'welcome'",
-			'instance switching from management'
+			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
+			'instance browsing from management'
 		);
 		assert(
 			window.getSize().join('x') === managedWindowSize.join('x'),
@@ -1909,8 +1921,9 @@ async function run(): Promise<Record<string, unknown>> {
 		await sizeViewport(window, 640, 640);
 		await assertRenderedFloor(window, 'narrow recent-instance list');
 		window.setSize(managedWindowSize[0], managedWindowSize[1]);
+		await window.webContents.executeJavaScript("document.querySelector('#hosting-install').click()");
+		await waitForRenderer(window, "!document.querySelector('#install-section').hidden && document.body.dataset.busy!=='true'", 'new setup from local chooser');
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#begin-new-instance').click();
 			document.querySelector('#install-advanced > summary').click();
 			document.querySelector('#install-home').value = ${JSON.stringify(otherHome)};
 		})()`);
@@ -2306,9 +2319,10 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#backup-form').scrollIntoView({block:'start'})");
 		const fullExportScreenshot = await capture(window, outputDir, '08-full-instance-export.png', true);
 		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
-		await waitForRenderer(window, "document.body.dataset.phase==='welcome'", 'return to Welcome before full import');
+		await waitForRenderer(window, "!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'", 'local chooser before full import');
+		await window.webContents.executeJavaScript("document.querySelector('#hosting-import').click()");
+		await waitForRenderer(window, "!document.querySelector('#instance-import-section').hidden && document.body.dataset.busy!=='true'", 'import from local chooser');
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#begin-instance-import').click();
 			document.querySelector('#instance-restore-source').value=${JSON.stringify(fullExport)};
 			document.querySelector('#instance-restore-home').value=${JSON.stringify(fullRestoredHome)};
 			document.querySelector('#instance-restore-source').dispatchEvent(new Event('input'));
@@ -2538,16 +2552,18 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 			picker.value = 'open-another';
 			picker.dispatchEvent(new Event('change', {bubbles:true}));
 		})()`);
-		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'manual switch to Welcome after automatic reopening');
+		await waitForRenderer(window, "!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'", 'browse other instances after automatic reopening');
+		assert(await window.webContents.executeJavaScript("(async () => !!(await window.fholdAdmin.welcome()).selectedInstance)()"), 'Browsing cleared the current instance before an explicit Open.');
+		await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
+		assert(await window.webContents.executeJavaScript("document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden"), 'Back did not return to the selected instance.');
 		window.webContents.reload();
 		await waitForLoad(window);
-		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'Welcome remains open across renderer reloads');
-		assert(await window.webContents.executeJavaScript("(async () => !(await window.fholdAdmin.welcome()).selectedInstance)()"), 'Renderer reload silently reopened the instance after manual switching.');
+		await waitForRenderer(window, "document.body.dataset.phase === 'ready'", 'selected instance survives a cancelled browse and renderer reload');
 		assert(window.getSize().join('x') === size, 'Reopening or switching resized the window.');
 		assert(readFileSync(preferencesPath, 'utf8') === preferences, 'Automatic reopening rewrote recent-instance preferences.');
 		assert(readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8') === intent, 'Automatic reopening changed instance intent.');
 		const welcome = await capture(window, outputDir, '09a-manual-instance-selection.png');
-		progress('new process reopened the previous instance read-only; manual Welcome survived renderer reload without resizing or container startup');
+		progress('new process reopened the previous instance read-only; browsing/Back preserved it across renderer reload without resizing or container startup');
 		return {
 			ok: true,
 			instanceLaunchVerified: { automaticReopen: true, welcomeOnlyOnFirstOrManualLaunch: true, noHomeOrPreferenceWrites: true, noContainerStartup: true, subtitleRemoved: true, windowSizeStable: true },

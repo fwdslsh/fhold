@@ -1,18 +1,13 @@
 import { state } from './state.js';
+import { byId, message, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
 import {
-	all,
-	byId,
-	message,
-	notice,
-	operation,
-	setBusy,
-	setOptions,
-	setSkipTarget,
-	setText
-} from './ui.js';
-import { openInstance, renderInstancePicker, showNewInstanceSetup } from './instances.js';
-import { renderRestartStatus } from './restart.js';
+	confirmInstanceSwitch,
+	openInstance,
+	renderInstancePicker,
+	showNewInstanceSetup
+} from './instances.js';
 import { chooseManagedDirectory } from './directories.js';
+import { openAdminSettings, closeAdminSettings } from './settings.js';
 
 export function targetKey(target) {
 	return target.kind === 'hosted'
@@ -21,105 +16,6 @@ export function targetKey(target) {
 }
 export function targetLocation(target) {
 	return target.kind === 'hosted' ? target.ref.remoteHome || target.ref.resourceId : target.homeDir;
-}
-export function renderHosted(snapshot) {
-	const hosted = snapshot.hosting;
-	state.currentSnapshot = snapshot;
-	state.currentConfig = null;
-	for (const id of [
-		'loading-state',
-		'error-state',
-		'instance-welcome',
-		'install-section',
-		'instance-import-section'
-	])
-		byId(id).hidden = true;
-	byId('app-shell').hidden = false;
-	document.body.dataset.phase = 'ready';
-	for (const element of all('.setup-only, [data-view-panel], [data-view]')) element.hidden = true;
-	byId('view-hosted').hidden = false;
-	byId('mobile-navigation').hidden = true;
-	renderRestartStatus(hosted);
-	byId('sidebar-alerts').append(byId('notification-area'));
-	setSkipTarget('main-content');
-	setText('view-title', hosted.name);
-	setText('view-description', hosted.providerLabel || 'Hosted instance');
-	setText('hosted-location', hosted.location);
-	setText(
-		'hosted-state',
-		hosted.platformState ||
-			hosted.services
-				.map((service) => `${service.name}: ${service.state} ${service.health}`)
-				.join('\n') ||
-			'Stopped'
-	);
-	setText(
-		'hosted-warnings',
-		[...hosted.warnings, ...hosted.services.flatMap((service) => service.warnings || [])].join('\n')
-	);
-	byId('hosted-warnings').hidden = !byId('hosted-warnings').textContent;
-	setText('hosted-settings-detail', hosted.capabilities.settings.reason);
-	setText('hosted-transfer-detail', hosted.capabilities.transfer.reason);
-	setText(
-		'hosted-access-detail',
-		hosted.guidance?.access ||
-			'Use the agent’s native interface for account setup and agent configuration.'
-	);
-	setText(
-		'hosted-client-detail',
-		hosted.guidance?.client || 'Opening the agent uses its native authentication.'
-	);
-	setText(
-		'hosted-revisions',
-		(hosted.revisions || [])
-			.map(
-				(item) =>
-					`${item.name}: ${item.active ? 'active' : 'inactive'}, ${item.replicas ?? 'unknown'} replica(s), ${item.health}`
-			)
-			.join('\n')
-	);
-	byId('hosted-revisions').hidden = !hosted.revisions?.length;
-	const client = byId('hosted-open-agent');
-	client.hidden = !hosted.clientUrl;
-	client.href = hosted.clientUrl || 'about:blank';
-	const portal = byId('hosted-open-portal');
-	portal.hidden = !hosted.portalUrl;
-	portal.href = hosted.portalUrl || 'about:blank';
-	for (const [id, choices, placeholder] of [
-		[
-			'hosted-log-revision',
-			(hosted.revisions || []).map((item) => ({
-				value: item.name,
-				label: `${item.name}${item.active ? ' · active' : ''}`
-			})),
-			'Latest revision'
-		],
-		[
-			'hosted-log-container',
-			(hosted.containers || []).map((item) => ({ value: item.name, label: item.name })),
-			'Default container'
-		]
-	]) {
-		const field = byId(id);
-		const selected = field.value;
-		setOptions(
-			field,
-			[{ value: '', label: placeholder }, ...choices],
-			choices.some((item) => item.value === selected) ? selected : ''
-		);
-	}
-	for (const button of all('[data-hosted-action]')) {
-		const capability = hosted.capabilities[button.dataset.hostedAction];
-		button.disabled = state.operationInFlight || !capability.supported;
-		button.hidden = !capability.supported;
-	}
-	setText(
-		'hosted-restart-detail',
-		hosted.capabilities.restart.reason ||
-			hosted.guidance?.restart ||
-			'Restart may interrupt current work.'
-	);
-	renderInstancePicker(snapshot);
 }
 
 let savedConnections = [];
@@ -130,7 +26,7 @@ function selectedConnectionId() {
 		state.currentSnapshot?.target?.connectionId || state.currentSnapshot?.hosting?.ref.connectionId
 	);
 }
-async function loadConnections() {
+export async function loadHostingConnections() {
 	const selected = byId('hosting-connection').value;
 	savedConnections = await state.api.hostingConnections();
 	setOptions(
@@ -141,11 +37,15 @@ async function loadConnections() {
 	renderConnectionList();
 }
 function hostingStatus(value, error = false) {
-	const status = byId(byId('hosting-manager').open ? 'hosting-manager-status' : 'hosting-status');
+	const status = byId(state.adminSettingsOpen ? 'hosting-manager-status' : 'hosting-status');
 	status.textContent = value;
 	status.hidden = !value;
 	status.className = `help-text${error ? ' danger-text' : ''}`;
 	status.setAttribute('role', error ? 'alert' : 'status');
+}
+function clearInstanceOpenError() {
+	setText('instance-preference-warning', '');
+	byId('instance-preference-warning').hidden = true;
 }
 async function connectionOperation(progress, action) {
 	if (state.operationInFlight) return undefined;
@@ -161,12 +61,19 @@ async function connectionOperation(progress, action) {
 	}
 }
 async function discover() {
+	clearInstanceOpenError();
 	const id = byId('hosting-connection').value;
 	const epoch = ++discoveryEpoch;
 	byId('hosting-instance-list').replaceChildren();
 	byId('hosting-discover').hidden = true;
-	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
-		byId(button).hidden = true;
+	for (const id of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
+		byId(id).hidden = false;
+		byId(id).disabled = true;
+	}
+	byId('hosting-open-folder').hidden = id === 'local';
+	byId('hosting-creation-help').hidden = true;
+	byId('choose-instance').hidden = id !== 'local';
+	let features;
 	await connectionOperation('Finding instances', async () => {
 		let instances;
 		try {
@@ -177,16 +84,13 @@ async function discover() {
 		}
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		const list = byId('hosting-instance-list');
-		const features = await state.api.hostingFeatures(id);
+		features = await state.api.hostingFeatures(id);
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
-		for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
-			byId(button).hidden = !features.installation;
 		list.replaceChildren();
 		hostingStatus(
 			instances.length
 				? ''
-				: features.emptyHint ||
-						'No instances found. Check this connection in Manage host connections.'
+				: features.emptyHint || 'No instances found. Check this connection in Admin settings.'
 		);
 		for (const instance of instances) {
 			const button = document.createElement('button');
@@ -199,6 +103,7 @@ async function discover() {
 			path.className = 'instance-path';
 			path.textContent = instance.location;
 			button.append(name, path);
+			button.setAttribute('aria-label', `Open ${instance.name} at ${instance.location}`);
 			button.addEventListener(
 				'click',
 				() =>
@@ -211,16 +116,44 @@ async function discover() {
 			list.append(button);
 		}
 	});
+	if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
+		byId(button).disabled = !features?.installation;
+		byId(button).title = features?.installation ? '' : 'Unavailable through this connection.';
+	}
+	byId('hosting-creation-help').hidden = !features || features.installation;
 	byId('hosting-discover').hidden = !byId('hosting-status').classList.contains('danger-text');
 }
 export async function showHostingChooser(id) {
-	byId('app-shell').hidden = true;
+	if (state.operationInFlight) return;
+	// Finish a status render before hiding the app: a late hosted snapshot must
+	// not reopen it over the chooser. Browsing leaves the selected target intact.
+	await state.snapshotPromise;
+	if (state.operationInFlight) return;
+	clearInstanceOpenError();
+	for (const surface of [
+		'app-shell',
+		'loading-state',
+		'error-state',
+		'install-section',
+		'instance-import-section'
+	])
+		byId(surface).hidden = true;
 	byId('instance-welcome').hidden = false;
 	byId('instance-options').hidden = true;
 	byId('open-hosting').hidden = false;
-	await loadConnections();
-	if (id) byId('hosting-connection').value = id;
-	await discover();
+	setSkipTarget('instance-welcome');
+	byId('hosting-chooser-title').focus();
+	try {
+		await loadHostingConnections();
+		if (id)
+			byId('hosting-connection').value = savedConnections.some((item) => item.id === id)
+				? id
+				: 'local';
+		await discover();
+	} catch (error) {
+		hostingStatus(message(error), true);
+	}
 }
 function providerFields() {
 	const kind = byId('hosting-provider').value;
@@ -271,6 +204,8 @@ async function loadAzureChoices(field) {
 }
 function editConnection(connection) {
 	if (state.operationInFlight) return;
+	hostingStatus('');
+	byId('hosting-check-details').replaceChildren();
 	editingId = connection?.id;
 	byId('hosting-add-form').reset();
 	savedChoice('hosting-subscription', connection?.subscriptionId, 'Choose a subscription');
@@ -308,19 +243,23 @@ function renderConnectionList() {
 		const row = document.createElement('section');
 		row.className = 'hosting-connection-row';
 		const description = document.createElement('div');
+		description.className = 'hosting-connection-description';
 		const title = document.createElement('strong');
 		title.textContent = connection.label;
 		const location = document.createElement('p');
 		location.className = 'help-text';
-		location.textContent = connection.host || `${connection.resourceGroup} · Azure`;
+		location.textContent =
+			connection.kind === 'ssh-docker'
+				? `${connection.host}${connection.port ? `:${connection.port}` : ''} · SSH`
+				: `${connection.resourceGroup} · Azure`;
 		description.append(title, location);
 		const buttons = document.createElement('div');
 		buttons.className = 'button-row compact';
 		for (const [label, action] of [
 			[
-				'Open',
+				'Open instances',
 				async () => {
-					byId('hosting-manager').close();
+					closeAdminSettings({ restore: false });
 					await showHostingChooser(connection.id);
 				}
 			],
@@ -330,7 +269,7 @@ function renderConnectionList() {
 		]) {
 			const button = document.createElement('button');
 			button.type = 'button';
-			button.className = 'secondary';
+			button.className = label === 'Open instances' ? 'secondary' : 'text-button';
 			button.textContent = label;
 			button.setAttribute('aria-label', `${label} ${connection.label}`);
 			button.addEventListener('click', () => void action());
@@ -355,12 +294,19 @@ async function checkConnection(connection) {
 			!result.ok
 		);
 		const details = byId('hosting-check-details');
+		const checks = document.createElement('details');
+		checks.className = 'connection-diagnostics';
+		checks.open = !result.ok;
+		const summary = document.createElement('summary');
+		summary.textContent = 'Connection details';
+		checks.append(summary);
 		for (const check of result.checks) {
 			const line = document.createElement('p');
 			line.className = `help-text${check.ok ? '' : ' danger-text'}`;
 			line.textContent = `${check.name}: ${check.detail}`;
-			details.append(line);
+			checks.append(line);
 		}
+		details.append(checks);
 		if (connection.kind === 'ssh-docker' && result.repairable) {
 			const repair = document.createElement('button');
 			repair.type = 'button';
@@ -399,7 +345,7 @@ async function removeConnection(connection) {
 	closeEditor();
 	byId('hosting-check-details').replaceChildren();
 	byId('hosting-instance-list').replaceChildren();
-	await loadConnections();
+	await loadHostingConnections();
 	state.recentInstances = state.recentInstances.filter(
 		(item) => item.kind !== 'hosted' || item.ref.connectionId !== connection.id
 	);
@@ -408,13 +354,9 @@ async function removeConnection(connection) {
 }
 export async function manageHostingConnections() {
 	if (state.operationInFlight) return;
-	byId('hosting-manager').showModal();
 	closeEditor();
 	byId('hosting-check-details').replaceChildren();
-	await connectionOperation('Loading connections', async () => {
-		await loadConnections();
-		hostingStatus('');
-	});
+	await openAdminSettings('connections');
 }
 export function bindHostingEvents() {
 	byId('hosting-sign-in').addEventListener(
@@ -444,6 +386,7 @@ export function bindHostingEvents() {
 			});
 	});
 	byId('hosting-open-folder').addEventListener('click', async () => {
+		if (state.operationInFlight) return;
 		const connection = savedConnections.find(
 			(item) => item.id === byId('hosting-connection').value
 		);
@@ -452,31 +395,41 @@ export function bindHostingEvents() {
 		try {
 			const home = await chooseManagedDirectory('instance');
 			if (home)
-				await openInstance({
-					kind: 'hosted',
-					ref: { kind: 'ssh-docker', connectionId: connection.id, remoteHome: home }
-				});
+				await openInstance(
+					connection.id === 'local'
+						? { kind: 'local', homeDir: home }
+						: {
+								kind: 'hosted',
+								ref: { kind: 'ssh-docker', connectionId: connection.id, remoteHome: home }
+							}
+				);
+		} catch (error) {
+			hostingStatus(message(error), true);
 		} finally {
 			state.installConnection = previous;
 		}
 	});
 	byId('connect-host').addEventListener('click', () => void showHostingChooser());
+	byId('open-hosting').addEventListener('hosting-refresh', () => {
+		if (!byId('open-hosting').hidden) void showHostingChooser();
+	});
 	byId('hosting-back').addEventListener('click', () => {
+		if (state.operationInFlight) return;
+		discoveryEpoch++;
 		byId('open-hosting').hidden = true;
 		state.installConnection = undefined;
 		state.installationReadiness = undefined;
 		if (state.currentSnapshot) {
 			byId('instance-welcome').hidden = true;
 			byId('app-shell').hidden = false;
-		} else byId('instance-options').hidden = false;
+			setSkipTarget('main-content');
+			byId('instance-picker').focus();
+		} else {
+			byId('instance-options').hidden = false;
+			byId('connect-host').focus();
+		}
 	});
 	byId('hosting-manage').addEventListener('click', () => void manageHostingConnections());
-	byId('hosting-manager-close').addEventListener('click', () => {
-		if (!state.operationInFlight) byId('hosting-manager').close();
-	});
-	byId('hosting-manager').addEventListener('cancel', (event) => {
-		if (state.operationInFlight) event.preventDefault();
-	});
 	byId('hosting-new').addEventListener('click', () => editConnection());
 	byId('hosting-edit-cancel').addEventListener('click', closeEditor);
 	byId('hosting-label').addEventListener('input', () => {
@@ -506,6 +459,7 @@ export function bindHostingEvents() {
 		['hosting-import', true]
 	])
 		byId(button).addEventListener('click', async () => {
+			if (state.operationInFlight || !confirmInstanceSwitch()) return;
 			const connection = savedConnections.find(
 				(item) => item.id === byId('hosting-connection').value
 			);
@@ -560,52 +514,13 @@ export function bindHostingEvents() {
 				window.location.reload();
 				return;
 			}
-			await loadConnections();
+			await loadHostingConnections();
 			byId('hosting-connection').value = saved.id;
 			closeEditor();
 			byId('hosting-instance-list').replaceChildren();
 			hostingStatus('Connection saved. Check it to verify sign-in and discover instances.');
 			return saved;
 		});
-		if (saved) {
-			await checkConnection(saved);
-			if (!byId('hosting-manager-status').classList.contains('danger-text')) {
-				byId('hosting-manager').close();
-				await showHostingChooser(saved.id);
-			}
-		}
+		if (saved) await checkConnection(saved);
 	});
-	for (const button of all('[data-hosted-action]'))
-		button.addEventListener('click', async () => {
-			if (state.operationInFlight) return;
-			const action = button.dataset.hostedAction;
-			let confirmed = false;
-			setBusy(true);
-			try {
-				confirmed = await state.api.confirmRestart(action);
-			} catch (error) {
-				notice(message(error), 'error', { persist: true });
-			} finally {
-				setBusy(false);
-			}
-			if (!confirmed) return;
-			await operation(
-				`${action[0].toUpperCase()}${action.slice(1)} instance`,
-				() => state.api.action(action, true),
-				state.currentSnapshot?.hosting.ref.kind === 'azure-container-apps'
-					? 'Request submitted. Check platform status.'
-					: 'Operation complete.'
-			);
-		});
-	byId('hosted-load-logs').addEventListener(
-		'click',
-		() =>
-			void operation('Reading logs', async () => {
-				byId('hosted-logs').value = await state.api.logs({
-					type: byId('hosted-log-type').value,
-					revision: byId('hosted-log-revision').value || undefined,
-					container: byId('hosted-log-container').value || undefined
-				});
-			})
-	);
 }

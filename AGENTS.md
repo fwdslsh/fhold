@@ -17,7 +17,9 @@ running processes, mocked tests and source scans are not live readiness.
   image whose adapters call Guardian. Keep exactly gateway, discord and slack
   Compose profiles.
 - CLI owns local installation/lifecycle. Optional Admin uses the same library;
-  it has no hosted server, chat, background updater or automatic window resizing.
+  it has no hosted server, chat, standalone background service or automatic window
+  resizing. Admin's AppImage updater runs only while Admin is open; Stable is
+  the default channel and updating Admin never upgrades containers or remote CLIs.
 - Shared host-side hosting adapters manage existing local Docker, SSH-Docker and
   experimental ACA targets. Keep provider selection in the shared library,
   native SSH/Azure credentials on the management host, and remote paths/resources

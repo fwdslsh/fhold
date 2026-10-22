@@ -12,6 +12,7 @@ import { buildComposeOptions } from '../control-plane/compose.js';
 import {
 	composeLogs,
 	composePs,
+	completeContainerImages,
 	containerWarnings,
 	ensureDockerReady,
 	parseComposePsRows
@@ -102,7 +103,7 @@ export async function inspectLocalInstance(homeDir: string): Promise<HostingSnap
 		warnings: result.ok ? [] : [result.stderr || 'Docker status is unavailable.'],
 		services: result.ok
 			? await Promise.all(
-					parseComposePsRows(result.stdout).map(async (row) => ({
+					(await completeContainerImages(parseComposePsRows(result.stdout))).map(async (row) => ({
 						name: row.service,
 						image: row.image,
 						state: row.state,

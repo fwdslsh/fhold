@@ -46,7 +46,7 @@ jobs:
           bun run lib:test
           bun run cli:test
           bun run --cwd packages/electron test
-          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts
+          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts
       - name: Lint
         run: bun run lint
       - name: Build the standalone CLI

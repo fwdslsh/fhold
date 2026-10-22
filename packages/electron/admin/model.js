@@ -37,7 +37,7 @@ export function friendlyServiceName(name) {
 
 export function serviceImageDetails(image) {
 	if (typeof image !== 'string' || !image.trim())
-		return { label: 'Image tag', value: 'Unavailable' };
+		return { label: 'Image tag', value: 'Not reported' };
 	const [reference, digest] = image.trim().split('@');
 	if (/^sha256:[a-f0-9]+$/i.test(reference))
 		return { label: 'Image digest', value: reference };
