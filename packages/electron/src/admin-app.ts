@@ -1,18 +1,14 @@
 import {
-	SshInstanceManagement,
 	MANAGEMENT_METHODS,
 	ensureDockerReady,
 	hostingProvider,
+	hostingConnectionSetup,
 	openHostingInstance,
 	LOCAL_CONNECTION,
 	parseHostingConnection,
 	connectionEndpoint,
 	checkHostingConnection,
 	repairSshCli,
-	sshArgs,
-	SSH_RPC_COMMAND,
-	runHostingProcess,
-	type HostingConnection,
 	type InstanceManagement
 } from '@fhold/lib';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
@@ -42,14 +38,6 @@ let instances: AdminInstances;
 let activeManagement: { key: string; api: InstanceManagement } | undefined;
 function management() {
 	const target = instances.current();
-	const homeDir =
-		target.kind === 'local'
-			? target.homeDir
-			: target.ref.kind === 'ssh-docker'
-				? target.ref.remoteHome
-				: undefined;
-	if (!homeDir)
-		throw Error('This hosting environment does not expose instance-file administration.');
 	const key = JSON.stringify(target);
 	if (activeManagement?.key === key) return activeManagement.api;
 	const openUrl = (url: string) => {
@@ -61,7 +49,7 @@ function management() {
 			: instances.hosting.connection(target.ref.connectionId);
 	const ref =
 		target.kind === 'local'
-			? { kind: 'local-docker' as const, connectionId: 'local' as const, homeDir }
+			? { kind: 'local-docker' as const, connectionId: 'local' as const, homeDir: target.homeDir }
 			: target.ref;
 	const api = openHostingInstance(connection, ref).management?.({
 		setupName: instances.setupName,
@@ -82,28 +70,20 @@ function selectedConnection(id: string) {
 }
 function hostedSession() {
 	const target = instances.current();
-	return target.kind === 'hosted' && target.ref.kind === 'azure-container-apps'
-		? openHostingInstance(instances.hosting.connection(target.ref.connectionId), target.ref)
-		: undefined;
+	if (target.kind !== 'hosted') return undefined;
+	const session = openHostingInstance(
+		instances.hosting.connection(target.ref.connectionId),
+		target.ref
+	);
+	return session.management ? undefined : session;
 }
 async function hostingInfo(id: string) {
-	const connection = instances.hosting.connection(id);
-	if (connection.kind !== 'ssh-docker') throw Error('Choose an SSH computer.');
-	const response = JSON.parse(
-		await runHostingProcess('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
-			input: JSON.stringify({ version: 1, action: 'hello' })
-		})
-	) as { ok?: boolean; value?: { instancesDirectory?: string; management?: string[] } };
-	if (
-		response.ok !== true ||
-		typeof response.value?.instancesDirectory !== 'string' ||
-		!response.value.management?.includes('snapshot')
-	)
-		throw Error('Update the remote fhold CLI from Connections before managing this computer.');
-	return {
-		instancesDirectory: response.value.instancesDirectory,
-		defaultHome: join(response.value.instancesDirectory, 'default')
-	};
+	const installation = hostingProvider(instances.hosting.connection(id)).installation;
+	if (!installation)
+		throw Error(
+			'This provider does not expose an instance-directory installer. Use its deployment tooling.'
+		);
+	return installation.info();
 }
 
 function handleAdmin(
@@ -161,6 +141,36 @@ export async function runAdminAction(action: StackAction): Promise<AdminViewSnap
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
+	ipcMain.handle(ADMIN_CHANNELS.hostingFeatures, (event, id: string) => {
+		requireAdminSender(event);
+		const provider = hostingProvider(instances.hosting.connection(id));
+		return { installation: !!provider.installation, emptyHint: provider.emptyHint };
+	});
+	ipcMain.handle(ADMIN_CHANNELS.hostingSetup, (event, value: unknown) => {
+		requireAdminSender(event);
+		return instances.runConnection(async () => {
+			if (!value || typeof value !== 'object' || Array.isArray(value))
+				throw new Error('Choose a connection setup action.');
+			const input = value as Record<string, unknown>;
+			const setup = hostingConnectionSetup(input.provider);
+			if (!setup) throw new Error('This hosting provider uses native host setup.');
+			if (input.action === 'sign-in') {
+				await setup.signIn();
+				return;
+			}
+			if (input.action !== 'choices' || typeof input.field !== 'string')
+				throw new Error('Choose a connection setup action.');
+			const values = input.values ?? {};
+			if (
+				!values ||
+				typeof values !== 'object' ||
+				Array.isArray(values) ||
+				Object.values(values).some((value) => typeof value !== 'string')
+			)
+				throw new Error('Connection scope values must be text.');
+			return setup.choices(input.field, values as Record<string, string>);
+		});
+	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingInfo, (event, id: string) => {
 		requireAdminSender(event);
 		return instances.runConnection(() => hostingInfo(id));
@@ -170,17 +180,11 @@ export function registerAdminIpc(): void {
 		(event, value: { connectionId: string; path?: string }) => {
 			requireAdminSender(event);
 			return instances.runConnection(async () => {
-				const info = await hostingInfo(value.connectionId);
-				const connection = instances.hosting.connection(value.connectionId) as Extract<
-					HostingConnection,
-					{ kind: 'ssh-docker' }
-				>;
-				const api = new SshInstanceManagement(connection, info.defaultHome);
-				try {
-					return await api.call('directory', value.path ?? info.instancesDirectory);
-				} finally {
-					await api.close();
-				}
+				const installation = hostingProvider(
+					instances.hosting.connection(value.connectionId)
+				).installation;
+				if (!installation) throw new Error('This provider has no instance-directory browser.');
+				return installation.directory(value.path);
 			});
 		}
 	);
@@ -197,7 +201,11 @@ export function registerAdminIpc(): void {
 			return instances.run(async () => {
 				if (method === 'snapshot') return adminSnapshot();
 				if (method === 'action') return runAdminAction(confirmedAdminAction(value));
-				if (method === 'logs' && hostedSession()) return hostedSession()!.logs({ tail: 250 });
+				if (method === 'logs' && hostedSession())
+					return hostedSession()!.logs({
+						tail: 250,
+						...(value as import('@fhold/lib').HostingLogOptions | undefined)
+					});
 				const result = await management().call(method, value, ...extra);
 				if (result && typeof result === 'object' && 'phase' in result) return adminSnapshot();
 				return result;

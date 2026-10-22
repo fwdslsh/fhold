@@ -30,7 +30,7 @@ import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, 
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
 import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
-import { renderHosted, targetKey } from '../admin/hosting.js';
+import { renderHosted, targetKey, bindHostingEvents } from '../admin/hosting.js';
 import { capabilities } from '@fhold/lib';
 import {
 	initializeAdmin,
@@ -176,7 +176,7 @@ describe('Admin static security boundary', () => {
 	it('renders remote targets without a fake local configuration or provider discovery', () => {
 		let providers = 0;
 		state.api = { providers: async () => { providers++; return { providers: [] }; } };
-		const hosting = { ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' }, name: 'cloud-agent', location: '/resource', services: [], warnings: ['Platform observation only'], platformState: 'Scaled to zero', capabilities: capabilities(false), clientUrl: 'https://agent.example.com' };
+		const hosting = { ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' }, name: 'cloud-agent', location: '/resource', services: [], warnings: ['Platform observation only'], platformState: 'Scaled to zero', capabilities: capabilities(['start', 'stop']), clientUrl: 'https://agent.example.com' };
 		render({ phase: 'remote', hosting });
 		expect(control('view-hosted').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(false);
@@ -192,6 +192,41 @@ describe('Admin static security boundary', () => {
 		expect(state.currentSnapshot.phase).toBe('remote');
 		expect(control('hosted-warnings').textContent).toContain('SSH disconnected');
 		expect(control('hosted-warnings').hidden).toBe(false);
+	});
+	it('uses provider-owned guidance and preserves selected log targets across status refresh', () => {
+		const hosting = {ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource'},name:'agent',location:'/resource',
+			providerLabel:'Cloud provider',guidance:{client:'Explicit open may wake the agent',access:'Native account setup',restart:'Native restart'},
+			services:[],warnings:[],capabilities:capabilities(['start','stop','restart']),
+			revisions:[{name:'one',active:true,health:'Healthy'},{name:'two',active:false,health:'Inactive'}],
+			containers:[{name:'assistant',image:'image'}],portalUrl:'https://portal.example.com'};
+		renderHosted({phase:'remote',hosting});
+		control('hosted-log-revision').value='two'; control('hosted-log-container').value='assistant';
+		renderHosted({phase:'remote',hosting});
+		expect(control('hosted-log-revision').value).toBe('two');
+		expect(control('hosted-log-container').value).toBe('assistant');
+		expect(control('hosted-revisions').textContent).toContain('unknown replica(s)');
+		expect(control('view-description').textContent).toBe('Cloud provider');
+		expect(control('hosted-access-detail').textContent).toBe('Native account setup');
+		expect(control('hosted-client-detail').textContent).toBe('Explicit open may wake the agent');
+	});
+	it('loads Azure choices through native setup, preserves saved scope, and never creates an instance during sign-in', async () => {
+		const calls: unknown[] = [];
+		const originalSnapshot = state.currentSnapshot;
+		control('hosting-subscription').value = 'subscription';
+		control('hosting-group').value = 'group';
+		control('install-section').hidden = true;
+		control('instance-import-section').hidden = true;
+		state.api = {hostingSetup:async(value: {action:string;field?:string})=>{
+			calls.push(value); return value.action === 'sign-in' ? undefined : [{value:'subscription',label:'Account'}];
+		}};
+		bindHostingEvents();
+		control('hosting-sign-in').listeners.get('click')?.({});
+		await new Promise(resolve=>setTimeout(resolve,0));
+		expect(calls).toEqual([{provider:'azure-container-apps',action:'sign-in'},
+			{provider:'azure-container-apps',action:'choices',field:'subscriptionId',values:{subscriptionId:'subscription'}}]);
+		expect(control('hosting-subscription').value).toBe('subscription');
+		expect(control('hosting-group').value).toBe('group');
+		expect(state.currentSnapshot).toBe(originalSnapshot);
 	});
 	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
 		expect(html).toContain('Entire instance (must be stopped)');

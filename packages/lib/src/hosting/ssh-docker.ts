@@ -1,6 +1,14 @@
 import { parseInstanceRef } from './preferences.js';
 import { runHostingProcess, type HostingProcess } from './process.js';
 import { SshInstanceManagement } from '../management/ssh.js';
+import { checkSshConnection } from './ssh-check.js';
+import {
+	HOSTING_WIRE_VERSION,
+	SSH_RPC_COMMAND,
+	sshArgs,
+	type MachineRequest,
+	type MachineResponse
+} from './ssh-native.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -9,30 +17,6 @@ import {
 	type HostingSnapshot,
 	type InstanceSummary
 } from './types.js';
-
-export const HOSTING_WIRE_VERSION = 1;
-export const SSH_RPC_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc';
-export function sshArgs(connection: Extract<HostingConnection, { kind: 'ssh-docker' }>): string[] {
-	return [
-		'-o',
-		'BatchMode=yes',
-		'-o',
-		'ConnectTimeout=10',
-		...(connection.port ? ['-p', String(connection.port)] : []),
-		connection.host
-	];
-}
-export type MachineRequest = {
-	version: 1;
-	action: 'hello' | 'list' | 'diagnose' | 'inspect' | 'logs' | 'start' | 'stop' | 'restart';
-	homeDir?: string;
-	roots?: string[];
-	tail?: number;
-	confirmed?: boolean;
-};
-export type MachineResponse =
-	| { version: 1; ok: true; value: unknown }
-	| { version: 1; ok: false; error: string };
 
 export function sshDockerProvider(
 	connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
@@ -89,6 +73,35 @@ export function sshDockerProvider(
 		};
 	}
 	const provider: HostingProvider = {
+		check: () => checkSshConnection(connection, run, () => provider.listInstances()),
+		installation: {
+			async info() {
+				const value = (await request({ action: 'hello' })) as {
+					instancesDirectory?: unknown;
+					management?: string[];
+				};
+				if (
+					typeof value?.instancesDirectory !== 'string' ||
+					!value.management?.includes('snapshot')
+				)
+					throw new Error(
+						'Update the remote fhold CLI from Connections before managing this computer.'
+					);
+				return {
+					instancesDirectory: value.instancesDirectory,
+					defaultHome: `${value.instancesDirectory}/default`
+				};
+			},
+			async directory(path) {
+				const info = await provider.installation!.info();
+				const manager = new SshInstanceManagement(connection, info.defaultHome);
+				try {
+					return await manager.call('directory', path ?? info.instancesDirectory);
+				} finally {
+					await manager.close();
+				}
+			}
+		},
 		async listInstances() {
 			await hello('list');
 			const values = await request({
@@ -142,7 +155,12 @@ export function sshDockerProvider(
 					services: snapshot.services,
 					warnings,
 					pendingRestart: snapshot.pendingRestart,
-					capabilities: capabilities(true, managed)
+					capabilities: capabilities(
+						managed
+							? ['start', 'stop', 'restart', 'settings', 'transfer']
+							: ['start', 'stop', 'restart'],
+						'Update the remote fhold CLI to enable instance settings and file transfer.'
+					)
 				};
 			}
 			return {
@@ -150,11 +168,17 @@ export function sshDockerProvider(
 				management: (options) => new SshInstanceManagement(connection, ref.remoteHome, options),
 				inspect,
 				async logs(options = {}) {
+					if (Object.entries(options).some(([key, value]) => key !== 'tail' && value !== undefined))
+						throw new Error(
+							'Docker logs support --tail; deployment revision/replica selection is not available.'
+						);
 					return String(
 						await request({ action: 'logs', homeDir: ref.remoteHome, tail: options.tail })
 					);
 				},
-				async operate(action, confirmed) {
+				async operate(action, confirmed, options) {
+					if (options?.revision !== undefined)
+						throw new Error('This instance has no deployment revision selector.');
 					if (!confirmed)
 						throw new Error('Confirm this lifecycle operation before changing containers.');
 					await hello(action);

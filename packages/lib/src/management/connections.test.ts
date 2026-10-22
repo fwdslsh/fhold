@@ -7,7 +7,7 @@ const snapshot: HostingSnapshot = {
 	name: 'qa',
 	location: home,
 	ref: { kind: 'local-docker', connectionId: 'local', homeDir: home },
-	capabilities: capabilities(true, true),
+	capabilities: capabilities(['start', 'stop', 'restart', 'settings', 'transfer']),
 	services: [{ name: 'assistant', state: 'running', health: 'healthy', id: '123abc' }],
 	warnings: []
 };

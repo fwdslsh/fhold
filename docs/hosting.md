@@ -97,18 +97,36 @@ instance/recovery locations and a native local picker for export/import archives
 ## Azure Container Apps (experimental)
 
 Install the native Azure CLI on this computer and explicitly sign in with
-`az login`. Add a scoped connection; fhold never changes your global Azure account
+`az login` or `fhold hosting login azure-container-apps`. In Admin, choose
+**Manage host connections → Add connection → Azure Container Apps**. **Sign in
+to Azure** opens the native browser flow; **Load subscriptions** uses an existing
+login. Choose a subscription and resource group, then save the connection.
+Add a scoped connection; fhold never changes your global Azure account
 selection and does not install extensions or create resources automatically.
 
 ```bash
+fhold hosting login azure-container-apps
+fhold hosting scopes azure-container-apps
+fhold hosting scopes azure-container-apps --subscription <subscription-uuid>
 fhold hosting add cloud --provider azure-container-apps \
   --subscription <subscription-uuid> --group <resource-group>
+fhold hosting check cloud
 fhold hosting instances --connection cloud
 fhold --connection cloud --name <app-name> status
 fhold --connection cloud --name <app-name> logs
 fhold --connection cloud --name <app-name> stop --confirm
 fhold --connection cloud --name <app-name> start --confirm
+fhold --connection cloud --name <app-name> restart --confirm
+fhold --connection cloud --name <app-name> connect opencode
+fhold --connection cloud --name <app-name> console
+fhold --connection cloud --name <app-name> logs --type console --tail 100 \
+  --revision <revision-name> --container <container-name>
 ```
+
+The connection check names the failing layer: Azure CLI, sign-in, resource group,
+or discovery. Sign in again or edit the connection to fix that layer; SSH repair
+and instance-root advice do not apply to Azure. Native CLI/extension upgrades
+remain explicit workstation operations, not hidden fhold installs.
 
 Discovery lists apps in that resource group with an `fhold-assistant` image or
 the deployment-owned tag `fhold=assistant`. Custom assistant images should use
@@ -122,9 +140,27 @@ Status shows native platform/revision observations, not a fabricated local
 instance folder or Compose intent. Stopped and scaled-to-zero are distinct;
 successful Azure provisioning is not verified agent readiness. Status checks
 do not contact OpenCode or wake a zero-replica app. **Open OpenCode** is an explicit
-client action and may wake it; native sign-in is still required. Logs default to
-system logs, which do not require a live replica. Use `az containerapp logs show`
-to select a specific revision/replica/container's console logs.
+client action and may wake it; native sign-in is still required. A platform-stopped
+app needs **Start** first. Logs default to system logs, which do not require a
+live replica. Admin lets you choose platform/agent logs, revision and container;
+CLI additionally accepts `--replica`. Read-only refresh preserves that selection.
+Console logs and interactive terminals need a running replica; fhold does not
+silently start one to satisfy a read.
+
+`console` opens the native [Azure container console](https://learn.microsoft.com/azure/container-apps/container-console)
+with inherited terminal input/output. `--revision`, `--replica` and `--container`
+select its target. No CLI is installed inside Assistant and no generated shell
+script, stdin protocol or management port is added. Use ordinary image-baked
+skills/commands there for Claude/Codex sign-in and agent diagnostics. Admin's
+**Azure portal** link provides the platform's own Console and deployment tools;
+**Open OpenCode** provides the agent's native AI-account and chat interface.
+
+**Restart** uses Azure's documented [revision restart](https://learn.microsoft.com/cli/azure/containerapp/revision#az-containerapp-revision-restart),
+not Compose recreation, image replacement or settings application. The app must
+have exactly one active revision; otherwise choose revisions using your deployment
+tooling. CLI optionally binds confirmation to `--revision <name>` and refuses a
+stale selection before sending the request. Restart interrupts active work and is
+not proof of a completed checkpoint, vendor reconnect or runtime readiness.
 
 Start/Stop use the documented [ARM Start](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps/start?view=rest-resource-manager-containerapps-2026-07-01)
 and [ARM Stop](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps/stop?view=rest-resource-manager-containerapps-2026-07-01)
@@ -142,6 +178,8 @@ External deployment tooling owns these. Runtime recovery remains entirely with
 the existing Assistant: no host-side Blob reader, new recovery gate, automatic
 unlock or ownership fallback is introduced. Ordered stop/drain/replacement is an
 external responsibility; there is no rolling-update shortcut.
+The [qualification record](operations/azure-management-verification.md) separates
+live read-only checks from adapter tests and unperformed cloud mutations.
 
 ## Admin and shared preferences
 
@@ -165,7 +203,8 @@ fhold hosting remove lab --confirm
 ```
 
 Open an SSH instance to use the normal Admin pages; no manual tunnel is needed.
-ACA shows its narrower platform controls with explicit explanations for unsupported
+ACA shows its native platform controls, revision/log selectors and direct access
+links, with explicit explanations for unsupported
 operations, never substitutes a local home. Lifecycle actions retain explicit confirmation. Status refreshes
 automatically without waking the agent; switching never changes window size or
 starts/stops an instance.

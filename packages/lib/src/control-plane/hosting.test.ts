@@ -11,7 +11,8 @@ import {
 } from '../hosting/preferences.js';
 import { listLocalInstances } from '../hosting/local-docker.js';
 import { hostingMachineRequest } from '../hosting/machine.js';
-import { sshDockerProvider, SSH_RPC_COMMAND } from '../hosting/ssh-docker.js';
+import { sshDockerProvider } from '../hosting/ssh-docker.js';
+import { SSH_RPC_COMMAND } from '../hosting/ssh-native.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import {
 	capabilities,
@@ -217,7 +218,7 @@ describe('native SSH transport', () => {
 					location: remoteHome,
 					services: [],
 					warnings: [],
-					capabilities: capabilities(true, true)
+					capabilities: capabilities(['start', 'stop', 'restart', 'settings', 'transfer'])
 				}
 			});
 		};
@@ -343,14 +344,13 @@ describe('ACA adapter uses external deployment ownership', () => {
 		expect(snapshot.platformState).toBe('Scaled to zero');
 		expect(snapshot.config).toBeUndefined();
 		expect(snapshot.clientUrl).toBe('https://agent.example.com');
-		expect(snapshot.capabilities.restart.supported).toBe(false);
+		expect(snapshot.capabilities.restart.supported).toBe(true);
 		for (const args of calls) {
 			expect(args).toContain(subscription);
 			expect(args).toContain('agents');
 			expect(args).toContain('--query');
 			expect(args).not.toContain('update');
 		}
-		await expect(provider.open(acaRef).operate('restart', true)).rejects.toThrow('not supported');
 		expect(calls.filter((args) => args[0] === 'rest')).toHaveLength(0);
 	});
 	test('revision read failures degrade status, rather than preventing unrelated inspection', async () => {

@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — Azure management and provider cleanup
+
+Host connections can sign in through Azure CLI's native browser flow and choose
+subscriptions/resource groups without pasting IDs. Connection checks separately
+report the CLI, account, scope and discovery. Existing Container Apps expose
+native revision status, confirmed single-active-revision restart, selected
+platform/console logs, OpenCode and Azure portal links. CLI adds an interactive
+native console and a direct OpenCode connection address. Observation never calls
+the agent or changes Azure's global account selection.
+Fix system-log requests to use Azure's required JSONL format and render native
+messages as text. Recognize `ScaledToZero` and preserve unavailable replica
+counts as unknown rather than inventing zero.
+
+Hosting capabilities use named operations rather than positional flags. The
+adapter owns its diagnostics and optional onboarding/console; common CLI verbs
+and Admin select supported interfaces rather than assuming every remote is SSH
+or has a Docker home. Native auth errors remain actionable without logging raw
+responses. No container changes, runtime management service, provisioning,
+deployment-template editing or recovery ownership changes are introduced.
+
 ## 0.3.261000-beta — monthly versions and updated AKM
 
 Adopt monthly `X.Y.YYMMNN[-alpha|-beta|-rc]` release versions (#46). Start the

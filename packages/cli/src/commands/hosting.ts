@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import type { ManagedSnapshot } from '@fhold/lib';
 import {
 	HostingPreferencesStore,
+	hostingConnectionSetup,
 	LOCAL_CONNECTION,
 	hostingProvider,
 	hostingMachineRequest,
@@ -18,11 +19,46 @@ import { main } from '../main.js';
 import { SSH_RPC_COMMAND, sshArgs } from '@fhold/lib';
 import { runHostingProcess } from '@fhold/lib';
 import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
+import { runSessionCommand } from '../lib/hosting-command.js';
 
 const store = () => new HostingPreferencesStore();
 export const hostingCommand = defineCommand({
 	meta: { name: 'hosting', description: 'Manage host connections and discover their instances' },
 	subCommands: {
+		login: defineCommand({
+			meta: {
+				name: 'login',
+				description: 'Sign in using the hosting provider’s native browser flow'
+			},
+			args: { provider: { type: 'positional', required: true } },
+			async run({ args }) {
+				const setup = hostingConnectionSetup(args.provider);
+				if (!setup)
+					throw new Error(
+						'This provider uses native host setup; for SSH, connect in a terminal first.'
+					);
+				await setup.signIn();
+				console.log('Hosting sign-in completed. Existing instances were not changed.');
+			}
+		}),
+		scopes: defineCommand({
+			meta: { name: 'scopes', description: 'List account scopes for a hosting connection' },
+			args: { provider: { type: 'positional', required: true }, subscription: { type: 'string' } },
+			async run({ args }) {
+				const setup = hostingConnectionSetup(args.provider);
+				if (!setup) throw new Error('This provider has no account-scope picker.');
+				console.log(
+					JSON.stringify(
+						await setup.choices(
+							args.subscription ? 'resourceGroup' : 'subscriptionId',
+							args.subscription ? { subscriptionId: args.subscription } : {}
+						),
+						null,
+						2
+					)
+				);
+			}
+		}),
 		command: defineCommand({
 			meta: { name: 'command', description: 'Ordinary instance CLI commands over native SSH' },
 			run: () => serveHostingCommand(main)
@@ -395,31 +431,13 @@ export async function runHostedCommand(
 		}
 		return;
 	}
-	if (!['status', 'logs', 'start', 'stop', 'restart'].includes(action))
-		throw new Error(
-			'Remote connections support status, logs and their available lifecycle actions. Manage other operations using the Docker-host CLI or your deployment tooling. No local instance was changed.'
-		);
 	if (!instance)
 		throw new Error(
 			'Choose an instance with --name/-n. Use fhold hosting instances --connection <name> to discover it.'
 		);
-	if (argv.slice(1).some((value) => value !== '--confirm'))
-		throw new Error(
-			'Remote lifecycle accepts only --confirm. Other options must be configured on the owning host or deployment tooling.'
-		);
 	const ref = await hostingProvider(connection).selectInstance(instance);
 	const session = openHostingInstance(connection, ref);
-	if (action === 'status') console.log(JSON.stringify(await session.inspect(), null, 2));
-	else if (action === 'logs') console.log(await session.logs());
-	else {
-		if (!argv.includes('--confirm'))
-			throw new Error(
-				'This changes remote containers and can interrupt work. Repeat with --confirm when ready.'
-			);
-		console.log(
-			JSON.stringify(await session.operate(action as 'start' | 'stop' | 'restart', true), null, 2)
-		);
-	}
+	await runSessionCommand(session, argv);
 	// Observation should not fail because optional recent-target persistence failed.
 	try {
 		store().remember(ref);

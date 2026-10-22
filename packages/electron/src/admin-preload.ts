@@ -4,6 +4,8 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	hostingFeatures: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingFeatures, id),
+	hostingSetup: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSetup, value),
 	directory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.directory, value),
 	hostingInfo: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingInfo, id),
 	hostingDirectory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingDirectory, value),
@@ -31,7 +33,7 @@ const api: AdminApi = {
 	confirmRestart: (action) => ipcRenderer.invoke(ADMIN_CHANNELS.confirmRestart, action),
 	action: (action: StackAction, confirmed = false) =>
 		ipcRenderer.invoke(ADMIN_CHANNELS.action, { action, confirmed }),
-	logs: () => ipcRenderer.invoke(ADMIN_CHANNELS.logs),
+	logs: (options) => ipcRenderer.invoke(ADMIN_CHANNELS.logs, options),
 	providers: () => ipcRenderer.invoke(ADMIN_CHANNELS.providers),
 	providerKey: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerKey, value),
 	providerEndpoint: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerEndpoint, value),

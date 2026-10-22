@@ -142,6 +142,15 @@ subprocesses pin a local socket from the selected native context, never send loc
 bind paths to a remote daemon or mutate the global context. ACA reports platform
 observations and accepted lifecycle requests honestly, separately from readiness,
 replica drain, runtime recovery ownership and external deployment intent.
+Azure onboarding uses native browser sign-in and read-only account/scope choices.
+The adapter owns scoped diagnostics, logs and its explicit interactive console.
+Confirmed restart addresses the one active revision through Azure's native API;
+it does not apply Docker intent, edit deployment templates or establish recovery
+completion. Native management credentials stay on the user's computer, and
+status/discovery never contact the agent or implicitly wake an idle replica.
+Provider capabilities are named operations; diagnostics and optional onboarding,
+console and file-management interfaces remain adapter-owned. Common CLI/Admin
+dispatch does not assume every remote target is SSH or has a local instance home.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped

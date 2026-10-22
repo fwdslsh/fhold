@@ -4,7 +4,7 @@ import { chmodSync, cpSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSy
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isIP } from 'node:net';
-import { sshArgs } from '../hosting/ssh-docker.js';
+import { sshArgs } from '../hosting/ssh-native.js';
 import { hostingFailure, runHostingProcess } from '../hosting/process.js';
 import { packTransfer, unpackTransfer, preserveTransferMetadata } from './transfer.js';
 import type { HostingConnection } from '../hosting/types.js';

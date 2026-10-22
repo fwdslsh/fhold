@@ -67,6 +67,7 @@ async function autoRun(): Promise<void> {
 }
 
 const subCommands = {
+	console: defineCommand({ meta: { name: 'console', description: 'Open a hosted agent’s native console' }, run() { throw new Error('Choose a console-capable hosting connection with --connection and --name.'); } }),
 	hosting: () => import('./commands/hosting.js').then((module) => module.default),
 	install: () => import('./commands/install.js').then((module) => module.default),
 	setup: () => import('./commands/setup.js').then((module) => module.default),
@@ -92,7 +93,8 @@ const subCommands = {
 } as const;
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
-	hosting: 'fhold hosting list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | instances --connection <connection>',
+	hosting: 'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | repair <connection> --confirm | instances --connection <connection>',
+	console: 'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup: 'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote]',
 	provider:

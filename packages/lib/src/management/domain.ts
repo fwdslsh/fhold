@@ -47,6 +47,12 @@ export function interruptionPrompt(action: unknown, hosting?: InstanceRef['kind'
 				'This submits a native platform request, not a settings update or container replacement. Active connections may be interrupted. Acceptance does not prove replica drain or agent readiness; check platform status before replacing any writers.',
 			buttons: ['Cancel', `Request ${action}`]
 		};
+	if (hosting === 'azure-container-apps' && action === 'restart')
+		return {
+			message: 'Restart the active Azure revision?',
+			detail: 'This uses Azure’s native revision restart. Active work and connections will be interrupted. It does not change images, settings, mounts, scale rules or secrets. Request acceptance is not proof of agent readiness or a completed recovery checkpoint.',
+			buttons: ['Cancel', 'Restart revision']
+		};
 	if (action === 'instance-export' || action === 'instance-import')
 		return {
 			message:

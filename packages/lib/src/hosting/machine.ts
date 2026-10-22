@@ -10,7 +10,7 @@ import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { ensureDockerReady } from '../control-plane/docker.js';
 import { FH_RELEASE_VERSION } from '../control-plane/release.js';
 import { MANAGEMENT_METHODS } from '../management/types.js';
-import { HOSTING_WIRE_VERSION, type MachineRequest, type MachineResponse } from './ssh-docker.js';
+import { HOSTING_WIRE_VERSION, type MachineRequest, type MachineResponse } from './ssh-native.js';
 
 const actions = [
 	'hello',

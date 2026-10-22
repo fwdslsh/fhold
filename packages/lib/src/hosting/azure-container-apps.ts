@@ -1,5 +1,11 @@
 import { parseInstanceRef } from './preferences.js';
-import { runHostingProcess, type HostingProcess } from './process.js';
+import {
+	runHostingProcess,
+	runHostingTerminal,
+	type HostingProcess,
+	type HostingTerminal
+} from './process.js';
+import { azureClient } from './azure-client.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -26,19 +32,109 @@ type AzureRevision = {
 	properties: { active?: boolean; replicas?: number; healthState?: string; runningState?: string };
 };
 
+function object(value: unknown): Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value))
+		throw new Error('Azure returned an invalid resource document.');
+	return value as Record<string, unknown>;
+}
+function appDocument(value: unknown): AzureApp {
+	const doc = object(value),
+		properties = object(doc.properties);
+	if (typeof doc.id !== 'string' || typeof doc.name !== 'string')
+		throw new Error('Azure returned an invalid app identity.');
+	const tags = doc.tags ? object(doc.tags) : {};
+	const template = properties.template ? object(properties.template) : {};
+	const configuration = properties.configuration ? object(properties.configuration) : {};
+	const ingress = configuration.ingress ? object(configuration.ingress) : {};
+	const containers = Array.isArray(template.containers)
+		? template.containers.map((item: unknown) => {
+				const container = object(item);
+				if (typeof container.name !== 'string' || typeof container.image !== 'string')
+					throw new Error('Azure returned an invalid container identity.');
+				return { name: container.name, image: container.image };
+			})
+		: [];
+	return {
+		id: doc.id,
+		name: doc.name,
+		tags: { fhold: typeof tags.fhold === 'string' ? tags.fhold : undefined },
+		properties: {
+			runningStatus:
+				typeof properties.runningStatus === 'string' ? properties.runningStatus : undefined,
+			provisioningState:
+				typeof properties.provisioningState === 'string' ? properties.provisioningState : undefined,
+			template: { containers },
+			configuration: {
+				ingress: {
+					external: ingress.external === true,
+					fqdn:
+						typeof ingress.fqdn === 'string' && /^[a-z\d.-]+$/i.test(ingress.fqdn)
+							? ingress.fqdn
+							: undefined
+				}
+			}
+		}
+	};
+}
+function revisionDocuments(value: unknown): AzureRevision[] {
+	if (!Array.isArray(value)) throw new Error('Azure did not return a revision list.');
+	return value.map((item: unknown) => {
+		const doc = object(item),
+			props = object(doc.properties);
+		if (typeof doc.name !== 'string' || !/^[\w.-]+$/.test(doc.name))
+			throw new Error('Azure returned an invalid revision name.');
+		return {
+			name: doc.name,
+			properties: {
+				active: props.active === true,
+				replicas:
+					typeof props.replicas === 'number' &&
+					Number.isInteger(props.replicas) &&
+					props.replicas >= 0
+						? props.replicas
+						: undefined,
+				healthState: typeof props.healthState === 'string' ? props.healthState : undefined,
+				runningState: typeof props.runningState === 'string' ? props.runningState : undefined
+			}
+		};
+	});
+}
+function systemLogText(raw: string): string {
+	return raw
+		.split('\n')
+		.map((line) => {
+			try {
+				const event = object(JSON.parse(line));
+				if (typeof event.Msg === 'string')
+					return `${typeof event.TimeStamp === 'string' ? `${event.TimeStamp} ` : ''}${event.Msg}`;
+			} catch {
+				/* Preserve unknown native output rather than discarding logs. */
+			}
+			return line;
+		})
+		.join('\n');
+}
+
 export function azureContainerAppsProvider(
 	connection: Extract<HostingConnection, { kind: 'azure-container-apps' }>,
-	run: HostingProcess = runHostingProcess
+	run: HostingProcess = runHostingProcess,
+	terminal: HostingTerminal = runHostingTerminal
 ): HostingProvider {
+	const client = azureClient(run);
 	const scope = [
 		'--subscription',
 		connection.subscriptionId,
 		'--resource-group',
 		connection.resourceGroup
 	];
-	async function az(args: string[]): Promise<unknown> {
-		const output = await run('az', [...args, '--only-show-errors', '--output', 'json']);
-		return output.trim() ? (JSON.parse(output) as unknown) : undefined;
+	const az = client.json;
+	function recognized(app: AzureApp): boolean {
+		return (
+			app.tags?.fhold === 'assistant' ||
+			!!app.properties.template?.containers?.some(({ image }) =>
+				/(?:^|\/)fhold-assistant(?::[^/]+|@sha256:[a-f\d]+)?$/.test(image)
+			)
+		);
 	}
 	function appRef(app: AzureApp): InstanceRef {
 		const ref = parseInstanceRef({
@@ -65,6 +161,69 @@ export function azureContainerAppsProvider(
 			);
 	}
 	const provider: HostingProvider = {
+		emptyHint:
+			'No fhold apps found in this resource group. Check the Azure scope. Custom images need the deployment tag fhold=assistant.',
+		async check() {
+			const result: import('./types.js').ConnectionCheck = {
+				ok: false,
+				repairable: false,
+				checks: [],
+				instances: []
+			};
+			let stage = 'Azure CLI';
+			try {
+				const version = await az(['version', '--query', '"azure-cli"']);
+				result.checks.push({
+					name: stage,
+					ok: true,
+					detail: `Azure CLI ${typeof version === 'string' ? version : 'available'}.`
+				});
+				stage = 'Azure sign-in';
+				const account = object(
+					await az([
+						'account',
+						'show',
+						'--subscription',
+						connection.subscriptionId,
+						'--query',
+						'{id:id,state:state}'
+					])
+				);
+				if (
+					typeof account.id !== 'string' ||
+					account.id.toLowerCase() !== connection.subscriptionId.toLowerCase() ||
+					account.state !== 'Enabled'
+				)
+					throw new Error(
+						'The selected Azure subscription is unavailable or disabled. Sign in with an account that can access it.'
+					);
+				result.checks.push({
+					name: stage,
+					ok: true,
+					detail: 'Native account can access the selected subscription.'
+				});
+				stage = 'Resource group';
+				await az(['group', 'show', ...scope, '--query', '{name:name}']);
+				result.checks.push({ name: stage, ok: true, detail: connection.resourceGroup });
+				stage = 'Discovery';
+				result.instances = await provider.listInstances();
+				result.checks.push({
+					name: stage,
+					ok: true,
+					detail: result.instances.length
+						? `Found ${result.instances.length} instance(s).`
+						: provider.emptyHint!
+				});
+				result.ok = true;
+			} catch (error) {
+				result.checks.push({
+					name: stage,
+					ok: false,
+					detail: error instanceof Error ? error.message : 'Azure connection failed.'
+				});
+			}
+			return result;
+		},
 		async listInstances() {
 			// Deployment owners mark custom assistant images with fhold=assistant.
 			// A dedicated fhold image also identifies the app without guessing names.
@@ -73,14 +232,17 @@ export function azureContainerAppsProvider(
 				'list',
 				...scope,
 				'--query',
-				"[?tags.fhold=='assistant' || contains(join(',', properties.template.containers[].image), 'fhold-assistant')].{id:id,name:name,properties:{}}"
+				'[].{id:id,name:name,tags:{fhold:tags.fhold},properties:{template:{containers:properties.template.containers[].{name:name,image:image}}}}'
 			]);
 			if (!Array.isArray(apps)) throw new Error('Azure did not return an instance list.');
-			return (apps as AzureApp[]).map((app) => ({
-				ref: appRef(app),
-				name: app.name,
-				location: app.id
-			}));
+			return apps
+				.map(appDocument)
+				.filter(recognized)
+				.map((app) => ({
+					ref: appRef(app),
+					name: app.name,
+					location: app.id
+				}));
 		},
 		async selectInstance(selector) {
 			if (selector.startsWith('/')) {
@@ -96,32 +258,36 @@ export function azureContainerAppsProvider(
 		},
 		open(ref) {
 			assertScope(ref);
+			const selectedResourceId = ref.resourceId;
 			const name = ref.resourceId.split('/').at(-1) || '';
 			async function inspect(): Promise<HostingSnapshot> {
 				// Native projections avoid returning secrets, environment and storage config.
-				const app = (await az([
-					'containerapp',
-					'show',
-					...scope,
-					'--name',
-					name,
-					'--query',
-					'{id:id,name:name,tags:{fhold:tags.fhold},properties:{runningStatus:properties.runningStatus,provisioningState:properties.provisioningState,configuration:{ingress:properties.configuration.ingress},template:{containers:properties.template.containers[].{name:name,image:image}}}}'
-				])) as AzureApp;
+				const app = appDocument(
+					await az([
+						'containerapp',
+						'show',
+						...scope,
+						'--name',
+						name,
+						'--query',
+						'{id:id,name:name,tags:{fhold:tags.fhold},properties:{runningStatus:properties.runningStatus,provisioningState:properties.provisioningState,configuration:{ingress:properties.configuration.ingress},template:{containers:properties.template.containers[].{name:name,image:image}}}}'
+					])
+				);
+				appRef(app);
+				if (app.id.toLowerCase() !== selectedResourceId.toLowerCase())
+					throw new Error(
+						'Azure returned a different app than the selected resource. No operation was applied.'
+					);
 				let revisions: AzureRevision[] = [];
 				const warnings: string[] = [];
-				const recognized =
-					app.tags?.fhold === 'assistant' ||
-					app.properties.template?.containers?.some((container) =>
-						container.image.includes('fhold-assistant')
-					);
+				const managed = recognized(app);
 				const recognitionReason =
 					'This app is inspect-only. Its deployment must declare fhold=assistant or use a fhold-assistant image before lifecycle management.';
 				const lifecycle = {
-					supported: !!recognized,
-					...(!recognized ? { reason: recognitionReason } : {})
+					supported: managed,
+					...(!managed ? { reason: recognitionReason } : {})
 				};
-				if (!recognized) warnings.push(recognitionReason);
+				if (!managed) warnings.push(recognitionReason);
 				try {
 					const observed = await az([
 						'containerapp',
@@ -134,7 +300,7 @@ export function azureContainerAppsProvider(
 						'[].{name:name,properties:{active:properties.active,replicas:properties.replicas,healthState:properties.healthState,runningState:properties.runningState}}'
 					]);
 					if (!Array.isArray(observed)) throw new Error('Revision list unavailable.');
-					revisions = observed as AzureRevision[];
+					revisions = revisionDocuments(observed);
 				} catch {
 					warnings.push(
 						'Revision status is unavailable. App status remains available; check Azure read permissions.'
@@ -143,9 +309,15 @@ export function azureContainerAppsProvider(
 				const stopped = app.properties.runningStatus?.toLowerCase() === 'stopped';
 				const active = revisions.filter((item) => item.properties.active);
 				const replicas = active.reduce((sum, item) => sum + (item.properties.replicas ?? 0), 0);
+				const countKnown =
+					active.length > 0 && active.every((item) => item.properties.replicas !== undefined);
 				const scaledToZero =
 					active.length > 0 &&
-					active.every((item) => item.properties.runningState?.toLowerCase() === 'scaledto0');
+					active.every((item) =>
+						['scaledto0', 'scaledtozero'].includes(
+							item.properties.runningState?.toLowerCase() || ''
+						)
+					);
 				if (replicas > 1)
 					warnings.push(
 						'Multiple replicas are reported. Confirm writer drain with deployment tooling before replacing an ephemeral instance.'
@@ -154,16 +326,33 @@ export function azureContainerAppsProvider(
 					? 'Stopped'
 					: scaledToZero
 						? 'Scaled to zero'
-						: `${app.properties.runningStatus || 'Unknown'}${active.length ? ` · ${replicas} replica(s)` : ''}`;
+						: `${app.properties.runningStatus || 'Unknown'}${active.length ? (countKnown ? ` · ${replicas} replica(s)` : ' · replica count unavailable') : ''}`;
 				const ingress = app.properties.configuration?.ingress;
 				return {
 					ref,
+					providerLabel: 'Azure Container Apps · experimental',
+					guidance: {
+						access:
+							'Open OpenCode to configure AI accounts and use your agent. The Azure portal’s Console provides a terminal for native Claude/Codex sign-in, plugins and diagnostics.',
+						client:
+							'Status checks do not wake an idle agent. Opening OpenCode may wake a scaled-to-zero app; a platform-stopped app needs Start first.',
+						restart:
+							'Restart interrupts current work in the active revision. It does not change Azure deployment settings.'
+					},
 					name: app.name,
 					location: app.id,
 					capabilities: {
-						...capabilities(false),
+						...capabilities(['start', 'stop']),
 						start: lifecycle,
 						stop: lifecycle,
+						restart:
+							managed && active.length === 1 && !stopped
+								? { supported: true }
+								: {
+										supported: false,
+										reason:
+											'Start the app and choose exactly one active revision before restarting. Multi-revision deployment changes stay with Azure deployment tooling.'
+									},
 						settings: {
 							supported: false,
 							reason:
@@ -187,9 +376,11 @@ export function azureContainerAppsProvider(
 					revisions: revisions.map((item) => ({
 						name: item.name,
 						active: !!item.properties.active,
-						replicas: item.properties.replicas ?? 0,
+						replicas: item.properties.replicas,
 						health: item.properties.healthState || item.properties.runningState || 'Unknown'
 					})),
+					containers: app.properties.template?.containers ?? [],
+					portalUrl: `https://portal.azure.com/#resource${encodeURI(app.id)}`,
 					...(ingress?.external && ingress.fqdn ? { clientUrl: `https://${ingress.fqdn}` } : {})
 				};
 			}
@@ -211,34 +402,77 @@ export function azureContainerAppsProvider(
 						'--follow',
 						'false'
 					];
+					if (
+						!Number.isInteger(options.tail ?? 100) ||
+						(options.tail ?? 100) < 0 ||
+						(options.tail ?? 100) > 300
+					)
+						throw new Error('Choose a log tail between 0 and 300 lines.');
+					if (options.type && !['system', 'console'].includes(options.type))
+						throw new Error('Choose system or console logs.');
 					for (const key of ['revision', 'replica', 'container'] as const)
-						if (options[key]) args.push(`--${key}`, options[key]);
-					return run('az', [...args, '--format', 'text', '--only-show-errors']);
+						if (options[key]) {
+							if (!/^[\w.-]+$/.test(options[key]!)) throw new Error(`Invalid ${key} name.`);
+							args.push(`--${key}`, options[key]!);
+						}
+					// Azure supports only JSONL for system events, unlike console logs.
+					const output = await client.text([
+						...args,
+						'--format',
+						options.type === 'console' ? 'text' : 'json'
+					]);
+					return options.type === 'console' ? output : systemLogText(output);
 				},
-				async operate(action, confirmed) {
+				async console(options = {}) {
+					const args = ['containerapp', 'exec', ...scope, '--name', name, '--command', '/bin/bash'];
+					for (const key of ['revision', 'replica', 'container'] as const)
+						if (options[key]) {
+							if (!/^[\w.-]+$/.test(options[key]!)) throw new Error(`Invalid ${key} name.`);
+							args.push(`--${key}`, options[key]!);
+						}
+					await terminal('az', [...args, '--only-show-errors']);
+				},
+				async operate(action, confirmed, options = {}) {
 					if (!confirmed)
 						throw new Error('Confirm this lifecycle operation before changing the Container App.');
-					if (action === 'restart')
-						throw new Error(
-							'ACA restart is not supported: use your deployment tooling for ordered stop/drain/replacement.'
-						);
 					const before = await inspect();
 					if (!before.capabilities[action].supported)
 						throw new Error(before.capabilities[action].reason);
 					// Native ARM Start/Stop, not revision deactivate or maxReplicas=0.
 					// Do not repeat this POST after an uncertain transport failure.
-					await run('az', [
-						'rest',
-						'--method',
-						'post',
-						'--url',
-						`${ref.resourceId}/${action}?api-version=${API_VERSION}`,
-						'--subscription',
-						connection.subscriptionId,
-						'--only-show-errors',
-						'--output',
-						'none'
-					]);
+					if (action === 'restart') {
+						const revision = before.revisions?.filter((item) => item.active)[0]?.name;
+						if (options.revision && options.revision !== revision)
+							throw new Error(
+								'The selected revision is no longer the active revision. Refresh before restarting.'
+							);
+						await client.text(
+							[
+								'containerapp',
+								'revision',
+								'restart',
+								...scope,
+								'--name',
+								name,
+								'--revision',
+								revision!,
+								'--output',
+								'none'
+							],
+							120_000
+						);
+					} else
+						await client.text([
+							'rest',
+							'--method',
+							'post',
+							'--url',
+							`${ref.resourceId}/${action}?api-version=${API_VERSION}`,
+							'--subscription',
+							connection.subscriptionId,
+							'--output',
+							'none'
+						]);
 					let snapshot: HostingSnapshot;
 					try {
 						snapshot = await inspect();

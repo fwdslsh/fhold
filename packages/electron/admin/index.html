@@ -27,9 +27,10 @@
           <p class="help-text">Use your normal SSH connection. If sign-in or host trust needs attention, first run <code>ssh &lt;host&gt;</code> in a terminal. No password or private key is stored here.</p>
         </div>
         <div id="hosting-azure-fields" class="form-stack" hidden>
-          <label class="field" for="hosting-subscription"><span>Subscription ID</span><input id="hosting-subscription" autocomplete="off" /></label>
-          <label class="field" for="hosting-group"><span>Resource group</span><input id="hosting-group" autocomplete="off" /></label>
-          <p class="help-text">Run <code>az login</code> on this computer first. Deployment configuration remains with your existing tooling.</p>
+          <div class="button-row"><button id="hosting-sign-in" class="secondary" type="button">Sign in to Azure</button><button id="hosting-load-scopes" class="secondary" type="button">Load subscriptions</button></div>
+          <label class="field" for="hosting-subscription"><span>Subscription</span><select id="hosting-subscription"><option value="">Choose a subscription</option></select></label>
+          <label class="field" for="hosting-group"><span>Resource group</span><select id="hosting-group"><option value="">Choose a resource group</option></select></label>
+          <p class="help-text">Uses Azure CLI on this computer. Sign-in opens its native browser flow; no Azure credentials are saved by fhold. Choose where your existing agents are deployed.</p>
         </div>
         <details id="hosting-advanced" class="disclosure"><summary>Advanced</summary><div class="form-stack disclosure-body">
           <label class="field" for="hosting-id"><span>CLI connection name</span><input id="hosting-id" required pattern="[a-z0-9][a-z0-9-]{0,62}" autocomplete="off" /></label>
@@ -295,30 +296,40 @@
         <main id="main-content" tabindex="-1">
           <section id="view-hosted" class="view-panel" hidden aria-labelledby="view-title">
             <section class="panel">
-              <h2>Instance</h2>
-              <p id="hosted-location" class="instance-path"></p>
+              <h2>Agent</h2>
               <p id="hosted-state" class="help-text" aria-live="polite"></p>
               <p id="hosted-warnings" class="help-text warning-text" role="status" hidden></p>
-              <pre id="hosted-revisions" class="help-text" hidden></pre>
               <div class="button-row">
                 <button class="secondary" type="button" data-hosted-action="start">Start</button>
                 <button class="secondary" type="button" data-hosted-action="restart">Restart</button>
                 <button class="secondary" type="button" data-hosted-action="stop">Stop</button>
                 <a id="hosted-open-agent" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode</a>
+                <a id="hosted-open-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Deployment portal</a>
               </div>
               <p id="hosted-restart-detail" class="help-text"></p>
-            </section>
-            <section class="panel">
-              <h2>Settings and data</h2>
-              <p id="hosted-settings-detail" class="help-text"></p>
-              <p id="hosted-transfer-detail" class="help-text"></p>
               <p id="hosted-client-detail" class="help-text"></p>
             </section>
             <details class="panel panel-disclosure">
               <summary>Recent logs</summary>
-              <p class="help-text">ACA shows platform system logs, which are available without an active replica. Use the Azure CLI for a selected replica’s console logs.</p>
+              <p class="help-text">Platform logs do not require a live replica. Agent logs come from the selected revision and container; an idle app may have no console logs available.</p>
+              <div class="field-grid">
+                <label class="field" for="hosted-log-type"><span>Source</span><select id="hosted-log-type"><option value="system">Platform</option><option value="console">Agent console</option></select></label>
+                <label class="field" for="hosted-log-revision"><span>Revision</span><select id="hosted-log-revision"><option value="">Latest revision</option></select></label>
+                <label class="field" for="hosted-log-container"><span>Container</span><select id="hosted-log-container"><option value="">Default container</option></select></label>
+              </div>
               <button id="hosted-load-logs" class="secondary" type="button">Load logs</button>
               <textarea id="hosted-logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent hosted instance logs">Logs have not been loaded.</textarea>
+            </details>
+            <details class="panel panel-disclosure">
+              <summary>Agent settings and data</summary>
+              <p id="hosted-access-detail" class="help-text"></p>
+              <p id="hosted-settings-detail" class="help-text"></p>
+              <p id="hosted-transfer-detail" class="help-text"></p>
+            </details>
+            <details class="panel panel-disclosure">
+              <summary>Deployment details</summary>
+              <p id="hosted-location" class="instance-path"></p>
+              <pre id="hosted-revisions" class="help-text" hidden></pre>
             </details>
           </section>
           <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-heading">

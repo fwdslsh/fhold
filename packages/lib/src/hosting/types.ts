@@ -1,6 +1,6 @@
 import type { StackConfig } from '../control-plane/stack-config.js';
 import type { RestartStatus } from '../control-plane/runtime-revision.js';
-import type { InstanceManagement } from '../management/types.js';
+import type { InstanceManagement, DirectoryListing } from '../management/types.js';
 
 export type HostingConnection =
 	| { kind: 'local-docker'; id: 'local'; label: string }
@@ -19,6 +19,19 @@ export type InstanceRef =
 	| { kind: 'azure-container-apps'; connectionId: string; resourceId: string };
 
 export type HostingAction = 'start' | 'stop' | 'restart';
+export type HostingActionOptions = { revision?: string };
+export type ConnectionCheck = {
+	ok: boolean;
+	repairable: boolean;
+	checks: Array<{ name: string; ok: boolean; detail: string }>;
+	instances: InstanceSummary[];
+};
+export type HostingChoice = { value: string; label: string };
+export type ConnectionSetup = {
+	/** Native sign-in runs on the management computer, never inside Assistant. */
+	signIn(): Promise<void>;
+	choices(field: string, values?: Record<string, string>): Promise<HostingChoice[]>;
+};
 export type HostingCapabilities = Record<
 	HostingAction | 'settings' | 'transfer',
 	{ supported: boolean; reason?: string }
@@ -39,8 +52,12 @@ export type HostingSnapshot = InstanceSummary & {
 	config?: StackConfig;
 	pendingRestart?: RestartStatus;
 	platformState?: string;
-	revisions?: Array<{ name: string; active: boolean; replicas: number; health: string }>;
+	revisions?: Array<{ name: string; active: boolean; replicas?: number; health: string }>;
 	clientUrl?: string;
+	portalUrl?: string;
+	containers?: Array<{ name: string; image: string }>;
+	providerLabel?: string;
+	guidance?: { access?: string; client?: string; restart?: string };
 };
 export type HostingResult = { snapshot: HostingSnapshot; message?: string; pending?: boolean };
 export type HostingLogOptions = {
@@ -57,10 +74,22 @@ export interface InstanceSession {
 	}): InstanceManagement;
 	readonly ref: InstanceRef;
 	inspect(): Promise<HostingSnapshot>;
-	operate(action: HostingAction, confirmed: boolean): Promise<HostingResult>;
+	operate(
+		action: HostingAction,
+		confirmed: boolean,
+		options?: HostingActionOptions
+	): Promise<HostingResult>;
 	logs(options?: HostingLogOptions): Promise<string>;
+	console?(options?: Pick<HostingLogOptions, 'revision' | 'replica' | 'container'>): Promise<void>;
 }
 export interface HostingProvider {
+	/** Provider-specific host setup and diagnostics; discovery itself is read-only. */
+	check?(): Promise<ConnectionCheck>;
+	readonly emptyHint?: string;
+	installation?: {
+		info(): Promise<{ instancesDirectory: string; defaultHome: string }>;
+		directory(path?: string): Promise<DirectoryListing>;
+	};
 	listInstances(): Promise<InstanceSummary[]>;
 	selectInstance(selector: string): Promise<InstanceRef>;
 	open(ref: InstanceRef): InstanceSession;
@@ -97,19 +126,14 @@ export function instanceKey(ref: InstanceRef): string {
 	]);
 }
 
-export function capabilities(restart = true, local = false): HostingCapabilities {
-	const reason = 'Manage these settings and files on the Docker host with its fhold CLI.';
-	return {
-		start: { supported: true },
-		stop: { supported: true },
-		restart: restart
-			? { supported: true }
-			: {
-					supported: false,
-					reason:
-						'Use the deployment tooling for an ordered stop, drain and replacement. ACA restart is not a Compose recreate.'
-				},
-		settings: { supported: local, ...(local ? {} : { reason }) },
-		transfer: { supported: local, ...(local ? {} : { reason }) }
-	};
+export function capabilities(
+	supported: ReadonlyArray<keyof HostingCapabilities>,
+	reason = 'This operation is not available for this instance.'
+): HostingCapabilities {
+	return Object.fromEntries(
+		(['start', 'stop', 'restart', 'settings', 'transfer'] as const).map((name) => [
+			name,
+			supported.includes(name) ? { supported: true } : { supported: false, reason }
+		])
+	) as HostingCapabilities;
 }
