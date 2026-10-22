@@ -18,7 +18,7 @@ import {
 } from '../admin/connections.js';
 import { bindConfigurationEvents } from '../admin/configuration.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
-import { endpoint, isHealthy, promptVisible } from '../admin/model.js';
+import { endpoint, isHealthy, promptVisible, serviceImageDetails } from '../admin/model.js';
 import { bindRecoveryEvents, recoveryInput, renderRecovery, renderRecoveryStatus, updateRecoveryFields } from '../admin/recovery.js';
 import {
 	bindRemoteEvents,
@@ -1138,6 +1138,40 @@ describe('Admin instance picker and automatic status', () => {
 			config: defaultStackConfig(), portalSecrets: {}, portalMappings: { discord: { users: {} }, slack: { users: {} } }, credentials: []
 		};
 	}
+	it('distinguishes actual container image tags from configured and available image tags', () => {
+		const snapshot = { ...runtimeSnapshot(), updateImageTag: 'available-release', services: [
+			{ name: 'guardian', state: 'exited', health: '', image: 'fwdslsh/fhold-guardian:prior-release' },
+			{ name: 'assistant', state: 'running', health: 'healthy', image: 'fwdslsh/fhold-assistant:actually-running' }
+		] };
+		snapshot.config.deployment.images.assistant = 'saved-not-applied';
+		renderServices(snapshot);
+		const imageInRow = (index: number) => control('services').children[index].children[0].children[1].children[1].textContent;
+		expect(imageInRow(0)).toBe('actually-running');
+		expect(imageInRow(1)).toBe('prior-release');
+		expect(snapshot.services[0].name).toBe('guardian');
+		expect(control('update-image-tag').textContent).toBe('available-release');
+		expect(control('update-stack').disabled).toBe(false);
+		renderServices({ ...snapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
+		expect(imageInRow(0)).toBe('Unavailable');
+		renderServices({ ...snapshot, updateImageTag: undefined });
+		expect(control('update-image-tag').textContent).toBe('Unavailable');
+	});
+	it('formats tags, private registry ports and digests without inventing a latest tag', () => {
+		expect(serviceImageDetails('registry.test:5000/team/assistant:beta')).toEqual({ label: 'Image tag', value: 'beta' });
+		expect(serviceImageDetails('registry.test:5000/team/assistant')).toEqual({ label: 'Image', value: 'registry.test:5000/team/assistant' });
+		const digest = `sha256:${'a'.repeat(64)}`;
+		expect(serviceImageDetails(`team/assistant@${digest}`)).toEqual({ label: 'Image digest', value: digest });
+		expect(serviceImageDetails(`team/assistant:beta@${digest}`)).toEqual({ label: 'Image tag', value: 'beta' });
+		expect(serviceImageDetails(digest)).toEqual({ label: 'Image digest', value: digest });
+		expect(serviceImageDetails(undefined)).toEqual({ label: 'Image tag', value: 'Unavailable' });
+	});
+	it('keeps Update behind confirmation when an available image tag is shown', async () => {
+		let updates = 0;
+		state.api = { confirmRestart: async () => false, update: async () => { updates++; } };
+		bindRuntimeEvents();
+		await control('update-stack').listeners.get('click')?.({});
+		expect(updates).toBe(0);
+	});
 	it('reports actual runtime state on Overview without equating a container with account readiness', () => {
 		const snapshot = {
 			...runtimeSnapshot()

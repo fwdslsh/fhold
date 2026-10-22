@@ -20,6 +20,7 @@ export type ComposeOptions = {
 
 export type ComposePsRow = {
 	service: string;
+	image?: string;
 	state: string;
 	health: string;
 	id: string;
@@ -288,6 +289,7 @@ export function parseComposePsRows(stdout: string): ComposePsRow[] {
 				if (!service) continue;
 				rows.push({
 					service,
+					...(typeof item.Image === 'string' ? { image: item.Image } : {}),
 					state: String(item.State ?? ''),
 					health: String(item.Health ?? ''),
 					id: String(item.ID ?? ''),

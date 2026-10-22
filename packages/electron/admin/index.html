@@ -365,8 +365,14 @@
                   <button id="start-stack" data-action="start" class="secondary" type="button">Start</button>
                   <button id="restart-stack" data-action="restart" class="secondary" type="button">Restart</button>
                   <button id="stop-stack" data-action="stop" class="danger subtle" type="button">Stop</button>
-				  <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
+              </div>
+              <div class="runtime-update">
+                <div class="runtime-update-action">
+                  <span>Available image tag <code id="update-image-tag">Unavailable</code></span>
+                  <button id="update-stack" class="secondary" type="button">Update</button>
+                </div>
+                <p class="help-text">Included with this fhold version. Custom image settings are kept.</p>
               </div>
               <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
               <div id="services" class="services" aria-live="polite"></div>

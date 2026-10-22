@@ -5,10 +5,31 @@ import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { serveManagementSession } from './session.js';
 import { localInstanceManagement } from './instance.js';
+import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
+import type { ManagedSnapshot } from './types.js';
 
 const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+test('snapshot reports the managing CLI runtime cohort locally and over the SSH session envelope', async () => {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-session-version-'));
+	roots.push(root);
+	const home = join(root, 'not-installed');
+	const management = localInstanceManagement(home);
+	try {
+		const snapshot = await management.call<ManagedSnapshot>('snapshot');
+		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_VERSION);
+		let output = '';
+		await serveManagementSession(
+			Readable.from([`${JSON.stringify({ id: 1, homeDir: home, method: 'snapshot' })}\n`]),
+			new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } })
+		);
+		expect(JSON.parse(output)).toMatchObject({ id: 1, ok: true, value: { updateImageTag: FH_RUNTIME_VERSION } });
+		expect(existsSync(home)).toBe(false);
+	} finally {
+		await management.close();
+	}
 });
 test('native session routes paths only through JSON and continues after a failed read', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-session-test-'));

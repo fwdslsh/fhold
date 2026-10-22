@@ -1,5 +1,25 @@
 # Admin verification
 
+## Overview image information
+
+Overview shows each existing container's image tag from Docker's Compose status,
+not the tag saved in instance settings. Stopped containers retain their reported
+image tag; missing metadata says Unavailable. Digest-only images show their digest,
+and an untagged reference is shown as-is without inventing a `latest` tag. The full
+reported reference is available on hover. Status and image version remain separate.
+
+The available image tag beside Update is the published runtime cohort included
+with the CLI managing that instance. SSH instances report the remote CLI's cohort,
+not the desktop app's version. This is not a live registry lookup; custom image
+pins remain preserved by the existing update operation. Matching tags do not
+disable Update or establish that mutable tags/content are current. Missing version
+metadata does not block management. No new automatic update or restart is added.
+
+Manually check mixed container versions, stopped/unhealthy services, missing Docker
+metadata, long custom tags, narrow widths and 200% text size. Confirm Update remains
+adjacent to its available tag, lifecycle actions are separate, refresh does not
+replace observed tags with saved intent, and cancelling Update performs no mutation.
+
 ## Current wizard and Apps
 
 The current preview removes the Welcome/creation headings and duplicate naming

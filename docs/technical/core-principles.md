@@ -182,6 +182,10 @@ Admin restarts and instance switches. Only successful healthy activation clears
 the pending state; updates also verify their selected image identities first.
 The existing lifecycle lock and Compose path own application. No background
 service, automatic restart or second configuration store is introduced.
+Overview shows observed container image tags independently of saved intent and
+runtime health. The available image tag comes from the managing tool's bundled
+runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
+latest version. Update preserves explicit custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.

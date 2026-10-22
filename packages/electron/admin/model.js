@@ -35,6 +35,19 @@ export function friendlyServiceName(name) {
 	return name;
 }
 
+export function serviceImageDetails(image) {
+	if (typeof image !== 'string' || !image.trim())
+		return { label: 'Image tag', value: 'Unavailable' };
+	const [reference, digest] = image.trim().split('@');
+	if (/^sha256:[a-f0-9]+$/i.test(reference))
+		return { label: 'Image digest', value: reference };
+	const name = reference.slice(reference.lastIndexOf('/') + 1);
+	const separator = name.lastIndexOf(':');
+	if (separator !== -1) return { label: 'Image tag', value: name.slice(separator + 1) };
+	if (digest) return { label: 'Image digest', value: digest };
+	return { label: 'Image', value: reference };
+}
+
 export function promptVisible(prompt, values) {
 	if (!prompt.when) return true;
 	const matches = values[prompt.when.key] === prompt.when.value;

@@ -12,8 +12,11 @@ export type ManagedSnapshot = {
 	homeDir: string;
 	configPath: string;
 	config: StackConfig;
+	/** Runtime image cohort included with the CLI managing this target, not a registry lookup. */
+	updateImageTag?: string;
 	services: Array<{
 		name: string;
+		image?: string;
 		state: string;
 		health: string;
 		warnings?: string[];

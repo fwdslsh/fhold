@@ -41,6 +41,7 @@ export type HostingSnapshot = InstanceSummary & {
 	capabilities: HostingCapabilities;
 	services: Array<{
 		name: string;
+		image?: string;
 		state: string;
 		health: string;
 		id?: string;

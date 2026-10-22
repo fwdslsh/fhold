@@ -104,6 +104,7 @@ export async function inspectLocalInstance(homeDir: string): Promise<HostingSnap
 			? await Promise.all(
 					parseComposePsRows(result.stdout).map(async (row) => ({
 						name: row.service,
+						image: row.image,
 						state: row.state,
 						health: row.health,
 						id: row.id,
