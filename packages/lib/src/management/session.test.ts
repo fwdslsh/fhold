@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
@@ -16,6 +16,11 @@ test('snapshot reports the managing CLI runtime cohort locally and over the SSH 
 	const root = mkdtempSync(join(tmpdir(), 'fhold-session-version-'));
 	roots.push(root);
 	const home = join(root, 'not-installed');
+	// This tests snapshot/transport metadata, not the runner's Docker daemon.
+	const docker = join(root, 'docker');
+	writeFileSync(docker, `#!${process.execPath}\nprocess.exit(0);\n`, {mode:0o700});
+	const previousDocker = process.env.FH_DOCKER_BIN;
+	process.env.FH_DOCKER_BIN = docker;
 	const management = localInstanceManagement(home);
 	try {
 		const snapshot = await management.call<ManagedSnapshot>('snapshot');
@@ -29,6 +34,8 @@ test('snapshot reports the managing CLI runtime cohort locally and over the SSH 
 		expect(existsSync(home)).toBe(false);
 	} finally {
 		await management.close();
+		if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN;
+		else process.env.FH_DOCKER_BIN = previousDocker;
 	}
 });
 test('native session routes paths only through JSON and continues after a failed read', async () => {
