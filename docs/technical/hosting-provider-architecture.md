@@ -1,5 +1,9 @@
 # Hosting-provider architecture for CLI and Admin
 
+For the next refactor, see the [hosting and agent management design](hosting-agent-management-design.md).
+It separates deployment operations from agent/app operations and proposes one
+typed management surface. That proposal is not a claim of shipped capability.
+
 Status: the shared host-side foundation, local lifecycle extraction, SSH machine
 transport/discovery/lifecycle, shared recents and an experimental ACA adapter are
 implemented. SSH now additionally shares the normal Admin/CLI instance operations,

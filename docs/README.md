@@ -8,6 +8,7 @@
 - [Ephemeral implementation review](technical/ephemeral-assistant-implementation-review.md): current code ownership, reusable tests and remaining qualification gates.
 - [Hosted instance management](hosting.md): shared CLI/Admin connections, SSH Docker management and experimental ACA observation/Start/Stop requests.
 - [Hosting-provider architecture](technical/hosting-provider-architecture.md): implemented foundation and phased parity/qualification work.
+- [Hosting and agent management design](technical/hosting-agent-management-design.md): reviewed next-step abstraction, operation contracts and staged provider-parity work; not implemented.
 - [MCP and external clients](remote-mcp.md), [Claude Desktop bridge](claude-desktop.md).
 - [Discord](portals/discord-setup.md) and [Slack](portals/slack-setup.md).
 - [Experimental native remote workers](native-remote-access.md).
