@@ -232,6 +232,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				)
 			);
 		const capture = async (name: string) => {
+			// Full-page captures start at the page origin so offscreen fixed
+			// controls are not composited into the middle of a tall screenshot.
+			await evaluate('window.scrollTo(0, 0)');
 			const size = (await command('Page.getLayoutMetrics')).cssContentSize;
 			const result = await command('Page.captureScreenshot', {
 				format: 'png',
@@ -673,10 +676,17 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('#apply-pending-restart');
 		expect(await evaluate('window.hostingQa.actions')).toBe(2);
 		expect(await evaluate("!document.querySelector('#view-hosted').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
-		// Host connection CRUD uses the same shipped modules and native form/dialog behavior.
+		// App settings is a page, independent of the selected remote/local instance.
 		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');const {manageHostingConnections}=await import('./hosting.js');
+			const {bindAdminSettingsEvents}=await import('./settings.js');
+			window.appQa={snapshot:{settings:{updates:{channel:'stable',automatic:true}},update:{version:'0.3.261001-beta',supported:true,phase:'idle'}},installs:0};
+			state.api.appSettings=async()=>structuredClone(window.appQa.snapshot);
+			state.api.saveAppSettings=async settings=>{window.appQa.snapshot.settings=settings;return structuredClone(window.appQa.snapshot);};
+			state.api.onAppUpdate=listener=>{window.appQa.emit=listener;return()=>{};};
+			state.api.checkAppUpdate=async()=>{window.appQa.snapshot.update={...window.appQa.snapshot.update,phase:'ready',availableVersion:'0.3.261002-beta'};return structuredClone(window.appQa.snapshot);};
+			state.api.installAppUpdate=async()=>{window.appQa.installs++;};
 			window.connectionQa={connections:[{kind:'local-docker',id:'local',label:'This computer'},{kind:'ssh-docker',id:'krang',label:'Krang',host:'krang',roots:[]}],saved:0,removed:0,repair:0,approve:false,checkFails:true};const qa=window.connectionQa;
 			state.api.hostingConnections=async()=>structuredClone(qa.connections);
 			state.api.hostingSaveConnection=async value=>{qa.saved++;qa.connections.push(value);return value;};
@@ -685,9 +695,27 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.hostingCheckConnection=async()=>({ok:!qa.checkFails,repairable:true,instances:[],checks:[{name:'SSH',ok:true,detail:'Connected to krang.'},{name:'Remote CLI',ok:!qa.checkFails,detail:qa.checkFails?'Missing CLI. Install / update remote CLI.':'CLI ready.'}]});
 			state.api.hostingRepairConnection=async()=>{qa.repair++;qa.checkFails=false;return 'Remote CLI updated. No containers changed.';};
 			state.api.hostingInstances=async()=>{throw Error('SSH sign-in failed. Review native SSH configuration.');};
-			await manageHostingConnections();
+			bindAdminSettingsEvents();await manageHostingConnections();
 		})()`);
-		expect(await evaluate("document.querySelector('#hosting-manager').open")).toBe(true);
+		expect(await evaluate("!document.querySelector('#admin-settings').hidden && document.body.dataset.adminSettings==='true'")).toBe(true);
+		expect(await evaluate("document.querySelector('#admin-update-channel').value")).toBe('stable');
+		expect(await evaluate("document.querySelector('#app-shell').inert")).toBe(true);
+		expect(await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")).toBe(true);
+		await capture('admin-settings-stable-desktop.png');
+		await evaluate("document.querySelector('#admin-settings-back').focus()");
+		for (const id of ['admin-update-channel', 'admin-update-automatic', 'admin-updates-save', 'admin-update-check']) {
+			await keypress('Tab', 'Tab', 9);
+			expect(await evaluate('document.activeElement.id')).toBe(id);
+		}
+		await value('#admin-update-channel','beta','change');
+		await click('#admin-updates-save');
+		expect(await evaluate('window.appQa.snapshot.settings.updates.channel')).toBe('beta');
+		await click('#admin-update-check');
+		expect(await evaluate("document.querySelector('#admin-update-install').hidden")).toBe(false);
+		expect(await evaluate('window.appQa.installs')).toBe(0);
+		await capture('admin-settings-update-ready.png');
+		await click('#admin-update-install');
+		expect(await evaluate('window.appQa.installs')).toBe(1);
 		await click('button[aria-label="Check Krang"]');
 		expect(await evaluate("document.querySelector('#hosting-manager-status').textContent")).toContain('needs attention');
 		await click('#hosting-check-details button');
@@ -712,7 +740,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
 		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
 		await capture('hosting-connections-narrow.png');
-		await click('#hosting-manager-close');
+		await evaluate("document.documentElement.style.fontSize='200%'");
+		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		await capture('admin-settings-narrow-200pct.png');
+		await evaluate("document.documentElement.style.fontSize=''");
+		await click('#admin-settings-back');
+		expect(await evaluate("document.querySelector('#admin-settings').hidden && !document.querySelector('#app-shell').inert")).toBe(true);
 		await evaluate("document.querySelector('#app-shell').hidden=true;document.querySelector('#instance-welcome').hidden=false;document.querySelector('#open-hosting').open=true");
 		await click('#hosting-discover');
 		expect(await evaluate("document.querySelector('#hosting-status').textContent")).toContain('SSH sign-in failed');

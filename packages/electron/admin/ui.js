@@ -64,7 +64,7 @@ export function notice(value, tone = 'success', options = {}) {
 export function setBusy(value) {
 	state.operationInFlight = value;
 	document.body.dataset.busy = String(value);
-	const busyRegion = !byId('install-section').hidden
+	const busyRegion = state.adminSettingsOpen ? byId('admin-settings') : !byId('install-section').hidden
 		? byId('install-section')
 		: !byId('instance-import-section').hidden
 			? byId('instance-import-section')

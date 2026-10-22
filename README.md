@@ -22,7 +22,9 @@ same files; contributor build and deployment details are in the
 
 Optional Guardian supplies authenticated, policy-scoped MCP. One Portal image
 adds Discord and Slack. The local Admin utility manages setup and settings,
-with a welcome/instance picker; it is not a chat server or background updater.
+with a welcome/instance picker; it is not a chat server or background service.
+Admin settings manages host connections and automatic AppImage updates, using
+Stable by default. App updates never change running agents or container images.
 Trusted OpenCode and experimental native Codex/Claude workers bypass Guardian.
 Both native supervisors start by default; either can be explicitly disabled.
 Native sign-in, workspace trust and consent remain explicit user decisions.

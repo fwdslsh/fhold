@@ -2233,6 +2233,31 @@ body[data-phase="setup_incomplete"] #provider-connection {
 	box-shadow: var(--shadow);
 }
 .hosting-manager::backdrop { background: #0009; }
+body[data-admin-settings="true"] > :is(#loading-state, #instance-welcome, #error-state, #install-section, #instance-import-section, #app-shell) {
+	display: none;
+}
+.admin-settings-shell {
+	max-width: 880px;
+	margin: 0 auto;
+	padding: 32px clamp(16px, 4vw, 40px) 56px;
+}
+.admin-settings-shell > .page-header {
+	display: block;
+	margin: 24px 0;
+	padding: 0;
+}
+.admin-settings-shell h1 { margin: 0 0 8px; }
+.admin-settings-sections { display: grid; gap: 24px; }
+.admin-settings-shell .form-stack { gap: 14px; margin-top: 0; }
+.admin-settings-shell .form-stack > .help-text { margin: 0; }
+.admin-settings-shell h2 { font-size: 1.125rem; line-height: 1.25; letter-spacing: -.015em; }
+.admin-settings-shell .section-heading { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.admin-settings-shell .section-heading h2 { margin: 0; }
+.admin-settings-shell .field { max-width: 420px; }
+.admin-settings-shell progress { width: 100%; accent-color: var(--accent); }
+.admin-settings-link { margin-top: 16px; color: var(--ink-soft); }
+.admin-update-badge { display: inline-block; margin-left: 8px; font-size: .75rem; color: var(--success); }
+.instance-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .hosting-manager-header, .hosting-connection-row {
 	display: flex;
 	align-items: center;

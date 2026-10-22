@@ -5,6 +5,8 @@ export function createAdminState() {
 		currentConfig: null,
 		currentSnapshot: null,
 		currentView: 'overview',
+		adminSettingsOpen: false,
+		appSettingsSnapshot: undefined,
 		instancesDirectory: '',
 		recentInstances: [],
 		snapshotPromise: undefined,

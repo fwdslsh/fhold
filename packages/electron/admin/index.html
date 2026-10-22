@@ -11,8 +11,31 @@
     <link rel="stylesheet" href="admin.css" />
   </head>
   <body>
-    <dialog id="hosting-manager" class="hosting-manager" aria-labelledby="hosting-manager-title">
-      <header class="hosting-manager-header"><h2 id="hosting-manager-title">Host connections</h2><button id="hosting-manager-close" class="text-button" type="button" aria-label="Close host connections">Close</button></header>
+    <main id="admin-settings" class="admin-settings-shell" tabindex="-1" hidden aria-labelledby="admin-settings-title">
+      <button id="admin-settings-back" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button>
+      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Admin settings</h1><p class="page-description">Preferences for this app. Your agents’ settings stay with each instance.</p></header>
+      <div class="admin-settings-sections">
+        <section class="panel form-stack" aria-labelledby="admin-updates-title">
+          <div class="section-heading"><h2 id="admin-updates-title">App updates</h2><span id="admin-app-version" class="help-text"></span></div>
+          <form id="admin-updates-form" class="form-stack">
+            <label class="field" for="admin-update-channel"><span>Update channel</span><select id="admin-update-channel" aria-describedby="admin-update-channel-help"><option value="stable">Stable — recommended</option><option value="beta">Beta — early testing</option><option value="alpha">Alpha — experimental builds</option></select></label>
+            <p id="admin-update-channel-help" class="help-text">Stable releases only. Switching channels never downgrades Admin.</p>
+            <label class="check-row"><input id="admin-update-automatic" type="checkbox" checked /><span>Check for and download updates automatically</span></label>
+            <p class="help-text">Downloaded updates install when you close Admin, or you can restart it sooner. Your agents keep running; containers and remote tools are not updated.</p>
+            <div class="button-row compact"><button id="admin-updates-save" class="secondary" type="submit">Save preferences</button></div>
+          </form>
+          <p id="admin-update-status" class="help-text" role="status" aria-live="polite">Loading update preferences…</p>
+          <progress id="admin-update-progress" max="100" aria-label="Admin update download" hidden></progress>
+          <p id="admin-settings-message" class="help-text" role="status" aria-live="polite" hidden></p>
+          <div class="button-row compact">
+            <button id="admin-update-check" class="secondary" type="button">Check now</button>
+            <button id="admin-update-download" class="secondary" type="button" hidden>Download update</button>
+            <button id="admin-update-install" class="primary" type="button" hidden>Restart Admin to update</button>
+            <a href="https://github.com/fwdslsh/fhold/releases" target="_blank" rel="noreferrer">Release notes &amp; downloads</a>
+          </div>
+        </section>
+    <section id="hosting-manager" class="panel" aria-labelledby="hosting-manager-title">
+      <header class="hosting-manager-header"><h2 id="hosting-manager-title">Host connections</h2></header>
       <p class="help-text">Choose where your agents run. Sign-in stays with your computer’s SSH or Azure tools.</p>
       <div id="hosting-manager-list"></div>
       <p id="hosting-manager-status" class="help-text" role="status" aria-live="polite" hidden></p>
@@ -42,7 +65,9 @@
         </div></details>
         <div class="button-row"><button id="hosting-save" class="primary" type="submit">Save connection</button><button id="hosting-edit-cancel" class="secondary" type="button">Cancel</button></div>
       </form>
-    </dialog>
+    </section>
+      </div>
+    </main>
 	    <a id="skip-link" class="skip-link" href="#main-content">Skip to content</a>
 		<dialog id="remote-directory-dialog" class="hosting-manager" aria-labelledby="remote-directory-title">
 		  <h2 id="remote-directory-title">Choose a folder</h2>
@@ -62,6 +87,7 @@
       <section class="welcome-card instance-card" aria-label="Choose an instance">
         <header class="instance-intro">
           <h1 class="instance-wordmark">f<span aria-hidden="true">/</span>hold</h1>
+          <button class="text-button" type="button" data-admin-settings>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
         </header>
         <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
         <div id="instance-options" class="instance-options">
@@ -81,7 +107,7 @@
 		  <h2>Your instances</h2>
 		  <div class="hosting-picker-row">
             <label class="field" for="hosting-connection"><span>Computer or cloud</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
-            <button id="hosting-manage" class="secondary" type="button">Connections…</button>
+            <button id="hosting-manage" class="secondary" type="button">Admin settings</button>
 		  </div>
 		  <button id="hosting-discover" class="text-button" type="button" hidden>Try again</button>
             <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
@@ -100,6 +126,7 @@
 	        <dl class="detail-list compact"><div><dt>Selected home</dt><dd id="error-home">Checking…</dd></div></dl>
 	        <button id="retry-snapshot" class="primary" type="button">Try again</button>
             <button class="secondary" type="button" data-instance-switch>Choose another instance</button>
+			<button class="text-button" type="button" data-admin-settings>Admin settings</button>
 	      </section>
 	    </main>
 
@@ -270,6 +297,7 @@
             </div>
           </section>
         </div>
+        <button class="nav-item admin-settings-link" type="button" data-admin-settings>Admin settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
       </aside>
 
       <div class="workspace">

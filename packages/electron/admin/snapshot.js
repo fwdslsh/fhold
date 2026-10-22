@@ -200,6 +200,7 @@ export async function refresh({ statusOnly = false } = {}) {
 export async function refreshVisibleStatus() {
 	if (
 		document.hidden ||
+		state.adminSettingsOpen ||
 		state.operationInFlight ||
 		!state.currentSnapshot ||
 		byId('app-shell').hidden ||

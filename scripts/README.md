@@ -16,6 +16,7 @@ Only a small script surface remains active.
 | `smoke-admin-artifact.mjs` | Extract and launch a fresh Linux Admin AppImage on its build runner |
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
+| `validate-admin-update-feeds.mjs` | Verify both generated Electron feeds match their exact AppImage version, architecture, size and SHA-512 |
 | `live-acceptance.ts` | Opt-in real-provider runtime acceptance after a retained Admin E2E run |
 | `provider-settings-native.test.ts` | Opt-in shipped-image native provider settings, live file watching and controlled compatible-transport regression |
 | `smoke-opencode-v2-live.mjs` | Image-internal native settings and plugin hot-update checks, including atomic saves and existing-session permission changes |

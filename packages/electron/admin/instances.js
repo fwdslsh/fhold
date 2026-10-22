@@ -1,7 +1,7 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
-import { targetKey, targetLocation, manageHostingConnections } from './hosting.js';
+import { targetKey, targetLocation } from './hosting.js';
 import { chooseManagedDirectory } from './directories.js';
 import { resetProviderState } from './providers.js';
 
@@ -41,8 +41,7 @@ export function renderInstancePicker(snapshot) {
 				value: targetKey(target),
 				label: instanceName(target)
 			})),
-			{ value: 'open-another', label: 'Open another instance…' },
-			{ value: 'manage-hosting', label: 'Manage host connections…' }
+			{ value: 'open-another', label: 'Open another instance…' }
 		],
 		selected
 	);
@@ -269,7 +268,6 @@ export function bindInstanceEvents() {
 					: current?.homeDir || '';
 		byId('instance-picker').value = selected;
 		if (requested === 'open-another') await showInstances();
-		else if (requested === 'manage-hosting') await manageHostingConnections();
 		else {
 			const target = state.recentInstances.find((item) => targetKey(item) === requested);
 			if (target && targetKey(target) !== selected) await openInstance(target);

@@ -13,6 +13,7 @@ import {
 import { openInstance, renderInstancePicker, showNewInstanceSetup } from './instances.js';
 import { renderRestartStatus } from './restart.js';
 import { chooseManagedDirectory } from './directories.js';
+import { openAdminSettings, closeAdminSettings } from './settings.js';
 
 export function targetKey(target) {
 	return target.kind === 'hosted'
@@ -130,7 +131,7 @@ function selectedConnectionId() {
 		state.currentSnapshot?.target?.connectionId || state.currentSnapshot?.hosting?.ref.connectionId
 	);
 }
-async function loadConnections() {
+export async function loadHostingConnections() {
 	const selected = byId('hosting-connection').value;
 	savedConnections = await state.api.hostingConnections();
 	setOptions(
@@ -141,7 +142,7 @@ async function loadConnections() {
 	renderConnectionList();
 }
 function hostingStatus(value, error = false) {
-	const status = byId(byId('hosting-manager').open ? 'hosting-manager-status' : 'hosting-status');
+	const status = byId(state.adminSettingsOpen ? 'hosting-manager-status' : 'hosting-status');
 	status.textContent = value;
 	status.hidden = !value;
 	status.className = `help-text${error ? ' danger-text' : ''}`;
@@ -186,7 +187,7 @@ async function discover() {
 			instances.length
 				? ''
 				: features.emptyHint ||
-						'No instances found. Check this connection in Manage host connections.'
+						'No instances found. Check this connection in Admin settings.'
 		);
 		for (const instance of instances) {
 			const button = document.createElement('button');
@@ -218,7 +219,7 @@ export async function showHostingChooser(id) {
 	byId('instance-welcome').hidden = false;
 	byId('instance-options').hidden = true;
 	byId('open-hosting').hidden = false;
-	await loadConnections();
+	await loadHostingConnections();
 	if (id) byId('hosting-connection').value = id;
 	await discover();
 }
@@ -320,7 +321,7 @@ function renderConnectionList() {
 			[
 				'Open',
 				async () => {
-					byId('hosting-manager').close();
+					closeAdminSettings();
 					await showHostingChooser(connection.id);
 				}
 			],
@@ -399,7 +400,7 @@ async function removeConnection(connection) {
 	closeEditor();
 	byId('hosting-check-details').replaceChildren();
 	byId('hosting-instance-list').replaceChildren();
-	await loadConnections();
+	await loadHostingConnections();
 	state.recentInstances = state.recentInstances.filter(
 		(item) => item.kind !== 'hosted' || item.ref.connectionId !== connection.id
 	);
@@ -408,13 +409,9 @@ async function removeConnection(connection) {
 }
 export async function manageHostingConnections() {
 	if (state.operationInFlight) return;
-	byId('hosting-manager').showModal();
 	closeEditor();
 	byId('hosting-check-details').replaceChildren();
-	await connectionOperation('Loading connections', async () => {
-		await loadConnections();
-		hostingStatus('');
-	});
+	await openAdminSettings('connections');
 }
 export function bindHostingEvents() {
 	byId('hosting-sign-in').addEventListener(
@@ -471,12 +468,6 @@ export function bindHostingEvents() {
 		} else byId('instance-options').hidden = false;
 	});
 	byId('hosting-manage').addEventListener('click', () => void manageHostingConnections());
-	byId('hosting-manager-close').addEventListener('click', () => {
-		if (!state.operationInFlight) byId('hosting-manager').close();
-	});
-	byId('hosting-manager').addEventListener('cancel', (event) => {
-		if (state.operationInFlight) event.preventDefault();
-	});
 	byId('hosting-new').addEventListener('click', () => editConnection());
 	byId('hosting-edit-cancel').addEventListener('click', closeEditor);
 	byId('hosting-label').addEventListener('input', () => {
@@ -560,20 +551,14 @@ export function bindHostingEvents() {
 				window.location.reload();
 				return;
 			}
-			await loadConnections();
+			await loadHostingConnections();
 			byId('hosting-connection').value = saved.id;
 			closeEditor();
 			byId('hosting-instance-list').replaceChildren();
 			hostingStatus('Connection saved. Check it to verify sign-in and discover instances.');
 			return saved;
 		});
-		if (saved) {
-			await checkConnection(saved);
-			if (!byId('hosting-manager-status').classList.contains('danger-text')) {
-				byId('hosting-manager').close();
-				await showHostingChooser(saved.id);
-			}
-		}
+		if (saved) await checkConnection(saved);
 	});
 	for (const button of all('[data-hosted-action]'))
 		button.addEventListener('click', async () => {

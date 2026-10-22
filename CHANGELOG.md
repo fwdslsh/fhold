@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+Add Admin settings for the desktop app itself, accessible from Welcome and any
+managed instance. Move host connection management there and keep the instance
+picker focused on choosing an instance. Connection editing, checks, repair and
+removal retain the existing native flows; saving a connection stays in Settings.
+
+Use standard electron-updater AppImage updates with GitHub release feeds. Stable
+is the default even in prerelease builds; Beta and Alpha are explicit opt-ins.
+Check/download automatically while Admin is open, with an optional manual mode.
+Install a verified download on normal app quit or an explicitly confirmed Admin
+restart. Agent containers and remote CLIs remain unchanged. Channel changes
+discard previously staged updates without downgrading. PR previews never
+self-update. Publish/checksum both native architecture feeds and validate their
+AppImage hashes before and after release upload.
+
 ## 0.3.261001-beta — Admin Overview and Azure host management
 
 Tooling-only release of the Linux Admin and CLI. Runtime images remain pinned to

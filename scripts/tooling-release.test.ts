@@ -99,7 +99,7 @@ test('root build scripts can change without runtime qualification, but install h
 	).toBe('full');
 });
 test('tooling assets omit the bridge and fresh installs use the published runtime cohort', () => {
-	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(5);
+	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(7);
 	expect(
 		requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools').some((name) =>
 			name.endsWith('.mcpb')

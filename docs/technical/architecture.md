@@ -26,8 +26,12 @@ and Slack adapters and receives only their explicitly needed credential keys.
 
 CLI and Admin call the same host library for install, configuration, credential
 changes and own-backup restore. Per-home locks serialize mutations. Inspection
-does not reconcile or create keys. Admin has no server, tray, background updater
-or automatic window resizing; recent instances are local preferences only.
+does not reconcile or create keys. Admin has no server, tray, standalone background
+service or automatic window resizing; recent instances are local preferences only.
+Its Settings page manages host connections and the app's standard Electron
+AppImage updater. Stable is the default channel, and automatic checks/downloads
+run only while Admin is open. Applying an app update does not update containers,
+change an instance or install a remote CLI.
 
 `state/stack.json` owns fhold deployment intent, including product identity,
 project/image selection, Assistant settings, gateway, portal scope and named

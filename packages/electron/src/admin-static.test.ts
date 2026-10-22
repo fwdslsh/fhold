@@ -32,6 +32,7 @@ import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../ad
 import { createAdminState, state } from '../admin/state.js';
 import { renderHosted, targetKey, bindHostingEvents } from '../admin/hosting.js';
 import { capabilities } from '@fhold/lib';
+import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
 import {
 	initializeAdmin,
 	renderWelcome,
@@ -87,6 +88,7 @@ class Control {
 	getAttribute(name: string) {
 		return this.attributes.get(name) ?? null;
 	}
+	removeAttribute(name: string) { this.attributes.delete(name); }
 	toggleAttribute(name: string, enabled: boolean) {
 		if (enabled) this.attributes.set(name, '');
 		else this.attributes.delete(name);
@@ -1021,6 +1023,47 @@ describe('Admin static security boundary', () => {
 	});
 });
 
+describe('Admin app settings', () => {
+	it('opens without selecting an instance and returns without clearing its draft or resizing', async () => {
+		const snapshot = { phase: 'ready', homeDir: '/unused-test-home', config: defaultStackConfig(), services: [] };
+		state.currentSnapshot = snapshot;
+		state.dirtyForms.add('discord-connections-form');
+		let instanceCalls = 0;
+		state.api = {
+			appSettings: async () => ({ settings: { updates: { channel: 'stable', automatic: true } }, update: { version: '0.3.261001-beta', supported: true, phase: 'idle' } }),
+			hostingConnections: async () => [{ id: 'local', kind: 'local-docker', label: 'This computer' }],
+			snapshot: async () => { instanceCalls++; return snapshot; }
+		};
+		await openAdminSettings();
+		expect(state.adminSettingsOpen).toBe(true);
+		expect(control('admin-settings').hidden).toBe(false);
+		expect(control('admin-update-channel').value).toBe('stable');
+		expect(instanceCalls).toBe(0);
+		closeAdminSettings();
+		expect(state.adminSettingsOpen).toBe(false);
+		expect(state.currentSnapshot).toBe(snapshot);
+		expect(state.dirtyForms.has('discord-connections-form')).toBe(true);
+		expect(control('admin-settings').hidden).toBe(true);
+	});
+	it('shows download readiness separately from container pending restart and keeps manual actions explicit', () => {
+		renderAdminSettings({ settings: { updates: { channel: 'stable', automatic: true } }, update: { version: '0.3.261001-beta', supported: true, phase: 'ready', availableVersion: '0.3.261002' } });
+		expect(control('admin-update-install').hidden).toBe(false);
+		expect(control('admin-update-download').hidden).toBe(true);
+		expect(control('admin-update-status').textContent).toContain('Admin closes');
+		renderAdminSettings({ settings: { updates: { channel: 'beta', automatic: false } }, update: { version: '0.3.261001-beta', supported: true, phase: 'available', availableVersion: '0.3.261002-beta' } });
+		expect(control('admin-update-install').hidden).toBe(true);
+		expect(control('admin-update-download').hidden).toBe(false);
+	});
+	it('does not poll an instance while its Admin settings page is open', async () => {
+		state.currentSnapshot = { phase: 'ready', homeDir: '/unused-test-home', config: defaultStackConfig(), services: [] };
+		state.adminSettingsOpen = true;
+		let calls = 0;
+		state.api = { snapshot: async () => { calls++; return state.currentSnapshot; } };
+		await refreshVisibleStatus();
+		expect(calls).toBe(0);
+	});
+});
+
 describe('Admin instance picker and automatic status', () => {
 	function emptySnapshot() {
 		return {
@@ -1061,7 +1104,7 @@ describe('Admin instance picker and automatic status', () => {
 		];
 		render(snapshot);
 		expect(control('instance-picker').options.map((option) => option.textContent)).toEqual([
-			'personal-agent', 'may', 'june', 'Open another instance…', 'Manage host connections…'
+			'personal-agent', 'may', 'june', 'Open another instance…'
 		]);
 		expect(control('instance-picker').value).toBe(snapshot.homeDir);
 		const sidebar = html.slice(html.indexOf('<aside class="sidebar">'), html.indexOf('</aside>'));

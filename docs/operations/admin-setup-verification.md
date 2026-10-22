@@ -1,5 +1,43 @@
 # Admin verification
 
+## Admin settings and app updates
+
+**Settings** on Welcome and **Admin settings** in the sidebar/error view open
+the app's own settings page, without changing the selected instance or its
+drafts. Host connections now live on this page, not in a modal or the instance
+picker. Add/Edit/Check/Remove and confirmed SSH CLI repair retain their native
+backends. Save stays on the page; Open explicitly returns to instance discovery.
+Returning from Settings leaves the prior page and all running agents alone.
+
+The implementation follows Gutterpress's standard
+[Electron updater and GitHub packaging pattern](https://github.com/dimm-city/gutterpress/blob/849ab469bc2a477214583469ba782de7d6e3c55e/packages/desktop/electron/updater.ts),
+reviewed with its builder configuration. fhold uses public updater APIs and a new
+native updater when changing channels, not Gutterpress's private channel-field
+assignment. fhold also enables automatic downloads by default, as requested.
+The preference remains **Stable** even in an installed beta. Beta receives beta
+and stable releases; Alpha also receives alphas. Automatic checks/downloads run
+at launch and every four hours while Admin is open, with throttled focus checks.
+Manual mode retains Check now and Download update. No standalone service runs.
+
+A ready download has a quiet Settings badge. It installs when Admin normally
+closes; **Restart Admin to update** additionally requires native confirmation
+explaining unsaved forms/sign-in and that agents remain running. Channel changes
+disable the old staged install and do not downgrade. Missing feeds (including
+before the first stable release), rate limiting, offline downloads and unwritable
+AppImage locations remain actionable update errors, not whole-app failures.
+Source runs, extracted installs and PR previews explain why self-updating is
+unavailable. Old updater-free releases need one manual AppImage install.
+
+Qualification: test Settings from Welcome, a local instance, SSH, an ACA view
+and a failed instance; edit/check a connection; go Back with a dirty instance
+form; exercise stable/beta/alpha, disabled automatic checks, progress, ready
+download, cancelled/confirmed restart and failed downloads. Check narrow/200%
+text layouts and keyboard focus. Use temporary profiles only. The packaged
+startup smoke verifies default preferences and real Settings IPC; renderer/unit
+fixtures do not prove a public-to-public update installation. Both generated
+Linux architecture feeds must identify their exact AppImage bytes and ship in
+the release. See [release gates](release.md).
+
 ## Overview image information
 
 Overview shows each existing container's image tag from Docker's Compose status,
@@ -13,7 +51,7 @@ with the CLI managing that instance. SSH instances report the remote CLI's cohor
 not the desktop app's version. This is not a live registry lookup; custom image
 pins remain preserved by the existing update operation. Matching tags do not
 disable Update or establish that mutable tags/content are current. Missing version
-metadata does not block management. No new automatic update or restart is added.
+metadata does not block management. No automatic container update or restart is added.
 
 Manually check mixed container versions, stopped/unhealthy services, missing Docker
 metadata, long custom tags, narrow widths and 200% text size. Confirm Update remains

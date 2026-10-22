@@ -69,6 +69,12 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 						};
 						check();
 					});
+					const preferences = await window.fholdAdmin.appSettings();
+					if (preferences.settings.updates.channel !== 'stable' || !preferences.settings.updates.automatic) throw new Error('Packaged Admin update defaults are incorrect.');
+					document.querySelector('#instance-welcome [data-admin-settings]').click();
+					if (document.querySelector('#admin-settings').hidden || !document.querySelector('#hosting-manager').closest('#admin-settings')) throw new Error('Admin settings page did not open.');
+					document.querySelector('#admin-settings-back').click();
+					if (!document.querySelector('#admin-settings').hidden) throw new Error('Admin settings did not return to Welcome.');
 					const name = document.querySelector('#install-instance-name');
 					const folder = document.querySelector('#install-home');
 					if (!document.querySelector('#install-section').hidden) throw new Error('Setup form was shown before choosing setup.');

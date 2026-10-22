@@ -389,9 +389,9 @@ describe('release completeness gate', () => {
 		expect(productName).toBe('fhold Admin');
 	});
 
-	test('Admin artifacts have explicit updater-free, dash-safe names', () => {
+	test('Admin artifacts have standard GitHub update metadata and dash-safe names', () => {
 		const builder = readFileSync(join(ROOT, 'packages/electron/electron-builder.yml'), 'utf8');
-		expect(builder).toContain('publish: null');
+		expect(Bun.YAML.parse(builder).publish).toEqual({ provider: 'github', owner: 'fwdslsh', repo: 'fhold' });
 		expect(builder).toContain('artifactName: fhold-admin-${version}-${arch}-${os}.${ext}');
 		expect(builder).not.toMatch(/^mac:|^win:/m);
 	});
@@ -541,7 +541,7 @@ describe('release completeness gate', () => {
 		]);
 	});
 
-	test('required assets cover CLI, Admin, MCPB, and checksums without updater feeds', () => {
+	test('required assets cover CLI, Admin, MCPB, checksums and both native update feeds', () => {
 		const required = requiredReleaseAssets('0.1.2610020008-beta.1', productName);
 		for (const binary of CLI_BINARIES) expect(required).toContain(binary);
 		for (const asset of expectedAdminAssets('0.1.2610020008-beta.1', productName))
@@ -549,7 +549,7 @@ describe('release completeness gate', () => {
 		expect(required).toContain(expectedClaudeExtensionAsset('0.1.2610020008-beta.1'));
 		expect(required.some((name) => /mac\.zip|\.exe$/.test(name))).toBe(false);
 		expect(required).toContain('checksums-sha256.txt');
-		expect(required.some((name) => name.endsWith('.yml'))).toBe(false);
+		expect(required.filter((name) => name.endsWith('.yml'))).toEqual(['latest-linux.yml', 'latest-linux-arm64.yml']);
 	});
 
 	test('checksumFor treats the release filename as opaque, including spaces', () => {

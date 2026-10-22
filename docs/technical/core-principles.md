@@ -26,7 +26,11 @@ tool names, configuration and licenses are not renamed.
 Assistant is the only default container and includes OpenCode, AKM and
 supercronic. Guardian and the single Discord/Slack Portal image are optional.
 CLI is the primary installer/orchestrator; Admin is a local settings utility
-with no server, chat, updater, tray or background control plane. The optional
+with no server, chat, tray or background control plane. Its standard Electron
+AppImage updater checks/downloads while Admin is open, defaults to the Stable
+channel (even in a prerelease build), and applies on ordinary quit or an explicitly
+confirmed Admin restart. It never restarts agents, updates container images or
+repairs remote CLIs. Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
@@ -128,6 +132,14 @@ managed Compose labels and bounded root/child/home candidates. Host-CLI repair i
 explicitly confirmed, checksum-verified and atomic; it never changes Docker,
 SSH trust or instance files. Connection editing/removal affects metadata only,
 clearing scoped recents on endpoint changes rather than silently retargeting them.
+Admin's own Settings page owns host-connection management and app-update
+preferences. These remain accessible without a selected or healthy instance.
+Update preferences live in Admin's local user-data `settings.json`, separate
+from shared hosting metadata and all instance files. Beta and Alpha are explicit
+opt-ins; switching back to Stable discards any staged prerelease update and waits
+for a newer stable release without downgrading. GitHub releases carry the standard
+electron-builder Linux feed for each architecture, verified alongside installers.
+There is no custom release protocol, updater service or startup installer.
 
 SSH opens a session-scoped management facade over stdin/stdout, preserving native
 sign-in and model-verification state. Local and SSH Admin use the same instance

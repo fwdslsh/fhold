@@ -4,6 +4,19 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	appSettings: () => ipcRenderer.invoke(ADMIN_CHANNELS.appSettings),
+	saveAppSettings: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.saveAppSettings, value),
+	checkAppUpdate: () => ipcRenderer.invoke(ADMIN_CHANNELS.checkAppUpdate),
+	downloadAppUpdate: () => ipcRenderer.invoke(ADMIN_CHANNELS.downloadAppUpdate),
+	installAppUpdate: () => ipcRenderer.invoke(ADMIN_CHANNELS.installAppUpdate),
+	onAppUpdate: (listener) => {
+		const receive = (_event: Electron.IpcRendererEvent, snapshot: Parameters<typeof listener>[0]) =>
+			listener(snapshot);
+		ipcRenderer.on(ADMIN_CHANNELS.appUpdateChanged, receive);
+		return () => {
+			ipcRenderer.removeListener(ADMIN_CHANNELS.appUpdateChanged, receive);
+		};
+	},
 	hostingFeatures: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingFeatures, id),
 	hostingSetup: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSetup, value),
 	directory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.directory, value),

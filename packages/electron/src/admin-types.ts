@@ -20,6 +20,8 @@ import type { HostingChoice, HostingLogOptions } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
 import type { ManagedSnapshot } from '@fhold/lib';
+import type { AdminSettings } from './admin-settings.js';
+import type { AdminAppSnapshot } from './admin-updates.js';
 
 export type AdminSnapshot = ManagedSnapshot;
 
@@ -46,6 +48,12 @@ export type AdminWelcome = {
 };
 
 export type AdminApi = {
+	appSettings(): Promise<AdminAppSnapshot>;
+	saveAppSettings(value: AdminSettings): Promise<AdminAppSnapshot>;
+	checkAppUpdate(): Promise<AdminAppSnapshot>;
+	downloadAppUpdate(): Promise<AdminAppSnapshot>;
+	installAppUpdate(): Promise<void>;
+	onAppUpdate(listener: (snapshot: AdminAppSnapshot) => void): () => void;
 	hostingFeatures(id: string): Promise<{ installation: boolean; emptyHint?: string }>;
 	hostingSetup(value: {
 		provider: HostingConnection['kind'];
@@ -163,6 +171,12 @@ export type AdminApi = {
 };
 
 export const ADMIN_CHANNELS = {
+	appSettings: 'admin:app-settings',
+	saveAppSettings: 'admin:save-app-settings',
+	checkAppUpdate: 'admin:check-app-update',
+	downloadAppUpdate: 'admin:download-app-update',
+	installAppUpdate: 'admin:install-app-update',
+	appUpdateChanged: 'admin:app-update-changed',
 	hostingFeatures: 'admin:hosting-features',
 	hostingSetup: 'admin:hosting-setup',
 	directory: 'admin:directory',
