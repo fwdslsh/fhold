@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased — Azure management and provider cleanup
+## 0.3.261001-beta — Admin Overview and Azure host management
+
+Tooling-only release of the Linux Admin and CLI. Runtime images remain pinned to
+`0.3.261000-beta`; no container upgrade is required.
+
+Overview displays each container's observed image tag, independently of saved
+configuration and runtime health. Show the runtime image tag included with the
+managing tool beside Update, separate from Start/Restart/Stop. Preserve custom
+image pins and native restart confirmation. Improve service ordering, tag wrapping
+and narrow/200%-text layouts, with designer-reviewed screenshots and regressions.
+Missing metadata stays unavailable instead of guessing a version.
+
+PRs targeting main independently build and launch-smoke a Linux x86_64 Admin
+AppImage, named by PR/commit and downloadable for 14 days without publishing a
+release or container images.
 
 Host connections can sign in through Azure CLI's native browser flow and choose
 subscriptions/resource groups without pasting IDs. Connection checks separately
