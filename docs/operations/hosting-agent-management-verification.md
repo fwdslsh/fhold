@@ -86,6 +86,7 @@ Final local checks on the source-frozen implementation:
 | Admin real-Chromium provider workflow | Passed, 298 assertions against the synthetic native API. No vendor account or billed inference. |
 | `bun run lint` | Passed its configured gate; repository style warnings remain. This is not a warning-free lint claim. |
 | CLI compile and Admin bundle | Both passed. |
+| Packaged Linux x64 AppImage startup | Passed with its real preload/renderer and an isolated temporary home/profile. |
 | `bun run docs:test` | Both documentation tests passed. |
 | Generated stopped test home: Compose `config --quiet`, all three profiles | Passed without starting containers. |
 | `git diff --check` | Passed. |
@@ -98,6 +99,11 @@ retention and configured-versus-observed image provenance. Review findings were
 fixed and regression-tested, including first-install setup, revision selection,
 RPC-only remote status, recovery mutation rendering, app-policy editing and
 one-click SSH access.
+
+The initial PR AppImage smoke caught one embedded assertion still reading the
+old top-level configuration shape. It now reads the normalized optional Docker
+subview, with an architecture regression guard. Both reviewers approved that
+follow-up, and the actual rebuilt AppImage passed the startup smoke locally.
 
 No dependency pins, runtime/image sources, backup formats or live deployments
 changed. The skipped image tests and real ACA signal/storage/scale qualification

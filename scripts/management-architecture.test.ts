@@ -48,6 +48,9 @@ describe('hosting and agent management boundaries', () => {
 		const source = read('packages/electron/src/admin-app.ts');
 		expect(source).not.toMatch(/\.management\?\./);
 		expect(source).not.toMatch(/phase:\s*['"]remote['"]/);
+		const startup = read('packages/electron/src/admin-main.ts');
+		expect(startup).not.toMatch(/snapshot\.config\b/);
+		expect(startup).toContain("snapshot.docker?.config.deployment.projectName !== 'custom-agent'");
 	});
 	it('keeps native services and generic composition independent of deployment completion and transport classes', () => {
 		const service = read('packages/lib/src/management/agent-services.ts');

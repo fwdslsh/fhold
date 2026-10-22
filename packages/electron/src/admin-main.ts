@@ -94,7 +94,7 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					const snapshot = await window.fholdAdmin.snapshot();
 					if (snapshot.lifecycle.state !== 'known' || snapshot.lifecycle.value !== 'not-installed')
 						throw new Error('Smoke home is not fresh.');
-					if (snapshot.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
+					if (snapshot.docker?.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
 				})()`);
 			})(),
 			new Promise<never>((_resolve, reject) => {
