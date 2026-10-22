@@ -260,20 +260,20 @@ button.text-button.danger {
 }
 
 .error-state {
-	padding: 24px;
+	padding: var(--space-lg);
+	align-content: start;
+	padding-top: clamp(48px, 15vh, 120px);
 }
 
 .error-card {
-	width: min(620px, 100%);
-	padding: 36px;
-	border: 1px solid var(--border-soft);
-	border-radius: var(--control-radius);
-	background: var(--surface);
+	width: min(520px, 100%);
+	padding: var(--space-lg) 0;
 }
 
 .error-card h1 {
-	margin: 8px 0 12px;
+	margin: 0 0 var(--space-md);
 	font-family: inherit;
+	font-size: var(--text-model);
 }
 
 .error-card > p:not(.eyebrow) {
@@ -559,7 +559,7 @@ button.text-button.danger {
 
 .overview-intro {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
 	flex-wrap: wrap;
 	gap: 24px;
@@ -569,6 +569,7 @@ button.text-button.danger {
 
 .overview-identity {
 	display: grid;
+	flex: 1 1 16rem;
 	gap: 8px;
 	min-width: 0;
 }
@@ -600,11 +601,25 @@ button.text-button.danger {
 	gap: 16px;
 	flex-wrap: wrap;
 }
-.hosted-summary {
-	padding: 0 0 var(--space-lg);
-	border-bottom: 1px solid var(--border-soft);
+.capability-fields {
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
-#hosted-state { margin-top: 0; font-size: var(--text-section); color: var(--ink); }
+
+.capability-fields[disabled] :is(input, select, textarea, button) {
+	cursor: not-allowed;
+}
+
+.capability-note {
+	margin: var(--space-md) 0;
+	padding: var(--space-sm) var(--space-md);
+	border-left: 2px solid var(--border);
+	color: var(--ink-soft);
+	font-size: var(--text-label);
+	line-height: 1.5;
+}
 
 #overview-home {
 	flex-basis: 100%;

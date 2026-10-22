@@ -139,7 +139,7 @@ try {
 			),
 		'full SSH Admin overview'
 	);
-	assert.equal(await evaluate("document.querySelector('#view-hosted').hidden"), true);
+	assert.equal(await evaluate("document.querySelector('#mobile-navigation').hidden"), false);
 	assert.deepEqual(
 		await evaluate('({width:outerWidth,height:outerHeight})'),
 		geometry,

@@ -284,6 +284,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe('This computer');
 		expect(await evaluate("document.querySelector('#instance-page-header').hidden")).toBe(true);
 		expect(await evaluate("document.querySelector('#services .service').children.length")).toBe(3);
+		const managementStructure = await evaluate(`({
+			navigation:[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view),
+			apps:[...document.querySelectorAll('[data-connection-app]')].map(app=>app.dataset.connectionApp),
+			system:[...document.querySelector('#view-system').children].map(section=>section.id)
+		})`);
 		expect(await evaluate("document.fonts.check('14px \"Instrument Sans\"')")).toBe(true);
 		expect(await evaluate("[...document.fonts].find(font=>font.family==='Instrument Sans')?.status")).toBe('loaded');
 		expect(await evaluate("document.querySelector('.sidebar .brand-mark')")).toBeNull();
@@ -710,16 +715,32 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate('window.installQa.installs')).toBe(2);
 		expect(await evaluate('window.installQa.reads')).toBe(3);
 		await capture('install-distinct-retry-passed.png');
-		// The hosted view consumes the same actual renderer, but deliberately does
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
+			state.providersLoaded=true;state.currentView='overview';
+			render({...window.overviewQa,phase:'ready',connectionLabel:'Krang',homeDir:'/opt/stacks/agent',target:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'}});
+		})()`);
+		for (const view of ['overview', 'provider', 'connections', 'system']) {
+			await pointerClick(`[data-view="${view}"]`);
+			await capture(`ssh-${view}-desktop.png`);
+		}
+		expect(await evaluate("document.querySelector('#provider-fields').disabled")).toBe(false);
+		expect(await evaluate("document.querySelector('#transfer-fields').disabled")).toBe(false);
+		await evaluate(`(async()=>{const {state}=await import('./state.js');window.logQa=[];state.api.logs=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`);
+		await click('#load-logs');
+		expect(await evaluate('window.logQa.at(-1)')).toBeNull();
+		// Every hosting connection uses the same actual screens. This deliberately does
 		// not qualify SSH/Azure connectivity or any native account/deployment.
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			const {render}=await import('./snapshot.js');
 			state.api.providers=async()=>{throw Error('Remote view attempted local provider discovery');};
-			render({phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent',services:[],warnings:[],platformState:'Scaled to zero',capabilities:{start:{supported:true},stop:{supported:true},restart:{supported:false,reason:'Ordered replacement uses deployment tooling.'},settings:{supported:false,reason:'Manage settings in deployment tooling.'},transfer:{supported:false,reason:'No local instance folder.'}},clientUrl:'https://agent.example.com'}});
+			state.currentView='overview';
+			render({phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',providerLabel:'Azure Container Apps · experimental',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent',services:[],containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}'}],logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent console'}],warnings:[],platformState:'Scaled to zero',capabilities:{start:{supported:true},stop:{supported:true},restart:{supported:false,reason:'Ordered replacement uses deployment tooling.'},settings:{supported:false,reason:'Manage settings in deployment tooling.'},transfer:{supported:false,reason:'No local instance folder.'}},clientUrl:'https://agent.example.com'}});
 		})()`);
-		expect(await evaluate("!document.querySelector('#view-hosted').hidden && document.querySelector('#view-system').hidden && document.querySelector('#view-provider').hidden")).toBe(true);
-		expect(await evaluate("document.querySelector('[data-hosted-action=restart]').hidden")).toBe(true);
+		expect(await evaluate("!document.querySelector('#view-overview').hidden && !document.querySelector('#mobile-navigation').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#restart-stack').disabled && !document.querySelector('#restart-stack').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
 		expect(await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")).toBe('cloud-agent · cloud');
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
@@ -729,21 +750,65 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.action=async()=>{window.hostingQa.actions++;return {...state.currentSnapshot,hosting:{...state.currentSnapshot.hosting,warnings:['Azure accepted start. Agent readiness remains unverified.']}};};
 			bindHostingEvents();
 		})()`);
-		await click('[data-hosted-action=start]');
+		await click('#start-stack');
 		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Native confirmation unavailable');
 		expect(await evaluate("document.body.dataset.busy")).toBe('false');
 		await evaluate('window.hostingQa.dialogFails=false');
-		await click('[data-hosted-action=start]');
+		await click('#start-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(0);
 		await evaluate('window.hostingQa.approved=true');
-		await click('[data-hosted-action=start]');
+		await click('#start-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(1);
 		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Request submitted. Check platform status.');
-		expect(await evaluate("document.querySelector('#hosted-warnings').textContent")).toContain('readiness remains unverified');
-		await capture('hosted-agent-desktop.png');
+		expect(await evaluate("document.querySelector('#runtime-status-detail').textContent")).toContain('readiness remains unverified');
+		await capture('aca-overview-desktop.png');
+		const expectedNavigation = ['overview', 'provider', 'connections', 'system'];
+		expect(await evaluate("[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view)")).toEqual(expectedNavigation);
+		expect(await evaluate(`({
+			navigation:[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view),
+			apps:[...document.querySelectorAll('[data-connection-app]')].map(app=>app.dataset.connectionApp),
+			system:[...document.querySelector('#view-system').children].map(section=>section.id)
+		})`)).toEqual(managementStructure);
+		for (const view of ['provider', 'connections', 'system']) {
+			await pointerClick(`[data-view="${view}"]`);
+			expect(await evaluate(`!document.querySelector('#view-${view}').hidden`)).toBe(true);
+			await capture(`aca-${view}-desktop.png`);
+		}
+		await evaluate("document.querySelector('#import-export').open=true");
+		await value('#log-source', 'console');
+		await click('#load-logs');
+		expect(await evaluate('window.logQa.at(-1)')).toEqual({type:'console'});
+		expect(await evaluate("document.querySelector('#transfer-fields').disabled && document.querySelector('#export-backup').matches(':disabled') && !document.querySelector('#transfer-fields-unavailable').hidden")).toBe(true);
+		await capture('aca-export-unavailable.png');
+		await pointerClick('[data-view="provider"]');
+		expect(await evaluate("document.querySelector('#add-provider-service').matches(':disabled') && !document.querySelector('#provider-fields-unavailable').hidden")).toBe(true);
+		await click('#add-provider-service');
+		expect(await evaluate("document.querySelector('#provider-editor').hidden")).toBe(true);
+		await evaluate("document.querySelector('#add-provider-service').focus()");
+		expect(await evaluate("document.activeElement.id==='add-provider-service'")).toBe(false);
+		await pointerClick('[data-view="connections"]');
+		await pointerClick('#discord-connection > summary');
+		expect(await evaluate("document.querySelector('#discord').matches(':disabled') && !document.querySelector('#discord-fields-unavailable').hidden")).toBe(true);
+		await capture('aca-discord-unavailable.png');
+		await pointerClick('[data-view="overview"]');
+		await click('#restart-stack');
+		expect(await evaluate('window.hostingQa.actions')).toBe(1);
 		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
 		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
-		await capture('hosted-agent-narrow.png');
+		await capture('aca-overview-narrow.png');
+		for (const width of [320, 620, 1120]) {
+			await command('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:false});
+			for (const view of ['overview','provider','connections','system']) {
+				await evaluate(`import('./ui.js').then(({showView})=>showView('${view}'))`);
+				expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+				await capture(`aca-${view}-${width}.png`);
+			}
+		}
+		await evaluate("document.documentElement.style.fontSize='200%'");
+		await capture('aca-system-200pct.png');
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await evaluate("document.documentElement.style.fontSize=''");
+		await evaluate("import('./ui.js').then(({showView})=>showView('overview'))");
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			const {render}=await import('./snapshot.js');
@@ -754,7 +819,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate(`(async()=>{const {bindRestartEvents}=await import('./restart.js');bindRestartEvents();})()`);
 		await click('#apply-pending-restart');
 		expect(await evaluate('window.hostingQa.actions')).toBe(2);
-		expect(await evaluate("!document.querySelector('#view-hosted').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
+		expect(await evaluate("!document.querySelector('#view-overview').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
 		// App settings is a page, independent of the selected remote/local instance.
 		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
 		await evaluate(`(async()=>{
@@ -879,7 +944,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("window.providerQa.state.currentSnapshot.hosting.name")).toBe('cloud-agent');
 		await capture('instances-from-aca-desktop.png');
 		await click('#hosting-back');
-		expect(await evaluate("document.querySelector('#instance-welcome').hidden && !document.querySelector('#view-hosted').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden")).toBe(true);
 		expect(await evaluate("window.providerQa.state.dirtyForms.has('preferences-form')")).toBe(true);
 		await evaluate(`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.currentSnapshot=null;state.dirtyForms.clear();renderWelcome(window.instanceQaWelcome);})()`);
 		expect(await evaluate("document.querySelector('#begin-new-instance').classList.contains('primary')")).toBe(true);
@@ -944,7 +1009,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#instance-restore-source').value")).toBe('/home/user/fhold/backups/april-export');
 		expect(await evaluate("document.querySelector('#instance-restore-home').value")).toBe('/home/user/fhold/instances/restored-agent');
 		expect(await evaluate("document.querySelector('#apply-instance-restore').disabled")).toBe(true);
+		await evaluate(`(async()=>{const {state}=await import('./state.js');const {showHostingChooser}=await import('./hosting.js');window.connectionQa.connections.push({id:'cloud',kind:'azure-container-apps',label:'Cloud test',subscriptionId:'synthetic',resourceGroup:'agents'});state.api.hostingFeatures=async()=>({installation:false});state.api.hostingInstances=async()=>[];await showHostingChooser('cloud');})()`);
+		expect(await evaluate("['hosting-install','hosting-import','hosting-open-folder'].every(id=>{const control=document.getElementById(id);return !control.hidden&&control.disabled})")).toBe(true);
+		expect(await evaluate("document.querySelector('#hosting-creation-help').hidden")).toBe(false);
+		await capture('instances-cloud-creation-unavailable.png');
 		await evaluate(`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`);
+		expect(await evaluate("document.querySelector('#error-home').hidden")).toBe(true);
 		await capture('instance-error-desktop.png');
 		await command('Emulation.setDeviceMetricsOverride',{width:320,height:900,deviceScaleFactor:1,mobile:false});
 		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);

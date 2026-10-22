@@ -28,9 +28,10 @@ import {
 } from '../admin/remote.js';
 import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, verifyProvider } from '../admin/providers.js';
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
-import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
+import { bindSnapshotEvents, render, refresh, refreshVisibleStatus, showFatalError } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
-import { renderHosted, targetKey, bindHostingEvents, showHostingChooser } from '../admin/hosting.js';
+import { targetKey, bindHostingEvents, showHostingChooser } from '../admin/hosting.js';
+import { instanceCapability, instancePresentation, renderInstanceCapabilities, renderInstanceDetails, selectedLogOptions } from '../admin/instance-presentation.js';
 import { capabilities } from '@fhold/lib';
 import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
 import {
@@ -195,6 +196,12 @@ beforeEach(() => {
 		})
 	);
 	selectors = new Map();
+	selector('[data-view-panel]', ...['overview', 'provider', 'connections', 'system'].map(name => {
+		const panel = control(`view-${name}`); panel.dataset.viewPanel = name; return panel;
+	}));
+	selector('[data-instance-feature]', ...[...html.matchAll(/<fieldset id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(match => {
+		const fields = control(match[1]); fields.dataset.instanceFeature = match[2]; return fields;
+	}));
 	selector('#install-advanced input', control('install-home'), control('install-assistant-port'), control('install-gateway-port'));
 	state.installationReadiness = { ok: true };
 	control('install-automatic-ports').checked = true;
@@ -221,12 +228,21 @@ describe('Admin static security boundary', () => {
 		let providers = 0;
 		state.api = { providers: async () => { providers++; return { providers: [] }; } };
 		const hosting = { ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' }, name: 'cloud-agent', location: '/resource', services: [], warnings: ['Platform observation only'], platformState: 'Scaled to zero', capabilities: capabilities(['start', 'stop']), clientUrl: 'https://agent.example.com' };
+		expect(instancePresentation({phase:'remote',hosting}).location).toBe('Connected host');
 		render({ phase: 'remote', hosting });
-		expect(control('view-hosted').hidden).toBe(false);
+		expect(control('view-overview').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(false);
-		expect(control('view-title').textContent).toBe('cloud-agent');
+		expect(control('overview-name').textContent).toBe('cloud-agent');
 		expect(state.currentConfig).toBeNull(); expect(providers).toBe(0);
-		expect(control('hosted-open-agent').hidden).toBe(false);
+		expect(control('overview-opencode-link').hidden).toBe(false);
+		expect(control('restart-stack').disabled).toBe(true);
+		expect(control('provider-fields').disabled).toBe(true);
+		expect(control('provider-fields-unavailable').hidden).toBe(false);
+		showView('provider'); expect(control('view-provider').hidden).toBe(false);
+		showView('connections'); expect(control('view-connections').hidden).toBe(false);
+		showView('system'); expect(control('view-system').hidden).toBe(false);
+		expect(control('transfer-fields').disabled).toBe(true);
+		expect(control('recovery-fields').disabled).toBe(true);
 		expect(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'one', remoteHome: '/agent' } })).not.toBe(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' } }));
 	});
 	it('keeps remote status failures in the selected remote view, with no local fallback', async () => {
@@ -234,8 +250,8 @@ describe('Admin static security boundary', () => {
 		state.api = { snapshot: async () => { throw new Error('SSH disconnected'); } };
 		await refresh({ statusOnly: true });
 		expect(state.currentSnapshot.phase).toBe('remote');
-		expect(control('hosted-warnings').textContent).toContain('SSH disconnected');
-		expect(control('hosted-warnings').hidden).toBe(false);
+		expect(control('runtime-status-detail').textContent).toContain('SSH disconnected');
+		expect(control('runtime-status-detail').hidden).toBe(false);
 	});
 	it('uses provider-owned guidance and preserves selected log targets across status refresh', () => {
 		const hosting = {ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource'},name:'agent',location:'/resource',
@@ -243,15 +259,47 @@ describe('Admin static security boundary', () => {
 			services:[],warnings:[],capabilities:capabilities(['start','stop','restart']),
 			revisions:[{name:'one',active:true,health:'Healthy'},{name:'two',active:false,health:'Inactive'}],
 			containers:[{name:'assistant',image:'image'}],portalUrl:'https://portal.example.com'};
-		renderHosted({phase:'remote',hosting});
-		control('hosted-log-revision').value='two'; control('hosted-log-container').value='assistant';
-		renderHosted({phase:'remote',hosting});
-		expect(control('hosted-log-revision').value).toBe('two');
-		expect(control('hosted-log-container').value).toBe('assistant');
-		expect(control('hosted-revisions').textContent).toContain('unknown replica(s)');
-		expect(control('view-description').textContent).toBe('Cloud provider');
-		expect(control('hosted-access-detail').textContent).toBe('Native account setup');
-		expect(control('hosted-client-detail').textContent).toBe('Explicit open may wake the agent');
+		render({phase:'remote',hosting});
+		control('log-revision').value='two'; control('log-container').value='assistant';
+		render({phase:'remote',hosting});
+		expect(control('log-revision').value).toBe('two');
+		expect(control('log-container').value).toBe('assistant');
+		expect(control('deployment-revisions').textContent).toContain('unknown replica(s)');
+		expect(control('overview-location').textContent).toBe('Cloud provider');
+		expect(control('provider-default-status').textContent).toBe('Native account setup');
+		expect(control('instance-client-guidance').textContent).toBe('Explicit open may wake the agent');
+	});
+	it('enables the same sections for a managed connection and uses capabilities, not its provider name', () => {
+		const config = defaultStackConfig();
+		renderInstanceCapabilities({phase:'ready', config});
+		expect(control('provider-fields').disabled).toBe(false);
+		expect(control('transfer-fields').disabled).toBe(false);
+		expect(control('provider-fields-unavailable').hidden).toBe(true);
+		expect(instanceCapability('update', {phase:'ready',config}).supported).toBe(true);
+		renderInstanceCapabilities({phase:'remote',hosting:{capabilities:capabilities(['settings'])}});
+		expect(control('provider-fields').disabled).toBe(false);
+		expect(control('transfer-fields').disabled).toBe(true);
+	});
+	it('omits unsupported log options for both managed and inspect-only connections', () => {
+		renderInstanceDetails({phase:'ready',config:defaultStackConfig()});
+		expect(selectedLogOptions()).toBeUndefined();
+		renderInstanceDetails({phase:'remote',hosting:{name:'agent',location:'/remote'}});
+		control('log-source').value='system';
+		expect(selectedLogOptions()).toBeUndefined();
+		renderInstanceDetails({phase:'remote',hosting:{name:'agent',location:'/remote',logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent'}],revisions:[{name:'one'}]}});
+		control('log-source').value='console';control('log-revision').value='one';
+		expect(selectedLogOptions()).toEqual({type:'console',revision:'one'});
+	});
+	it('shows only a real selected location on opening errors and preserves the recovery actions', async () => {
+		state.api={selectedHome:async()=>'/opt/stacks/agent'};
+		await showFatalError(Error('Unavailable instance'));
+		expect(control('error-home').textContent).toBe('/opt/stacks/agent');
+		expect(control('error-home').hidden).toBe(false);
+		state.api.selectedHome=async()=>{throw Error('No selected home');};
+		await showFatalError(Error('Unavailable connection'));
+		expect(control('error-home').hidden).toBe(true);
+		expect(control('error-home').textContent).toBe('');
+		expect(control('error-state').hidden).toBe(false);
 	});
 	it('loads Azure choices through native setup, preserves saved scope, and never creates an instance during sign-in', async () => {
 		const calls: unknown[] = [];
@@ -1207,6 +1255,15 @@ describe('Admin instance picker and automatic status', () => {
 		await choose('open-another');
 		expect(closed).toBe(false);
 		expect(reloads).toBe(0);
+	});
+	it('keeps creation and folder actions visible but disabled when a connection cannot install', async () => {
+		state.api={hostingConnections:async()=>[{id:'local',label:'This computer',kind:'local-docker'},{id:'cloud',label:'Cloud',kind:'azure-container-apps'}],hostingInstances:async()=>[],hostingFeatures:async()=>({installation:false})};
+		await showHostingChooser('cloud');
+		for(const id of ['hosting-install','hosting-import','hosting-open-folder']) {
+			expect(control(id).hidden).toBe(false);
+			expect(control(id).disabled).toBe(true);
+		}
+		expect(control('hosting-creation-help').hidden).toBe(false);
 	});
 	it('waits for an automatic status read before switching and disables the picker while busy', async () => {
 		state.currentSnapshot = emptySnapshot();

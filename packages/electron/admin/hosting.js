@@ -1,22 +1,11 @@
 import { state } from './state.js';
-import {
-	all,
-	byId,
-	message,
-	notice,
-	operation,
-	setBusy,
-	setOptions,
-	setSkipTarget,
-	setText
-} from './ui.js';
+import { byId, message, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
 import {
 	confirmInstanceSwitch,
 	openInstance,
 	renderInstancePicker,
 	showNewInstanceSetup
 } from './instances.js';
-import { renderRestartStatus } from './restart.js';
 import { chooseManagedDirectory } from './directories.js';
 import { openAdminSettings, closeAdminSettings } from './settings.js';
 
@@ -27,111 +16,6 @@ export function targetKey(target) {
 }
 export function targetLocation(target) {
 	return target.kind === 'hosted' ? target.ref.remoteHome || target.ref.resourceId : target.homeDir;
-}
-export function renderHosted(snapshot) {
-	const hosted = snapshot.hosting;
-	state.currentSnapshot = snapshot;
-	state.currentConfig = null;
-	for (const id of [
-		'loading-state',
-		'error-state',
-		'instance-welcome',
-		'install-section',
-		'instance-import-section'
-	])
-		byId(id).hidden = true;
-	byId('app-shell').hidden = false;
-	byId('instance-page-header').hidden = false;
-	document.body.dataset.phase = 'ready';
-	for (const element of all('.setup-only, [data-view-panel], [data-view]')) element.hidden = true;
-	byId('view-hosted').hidden = false;
-	byId('mobile-navigation').hidden = true;
-	renderRestartStatus(hosted);
-	byId('sidebar-alerts').append(byId('notification-area'));
-	setSkipTarget('main-content');
-	setText('view-title', hosted.name);
-	setText('view-description', hosted.providerLabel || 'Hosted instance');
-	setText('hosted-location', hosted.location);
-	setText(
-		'hosted-state',
-		hosted.platformState ||
-			hosted.services
-				.map((service) => `${service.name}: ${service.state} ${service.health}`)
-				.join('\n') ||
-			'Stopped'
-	);
-	setText(
-		'hosted-warnings',
-		[...hosted.warnings, ...hosted.services.flatMap((service) => service.warnings || [])].join('\n')
-	);
-	byId('hosted-warnings').hidden = !byId('hosted-warnings').textContent;
-	setText('hosted-settings-detail', hosted.capabilities.settings.reason);
-	setText('hosted-transfer-detail', hosted.capabilities.transfer.reason);
-	setText(
-		'hosted-access-detail',
-		hosted.guidance?.access ||
-			'Use the agent’s native interface for account setup and agent configuration.'
-	);
-	setText(
-		'hosted-client-detail',
-		hosted.guidance?.client || 'Opening the agent uses its native authentication.'
-	);
-	setText(
-		'hosted-revisions',
-		(hosted.revisions || [])
-			.map(
-				(item) =>
-					`${item.name}: ${item.active ? 'active' : 'inactive'}, ${item.replicas ?? 'unknown'} replica(s), ${item.health}`
-			)
-			.join('\n')
-	);
-	byId('hosted-revisions').hidden = !hosted.revisions?.length;
-	const client = byId('hosted-open-agent');
-	client.hidden = !hosted.clientUrl;
-	client.href = hosted.clientUrl || 'about:blank';
-	const portal = byId('hosted-open-portal');
-	portal.hidden = !hosted.portalUrl;
-	portal.href = hosted.portalUrl || 'about:blank';
-	for (const [id, choices, placeholder] of [
-		[
-			'hosted-log-revision',
-			(hosted.revisions || []).map((item) => ({
-				value: item.name,
-				label: `${item.name}${item.active ? ' · active' : ''}`
-			})),
-			'Latest revision'
-		],
-		[
-			'hosted-log-container',
-			(hosted.containers || []).map((item) => ({ value: item.name, label: item.name })),
-			'Default container'
-		]
-	]) {
-		const field = byId(id);
-		const selected = field.value;
-		setOptions(
-			field,
-			[{ value: '', label: placeholder }, ...choices],
-			choices.some((item) => item.value === selected) ? selected : ''
-		);
-	}
-	renderHostedControls(hosted);
-	setText(
-		'hosted-restart-detail',
-		hosted.capabilities.restart.reason ||
-			hosted.guidance?.restart ||
-			'Restart may interrupt current work.'
-	);
-	renderInstancePicker(snapshot);
-}
-
-/** Updating disabled controls must not navigate away from a chooser or Settings. */
-export function renderHostedControls(hosted) {
-	for (const button of all('[data-hosted-action]')) {
-		const capability = hosted.capabilities[button.dataset.hostedAction];
-		button.disabled = state.operationInFlight || !capability.supported;
-		button.hidden = !capability.supported;
-	}
 }
 
 let savedConnections = [];
@@ -182,9 +66,14 @@ async function discover() {
 	const epoch = ++discoveryEpoch;
 	byId('hosting-instance-list').replaceChildren();
 	byId('hosting-discover').hidden = true;
-	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder'])
-		byId(button).hidden = true;
+	for (const id of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
+		byId(id).hidden = false;
+		byId(id).disabled = true;
+	}
+	byId('hosting-open-folder').hidden = id === 'local';
+	byId('hosting-creation-help').hidden = true;
 	byId('choose-instance').hidden = id !== 'local';
+	let features;
 	await connectionOperation('Finding instances', async () => {
 		let instances;
 		try {
@@ -195,12 +84,8 @@ async function discover() {
 		}
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 		const list = byId('hosting-instance-list');
-		const features = await state.api.hostingFeatures(id);
+		features = await state.api.hostingFeatures(id);
 		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
-		for (const button of ['hosting-install', 'hosting-import'])
-			byId(button).hidden = !features.installation;
-		byId('choose-instance').hidden = id !== 'local';
-		byId('hosting-open-folder').hidden = !features.installation || id === 'local';
 		list.replaceChildren();
 		hostingStatus(
 			instances.length
@@ -231,6 +116,12 @@ async function discover() {
 			list.append(button);
 		}
 	});
+	if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
+		byId(button).disabled = !features?.installation;
+		byId(button).title = features?.installation ? '' : 'Unavailable through this connection.';
+	}
+	byId('hosting-creation-help').hidden = !features || features.installation;
 	byId('hosting-discover').hidden = !byId('hosting-status').classList.contains('danger-text');
 }
 export async function showHostingChooser(id) {
@@ -256,7 +147,9 @@ export async function showHostingChooser(id) {
 	try {
 		await loadHostingConnections();
 		if (id)
-			byId('hosting-connection').value = savedConnections.some((item) => item.id === id) ? id : 'local';
+			byId('hosting-connection').value = savedConnections.some((item) => item.id === id)
+				? id
+				: 'local';
 		await discover();
 	} catch (error) {
 		hostingStatus(message(error), true);
@@ -630,37 +523,4 @@ export function bindHostingEvents() {
 		});
 		if (saved) await checkConnection(saved);
 	});
-	for (const button of all('[data-hosted-action]'))
-		button.addEventListener('click', async () => {
-			if (state.operationInFlight) return;
-			const action = button.dataset.hostedAction;
-			let confirmed = false;
-			setBusy(true);
-			try {
-				confirmed = await state.api.confirmRestart(action);
-			} catch (error) {
-				notice(message(error), 'error', { persist: true });
-			} finally {
-				setBusy(false);
-			}
-			if (!confirmed) return;
-			await operation(
-				`${action[0].toUpperCase()}${action.slice(1)} instance`,
-				() => state.api.action(action, true),
-				state.currentSnapshot?.hosting.ref.kind === 'azure-container-apps'
-					? 'Request submitted. Check platform status.'
-					: 'Operation complete.'
-			);
-		});
-	byId('hosted-load-logs').addEventListener(
-		'click',
-		() =>
-			void operation('Reading logs', async () => {
-				byId('hosted-logs').value = await state.api.logs({
-					type: byId('hosted-log-type').value,
-					revision: byId('hosted-log-revision').value || undefined,
-					container: byId('hosted-log-container').value || undefined
-				});
-			})
-	);
 }

@@ -106,6 +106,16 @@ the connection editor, narrow layouts and 200% text. The Chromium walkthrough us
 synthetic IPC responses, not real SSH/Azure connectivity or provider readiness.
 Packaged startup remains a separate native preload/settings check.
 
+Repeat the four management pages for local Docker, SSH and a capability-limited
+platform snapshot. Navigation, Apps order and System disclosure order must match.
+Unsupported fieldsets must stay visible and natively disabled, with adjacent
+reasons; image/lifecycle actions must stay in place rather than disappear. Verify
+an unavailable field cannot invoke IPC by pointer or keyboard, while logs and
+supported lifecycle controls still work through the selected connection. Refresh
+must preserve the selected page/log filters and never access local provider
+credentials or wake an idle agent. An opening error omits an unknown location
+instead of showing “Selected fhold home”; Choose another instance remains usable.
+
 ## Current wizard and Apps
 
 The current preview removes the Welcome/creation headings and duplicate naming

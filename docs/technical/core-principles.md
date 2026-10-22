@@ -163,6 +163,13 @@ status/discovery never contact the agent or implicitly wake an idle replica.
 Provider capabilities are named operations; diagnostics and optional onboarding,
 console and file-management interfaces remain adapter-owned. Common CLI/Admin
 dispatch does not assume every remote target is SSH or has a local instance home.
+Admin always uses the same Overview, Agent settings, Apps and System screens,
+navigation and section order, regardless of hosting provider. Unsupported sections
+remain visible, natively disabled and explained; unknown configuration is never
+shown as absent or off. Cloud observations use the ordinary service inventory and
+System logs/details, without a separate hosted-instance page or a fake StackConfig.
+No unsupported action falls back to local files, credentials or containers, and
+viewing these pages does not wake an idle agent.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped

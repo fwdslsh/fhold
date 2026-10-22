@@ -69,6 +69,18 @@ context; active work must never appear completed optimistically.
 
 ## Screen composition
 
+Every selected instance uses the same four pages: Overview, Agent settings,
+Apps and System. Hosting providers never replace the navigation or page layout.
+The renderer maps the selected snapshot into one presentation contract; it does
+not branch on provider names. A missing management capability disables the existing
+section's native fieldset and explains why immediately above it. The disclosure
+remains usable so users can discover the feature and its limitation. Unavailable
+does not mean unconfigured, disabled at runtime, or signed out. Never carry a
+previous instance's credentials, settings or readiness into an uninspectable target.
+Lifecycle and image-update buttons remain in their ordinary positions, disabled
+with a reason when unsupported. A platform status is not native-agent readiness.
+Logs and installation details remain under System, not on a separate cloud page.
+
 - **Assistant library:** stable location/task rail and named recent/discovered
   rows. Empty recents do not mean no instances exist. New/import are separate.
 - **Overview:** named assistant, observed status/location/path, one OpenCode
@@ -88,6 +100,9 @@ context; active work must never appear completed optimistically.
   time, a visible exit and shared field/action components. Do not restore the
   removed Welcome/Create headings.
 - **Loading/error:** calm status or actionable error, not a decorative hero.
+  Opening errors say “Can’t open this instance,” show the actual location only
+  when known, and offer Choose another instance, Try again and Settings. Never
+  render a placeholder as though it were the selected directory.
 
 At small widths, reduce margins and change composition before shrinking text.
 Do not resize the app window, hide required actions, truncate error guidance or

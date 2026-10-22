@@ -152,7 +152,7 @@ with inherited terminal input/output. `--revision`, `--replica` and `--container
 select its target. No CLI is installed inside Assistant and no generated shell
 script, stdin protocol or management port is added. Use ordinary image-baked
 skills/commands there for Claude/Codex sign-in and agent diagnostics. Admin's
-**Azure portal** link provides the platform's own Console and deployment tools;
+**Open deployment tools** link in System → Installation details provides the platform's own Console and deployment tools;
 **Open OpenCode** provides the agent's native AI-account and chat interface.
 
 **Restart** uses Azure's documented [revision restart](https://learn.microsoft.com/cli/azure/containerapp/revision#az-containerapp-revision-restart),
@@ -178,6 +178,15 @@ External deployment tooling owns these. Runtime recovery remains entirely with
 the existing Assistant: no host-side Blob reader, new recovery gate, automatic
 unlock or ownership fallback is introduced. Ordered stop/drain/replacement is an
 external responsibility; there is no rolling-update shortcut.
+
+Admin uses the same Overview, Agent settings, Apps and System pages for local,
+SSH and cloud instances. Unsupported features remain visible but disabled, with
+the reason next to their controls. For example, ACA's AI settings, app setup,
+import/export and checkpoint editing cannot be managed through this adapter yet;
+their disabled sections do not mean those features are disabled inside the agent.
+Use OpenCode or your deployment tools where indicated. System holds recent logs
+and deployment details for every connection. Status checks and browsing these
+pages do not contact or wake an idle agent.
 The [qualification record](operations/azure-management-verification.md) separates
 live read-only checks from adapter tests and unperformed cloud mutations.
 

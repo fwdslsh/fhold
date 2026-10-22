@@ -28,8 +28,12 @@ own discovery, typed target selection, lifecycle and diagnostics. Optional
 connection onboarding, interactive console and full instance-file management are
 separate capabilities, not methods that every cloud must pretend to implement.
 CLI's common remote verbs use `InstanceSession`; Admin chooses instance-file
-administration by the presence of `management`, not a provider-name check. Named
-operation lists replace ambiguous `capabilities(restart, local)` flags and remove
+administration by the presence of `management`, not a provider-name check.
+The same four Admin pages and their section order are retained for all providers;
+capability-disabled fields and adjacent reasons replace the former separate
+hosted-instance screen. Platform status is presented in the shared Overview;
+logs and deployment metadata live in System. No fake local configuration is needed.
+Named operation lists replace ambiguous `capabilities(restart, local)` flags and remove
 ACA-specific error text from the generic capability helper.
 SSH transport primitives are separate from its adapter/domain, eliminating the
 adapter-to-management import cycle. Remote directory setup is an optional provider

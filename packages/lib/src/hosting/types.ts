@@ -57,6 +57,8 @@ export type HostingSnapshot = InstanceSummary & {
 	clientUrl?: string;
 	portalUrl?: string;
 	containers?: Array<{ name: string; image: string }>;
+	/** Omitted when the connection supports only its default service output. */
+	logSources?: Array<{ type: 'system' | 'console'; label: string }>;
 	providerLabel?: string;
 	guidance?: { access?: string; client?: string; restart?: string };
 };

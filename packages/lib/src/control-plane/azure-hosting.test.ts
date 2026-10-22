@@ -204,6 +204,14 @@ test('console is a native interactive action with explicit replica scope and no 
 	expect(terminals).toHaveLength(1);
 });
 
+test('inspection advertises native log sources without contacting the agent', async () => {
+	const { provider, calls } = fixture();
+	expect((await provider.open(ref).inspect()).logSources).toEqual([
+		{ type: 'system', label: 'Platform' }, { type: 'console', label: 'Agent console' }
+	]);
+	expect(calls.some(args => args.includes('logs') || args.includes('exec') || args.includes('rest'))).toBe(false);
+});
+
 test('console log selection is scoped, native and bounded, while system logs remain replica independent', async () => {
 	const { provider, calls } = fixture();
 	expect(

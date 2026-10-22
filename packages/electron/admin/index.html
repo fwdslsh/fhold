@@ -114,6 +114,7 @@
               <div class="hosting-create-actions">
                 <button id="hosting-install" class="primary" type="button" hidden><span aria-hidden="true">+</span> New assistant</button>
                 <button id="hosting-import" class="text-button" type="button" hidden>Import assistant…</button>
+                <p id="hosting-creation-help" class="help-text" hidden>Creation, import and folder browsing aren’t available through this connection. Use your deployment tools.</p>
               </div>
             </div>
           </aside>
@@ -148,13 +149,12 @@
 
 	    <main id="error-state" class="centered-state error-state" tabindex="-1" hidden>
 	      <section class="error-card" aria-labelledby="error-title">
-	        <p class="eyebrow">fhold needs attention</p>
-	        <h1 id="error-title">Setup could not be opened.</h1>
+	        <h1 id="error-title">Can’t open this instance</h1>
 	        <p id="error-message">fhold could not read the selected installation.</p>
-	        <dl class="detail-list compact"><div><dt>Selected home</dt><dd id="error-home">Checking…</dd></div></dl>
+	        <p id="error-home" class="instance-path" hidden></p>
             <div class="button-row">
-	        <button id="retry-snapshot" class="primary" type="button">Try again</button>
-            <button class="secondary" type="button" data-instance-switch>Choose another instance</button>
+	        <button class="primary" type="button" data-instance-switch>Choose another instance</button>
+            <button id="retry-snapshot" class="secondary" type="button">Try again</button>
 			<button class="text-button" type="button" data-admin-settings>Settings</button>
             </div>
 	      </section>
@@ -359,44 +359,6 @@
         </header>
         <div id="setup-alerts"></div>
         <main id="main-content" tabindex="-1">
-          <section id="view-hosted" class="view-panel disclosure-inventory" hidden aria-labelledby="view-title">
-            <section class="hosted-summary">
-              <h2 class="visually-hidden">Hosted instance status</h2>
-              <p id="hosted-state" class="help-text" aria-live="polite"></p>
-              <p id="hosted-warnings" class="help-text warning-text" role="status" hidden></p>
-              <div class="button-row">
-                <button class="secondary" type="button" data-hosted-action="start">Start</button>
-                <button class="secondary" type="button" data-hosted-action="restart">Restart</button>
-                <button class="secondary" type="button" data-hosted-action="stop">Stop</button>
-                <a id="hosted-open-agent" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode</a>
-                <a id="hosted-open-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Deployment portal</a>
-              </div>
-              <p id="hosted-restart-detail" class="help-text"></p>
-              <p id="hosted-client-detail" class="help-text"></p>
-            </section>
-            <details class="panel panel-disclosure">
-              <summary>Recent logs</summary>
-              <p class="help-text">Platform logs do not require a live replica. Agent logs come from the selected revision and container; an idle app may have no console logs available.</p>
-              <div class="field-grid">
-                <label class="field" for="hosted-log-type"><span>Source</span><select id="hosted-log-type"><option value="system">Platform</option><option value="console">Agent console</option></select></label>
-                <label class="field" for="hosted-log-revision"><span>Revision</span><select id="hosted-log-revision"><option value="">Latest revision</option></select></label>
-                <label class="field" for="hosted-log-container"><span>Container</span><select id="hosted-log-container"><option value="">Default container</option></select></label>
-              </div>
-              <button id="hosted-load-logs" class="secondary" type="button">Load logs</button>
-              <textarea id="hosted-logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent hosted instance logs">Logs have not been loaded.</textarea>
-            </details>
-            <details class="panel panel-disclosure">
-              <summary>Agent settings and data</summary>
-              <p id="hosted-access-detail" class="help-text"></p>
-              <p id="hosted-settings-detail" class="help-text"></p>
-              <p id="hosted-transfer-detail" class="help-text"></p>
-            </details>
-            <details class="panel panel-disclosure">
-              <summary>Deployment details</summary>
-              <p id="hosted-location" class="instance-path"></p>
-              <pre id="hosted-revisions" class="help-text" hidden></pre>
-            </details>
-          </section>
           <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-name">
             <header class="overview-intro">
               <div class="overview-identity">
@@ -409,6 +371,7 @@
                 <button class="text-button" type="button" data-view-target="connections">Connect an app <span aria-hidden="true">→</span></button>
               </div>
             </header>
+            <p id="instance-client-guidance" class="help-text" hidden></p>
 
             <section class="runtime-panel" aria-labelledby="runtime-heading">
               <div class="section-heading">
@@ -419,6 +382,7 @@
                   <button id="stop-stack" data-action="stop" class="text-button danger" type="button">Stop</button>
                 </div>
               </div>
+              <p id="runtime-action-help" class="help-text" hidden></p>
               <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
               <div class="service-columns" aria-hidden="true"><span>Service</span><span>Image</span><span>Status</span></div>
               <div id="services" class="services" aria-live="polite"></div>
@@ -453,6 +417,8 @@
 	            </section>
 
             <section id="provider-connection" class="panel" aria-labelledby="provider-heading">
+              <p id="provider-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="provider-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="provider-fields-unavailable" aria-label="AI model settings">
               <section id="provider-current-model" class="provider-current-model" aria-labelledby="provider-heading">
                 <h2 id="provider-heading">Your agent’s AI model</h2>
                 <div class="provider-default">
@@ -542,13 +508,14 @@
                 </form>
               </section>
 
-              <details id="provider-saved-accounts" class="disclosure provider-saved-setups" aria-labelledby="provider-saved-heading">
+            <details id="provider-saved-accounts" class="disclosure provider-saved-setups" aria-labelledby="provider-saved-heading">
                 <summary id="provider-saved-heading">Saved AI setups</summary>
                 <p class="help-text">Saved details are not proof a service works. Edit a setup to choose and test a model.</p>
                 <p id="provider-saved-empty" class="help-text">No saved AI setups.</p>
                 <ul id="provider-saved-list" class="provider-account-list" aria-label="Saved AI setups"></ul>
                 <button id="load-providers" class="text-button" type="button">Refresh saved setups</button>
               </details>
+              </fieldset>
             </section>
 
             <details class="setup-only panel restore-panel" hidden>
@@ -583,12 +550,16 @@
             <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
               <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
               <div class="app-connection-body">
-                <p class="help-text">Open the server address and sign in with the username and password below. This gives full native access: use it only on this computer or a trusted private network.</p>
+                <p class="help-text">Open the server address and use this instance’s sign-in details. OpenCode gives full native access, independently of app permissions.</p>
                 <dl class="connection-values">
                   <div><dt>Server address</dt><dd><a id="direct-url" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Loading…</a><button class="text-button" type="button" data-copy-field="direct-url">Copy</button></dd></div>
-                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
                 </dl>
 				  <p id="opencode-connection-help" class="help-text" role="status"></p>
+                <p id="opencode-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="opencode-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="opencode-fields-unavailable" aria-label="OpenCode sign-in and network settings">
+                <dl class="connection-values">
+                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
+                </dl>
                 <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
                 <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
                 <details class="disclosure">
@@ -602,11 +573,14 @@
                     <button class="secondary" type="submit">Save OpenCode network settings</button>
                   </form>
                 </details>
+                </fieldset>
               </div>
             </details>
             <details id="claude-connection" class="panel panel-disclosure connection-app" data-connection-app="claude" name="connected-app">
               <summary><span>Claude<small>Chat on this computer or work remotely from any device.</small></span></summary>
               <div class="app-connection-body">
+                <p id="claude-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="claude-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="claude-fields-unavailable" aria-label="Claude connection settings">
                 <details class="disclosure connection-method" name="claude-method">
                   <summary><span>Desktop chat<small>Use the Claude Desktop app on this computer.</small></span></summary>
                   <form id="claude-permissions-form" class="form-stack" data-managed-form>
@@ -636,12 +610,15 @@
                   <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up remote connection</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open in Claude</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
                   <p class="help-text">Requires an eligible Claude subscription. Remote sessions can work with this instance’s files using Claude’s own permissions. The desktop chat permissions above do not apply. Disabling startup keeps your sign-in; manage paired devices in Claude.</p>
                 </details>
+                </fieldset>
               </div>
             </details>
 
             <details id="codex-connection" class="panel panel-disclosure connection-app" data-connection-app="codex" name="connected-app">
               <summary><span>Codex<small>Remote sessions with your ChatGPT account.</small></span><span class="card-label">Experimental</span></summary>
               <div class="app-connection-body">
+                <p id="codex-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="codex-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="codex-fields-unavailable" aria-label="Codex connection settings">
                 <p class="help-text">Set up guides sign-in, workspace access and execution settings. Then get a pairing code to connect your Codex client.</p>
                 <p><span id="codex-remote-status" class="status-badge neutral">Startup not checked</span></p>
                 <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up Codex</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
@@ -652,12 +629,15 @@
                   <button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button>
                 </details>
                 <p class="help-text">Codex runs its own agent. This uses native access; the MCP permissions do not apply. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
+                </fieldset>
               </div>
             </details>
 
             <details id="discord-connection" class="panel panel-disclosure connection-app" data-connection-app="discord" name="connected-app">
               <summary><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></summary>
               <div class="app-connection-body">
+                <p id="discord-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="discord-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="discord-fields-unavailable" aria-label="Discord connection settings">
                 <details class="disclosure setup-help"><summary>Set up your Discord bot</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with View Channels, Read Message History, Send Messages, Create Public Threads, Send Messages in Threads, and Add Reactions.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></details>
                 <details id="discord-tokens" class="disclosure">
                   <summary><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></summary>
@@ -691,12 +671,15 @@
                   <div id="discord-mappings" class="mapping-list" aria-live="polite"></div>
 
                 </details>
+                </fieldset>
               </div>
             </details>
 
             <details id="slack-connection" class="panel panel-disclosure connection-app" data-connection-app="slack" name="connected-app">
               <summary><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></summary>
               <div class="app-connection-body">
+                <p id="slack-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="slack-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="slack-fields-unavailable" aria-label="Slack connection settings">
                 <details class="disclosure setup-help"><summary>Set up your Slack bot</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need. Add <code>reactions:write</code> for tool reactions.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need.</li><li>Enable Interactivity &amp; Shortcuts for question, approval and Stop buttons. Socket Mode needs no public Request URL.</li><li>Install or reinstall the app, save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
                 <details id="slack-tokens" class="disclosure">
                   <summary><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></summary>
@@ -731,12 +714,15 @@
                   <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
 
                 </details>
+                </fieldset>
               </div>
             </details>
 
             <details id="mcp-connection" class="panel panel-disclosure connection-app" data-connection-app="mcp" name="connected-app">
               <summary><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
               <div class="app-connection-body">
+                <p id="mcp-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="mcp-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="mcp-fields-unavailable" aria-label="MCP connection settings">
                 <form id="mcp-connections-form" class="form-stack" data-managed-form>
                   <label class="switch"><input id="gateway" type="checkbox" /><span>Enable MCP access</span></label>
                   <button class="secondary" type="submit">Save MCP settings</button>
@@ -806,13 +792,17 @@
                   <dl class="connection-values"><div><dt>Health check</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div></dl>
                   <p class="help-text">MCP is an API, not a website. Use the full /mcp address, not the base port. The health check returns JSON. 127.0.0.1 accepts connections only from this computer; LAN or public access needs explicit network and TLS configuration.</p>
                 </details>
+                </fieldset>
               </div>
             </details>
             <details id="advanced-access" class="disclosure">
               <summary>Advanced access</summary>
+              <p id="access-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="access-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="access-fields-unavailable" aria-label="Advanced app permissions">
               <p class="help-text">Change permissions for existing connections. Changes apply to every app using that connection; external apps may not be listed. OpenCode, Claude remote connection and Codex use their own permissions.</p>
               <div id="saved-access" class="saved-access-list"></div>
               <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
+              </fieldset>
             </details>
           </section>
 
@@ -821,21 +811,31 @@
               <summary id="diagnostics-heading">Installation details</summary>
               <dl class="detail-list">
                 <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
-                <div><dt>fhold home</dt><dd id="home">Loading…</dd></div>
+                <div><dt>Instance location</dt><dd id="home">Loading…</dd></div>
                 <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
                 <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
               </dl>
               <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
+              <a id="deployment-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open deployment tools</a>
+              <pre id="deployment-revisions" class="help-text" hidden></pre>
             </details>
 
             <details id="recent-logs" class="panel panel-disclosure">
               <summary>Recent logs</summary>
+              <p id="log-help" class="help-text"></p>
+              <div class="field-grid three-column">
+                <label class="field" for="log-source"><span>Source</span><select id="log-source"><option value="system">System</option><option value="console">Agent console</option></select></label>
+                <label class="field" for="log-revision"><span>Revision</span><select id="log-revision"><option value="">Current</option></select></label>
+                <label class="field" for="log-container"><span>Container</span><select id="log-container"><option value="">All services</option></select></label>
+              </div>
               <button id="load-logs" class="secondary" type="button">Load logs</button>
               <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
             </details>
 
             <details id="connection-keys" class="panel panel-disclosure">
               <summary><span>Connection keys <small>Advanced security maintenance</small></span></summary>
+              <p id="keys-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
               <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
               <form id="key-rotation-form" class="form-stack">
                 <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
@@ -845,10 +845,13 @@
                 <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
                 <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
               </div>
+              </fieldset>
             </details>
 
             <details id="import-export" class="panel panel-disclosure">
               <summary id="backup-heading"><span>Import / export <small>Entire instance or reviewed content</small></span></summary>
+              <p id="transfer-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="transfer-fields" class="capability-fields" data-instance-feature="transfer" aria-describedby="transfer-fields-unavailable" aria-label="Instance export">
               <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
               <p class="help-text">To import an entire instance, choose “Open another instance…” → “Import assistant…” and select an empty destination. To import portable content, create a fresh instance and choose “Import from an fhold export” during setup. Imported portable tasks stay inactive until reviewed.</p>
               <p class="help-text">Automatic checkpoints are configured separately under Ephemeral container support. Their format is not an import/export file.</p>
@@ -869,10 +872,13 @@
               </form>
               <div id="backup-summary" class="inline-status neutral" hidden></div>
               <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
+              </fieldset>
             </details>
 
             <details id="runtime-recovery" class="panel panel-disclosure">
               <summary><span>Ephemeral container support <small>Automatic checkpoints · same-instance continuity</small></span></summary>
+              <p id="recovery-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="recovery-fields" class="capability-fields" data-instance-feature="settings" aria-describedby="recovery-fields-unavailable" aria-label="Ephemeral container settings">
               <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup, including after ordinary image upgrades. Optional for ordinary local installs.</p>
               <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
               <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Ephemeral container support is off.</strong><span>Local data remains in this instance’s home.</span></div>
@@ -929,6 +935,7 @@
                 <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
               </details>
               <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
+              </fieldset>
             </details>
           </section>
         </main>
