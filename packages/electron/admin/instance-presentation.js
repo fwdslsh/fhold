@@ -1,50 +1,45 @@
-// One presentation contract for every instance. Hosting adapters own support;
-// screens consume capabilities, never provider names or a fabricated StackConfig.
+// Provider-neutral projection for the fixed Admin screens. The normalized
+// snapshot describes what is known and which named operation owns an action;
+// renderer code never infers support from a provider kind or a local config.
 import { state } from './state.js';
 import { all, byId, setBadge, setOptions, setText } from './ui.js';
 
+function known(observation) {
+	return observation?.state === 'known' ? observation.value : undefined;
+}
+
+function observationReason(observation, fallback) {
+	return observation?.reason || fallback;
+}
+
 export function instancePresentation(snapshot) {
-	const platform = snapshot.phase === 'remote' ? snapshot.hosting : undefined;
-	const supported = { supported: true };
+	const deployment = known(snapshot.deployment) || {};
 	return {
-		name: platform?.name || snapshot.config?.deployment?.projectName || 'Your assistant',
-		location:
-			platform?.providerLabel ||
-			snapshot.connectionLabel ||
-			(platform ? 'Connected host' : 'This computer'),
-		path: platform?.location || snapshot.homeDir,
-		managed: !platform,
-		platform,
-		services: platform?.services || snapshot.services || [],
-		capabilities: platform?.capabilities || {
-			start: supported,
-			restart: supported,
-			stop: supported,
-			settings: supported,
-			transfer: supported
-		}
+		name: snapshot.identity?.name || 'Your assistant',
+		location: deployment.providerLabel || snapshot.identity?.location || 'Connected instance',
+		path: snapshot.docker?.homeDir || snapshot.identity?.location || 'Not reported',
+		docker: snapshot.docker,
+		deployment,
+		services: known(snapshot.services) || [],
+		serviceReason: observationReason(snapshot.services, 'Service status has not been inspected.')
 	};
+}
+
+function operationName(name) {
+	if (name.includes('.')) return name;
+	if (name === 'update') return 'docker.update';
+	return `host.${name}`;
 }
 
 export function instanceCapability(name, snapshot = state.currentSnapshot) {
 	if (!snapshot) return { supported: false, reason: 'Open an instance first.' };
-	const view = instancePresentation(snapshot);
-	// Image updates require the full management facade, not merely a settings
-	// capability. A platform lifecycle API cannot apply a Docker image cohort.
-	if (name === 'update')
-		return view.managed
-			? { supported: true }
-			: {
-					supported: false,
-					reason: 'Use your deployment tools to change this instance’s image.'
-				};
-	const capability = view.capabilities[name];
-	return capability?.supported
-		? capability
-		: {
-				supported: false,
-				reason: capability?.reason || 'Unavailable through this connection.'
-			};
+	const operation = snapshot.operations?.[operationName(name)];
+	if (!operation)
+		return { supported: false, reason: 'This operation is not available for this instance.' };
+	if (operation.support !== 'supported') return { supported: false, reason: operation.reason };
+	if (operation.availability.state !== 'ready')
+		return { supported: false, reason: operation.availability.reason };
+	return { supported: true };
 }
 
 export function renderInstanceCapabilities(snapshot) {
@@ -52,8 +47,6 @@ export function renderInstanceCapabilities(snapshot) {
 		const capability = instanceCapability(fields.dataset.instanceFeature, snapshot);
 		fields.disabled = !capability.supported;
 		fields.setAttribute('aria-disabled', String(!capability.supported));
-		// Fieldsets natively disable form controls, not links. Keep an unavailable
-		// section's links visible but non-interactive as well.
 		for (const link of fields.querySelectorAll('a')) {
 			link.inert = !capability.supported;
 			link.setAttribute('aria-disabled', String(!capability.supported));
@@ -62,7 +55,7 @@ export function renderInstanceCapabilities(snapshot) {
 		note.hidden = capability.supported;
 		note.textContent = capability.supported
 			? ''
-			: `Unavailable through this connection. ${capability.reason || 'Use your deployment tools to manage this setting.'}`;
+			: `Unavailable for this instance. ${capability.reason || 'Review its connection and deployment settings.'}`;
 	}
 }
 
@@ -71,30 +64,30 @@ export function renderInstanceDetails(snapshot) {
 	setText('overview-home', view.path);
 	setText('home', view.path);
 	setText('instance-name', view.name);
-	setText('config-path', snapshot.configPath || 'Not available through this connection');
-	const platform = view.platform;
+	setText('config-path', view.docker?.configPath || 'Not managed through this connection');
+	const deployment = view.deployment;
 	const portal = byId('deployment-portal');
-	portal.hidden = !platform?.portalUrl;
-	portal.href = platform?.portalUrl || 'about:blank';
+	portal.hidden = !deployment.portalUrl;
+	portal.href = deployment.portalUrl || 'about:blank';
 	setText(
 		'deployment-revisions',
-		(platform?.revisions || [])
+		(deployment.revisions || [])
 			.map(
 				(item) =>
 					`${item.name}: ${item.active ? 'active' : 'inactive'}, ${item.replicas ?? 'unknown'} replica(s), ${item.health}`
 			)
 			.join('\n')
 	);
-	byId('deployment-revisions').hidden = !platform?.revisions?.length;
+	byId('deployment-revisions').hidden = !deployment.revisions?.length;
 	for (const [id, choices, placeholder] of [
 		[
 			'log-revision',
-			(platform?.revisions || []).map((item) => ({ value: item.name, label: item.name })),
+			(deployment.revisions || []).map((item) => ({ value: item.name, label: item.name })),
 			'Current'
 		],
 		[
 			'log-container',
-			(platform?.containers || []).map((item) => ({ value: item.name, label: item.name })),
+			(deployment.containers || []).map((item) => ({ value: item.name, label: item.name })),
 			'All services'
 		]
 	]) {
@@ -103,7 +96,7 @@ export function renderInstanceDetails(snapshot) {
 		setOptions(select, [{ value: '', label: placeholder }, ...choices], selected);
 		select.disabled = choices.length === 0;
 	}
-	const sources = platform?.logSources || [];
+	const sources = deployment.logSources || [];
 	const source = byId('log-source');
 	setOptions(
 		source,
@@ -135,19 +128,18 @@ export function selectedLogOptions() {
 }
 
 export function renderPlatformAccess(snapshot) {
-	const platform = instancePresentation(snapshot).platform;
-	if (!platform) return;
+	const deployment = instancePresentation(snapshot).deployment;
 	for (const id of ['overview-opencode-link', 'direct-url', 'assistant-url-detail']) {
 		const link = byId(id);
-		link.hidden = !platform.clientUrl;
-		link.href = platform.clientUrl || 'about:blank';
-		if (id === 'direct-url') link.textContent = platform.clientUrl || 'Not reported';
+		link.hidden = !deployment.clientUrl;
+		link.href = deployment.clientUrl || 'about:blank';
+		if (id === 'direct-url') link.textContent = deployment.clientUrl || 'Not reported';
 	}
 	setText(
 		'opencode-connection-help',
-		platform.guidance?.client || 'Use the authentication configured for this instance.'
+		deployment.guidance?.client || 'Connect explicitly before managing native agent settings.'
 	);
-	setText('direct-username', 'Not available through this connection');
+	setText('direct-username', 'opencode');
 	for (const id of [
 		'mcp-connection-status',
 		'discord-connection-status',
@@ -161,15 +153,15 @@ export function renderPlatformAccess(snapshot) {
 		setBadge(byId(id), 'Not inspected');
 	setBadge(
 		byId('opencode-connection-status'),
-		platform.clientUrl ? 'Address available' : 'Address not reported'
+		deployment.clientUrl ? 'Address available' : 'Address not reported'
 	);
-	setText('provider-default-service', 'Not inspected');
-	setText('provider-default-model', 'Not available');
-	setText(
-		'provider-default-status',
-		platform.guidance?.access || 'Use OpenCode or your deployment tools to manage AI settings.'
-	);
-	setText('provider-saved-empty', 'Saved setups are not inspected through this connection.');
+	if (!state.providersLoaded) {
+		setText('provider-default-service', 'Not inspected');
+		setText('provider-default-model', 'Not available');
+		setText('provider-default-status', 'Connect to inspect native agent settings.');
+		setText('provider-saved-empty', 'Connect to inspect saved provider setups.');
+		byId('provider-saved-list').replaceChildren();
+	}
 	for (const id of [
 		'claude-guardian-help',
 		'mcp-guardian-help',
@@ -180,12 +172,9 @@ export function renderPlatformAccess(snapshot) {
 		'codex-recall-guidance'
 	])
 		setText(id, 'Not inspected through this connection.');
-	for (const id of ['provider-saved-list', 'saved-access', 'discord-mappings', 'slack-mappings'])
+	for (const id of ['saved-access', 'discord-mappings', 'slack-mappings'])
 		byId(id).replaceChildren();
 	byId('runtime-recovery-status').replaceChildren();
 	byId('runtime-recovery-status').className = 'inline-status neutral';
-	setText(
-		'runtime-recovery-status',
-		'Checkpoint configuration is not inspected through this connection.'
-	);
+	setText('runtime-recovery-status', 'Checkpoint configuration has not been inspected.');
 }

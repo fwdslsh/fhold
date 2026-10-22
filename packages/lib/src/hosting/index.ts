@@ -1,4 +1,9 @@
-export { hostingProvider, hostingConnectionSetup, openHostingInstance } from './provider.js';
+export {
+	hostingProvider,
+	hostingConnectionSetup,
+	openHostingInstance,
+	openInstanceSession
+} from './provider.js';
 export * from './types.js';
 export {
 	HostingPreferencesStore,

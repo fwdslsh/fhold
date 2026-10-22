@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { activateComposeCommand } from './activation.js';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
-import { composeProcessEnvironment, runDocker } from './docker.js';
+import { composeProcessEnvironment, composePs, parseComposePsRows, runDocker } from './docker.js';
 import type { FholdState } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
@@ -113,7 +113,26 @@ export async function disableRemote(state: FholdState, value: unknown): Promise<
 	}
 }
 
-/** Hold the existing lifecycle lock through native login and activation. No secrets are persisted here. */
+/** Bind a native login to the actual running writer, not a movable service name. */
+async function runningAssistantId(state: FholdState): Promise<string> {
+	const result = await composePs(buildComposeOptions(state));
+	const assistants = result.ok
+		? parseComposePsRows(result.stdout).filter(
+				(row) => row.service === 'assistant' && row.state === 'running' && row.id
+			)
+		: [];
+	if (assistants.length !== 1)
+		throw new Error(
+			'Start one Assistant before native sign-in. Its running container could not be selected.'
+		);
+	return assistants[0]!.id;
+}
+
+/**
+ * Start only the temporary native sign-in process. Deployment intent is changed
+ * once, after native setup succeeds; closing/cancelling this session never
+ * recreates containers or changes worker enablement/isolation.
+ */
 export async function beginRemoteEnable(
 	state: FholdState,
 	value: unknown,
@@ -121,8 +140,10 @@ export async function beginRemoteEnable(
 		sandbox?: CodexSandbox;
 		trusted: boolean;
 		update?: (progress: RemoteProgress) => void;
+		signal?: AbortSignal;
 	}
 ): Promise<RemoteEnableSession> {
+	options.signal?.throwIfAborted();
 	const tool = remoteTool(value);
 	if (options.trusted !== true)
 		throw new Error('Confirm trusted native workspace access; it bypasses Guardian policies.');
@@ -131,173 +152,165 @@ export async function beginRemoteEnable(
 			'Choose workspace-write, read-only, or explicit danger-full-access container isolation.'
 		);
 	requireInstall(state.homeDir);
-	const lock = acquireStackLock(state.dataDir);
-	if (!lock) throw new Error('Another stack operation is running.');
 	const field = tool === 'codex' ? 'codexRemote' : 'claudeRemote';
+	const parsed = readStackConfig(state.homeDir);
+	if (!parsed.ok) throw new Error(parsed.error);
+	const sandbox = options.sandbox ?? parsed.config.assistant.codexSandbox;
+	const runtimeId = await runningAssistantId(state);
+	options.signal?.throwIfAborted();
 	const progress: RemoteProgress = {
 		tool,
 		stage: 'starting',
 		output: '',
 		running: true,
-		enabled: false
+		enabled: parsed.config.assistant[field]
 	};
 	const publish = () => options.update?.({ ...progress });
-	try {
-		const parsed = readStackConfig(state.homeDir);
-		if (!parsed.ok) throw new Error(parsed.error);
-		rememberRuntimeBeforeChange(state.homeDir);
-		const sandbox = options.sandbox ?? parsed.config.assistant.codexSandbox;
-		parsed.config.assistant[field] = false;
-		if (tool === 'codex') parsed.config.assistant.codexSandbox = sandbox;
-		writeStackConfig(state.homeDir, parsed.config);
-		ensureRuntime(state);
-		publish();
-		await activateComposeCommand(state, ['up', '-d', '--wait'], { lock });
-		const compose = buildComposeOptions(state);
-		const child = spawn(
-			process.env.FH_DOCKER_BIN?.trim() || 'docker',
-			[
-				'compose',
-				...buildComposeCliArgs(state),
-				'exec',
-				'-T',
-				'--interactive',
-				'--workdir',
-				'/work',
-				'assistant',
-				'fhold-remote-setup',
-				tool,
-				sandbox
-			],
-			{ env: composeProcessEnvironment(compose.envFiles), stdio: ['pipe', 'pipe', 'pipe'] }
-		);
-		let ready = false;
-		let cancelled = false;
-		let protocolError = false;
-		let buffer = '';
-		const decoder = new StringDecoder('utf8');
-		const cancel = () => {
-			cancelled = true;
-			if (!child.stdin.destroyed) child.stdin.end(`${JSON.stringify({ cancel: true })}\n`);
-		};
-		child.stdin.on('error', () => {
-			/* native process exited */
-		});
-		const deadline = setTimeout(cancel, 900_000);
-		child.stdout.on('data', (chunk: Buffer) => {
-			buffer += decoder.write(chunk);
-			if (buffer.length > 262_144) {
+	// Native setup is intentionally against the currently selected runtime.
+	// Do not stage a disable/apply: a cancelled or switched client must leave
+	// existing worker intent and isolation untouched.
+	publish();
+	const compose = buildComposeOptions(state);
+	const child = spawn(
+		process.env.FH_DOCKER_BIN?.trim() || 'docker',
+		['exec', '--interactive', '--workdir', '/work', runtimeId, 'fhold-remote-setup', tool, sandbox],
+		{ env: composeProcessEnvironment(compose.envFiles), stdio: ['pipe', 'pipe', 'pipe'] }
+	);
+	let ready = false;
+	let cancelled = false;
+	let protocolError = false;
+	let buffer = '';
+	const decoder = new StringDecoder('utf8');
+	const cancel = () => {
+		cancelled = true;
+		if (!child.stdin.destroyed) child.stdin.end(`${JSON.stringify({ cancel: true })}\n`);
+	};
+	options.signal?.addEventListener('abort', cancel, { once: true });
+	if (options.signal?.aborted) cancel();
+	child.stdin.on('error', () => {
+		/* native process exited */
+	});
+	const deadline = setTimeout(cancel, 900_000);
+	child.stdout.on('data', (chunk: Buffer) => {
+		buffer += decoder.write(chunk);
+		if (buffer.length > 262_144) {
+			protocolError = true;
+			cancel();
+			return;
+		}
+		while (buffer.includes('\n')) {
+			const end = buffer.indexOf('\n');
+			const line = buffer.slice(0, end);
+			buffer = buffer.slice(end + 1);
+			try {
+				const event: unknown = JSON.parse(line);
+				if (!event || typeof event !== 'object') throw new Error('Invalid native setup output');
+				const item = event as Record<string, unknown>;
+				if (typeof item.stage === 'string') progress.stage = item.stage;
+				if (typeof item.output === 'string')
+					progress.output =
+						item.replace === true
+							? item.output.slice(-65_536)
+							: `${progress.output}${item.output}`.slice(-65_536);
+				if (typeof item.error === 'string') progress.error = item.error;
+				if (item.ready === true) ready = true;
+				publish();
+			} catch {
 				protocolError = true;
 				cancel();
-				return;
 			}
-			while (buffer.includes('\n')) {
-				const end = buffer.indexOf('\n');
-				const line = buffer.slice(0, end);
-				buffer = buffer.slice(end + 1);
-				try {
-					const event: unknown = JSON.parse(line);
-					if (!event || typeof event !== 'object') throw new Error('Invalid native setup output');
-					const item = event as Record<string, unknown>;
-					if (typeof item.stage === 'string') progress.stage = item.stage;
-					if (typeof item.output === 'string')
-						progress.output =
-							item.replace === true
-								? item.output.slice(-65_536)
-								: `${progress.output}${item.output}`.slice(-65_536);
-					if (typeof item.error === 'string') progress.error = item.error;
-					if (item.ready === true) ready = true;
-					publish();
-				} catch {
-					protocolError = true;
-					cancel();
-				}
-			}
-		});
-		child.stderr.on('data', (chunk: Buffer) => {
-			progress.output = `${progress.output}${chunk.toString('utf8')}`.slice(-65_536);
+		}
+	});
+	child.stderr.on('data', (chunk: Buffer) => {
+		progress.output = `${progress.output}${chunk.toString('utf8')}`.slice(-65_536);
+		publish();
+	});
+	const done = new Promise<number>((resolve) => {
+		child.once('error', () => resolve(127));
+		child.once('close', (code) => resolve(code ?? 1));
+	}).then(async (code) => {
+		buffer += decoder.end();
+		if (buffer.trim()) protocolError = true;
+		try {
+			if (code !== 0 || !ready || cancelled || protocolError || progress.error)
+				throw new Error(
+					progress.error ??
+						(cancelled
+							? 'Setup cancelled. Existing remote startup settings were not changed.'
+							: 'Native setup failed. Update to an image with guided remote setup and review the output.')
+				);
+			progress.stage = 'enabling';
 			publish();
-		});
-		const done = new Promise<number>((resolve) => {
-			child.once('error', () => resolve(127));
-			child.once('close', (code) => resolve(code ?? 1));
-		}).then(async (code) => {
-			buffer += decoder.end();
-			if (buffer.trim()) protocolError = true;
+			if (cancelled)
+				throw new Error('Setup cancelled. Existing remote startup settings were not changed.');
+			// Applying startup intent is an explicit successful workflow step,
+			// not a cleanup side effect. Recheck and lock immediately before it.
+			const lock = acquireStackLock(state.dataDir);
+			if (!lock) throw new Error('Another stack operation is running.');
 			try {
-				if (code !== 0 || !ready || cancelled || protocolError || progress.error)
+				if (cancelled)
+					throw new Error('Setup cancelled. Existing remote startup settings were not changed.');
+				if ((await runningAssistantId(state)) !== runtimeId)
 					throw new Error(
-						progress.error ??
-							(cancelled
-								? 'Setup cancelled. Remote access remains off.'
-								: 'Native setup failed. Update to an image with guided remote setup and review the output.')
+						'The Assistant was replaced during native sign-in. Reopen setup for its current container; startup settings were not changed.'
 					);
-				progress.stage = 'enabling';
-				publish();
+				if (cancelled)
+					throw new Error('Setup cancelled. Existing remote startup settings were not changed.');
 				const current = readStackConfig(state.homeDir);
 				if (!current.ok) throw new Error(current.error);
+				rememberRuntimeBeforeChange(state.homeDir);
 				current.config.assistant[field] = true;
+				if (tool === 'codex') current.config.assistant.codexSandbox = sandbox;
 				writeStackConfig(state.homeDir, current.config);
+				progress.enabled = true;
 				ensureRuntime(state);
 				await activateComposeCommand(state, ['up', '-d', '--wait'], { lock });
-				progress.stage = 'pairing';
-				publish();
-				const pairingDeadline = Date.now() + 20_000;
-				while (true) {
-					if (cancelled) throw new Error('Setup cancelled. Remote access remains off.');
-					try {
-						const output = await remoteConnection(state, tool);
-						progress.output = `${progress.output}\nBackground connection:\n${output}`.slice(
-							-65_536
-						);
-						publish();
-						break;
-					} catch (error) {
-						if (Date.now() >= pairingDeadline) throw error;
-						await new Promise((resolve) => setTimeout(resolve, 500));
-					}
-				}
-				if (cancelled) throw new Error('Setup cancelled. Remote access remains off.');
-				progress.enabled = true;
-				progress.stage = 'enabled';
-			} catch (error) {
-				progress.error = error instanceof Error ? error.message : String(error);
-				progress.stage = 'failed';
-				const current = readStackConfig(state.homeDir);
-				if (current.ok) {
-					current.config.assistant[field] = false;
-					writeStackConfig(state.homeDir, current.config);
-					ensureRuntime(state);
-					await activateComposeCommand(state, ['up', '-d', '--wait'], { lock }).catch(() => {
-						progress.error += ` Recovery failed; run fhold remote disable ${tool}.`;
-					});
-				}
 			} finally {
-				clearTimeout(deadline);
-				progress.running = false;
 				releaseStackLock(lock);
-				publish();
 			}
-			return { ...progress };
-		});
-		return {
-			snapshot: () => ({ ...progress }),
-			input(input) {
-				if (
-					!progress.running ||
-					!['sign-in', 'trust-and-consent'].includes(progress.stage) ||
-					typeof input !== 'string' ||
-					input.length > 2048 ||
-					[...input].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
-				)
-					throw new Error('Enter one native prompt answer, at most 2048 characters.');
-				child.stdin.write(`${JSON.stringify({ input })}\n`);
-			},
-			cancel,
-			done
-		};
-	} catch (error) {
-		releaseStackLock(lock);
-		throw error;
-	}
+			progress.stage = 'pairing';
+			publish();
+			const pairingDeadline = Date.now() + 20_000;
+			while (true) {
+				if (cancelled) throw new Error('Setup cancelled after startup settings were applied.');
+				try {
+					const output = await remoteConnection(state, tool);
+					progress.output = `${progress.output}\nBackground connection:\n${output}`.slice(-65_536);
+					publish();
+					break;
+				} catch (error) {
+					if (Date.now() >= pairingDeadline) throw error;
+					await new Promise((resolve) => setTimeout(resolve, 500));
+				}
+			}
+			if (cancelled) throw new Error('Setup cancelled after startup settings were applied.');
+			progress.enabled = true;
+			progress.stage = 'enabled';
+		} catch (error) {
+			progress.error = error instanceof Error ? error.message : String(error);
+			progress.stage = 'failed';
+		} finally {
+			clearTimeout(deadline);
+			options.signal?.removeEventListener('abort', cancel);
+			progress.running = false;
+			publish();
+		}
+		return { ...progress };
+	});
+	return {
+		snapshot: () => ({ ...progress }),
+		input(input) {
+			if (
+				!progress.running ||
+				!['sign-in', 'trust-and-consent'].includes(progress.stage) ||
+				typeof input !== 'string' ||
+				input.length > 2048 ||
+				[...input].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+			)
+				throw new Error('Enter one native prompt answer, at most 2048 characters.');
+			child.stdin.write(`${JSON.stringify({ input })}\n`);
+		},
+		cancel,
+		done
+	};
 }

@@ -3,14 +3,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
-import type { ManagedSnapshot } from '@fhold/lib';
 import {
 	HostingPreferencesStore,
 	hostingConnectionSetup,
 	LOCAL_CONNECTION,
 	hostingProvider,
 	hostingMachineRequest,
-	openHostingInstance
+	openInstanceSession
 } from '@fhold/lib';
 import { checkHostingConnection, repairSshCli, connectionEndpoint } from '@fhold/lib';
 import { serveManagementSession } from '@fhold/lib';
@@ -272,7 +271,7 @@ export async function runHostedCommand(
 		if (action === 'connect' && argv[1] !== 'remote' && ref?.kind === 'ssh-docker') {
 			const manager = new SshInstanceManagement(connection, ref.remoteHome);
 			try {
-				const snapshot = await manager.call<ManagedSnapshot>('snapshot');
+				const snapshot = await manager.call('snapshot');
 				const client = argv[1] || 'mcp';
 				if (!['opencode', 'mcp', 'claude'].includes(client))
 					throw Error('Client must be opencode, mcp, claude, or remote.');
@@ -287,15 +286,10 @@ export async function runHostedCommand(
 					note: 'Connected over SSH. Keep this command running while using the connection; Ctrl+C disconnects only this tunnel, not the agent.'
 				};
 				if (argv.includes('--show-password') && client === 'opencode')
-					output.password = (
-						await manager.call<{ password: string }>('assistantPassword')
-					).password;
+					output.password = (await manager.call('assistantPassword')).password;
 				if (argv.includes('--showKey') || argv.includes('--show-key')) {
 					const at = argv.indexOf('--credential');
-					const key = await manager.call<{ key: string }>(
-						'credentialKey',
-						at >= 0 ? argv[at + 1] : 'owner'
-					);
+					const key = await manager.call('credentialKey', at >= 0 ? argv[at + 1] : 'owner');
 					output.credentialKey = key.key;
 				}
 				if (argv.includes('--json')) console.log(JSON.stringify(output, null, 2));
@@ -355,7 +349,7 @@ export async function runHostedCommand(
 						includeOAuth: flag('--include-oauth'),
 						acknowledgeUnrestored: flag('--acknowledge-unrestored')
 					};
-					const preview = await manager.call<{ digest: string }>(method, value);
+					const preview = await manager.call(method, value);
 					console.log(
 						JSON.stringify(
 							flag('--apply')
@@ -436,8 +430,12 @@ export async function runHostedCommand(
 			'Choose an instance with --name/-n. Use fhold hosting instances --connection <name> to discover it.'
 		);
 	const ref = await hostingProvider(connection).selectInstance(instance);
-	const session = openHostingInstance(connection, ref);
-	await runSessionCommand(session, argv);
+	const session = openInstanceSession(connection, ref);
+	try {
+		await runSessionCommand(session, argv);
+	} finally {
+		await session.close();
+	}
 	// Observation should not fail because optional recent-target persistence failed.
 	try {
 		store().remember(ref);

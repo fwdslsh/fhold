@@ -1,13 +1,22 @@
 import { parseArgs, type ParseArgsOptionsConfig } from 'node:util';
-import type { InstanceSession, HostingAction, HostingLogOptions } from '@fhold/lib';
+import type { ComposedInstanceSession, HostingLogOptions, Operation } from '@fhold/lib';
+import { runSessionProviderCommand } from './session-provider-command.js';
+
+async function invoke<I, O>(operation: Operation<I, O>, input: I, confirmed = false): Promise<O> {
+	if (operation.support !== 'supported') throw new Error(operation.reason);
+	const availability = operation.availability();
+	if (availability.state !== 'ready') throw new Error(availability.reason);
+	return operation.invoke(input, { confirmed });
+}
 
 /** Shared remote verbs. The adapter, not the CLI, supplies their implementation. */
 export async function runSessionCommand(
-	session: InstanceSession,
+	session: ComposedInstanceSession,
 	argv: string[],
 	write: (text: string) => void = console.log
 ): Promise<void> {
 	const action = argv[0] || 'status';
+	if (action === 'provider') return runSessionProviderCommand(session, argv.slice(1), write);
 	const options: ParseArgsOptionsConfig =
 		action === 'logs' || action === 'console'
 			? {
@@ -36,11 +45,11 @@ export async function runSessionCommand(
 				throw new Error(
 					'Console accepts revision, replica and container selection, not log options.'
 				);
-			if (!session.console)
+			if (!session.host.console)
 				throw new Error(
 					'This provider does not expose an interactive console. Use its native host terminal.'
 				);
-			await session.console(value);
+			await invoke(session.host.console, value);
 		} else {
 			if (values.tail !== undefined) {
 				if (typeof values.tail !== 'string' || !/^\d+$/.test(values.tail))
@@ -52,7 +61,7 @@ export async function runSessionCommand(
 					throw new Error('Choose system or console logs.');
 				value.type = values.type as 'system' | 'console';
 			}
-			write(await session.logs(value));
+			write(await invoke(session.host.logs, value));
 		}
 	} else if (action === 'connect') {
 		if (
@@ -63,12 +72,14 @@ export async function runSessionCommand(
 				'This provider exposes the native OpenCode connection. Use connect opencode.'
 			);
 		const snapshot = await session.inspect();
-		if (!snapshot.clientUrl)
+		const deployment =
+			snapshot.deployment.state === 'known' ? snapshot.deployment.value : undefined;
+		if (!deployment?.clientUrl)
 			throw new Error(
 				'No reachable OpenCode ingress is configured. Check this app in the hosting provider.'
 			);
 		const result = {
-			url: snapshot.clientUrl,
+			url: deployment.clientUrl,
 			note: 'Opening this address may wake the agent. Use its existing native authentication.'
 		};
 		write(values.json ? JSON.stringify(result, null, 2) : `${result.url}\n${result.note}`);
@@ -77,19 +88,17 @@ export async function runSessionCommand(
 			throw new Error(
 				'This changes remote containers and can interrupt work. Repeat with --confirm when ready.'
 			);
+		if (values.revision !== undefined && typeof values.revision !== 'string')
+			throw new Error('Revision must be a revision name.');
 		if (values.revision !== undefined && action !== 'restart')
-			throw new Error('Revision selection applies only to restart.');
-		write(
-			JSON.stringify(
-				await session.operate(
-					action as HostingAction,
-					true,
-					typeof values.revision === 'string' ? { revision: values.revision } : undefined
-				),
-				null,
-				2
-			)
-		);
+			throw new Error('Revision selection is available only for restart.');
+		const actionOptions =
+			typeof values.revision === 'string' ? { revision: values.revision } : undefined;
+		const result =
+			action === 'restart'
+				? await invoke(session.host.restart, actionOptions, true)
+				: await invoke(session.host[action as 'start' | 'stop'], undefined, true);
+		write(JSON.stringify(result, null, 2));
 	} else
 		throw new Error(
 			`This provider does not expose ${action}. Use the instance's native interface or deployment tooling. No local instance was changed.`

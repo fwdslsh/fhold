@@ -2,16 +2,18 @@ import { isRunning } from './model.js';
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { byId, message, notice, operation, setBusy, setText } from './ui.js';
-import { instanceCapability, instancePresentation } from './instance-presentation.js';
+import { instanceCapability } from './instance-presentation.js';
 
 export function renderRestartStatus(snapshot) {
-	const pending = snapshot.pendingRestart;
-	byId('pending-restart').hidden = !pending?.required;
-	const running = snapshot.services.some(isRunning);
+	const pending =
+		snapshot.pendingChanges?.state === 'known' ? snapshot.pendingChanges.value : undefined;
+	byId('pending-restart').hidden = !pending?.pending;
+	const services = snapshot.services?.state === 'known' ? snapshot.services.value : [];
+	const running = services.some(isRunning);
 	setText('pending-restart-title', running ? 'Pending restart' : 'Saved changes pending startup');
 	setText(
 		'pending-restart-detail',
-		pending?.error ||
+		pending?.detail ||
 			(running
 				? 'Saved changes will apply after a restart.'
 				: 'Saved changes will apply when the instance starts.')
@@ -19,7 +21,7 @@ export function renderRestartStatus(snapshot) {
 	setText('apply-pending-restart', running ? 'Restart to apply' : 'Start to apply');
 	byId('apply-pending-restart').disabled =
 		state.operationInFlight ||
-		Boolean(snapshot.dockerError) ||
+		snapshot.services?.state === 'unavailable' ||
 		!instanceCapability(running ? 'restart' : 'start').supported;
 }
 
@@ -44,18 +46,18 @@ export async function requestStackAction(action) {
 	const result = await operation(
 		labels[action][0],
 		() => state.api.action(action, true),
-		instancePresentation(state.currentSnapshot).managed
-			? labels[action][1]
-			: 'Request submitted. Check platform status.'
+		labels[action][1]
 	);
 	if (!result) await refresh();
 	return result;
 }
 
 export async function offerRestart(snapshot = state.currentSnapshot) {
-	if (snapshot?.phase === 'remote') snapshot = snapshot.hosting;
-	if (!snapshot?.pendingRestart?.required) return;
-	return requestStackAction(snapshot.services.some(isRunning) ? 'restart' : 'start');
+	const pending =
+		snapshot?.pendingChanges?.state === 'known' ? snapshot.pendingChanges.value : undefined;
+	if (!pending?.pending) return;
+	const services = snapshot?.services?.state === 'known' ? snapshot.services.value : [];
+	return requestStackAction(services.some(isRunning) ? 'restart' : 'start');
 }
 
 export function bindRestartEvents() {

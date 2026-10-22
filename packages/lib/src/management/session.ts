@@ -3,6 +3,7 @@ import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
 import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { localInstanceManagement } from './instance.js';
+import { localDockerManagementHost } from './local-host-port.js';
 import { MANAGEMENT_METHODS, type InstanceManagement } from './types.js';
 import type { ManagementRequest, ManagementResponse } from './ssh.js';
 
@@ -36,12 +37,21 @@ export async function serveManagementSession(
 				if (!instance) {
 					instance = localInstanceManagement(request.homeDir, {
 						setupName: request.setupName,
+						host: localDockerManagementHost,
 						openUrl: (url) => write({ event: 'open-url', url })
 					});
 					instances.set(request.homeDir, instance);
 				}
 				const value = await withDockerMachineOutput(() =>
-					instance!.call(request.method, request.value, ...(request.extra ?? []))
+					// Unknown JSON is dispatched only here; the selected named handler
+					// validates its request before entering its domain operation.
+					(
+						instance!.call as (
+							method: typeof request.method,
+							value?: unknown,
+							...extra: unknown[]
+						) => Promise<unknown>
+					)(request.method, request.value, ...(request.extra ?? []))
 				);
 				write({ id, ok: true, value });
 			} catch (error) {

@@ -297,7 +297,11 @@ or **Apps → Codex → Set up Codex**. Confirm trusted workspace access and sel
 container isolation are under **Advanced settings**. The latter explains full
 container access before you confirm trust. The browser handles account login;
 the private dialog displays native prompts and
-accepts your answers. Cancellation or a failed prerequisite leaves startup off.
+accepts your answers. Cancelling sign-in or failing a prerequisite leaves the
+previous startup and sandbox settings unchanged. Temporary setup uses the selected
+running container without disabling an existing worker first. Only successful
+setup applies the confirmed startup change; cancelling later pairing does not
+undo settings already applied or recreate containers again.
 No terminal is required for the guided Admin flow. CLI enable requires a
 terminal for prompt answers; `--trust` explicitly confirms fhold's trust
 warning but does not accept any vendor prompt.
@@ -371,10 +375,11 @@ the latter do not close issue #38's live acceptance gate.
 1. Fresh install: both supervisors default on. Without subscription sign-in,
    both report `sign-in-needed` and neither remote worker starts. Once OpenCode
    activity is idle, enabled keep-alive sends no requests.
-2. Use guided enable in CLI and Admin. Verify only the selected worker pauses,
+2. Use guided enable in CLI and Admin. Verify startup intent is unchanged during sign-in,
    a native sign-in link opens in the host browser (with a printed fallback),
    and trust/consent are explicit human answers. Do not copy host authentication.
-   Cancel once and verify startup stays off with no lingering setup process.
+   Cancel once and verify previous startup/sandbox choices remain unchanged, with
+   no lingering setup process or cancellation-triggered container recreation.
 3. Complete setup for one vendor. Verify OpenCode and scheduler remain healthy;
    the other unsigned-in vendor still waits. Inspect status, then pair a supported
    client. Explicitly disabled workers must remain off.

@@ -10,14 +10,18 @@ import {
 	removeProviderAuth,
 	setProviderApiKey,
 	updateAssistantGlobalConfig,
-	type ProviderSummary
+	type ProviderSummary,
+	type NativeAgentRequestOptions
 } from './opencode.js';
 import { readNativePreferences } from './provider-files.js';
+import type { NativeSettingsWriteResult } from '../management/agent-models.js';
 
 export type ProviderSettings = {
 	providers: ProviderSummary[];
 	currentModel?: { provider: string; model: string };
 	configurationIssue?: string;
+	inventoryUnavailable?: boolean;
+	write?: NativeSettingsWriteResult & { credential?: 'saved' | 'unconfirmed' };
 };
 export type ProviderEndpointInput = {
 	provider: string;
@@ -26,7 +30,7 @@ export type ProviderEndpointInput = {
 	model: string;
 	key?: string;
 };
-type Options = { fetch?: typeof fetch };
+type Options = NativeAgentRequestOptions;
 type ConfigFile = { value: Record<string, unknown> };
 const POLICY_FILE = 'config/opencode/opencode.json';
 
@@ -212,7 +216,8 @@ function activation(
 ): Record<string, unknown> {
 	// New preferences use the promoted native field. Preserve existing files'
 	// still-supported experimental form instead of rewriting unrelated settings.
-	const legacy = !Object.hasOwn(config, 'policies') && Array.isArray(record(config.experimental)?.policies);
+	const legacy =
+		!Object.hasOwn(config, 'policies') && Array.isArray(record(config.experimental)?.policies);
 	const policies = legacy ? record(config.experimental)?.policies : config.policies;
 	const remaining = Array.isArray(policies)
 		? policies.filter((item) => {
@@ -220,7 +225,10 @@ function activation(
 				return rule?.action !== 'provider.use' || rule.resource !== provider;
 			})
 		: [];
-	const next = [...remaining, { action: 'provider.use', resource: provider, effect: enabled ? 'allow' : 'deny' }];
+	const next = [
+		...remaining,
+		{ action: 'provider.use', resource: provider, effect: enabled ? 'allow' : 'deny' }
+	];
 	return legacy ? { experimental: { policies: next } } : { policies: next };
 }
 async function withSettingsLock<T>(home: string, run: () => Promise<T>): Promise<T> {
@@ -237,22 +245,45 @@ async function applyConfigChange(
 	patch: Record<string, unknown>,
 	options: Options,
 	matches: (value: Record<string, unknown>) => boolean
-): Promise<void> {
+): Promise<NativeSettingsWriteResult> {
 	await updateAssistantGlobalConfig(home, patch, options);
 	// Native watchers apply the file asynchronously. Read back normalization;
 	// no reload API or process restart is involved.
-	const deadline = Date.now() + 5_000;
+	const deadline = Date.now() + Math.min(5_000, options.timeoutMs ?? 5_000);
 	do {
 		try {
-			if (matches(await readAssistantConfig(home, options))) return;
+			if (matches(await readAssistantConfig(home, options)))
+				return { saved: true, effective: 'verified', activation: 'none' };
 		} catch {
 			/* the native watcher may still be applying this edit */
 		}
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	} while (Date.now() < deadline);
-	throw new Error(
-		'OpenCode saved these preferences, but their effective settings could not be confirmed. Check the agent and higher-priority managed configuration before testing or using this model.'
-	);
+	return {
+		saved: true,
+		effective: 'unconfirmed',
+		activation: 'none',
+		detail:
+			'Preferences were saved, but their effective settings could not be confirmed. Check the agent and higher-priority managed configuration before testing or using this model.'
+	};
+}
+
+async function settingsAfterWrite(
+	home: string,
+	options: Options,
+	write: NonNullable<ProviderSettings['write']>
+): Promise<ProviderSettings> {
+	try {
+		return { ...(await listProviderSettings(home, options)), write };
+	} catch {
+		return {
+			providers: [],
+			inventoryUnavailable: true,
+			configurationIssue:
+				'Preferences were saved. The current AI account inventory could not be read; refresh it when the agent is reachable.',
+			write
+		};
+	}
 }
 
 /** Edit watched native user preferences, never managed policy. */
@@ -305,19 +336,38 @@ export async function saveProviderEndpoint(
 			},
 			...activation(global, provider, true)
 		};
-		await applyConfigChange(home, patch, options, (value) => {
-			const effective = record(record(value.providers)?.[provider]);
-			return (
-				record(effective?.settings)?.baseURL === url &&
-				Boolean(record(effective?.models)?.[model]) &&
-				providerPolicies(value)
-					.slice()
-					.reverse()
-					.find((rule) => rule.resource === provider)?.effect !== 'deny'
-			);
-		});
-		if (input.key !== undefined) await setProviderApiKey(home, provider, input.key, options);
-		return listProviderSettings(home, options);
+		const write: NonNullable<ProviderSettings['write']> = await applyConfigChange(
+			home,
+			patch,
+			options,
+			(value) => {
+				const effective = record(record(value.providers)?.[provider]);
+				return (
+					record(effective?.settings)?.baseURL === url &&
+					Boolean(record(effective?.models)?.[model]) &&
+					providerPolicies(value)
+						.slice()
+						.reverse()
+						.find((rule) => rule.resource === provider)?.effect !== 'deny'
+				);
+			}
+		);
+		if (input.key !== undefined) {
+			write.credential = 'unconfirmed';
+			if (write.effective === 'verified') {
+				try {
+					await setProviderApiKey(home, provider, input.key, options);
+					write.credential = 'saved';
+				} catch {
+					write.detail =
+						'The endpoint preferences were saved, but its sign-in could not be confirmed. Refresh the service and check its sign-in before retrying.';
+				}
+			} else {
+				write.detail =
+					'The endpoint preferences were saved, but the endpoint is not effective yet. Its API key was not submitted; sign in after the endpoint is available.';
+			}
+		}
+		return settingsAfterWrite(home, options, write);
 	});
 }
 
@@ -344,7 +394,7 @@ export async function useProviderModel(
 			throw new Error(
 				'The default model is controlled by config/opencode/opencode.json. Edit its managed model setting there.'
 			);
-		await applyConfigChange(
+		const write = await applyConfigChange(
 			home,
 			{ model: selection },
 			options,
@@ -352,7 +402,7 @@ export async function useProviderModel(
 				value.model === selection ||
 				(record(value.model)?.providerID === provider && record(value.model)?.model === model)
 		);
-		return listProviderSettings(home, options);
+		return settingsAfterWrite(home, options, write);
 	});
 }
 
@@ -366,6 +416,7 @@ export async function removeProviderSetup(
 		const settings = await listProviderSettings(home, options);
 		if (settings.currentModel?.provider === provider)
 			throw new Error('Choose another model for your agent before removing this setup.');
+		let write: NativeSettingsWriteResult | undefined;
 		if (options.endpoint) {
 			const { users, policy } = configurations(home);
 			if (definition(policy, provider))
@@ -379,7 +430,7 @@ export async function removeProviderSetup(
 			)
 				throw new Error('This advanced endpoint cannot be disabled by the simple service form.');
 			const global = await readAssistantGlobalConfig(home, options);
-			await applyConfigChange(
+			write = await applyConfigChange(
 				home,
 				activation(global, provider, false),
 				options,
@@ -391,7 +442,7 @@ export async function removeProviderSetup(
 			);
 		}
 		if (!options.endpoint) await removeProviderAuth(home, provider, options);
-		return listProviderSettings(home, options);
+		return write ? settingsAfterWrite(home, options, write) : listProviderSettings(home, options);
 	});
 }
 

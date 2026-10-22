@@ -14,12 +14,8 @@ function instanceName(target) {
 }
 
 export function renderInstancePicker(snapshot) {
-	const selected =
-		snapshot.phase === 'remote'
-			? targetKey({ kind: 'hosted', ref: snapshot.hosting.ref })
-			: snapshot.target
-				? targetKey({ kind: 'hosted', ref: snapshot.target })
-				: snapshot.homeDir;
+	const ref = snapshot.identity.ref;
+	const selected = ref.kind === 'local-docker' ? ref.homeDir : targetKey({ kind: 'hosted', ref });
 	const others = state.recentInstances.filter((target) => targetKey(target) !== selected);
 	setOptions(
 		byId('instance-picker'),
@@ -27,15 +23,9 @@ export function renderInstancePicker(snapshot) {
 			{
 				value: selected,
 				label:
-					snapshot.phase === 'remote'
-						? instanceName({
-								kind: 'hosted',
-								ref: snapshot.hosting.ref,
-								name: snapshot.hosting.name
-							})
-						: snapshot.target
-							? `${snapshot.config.deployment.projectName} · ${snapshot.connectionLabel}`
-							: snapshot.config.deployment?.projectName || 'Selected instance'
+					ref.kind === 'local-docker'
+						? snapshot.identity.name
+						: instanceName({ kind: 'hosted', ref, name: snapshot.identity.name })
 			},
 			...others.map((target) => ({
 				value: targetKey(target),
@@ -264,17 +254,14 @@ export function bindInstanceEvents() {
 	byId('instance-picker').addEventListener('change', async () => {
 		const requested = byId('instance-picker').value;
 		const current = state.currentSnapshot;
-		const selected =
-			current?.phase === 'remote'
-				? targetKey({ kind: 'hosted', ref: current.hosting.ref })
-				: current?.target
-					? targetKey({ kind: 'hosted', ref: current.target })
-					: current?.homeDir || '';
+		const ref = current?.identity.ref;
+		const selected = !ref
+			? ''
+			: ref.kind === 'local-docker'
+				? ref.homeDir
+				: targetKey({ kind: 'hosted', ref });
 		byId('instance-picker').value = selected;
-		if (requested === 'open-another')
-			await showHostingChooser(
-				current?.target?.connectionId || current?.hosting?.ref?.connectionId
-			);
+		if (requested === 'open-another') await showHostingChooser(ref?.connectionId);
 		else {
 			const target = state.recentInstances.find((item) => targetKey(item) === requested);
 			if (target && targetKey(target) !== selected) await openInstance(target);

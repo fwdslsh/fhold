@@ -1,6 +1,6 @@
 import type { StackConfig } from '../control-plane/stack-config.js';
 import type { RestartStatus } from '../control-plane/runtime-revision.js';
-import type { InstanceManagement, DirectoryListing } from '../management/types.js';
+import type { DirectoryListing } from '../management/contracts.js';
 
 export type HostingConnection =
 	| { kind: 'local-docker'; id: 'local'; label: string }
@@ -20,6 +20,10 @@ export type InstanceRef =
 
 export type HostingAction = 'start' | 'stop' | 'restart';
 export type HostingActionOptions = { revision?: string };
+export type HostingActionEffect =
+	| 'reconcile-deployment'
+	| 'request-platform-state'
+	| 'restart-runtime';
 export type ConnectionCheck = {
 	ok: boolean;
 	repairable: boolean;
@@ -39,9 +43,21 @@ export type HostingCapabilities = Record<
 export type InstanceSummary = { ref: InstanceRef; name: string; location: string };
 export type HostingSnapshot = InstanceSummary & {
 	capabilities: HostingCapabilities;
+	actionEffects?: Partial<Record<HostingAction, HostingActionEffect>>;
+	/** Advertised native SSH command methods, not a general management capability. */
+	managementMethods?: string[];
+	serviceError?: string;
 	services: Array<{
 		name: string;
+		/** Backward-compatible observed image shorthand. */
 		image?: string;
+		imageProvenance?: {
+			configuredReference?: string;
+			configuredReferences?: string[];
+			observedReferences?: string[];
+			digest?: string;
+			updateCandidate?: { reference: string; source: string };
+		};
 		state: string;
 		health: string;
 		id?: string;
@@ -71,10 +87,6 @@ export type HostingLogOptions = {
 	container?: string;
 };
 export interface InstanceSession {
-	management?(options?: {
-		setupName?: string;
-		openUrl?: (url: string) => void;
-	}): InstanceManagement;
 	readonly ref: InstanceRef;
 	inspect(): Promise<HostingSnapshot>;
 	operate(

@@ -6,7 +6,7 @@ import {
 	resolveFholdHome
 } from '../control-plane/foundation.js';
 import { classifyInstall, requireInstall } from '../control-plane/state.js';
-import { readStackConfig } from '../control-plane/stack-config.js';
+import { defaultStackConfig, readStackConfig } from '../control-plane/stack-config.js';
 import { restartStatus } from '../control-plane/runtime-revision.js';
 import { buildComposeOptions } from '../control-plane/compose.js';
 import {
@@ -21,7 +21,6 @@ import { runDocker } from '../control-plane/docker.js';
 import { activateComposeCommand, deactivateComposeCommand } from '../control-plane/activation.js';
 import { assistantEndpoint } from '../control-plane/opencode.js';
 import type { HostingProcess } from './process.js';
-import { localInstanceManagement } from '../management/instance.js';
 import {
 	capabilities,
 	type HostingAction,
@@ -88,6 +87,16 @@ export async function listLocalInstances(
 
 export async function inspectLocalInstance(homeDir: string): Promise<HostingSnapshot> {
 	const state = createFholdState(homeDir);
+	if (classifyInstall(state.homeDir) === 'not_installed') {
+		return {
+			ref: { kind: 'local-docker', connectionId: 'local', homeDir: state.homeDir },
+			name: defaultStackConfig(state.homeDir).deployment.projectName,
+			location: state.homeDir,
+			capabilities: capabilities([], 'Install this instance before changing its deployment.'),
+			services: [],
+			warnings: []
+		};
+	}
 	requireInstall(state.homeDir);
 	const config = readStackConfig(state.homeDir);
 	if (!config.ok) throw new Error(config.error);
@@ -101,6 +110,7 @@ export async function inspectLocalInstance(homeDir: string): Promise<HostingSnap
 		pendingRestart: restartStatus(state.homeDir),
 		clientUrl: assistantEndpoint(state.homeDir),
 		warnings: result.ok ? [] : [result.stderr || 'Docker status is unavailable.'],
+		...(!result.ok ? { serviceError: result.stderr || 'Docker status is unavailable.' } : {}),
 		services: result.ok
 			? await Promise.all(
 					(await completeContainerImages(parseComposePsRows(result.stdout))).map(async (row) => ({
@@ -140,7 +150,9 @@ export async function localInstanceLogs(
 	options: HostingLogOptions = {}
 ): Promise<string> {
 	if (Object.entries(options).some(([key, value]) => key !== 'tail' && value !== undefined))
-		throw new Error('Docker logs support --tail; deployment revision/replica selection is not available.');
+		throw new Error(
+			'Docker logs support --tail; deployment revision/replica selection is not available.'
+		);
 	const state = createFholdState(homeDir);
 	requireInstall(state.homeDir);
 	const result = await composeLogs(buildComposeOptions(state), options.tail ?? 100);
@@ -160,11 +172,11 @@ export const localDockerProvider: HostingProvider = {
 		if (ref.kind !== 'local-docker') throw new Error('Select a local Docker instance.');
 		return {
 			ref,
-			management: (options) => localInstanceManagement(ref.homeDir, options),
 			inspect: () => inspectLocalInstance(ref.homeDir),
 			logs: (options) => localInstanceLogs(ref.homeDir, options),
 			async operate(action, confirmed, options) {
-				if (options?.revision !== undefined) throw new Error('This instance has no deployment revision selector.');
+				if (options?.revision !== undefined)
+					throw new Error('This instance has no deployment revision selector.');
 				if (!confirmed)
 					throw new Error('Confirm this lifecycle operation before changing containers.');
 				await operateLocalInstance(ref.homeDir, action);

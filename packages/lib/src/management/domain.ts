@@ -1,5 +1,8 @@
 import { applyRestore, planRestore } from '../control-plane/restore.js';
-import { classifyInstall } from '../control-plane/state.js';
+import { classifyInstall, markInstalled } from '../control-plane/state.js';
+import { configureGuardianModeratorModel } from '../control-plane/opencode.js';
+import { mutateStack } from '../control-plane/operations.js';
+import type { AssistantReadiness } from './agent-access.js';
 import { createBackup } from '../control-plane/backup.js';
 import { installHome } from '../control-plane/install.js';
 import {
@@ -21,10 +24,21 @@ import {
 	restoreInstance,
 	INSTANCE_BACKUP_NOTICE
 } from '../control-plane/instance-backup.js';
-import { type InstanceRef } from '../hosting/types.js';
+import type { HostingActionEffect } from '../hosting/types.js';
 import type { StackAction } from './types.js';
 
-export function interruptionPrompt(action: unknown, hosting?: InstanceRef['kind']) {
+/** Host application completion is separate from the native agent verification. */
+export async function completeInstanceSetup(
+	homeDir: string,
+	readiness: Extract<AssistantReadiness, { ok: true }>
+): Promise<void> {
+	mutateStack(homeDir, () => {
+		configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
+		markInstalled(homeDir);
+	});
+}
+
+export function interruptionPrompt(action: unknown, effect?: HostingActionEffect) {
 	if (
 		typeof action !== 'string' ||
 		![
@@ -40,18 +54,19 @@ export function interruptionPrompt(action: unknown, hosting?: InstanceRef['kind'
 		].includes(action)
 	)
 		throw new Error('Invalid restart confirmation request.');
-	if (hosting === 'azure-container-apps' && (action === 'start' || action === 'stop'))
+	if (effect === 'request-platform-state' && (action === 'start' || action === 'stop'))
 		return {
-			message: `Request Azure to ${action} this app?`,
+			message: `Request the hosting platform to ${action} this app?`,
 			detail:
 				'This submits a native platform request, not a settings update or container replacement. Active connections may be interrupted. Acceptance does not prove replica drain or agent readiness; check platform status before replacing any writers.',
 			buttons: ['Cancel', `Request ${action}`]
 		};
-	if (hosting === 'azure-container-apps' && action === 'restart')
+	if (effect === 'restart-runtime' && action === 'restart')
 		return {
-			message: 'Restart the active Azure revision?',
-			detail: 'This uses Azure’s native revision restart. Active work and connections will be interrupted. It does not change images, settings, mounts, scale rules or secrets. Request acceptance is not proof of agent readiness or a completed recovery checkpoint.',
-			buttons: ['Cancel', 'Restart revision']
+			message: 'Restart the active runtime?',
+			detail:
+				'This requests a native runtime restart. Active work and connections will be interrupted. It does not change images, settings, mounts, scale rules or secrets. Request acceptance is not proof of agent readiness or a completed recovery checkpoint.',
+			buttons: ['Cancel', 'Restart runtime']
 		};
 	if (action === 'instance-export' || action === 'instance-import')
 		return {
@@ -83,7 +98,7 @@ export function interruptionPrompt(action: unknown, hosting?: InstanceRef['kind'
 		return {
 			message: 'Continue remote setup?',
 			detail:
-				'Setup may restart containers before and after native sign-in. Active work and connections may be interrupted, and all saved settings will be applied. Your data is kept. You can cancel now and set this up later.',
+				'Native sign-in runs first. Completing setup may restart containers to apply saved settings. Active work and connections may be interrupted. Your data is kept. Cancelling sign-in does not change startup settings or restart containers.',
 			buttons: ['Set up later', 'Continue setup']
 		};
 	if (action === 'update')

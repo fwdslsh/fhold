@@ -127,11 +127,17 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 		root
 	);
 	expect(result.code).toBe(0);
-	expect(JSON.parse(result.stdout).ref).toEqual({
+	const snapshot = JSON.parse(result.stdout);
+	expect(snapshot.identity.ref).toEqual({
 		kind: 'ssh-docker',
 		connectionId: 'lab',
 		remoteHome: '/opt/stacks/agent'
 	});
+	expect(snapshot.operations['agent.providers']).toMatchObject({
+		support: 'supported',
+		availability: { state: 'unavailable' }
+	});
+	expect(snapshot.docker).toBeUndefined();
 	const input = JSON.parse(readFileSync(capture, 'utf8'));
 	expect(input.args.at(-1)).toBe('PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc');
 	expect(input.args).not.toContain('/opt/stacks/agent');

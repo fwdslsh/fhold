@@ -29,10 +29,10 @@ export function updateRecoveryFields() {
 	byId(id('blob-auth')).hidden = !blob;
 	byId(id('client-id-field')).hidden = !identity;
 	byId(id('credential-form')).hidden = !enabled || !blob || identity;
-	const saved = state.currentSnapshot?.config?.recovery?.enabled;
-	const running = state.currentSnapshot?.services?.some(
-		(service) => !['exited', 'dead'].includes(service.state)
-	);
+	const saved = state.currentSnapshot?.docker?.config?.recovery?.enabled;
+	const running = (
+		state.currentSnapshot?.services?.state === 'known' ? state.currentSnapshot.services.value : []
+	).some((service) => !['exited', 'dead'].includes(service.state));
 	byId('initialize-recovery').disabled = !saved || running || state.operationInFlight;
 	byId('restore-runtime-recovery').disabled = !saved || running || state.operationInFlight;
 	byId('inspect-recovery').disabled = !saved || state.operationInFlight;
@@ -40,9 +40,11 @@ export function updateRecoveryFields() {
 }
 
 export function renderRecovery(snapshot) {
-	const recovery = snapshot.recovery;
-	const settings = recovery?.settings || snapshot.config.recovery;
+	const recovery =
+		snapshot.data?.recovery?.state === 'known' ? snapshot.data.recovery.value : undefined;
+	const settings = recovery?.settings || snapshot.docker?.config?.recovery;
 	if (!settings) return;
+	const editable = Boolean(recovery?.digest);
 	byId(id('enabled')).checked = settings.enabled;
 	byId(id('akm-capture')).checked = settings.akmIndexCapture === true;
 	byId(id('akm-restore')).checked = settings.akmIndexRestore === true;
@@ -67,16 +69,26 @@ export function renderRecovery(snapshot) {
 		? 'A private connection string is saved. Its value is not shown.'
 		: 'No connection string saved. Add one below, or select a deployment identity.';
 	byId(id('policy-path')).textContent = recovery?.policyPath || 'config/recovery/include.json';
-	byId('save-recovery-settings').disabled = !!snapshot.recoveryError;
+	byId('save-recovery-settings').disabled = !editable;
 	renderRecoveryStatus({
-		state: settings.enabled ? 'configured' : 'disabled',
-		failure: snapshot.recoveryError
+		state: editable ? (settings.enabled ? 'configured' : 'disabled') : 'not-ready',
+		failure: editable
+			? snapshot.data?.recovery?.state === 'unavailable'
+				? snapshot.data.recovery.reason
+				: undefined
+			: snapshot.data?.recovery?.reason ||
+				'Checkpoint settings are not available through this connection.'
 	});
 	updateRecoveryFields();
 }
 
 export function recoveryInput() {
-	const previous = state.currentSnapshot.recovery;
+	const previous =
+		state.currentSnapshot.data?.recovery?.state === 'known'
+			? state.currentSnapshot.data.recovery.value
+			: undefined;
+	if (!previous?.digest || !previous?.settings)
+		throw new Error('Checkpoint settings are not available through this connection.');
 	const settings = { ...previous.settings, enabled: byId(id('enabled')).checked };
 	const directory = byId(id('directory')).value.trim();
 	settings.destination =
@@ -156,7 +168,11 @@ export function bindRecoveryEvents() {
 	);
 	byId(id('form')).addEventListener('submit', async (event) => {
 		event.preventDefault();
-		const previous = state.currentSnapshot.recovery.settings;
+		const previous =
+			state.currentSnapshot.data?.recovery?.state === 'known'
+				? state.currentSnapshot.data.recovery.value.settings
+				: state.currentSnapshot.docker?.config?.recovery;
+		if (!previous) throw new Error('Recovery settings are not available for this instance.');
 		const saved = await operation(
 			'Saving checkpoint settings',
 			async () => {
@@ -168,7 +184,14 @@ export function bindRecoveryEvents() {
 			'Checkpoint settings saved. Existing checkpoints and containers were not changed.'
 		);
 		if (saved) {
-			const next = saved.config.recovery;
+			const next =
+				saved.data?.recovery?.state === 'known'
+					? saved.data.recovery.value.settings
+					: saved.docker?.config?.recovery;
+			if (!next) {
+				updateRecoveryFields();
+				return;
+			}
 			const newNamespace =
 				next.enabled &&
 				(!previous.enabled ||

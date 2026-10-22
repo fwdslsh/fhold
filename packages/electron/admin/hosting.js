@@ -22,9 +22,7 @@ let savedConnections = [];
 let editingId;
 let discoveryEpoch = 0;
 function selectedConnectionId() {
-	return (
-		state.currentSnapshot?.target?.connectionId || state.currentSnapshot?.hosting?.ref.connectionId
-	);
+	return state.currentSnapshot?.identity?.ref?.connectionId;
 }
 export async function loadHostingConnections() {
 	const selected = byId('hosting-connection').value;

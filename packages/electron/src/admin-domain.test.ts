@@ -1,8 +1,22 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { readdirSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	readdirSync,
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { defaultStackConfig, createBackup, writeStackConfig, MANAGED_FILES, SEEDED_FILES } from '@fhold/lib';
+import {
+	defaultStackConfig,
+	createBackup,
+	writeStackConfig,
+	MANAGED_FILES,
+	SEEDED_FILES
+} from '@fhold/lib';
 import { stageAdminAssets, DISTRIBUTION_ASSETS } from '../scripts/stage-assets.js';
 import { retainAdminE2eHome } from '../scripts/admin-e2e-retention.mjs';
 
@@ -43,7 +57,8 @@ afterEach(() => {
 });
 
 async function install(
-	config: unknown = defaultStackConfig(), automaticPorts = true
+	config: unknown = defaultStackConfig(),
+	automaticPorts = true
 ): Promise<{ root: string; home: string }> {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-admin-domain-'));
 	roots.push(root);
@@ -63,17 +78,39 @@ describe('Admin domain', () => {
 			expect(confirmedAdminAction({ action, confirmed: true })).toBe(action);
 		}
 		expect(() => confirmedAdminAction({ action: ['start'], confirmed: true })).toThrow();
-	expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
-	expect(interruptionPrompt('start', 'azure-container-apps').buttons).toEqual(['Cancel', 'Request start']);
-	expect(interruptionPrompt('stop', 'azure-container-apps').detail).toContain('Acceptance does not prove replica drain');
+		expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+		expect(interruptionPrompt('start', 'request-platform-state').buttons).toEqual([
+			'Cancel',
+			'Request start'
+		]);
+		expect(interruptionPrompt('stop', 'request-platform-state').detail).toContain(
+			'Acceptance does not prove replica drain'
+		);
+		expect(interruptionPrompt('restart', 'restart-runtime').buttons).toEqual([
+			'Cancel',
+			'Restart runtime'
+		]);
 		expect(interruptionPrompt('recovery-init').buttons[0]).toBe('Cancel');
 		expect(interruptionPrompt('recovery-init').detail).toContain('genuinely unused');
 		expect(interruptionPrompt('recovery-restore').detail).toContain('containers remain stopped');
-		expect(interruptionPrompt('remote-setup').detail).toContain('before and after native sign-in');
+		expect(interruptionPrompt('remote-setup').detail).toContain('Native sign-in runs first');
+		expect(interruptionPrompt('remote-setup').detail).toContain(
+			'Cancelling sign-in does not change startup settings'
+		);
 		for (const action of ['instance-export', 'instance-import']) {
 			const prompt = interruptionPrompt(action);
 			expect(prompt.buttons[0]).toBe('Cancel');
-			for (const detail of ['stopped', 'conversations', 'sign-ins', 'access keys', 'active task settings', 'unencrypted', 'empty folder', 'Never run the original and restored copies together']) expect(prompt.detail).toContain(detail);
+			for (const detail of [
+				'stopped',
+				'conversations',
+				'sign-ins',
+				'access keys',
+				'active task settings',
+				'unencrypted',
+				'empty folder',
+				'Never run the original and restored copies together'
+			])
+				expect(prompt.detail).toContain(detail);
 		}
 		expect(() => interruptionPrompt(['restart'])).toThrow();
 	});
@@ -115,9 +152,7 @@ describe('Admin domain', () => {
 			)
 		).toBe(true);
 		const posix = 'file:///opt/fhold%20Admin/admin/index.html';
-		expect(isAdminPageUrl('file:///opt/fhold%20Admin/admin/index.html', posix, false)).toBe(
-			true
-		);
+		expect(isAdminPageUrl('file:///opt/fhold%20Admin/admin/index.html', posix, false)).toBe(true);
 		for (const value of [
 			undefined,
 			'invalid',
@@ -147,13 +182,16 @@ describe('Admin domain', () => {
 		const resource = builder.extraResources.find((entry) => entry.to === 'skeleton');
 		if (!resource) throw new Error('Missing packaged Skeleton resources.');
 		expect(resource.from).toBe('dist/skeleton');
-  expect(DISTRIBUTION_ASSETS).toEqual([...MANAGED_FILES, ...SEEDED_FILES].sort());
-  const staged = stageAdminAssets(join(import.meta.dir, '../../..'));
-  function inventory(directory: string, prefix = ''): string[] {
-   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? inventory(join(directory, entry.name), `${prefix}${entry.name}/`) : [`${prefix}${entry.name}`]);
-  }
-  expect(inventory(staged).sort()).toEqual(DISTRIBUTION_ASSETS);
+		expect(DISTRIBUTION_ASSETS).toEqual([...MANAGED_FILES, ...SEEDED_FILES].sort());
+		const staged = stageAdminAssets(join(import.meta.dir, '../../..'));
+		function inventory(directory: string, prefix = ''): string[] {
+			return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
+				entry.isDirectory()
+					? inventory(join(directory, entry.name), `${prefix}${entry.name}/`)
+					: [`${prefix}${entry.name}`]
+			);
+		}
+		expect(inventory(staged).sort()).toEqual(DISTRIBUTION_ASSETS);
 	});
 
 	it('materializes a complete fresh home using only packaged Skeleton resources', async () => {
@@ -301,15 +339,31 @@ describe('Admin domain', () => {
 			writeFileSync(process.env.FH_DOCKER_BIN, `#!${process.execPath}\n`, { mode: 0o700 });
 			const destination = join(root, 'export');
 			const restored = join(root, 'restored');
-			await expect(backupFromAdmin(home, { destination, full: true })).rejects.toThrow('confirm-stopped');
+			await expect(backupFromAdmin(home, { destination, full: true })).rejects.toThrow(
+				'confirm-stopped'
+			);
 			writeFileSync(join(home, 'data/assistant/native-history'), 'whole instance');
 			await backupFromAdmin(home, { destination, full: true, confirmed: true });
 			const preview = await instanceRestoreFromAdmin(restored, { sourceHome: destination });
-			await expect(instanceRestoreFromAdmin(restored, { sourceHome: destination, apply: true, confirmed: true })).rejects.toThrow('Preview');
-			await instanceRestoreFromAdmin(restored, { sourceHome: destination, apply: true, previewDigest: preview.digest, confirmed: true });
-			expect(readFileSync(join(restored, 'data/assistant/native-history'), 'utf8')).toBe('whole instance');
+			await expect(
+				instanceRestoreFromAdmin(restored, {
+					sourceHome: destination,
+					apply: true,
+					confirmed: true
+				})
+			).rejects.toThrow('Preview');
+			await instanceRestoreFromAdmin(restored, {
+				sourceHome: destination,
+				apply: true,
+				previewDigest: preview.digest,
+				confirmed: true
+			});
+			expect(readFileSync(join(restored, 'data/assistant/native-history'), 'utf8')).toBe(
+				'whole instance'
+			);
 		} finally {
-			if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN; else process.env.FH_DOCKER_BIN = previousDocker;
+			if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN;
+			else process.env.FH_DOCKER_BIN = previousDocker;
 		}
 	});
 

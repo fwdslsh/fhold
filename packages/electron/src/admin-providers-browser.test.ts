@@ -84,11 +84,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		const browserSocket = debugOutput.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1];
 		if (!browserSocket) throw new Error('Missing Chromium debugger address');
 		const debuggerHttp = browserSocket.replace('ws://', 'http://').split('/devtools/')[0];
-		const targets = (await (await fetch(`${debuggerHttp}/json/list`)).json()) as Array<{
-			type: string;
-			webSocketDebuggerUrl: string;
-		}>;
-		const target = targets.find((entry) => entry.type === 'page');
+		let target: { type: string; webSocketDebuggerUrl: string } | undefined;
+		const pageDeadline = Date.now() + 5_000;
+		while (!target && Date.now() < pageDeadline) {
+			const targets = (await (await fetch(`${debuggerHttp}/json/list`)).json()) as Array<{
+				type: string;
+				webSocketDebuggerUrl: string;
+			}>;
+			target = targets.find((entry) => entry.type === 'page');
+			if (!target) await Bun.sleep(25);
+		}
 		if (!target) throw new Error('Chromium did not create a page');
 		socket = new WebSocket(target.webSocketDebuggerUrl);
 		await new Promise<void>((resolve, reject) => {
@@ -177,23 +182,70 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			if (Date.now() > deadline) throw new Error('Renderer fixture module did not load');
 			await Bun.sleep(50);
 		}
+		const config = defaultStackConfig();
+		const observedAt = '2026-10-22T00:00:00.000Z';
+		const known = (value: unknown) => ({ state: 'known', value, observedAt });
 		const snapshot = {
-			phase: 'ready',
-			homeDir: '/disposable-provider-fixture',
-			configPath: '/disposable-provider-fixture/state/stack.json',
-			config: defaultStackConfig(),
-			services: [{ name: 'assistant', state: 'running', health: 'healthy', running: true }],
-			credentials: [],
-			portalMappings: { discord: { users: {} }, slack: { users: {} } },
-			portalSecrets: {},
-			pendingRestart: { required: false }
+			identity: {
+				ref: { kind: 'local-docker', homeDir: '/disposable-provider-fixture' },
+				name: 'provider-fixture',
+				location: '/disposable-provider-fixture'
+			},
+			lifecycle: known('ready'),
+			deployment: known({ warnings: [] }),
+			services: known([{ name: 'assistant', state: 'running', health: 'healthy', running: true }]),
+			operations: {
+				'agent.providers': { support: 'supported', availability: { state: 'ready' } },
+				'agent.connect': { support: 'supported', availability: { state: 'ready' } },
+				'agent.assistantPassword': { support: 'supported', availability: { state: 'ready' } },
+				'agent.remote': { support: 'supported', availability: { state: 'ready' } },
+				'agent.codexRecall': { support: 'supported', availability: { state: 'ready' } },
+				'host.start': { support: 'supported', availability: { state: 'ready' } },
+				'host.stop': { support: 'supported', availability: { state: 'ready' } },
+				'host.restart': { support: 'supported', availability: { state: 'ready' } },
+				'data.backup': { support: 'supported', availability: { state: 'ready' } },
+				'data.restoreData': { support: 'supported', availability: { state: 'ready' } },
+				'data.restoreInstance': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery': { support: 'supported', availability: { state: 'ready' } },
+				'docker.update': { support: 'supported', availability: { state: 'ready' } }
+			},
+			pendingChanges: known({ pending: false }),
+			agent: {
+				access: known({ endpoint: 'http://127.0.0.1:3810' }),
+				account: { state: 'not-inspected', reason: 'fixture' },
+				models: { state: 'not-inspected', reason: 'fixture' },
+				readiness: { state: 'not-inspected', reason: 'fixture' }
+			},
+			apps: {
+				config: known({
+					credentials: Object.fromEntries(
+						Object.entries(config.credentials).map(([name, credential]) => [
+							name,
+							{ policy: credential.policy }
+						])
+					),
+					portalMappings: {
+						discord: { default: config.portals.discord.credential, users: {} },
+						slack: { default: config.portals.slack.credential, users: {} }
+					},
+					portalSecrets: {}
+				}),
+				connections: { state: 'not-inspected', reason: 'fixture' },
+				status: { state: 'not-inspected', reason: 'fixture' }
+			},
+			data: { recovery: { state: 'not-inspected', reason: 'fixture' } },
+			docker: {
+				homeDir: '/disposable-provider-fixture',
+				configPath: '/disposable-provider-fixture/state/stack.json',
+				config
+			}
 		};
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');const {showView,bindUiEvents}=await import('./ui.js');const providers=await import('./providers.js');
 			const account=(id,extra={})=>({id,name:id,source:'api',authenticated:false,connected:false,configured:false,models:[{id:'first-model',name:'First model'},{id:'team/second-model',name:'Second model'}],authMethods:[{index:0,type:'api',label:'API key'}],...extra});
 			window.providerQa={state,providers,calls:[],confirmations:[],confirmRemoval:false,failCheck:false,settings:{providers:[account('current-service',{authenticated:true,connected:true}),account('alphabetical-first',{authenticated:true,connected:true}),account('openai'),account('opencode',{source:'custom',connected:true}),account('uncommon-provider'),account('orphan',{authenticated:true,models:[]}),account('oauth-provider',{authMethods:[{index:0,type:'oauth',label:'Browser'}]})],currentModel:{provider:'current-service',model:'team/second-model'}}};
 			const qa=window.providerQa;window.confirm=prompt=>{qa.confirmations.push(prompt);return qa.confirmRemoval;};
-			state.api={snapshot:async()=>({...${JSON.stringify(snapshot)},phase:qa.setup?'setup_incomplete':'ready'}),providers:async()=>{qa.calls.push({operation:'list'});return structuredClone(qa.settings);},
+			state.api={snapshot:async()=>({...${JSON.stringify(snapshot)},lifecycle:{state:'known',value:qa.setup?'setup-incomplete':'ready',observedAt:'2026-10-22T00:00:00.000Z'}}),providers:async()=>{qa.calls.push({operation:'list'});return structuredClone(qa.settings);},
 				readiness:async value=>{qa.calls.push({operation:'test',...value});if(qa.failCheck)return {ok:false,error:'Check this server address and model access. This model could not respond.'};if(qa.settings.currentModel?.provider===value.provider&&qa.settings.currentModel?.model===value.model)qa.setup=false;return {ok:true,...value,response:'FH_READY'};},
 				providerKey:async value=>{qa.calls.push({operation:'key',provider:value.provider});Object.assign(qa.settings.providers.find(item=>item.id===value.provider),{authenticated:true,connected:true});},
 				providerOAuthStart:async value=>{qa.calls.push({operation:'oauth-start',provider:value.provider});return {method:'code',instructions:'Return with the authorization code from your provider.'};},
@@ -222,9 +274,21 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await idle();
 		};
 		const pointerClick = async (selector: string) => {
-			const point = await evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});target.scrollIntoView({block:'center'});const r=target.getBoundingClientRect();if(!r.width||!r.height)throw Error('Pointer target is not rendered');return {x:r.left+r.width/2,y:r.top+r.height/2};})()`) as { x: number; y: number };
-			await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
-			await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+			const point = (await evaluate(
+				`(()=>{const target=document.querySelector(${JSON.stringify(selector)});target.scrollIntoView({block:'center'});const r=target.getBoundingClientRect();if(!r.width||!r.height)throw Error('Pointer target is not rendered');return {x:r.left+r.width/2,y:r.top+r.height/2};})()`
+			)) as { x: number; y: number };
+			await command('Input.dispatchMouseEvent', {
+				type: 'mousePressed',
+				button: 'left',
+				clickCount: 1,
+				...point
+			});
+			await command('Input.dispatchMouseEvent', {
+				type: 'mouseReleased',
+				button: 'left',
+				clickCount: 1,
+				...point
+			});
 		};
 		const value = async (selector: string, value: string, event = 'input') => {
 			await evaluate(
@@ -238,24 +302,32 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				)
 			);
 		await evaluate(axe.source);
-		const accessibility: Array<{ screen: string; width: number; violations: Array<{ id: string; impact: string; nodes: unknown[] }> }> = [];
+		const accessibility: Array<{
+			screen: string;
+			width: number;
+			violations: Array<{ id: string; impact: string; nodes: unknown[] }>;
+		}> = [];
 		const capture = async (name: string) => {
 			await evaluate('document.fonts.ready.then(() => true)');
-			const audit = await evaluate(`(async()=>{
+			const audit = (await evaluate(`(async()=>{
 				const result=await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa','wcag22aa']}});
 				return {screen:${JSON.stringify(name)},width:innerWidth,violations:result.violations.map(({id,impact,nodes})=>({id,impact,nodes:nodes.map(({target,failureSummary})=>({target,failureSummary}))}))};
-			})()`) as (typeof accessibility)[number];
+			})()`)) as (typeof accessibility)[number];
 			accessibility.push(audit);
 			// Full-page captures start at the page origin so offscreen fixed
 			// controls are not composited into the middle of a tall screenshot.
 			await evaluate('window.scrollTo(0, 0)');
 			const size = (await command('Page.getLayoutMetrics')).cssContentSize;
-			const modalSize = await evaluate("document.querySelector('dialog:modal')?{width:innerWidth,height:innerHeight}:null") as {width:number;height:number}|null;
+			const modalSize = (await evaluate(
+				"document.querySelector('dialog:modal')?{width:innerWidth,height:innerHeight}:null"
+			)) as { width: number; height: number } | null;
 			const clipSize = modalSize || size;
 			const result = await command('Page.captureScreenshot', {
 				format: 'png',
 				captureBeyondViewport: true,
-				...(clipSize ? { clip: { x: 0, y: 0, width: clipSize.width, height: clipSize.height, scale: 1 } } : {})
+				...(clipSize
+					? { clip: { x: 0, y: 0, width: clipSize.width, height: clipSize.height, scale: 1 } }
+					: {})
 			});
 			if (typeof result.data !== 'string') throw new Error('Missing screenshot');
 			writeFileSync(join(root, name), Buffer.from(result.data, 'base64'));
@@ -264,24 +336,41 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
 			state.currentView='overview';
+			const observedAt='2026-10-22T00:00:00.000Z';
 			const overview=window.overviewQa={...${JSON.stringify(snapshot)},
-				homeDir:'/home/user/fhold/instances/april', updateImageTag:${JSON.stringify(FH_RUNTIME_VERSION)},
-				connectionDetails:{opencode:{url:'http://127.0.0.1:3810'},mcp:{url:'http://127.0.0.1:3830/mcp'},claude:{url:'http://127.0.0.1:3830/mcp'}},
-				services:[
+				identity:{ref:{kind:'local-docker',homeDir:'/home/user/fhold/instances/april'},name:'april',location:'/home/user/fhold/instances/april'},
+				docker:{...${JSON.stringify(snapshot.docker)},homeDir:'/home/user/fhold/instances/april',updateImageTag:${JSON.stringify(FH_RUNTIME_VERSION)},config:{...${JSON.stringify(snapshot.docker.config)},deployment:{...${JSON.stringify(snapshot.docker.config.deployment)},projectName:'april'},gateway:{...${JSON.stringify(snapshot.docker.config.gateway)},enabled:true},portals:{...${JSON.stringify(snapshot.docker.config.portals)},discord:{...${JSON.stringify(snapshot.docker.config.portals.discord)},enabled:true}}}},
+				apps:{...${JSON.stringify(snapshot.apps)},connections:{state:'known',observedAt,value:{opencode:{url:'http://127.0.0.1:3810',note:'Open native OpenCode.'},mcp:{url:'http://127.0.0.1:3830/mcp',note:'Connect an MCP client.'},claude:{url:'http://127.0.0.1:3830/mcp',note:'Install the local bridge.'}}}},
+				services:{state:'known',observedAt,value:[
 					{name:'assistant',state:'running',health:'healthy',image:'fwdslsh/fhold-assistant:0.2.2610211-beta.13'},
 					{name:'guardian',state:'running',health:'healthy',image:'fwdslsh/fhold-guardian:${FH_RUNTIME_VERSION}'},
-					{name:'discord',state:'running',health:'healthy',image:'fwdslsh/fhold-portal:${FH_RUNTIME_VERSION}'}]};
-			overview.config.deployment.projectName='april'; overview.config.gateway.enabled=true;
-			overview.config.portals.discord.enabled=true; render(overview,{preserveDirty:false});
+					{name:'discord',state:'running',health:'healthy',image:'fwdslsh/fhold-portal:${FH_RUNTIME_VERSION}'}]}};
+			render(overview,{preserveDirty:false});
 		})()`);
-		expect(await evaluate("document.querySelector('#update-image-tag').textContent")).toBe(FH_RUNTIME_VERSION);
-		expect(await evaluate("[...document.querySelectorAll('#services .service-image code')].map(item=>item.textContent)")).toEqual(['0.2.2610211-beta.13', FH_RUNTIME_VERSION, FH_RUNTIME_VERSION]);
-		expect(await evaluate("document.querySelector('#services .service-image').title")).toBe('fwdslsh/fhold-assistant:0.2.2610211-beta.13');
-		expect(await evaluate("document.querySelector('#update-stack').closest('.runtime-update-action').contains(document.querySelector('#update-image-tag'))")).toBe(true);
-		expect(await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")).toBeNull();
+		expect(await evaluate("document.querySelector('#update-image-tag').textContent")).toBe(
+			FH_RUNTIME_VERSION
+		);
+		expect(
+			await evaluate(
+				"[...document.querySelectorAll('#services .service-image code')].map(item=>item.textContent)"
+			)
+		).toEqual(['0.2.2610211-beta.13', FH_RUNTIME_VERSION, FH_RUNTIME_VERSION]);
+		expect(await evaluate("document.querySelector('#services .service-image').title")).toBe(
+			'fwdslsh/fhold-assistant:0.2.2610211-beta.13'
+		);
+		expect(
+			await evaluate(
+				"document.querySelector('#update-stack').closest('.runtime-update-action').contains(document.querySelector('#update-image-tag'))"
+			)
+		).toBe(true);
+		expect(
+			await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")
+		).toBeNull();
 		await capture('overview-desktop.png');
 		expect(await evaluate("document.querySelector('#overview-name').textContent")).toBe('april');
-		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe('This computer');
+		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe(
+			'/home/user/fhold/instances/april'
+		);
 		expect(await evaluate("document.querySelector('#instance-page-header').hidden")).toBe(true);
 		expect(await evaluate("document.querySelector('#services .service').children.length")).toBe(3);
 		const managementStructure = await evaluate(`({
@@ -289,84 +378,142 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			apps:[...document.querySelectorAll('[data-connection-app]')].map(app=>app.dataset.connectionApp),
 			system:[...document.querySelector('#view-system').children].map(section=>section.id)
 		})`);
-		expect(await evaluate("document.fonts.check('14px \"Instrument Sans\"')")).toBe(true);
-		expect(await evaluate("[...document.fonts].find(font=>font.family==='Instrument Sans')?.status")).toBe('loaded');
+		expect(await evaluate('document.fonts.check(\'14px "Instrument Sans"\')')).toBe(true);
+		expect(
+			await evaluate("[...document.fonts].find(font=>font.family==='Instrument Sans')?.status")
+		).toBe('loaded');
 		expect(await evaluate("document.querySelector('.sidebar .brand-mark')")).toBeNull();
-		expect(await evaluate("Math.abs(document.querySelector('#instance-picker').getBoundingClientRect().width-document.querySelector('.sidebar-instance').getBoundingClientRect().width)<1")).toBe(true);
-		await evaluate(`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,updateImageTag:undefined,target:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'},services:[{name:'assistant',state:'running',health:'healthy'}]});})()`);
-		expect(await evaluate("document.querySelector('#runtime-version-settings').hidden")).toBe(false);
-		expect(await evaluate("document.querySelector('#runtime-version-help').textContent")).toContain('older fhold CLI');
-		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(false);
+		expect(
+			await evaluate(
+				"Math.abs(document.querySelector('#instance-picker').getBoundingClientRect().width-document.querySelector('.sidebar-instance').getBoundingClientRect().width)<1"
+			)
+		).toBe(true);
+		await evaluate(
+			`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,docker:{...window.overviewQa.docker,updateImageTag:undefined},operations:{...window.overviewQa.operations,'docker.update':{support:'unknown'}},services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]}});})()`
+		);
+		expect(await evaluate("document.querySelector('#runtime-version-settings').hidden")).toBe(
+			false
+		);
+		expect(await evaluate("document.querySelector('#runtime-version-help').textContent")).toContain(
+			'older fhold CLI'
+		);
+		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
 		await capture('overview-older-host-cli.png');
-		await evaluate(`window.overviewQa.services[0].image='registry.example.com:5000/team/assistant:long-custom-image-tag-for-multiple-release-channels-2026';
+		await evaluate(`window.overviewQa.services.value[0].image='registry.example.com:5000/team/assistant:long-custom-image-tag-for-multiple-release-channels-2026';
 			import('./runtime.js').then(({renderServices})=>renderServices(window.overviewQa));`);
-		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 620,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('overview-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('overview-200pct.png');
-		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		await evaluate(`(async()=>{
 			document.documentElement.style.fontSize=''; const {renderServices}=await import('./runtime.js');
-			renderServices({...window.overviewQa,services:[],dockerError:'Cannot connect to Docker.'});
+			renderServices({...window.overviewQa,services:{state:'unavailable',reason:'Cannot connect to Docker.'}});
 		})()`);
-		expect(await evaluate("document.querySelector('#assistant-summary').textContent")).toBe('Status unavailable');
-		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
+		expect(await evaluate("document.querySelector('#assistant-summary').textContent")).toBe(
+			'Status unavailable'
+		);
+		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(false);
 		await capture('overview-unavailable.png');
 		// Component coverage uses the same actual instance renderer, not standalone
 		// lookalikes. Only native IPC is synthetic; no lab instance is mutated.
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');state.currentView='connections';render(window.overviewQa,{preserveDirty:false});})()`);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');state.currentView='connections';render(window.overviewQa,{preserveDirty:false});})()`
+		);
 		await capture('apps-desktop.png');
-		for (const app of ['opencode','claude','codex','discord','slack','mcp']) {
+		for (const app of ['opencode', 'claude', 'codex', 'discord', 'slack', 'mcp']) {
 			await evaluate(`document.querySelector('#${app}-connection').open=true`);
-			if(app==='claude')await evaluate("document.querySelector('#claude-connection .connection-method').open=true");
+			if (app === 'claude')
+				await evaluate("document.querySelector('#claude-connection .connection-method').open=true");
 			await capture(`app-${app}-desktop.png`);
 		}
 		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
 		await capture('system-desktop.png');
-		for (const section of ['installation-details','import-export','runtime-recovery']) {
-			await evaluate(`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}`);
+		for (const section of ['installation-details', 'import-export', 'runtime-recovery']) {
+			await evaluate(
+				`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}`
+			);
 			await capture(`system-${section}-desktop.png`);
 		}
-		for (const view of ['overview','provider','connections','system']) {
+		for (const view of ['overview', 'provider', 'connections', 'system']) {
 			await evaluate(`import('./ui.js').then(({showView})=>showView(${JSON.stringify(view)}))`);
-			for (const width of [320,360,375,414,480,640,768,1024,1280,1440]) {
-				await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-				expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
-				if([320,768,1280].includes(width))await capture(`${view}-${width}.png`);
+			for (const width of [320, 360, 375, 414, 480, 640, 768, 1024, 1280, 1440]) {
+				await command('Emulation.setDeviceMetricsOverride', {
+					width,
+					height: 900,
+					deviceScaleFactor: 1,
+					mobile: false
+				});
+				expect(
+					await evaluate(
+						'document.documentElement.scrollWidth<=document.documentElement.clientWidth'
+					)
+				).toBe(true);
+				if ([320, 768, 1280].includes(width)) await capture(`${view}-${width}.png`);
 			}
 		}
-		await command('Emulation.setDeviceMetricsOverride',{width:1120,height:780,deviceScaleFactor:1,mobile:false});
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		// Native dialog presentation and Escape/focus containment, without starting
 		// vendor sign-in, changing a policy or granting tool access.
-		await evaluate(`(async()=>{const {bindRemoteEvents}=await import('./remote.js');const {showView}=await import('./ui.js');bindRemoteEvents();showView('connections');document.querySelector('#claude-connection').open=true;document.querySelectorAll('#claude-connection .connection-method')[1].open=true;})()`);
+		await evaluate(
+			`(async()=>{const {bindRemoteEvents}=await import('./remote.js');const {showView}=await import('./ui.js');bindRemoteEvents();showView('connections');document.querySelector('#claude-connection').open=true;document.querySelectorAll('#claude-connection .connection-method')[1].open=true;})()`
+		);
 		await pointerClick('[data-remote-enable="claude"]');
 		expect(await evaluate("document.querySelector('#remote-trust').checked")).toBe(false);
 		await capture('remote-dialog-desktop.png');
-		for(const id of ['remote-cancel','remote-begin']) {
-			await keypress('Tab','Tab',9);
+		for (const id of ['remote-cancel', 'remote-begin']) {
+			await keypress('Tab', 'Tab', 9);
 			expect(await evaluate('document.activeElement.id')).toBe(id);
 		}
-		await keypress('Tab','Tab',9,8);
+		await keypress('Tab', 'Tab', 9, 8);
 		expect(await evaluate('document.activeElement.id')).toBe('remote-cancel');
-		await keypress('Escape','Escape',27);
+		await keypress('Escape', 'Escape', 27);
 		expect(await evaluate("document.querySelector('#remote-dialog').open")).toBe(false);
-		await evaluate(`(async()=>{const {bindAccessEvents}=await import('./access.js');bindAccessEvents();document.querySelector('#advanced-access').open=true;})()`);
-		await pointerClick('[data-manage-saved-access]');
+		await evaluate(
+			`document.querySelector('#advanced-access').open=true;document.querySelector('#permissions-dialog').showModal()`
+		);
 		await capture('permissions-dialog-desktop.png');
-		for(const id of ['cancel-permissions','save-permissions']) {
-			await keypress('Tab','Tab',9);
-			expect(await evaluate('document.activeElement.id')).toBe(id);
+		expect(await evaluate("document.querySelector('#permissions-dialog').open")).toBe(true);
+		for (let index = 0; index < 2; index++) {
+			await keypress('Tab', 'Tab', 9);
+			expect(
+				await evaluate(
+					"document.querySelector('#permissions-dialog').contains(document.activeElement)"
+				)
+			).toBe(true);
 		}
-		await keypress('Tab','Tab',9,8);
-		expect(await evaluate('document.activeElement.id')).toBe('cancel-permissions');
-		await keypress('Escape','Escape',27);
+		await keypress('Tab', 'Tab', 9, 8);
+		expect(
+			await evaluate(
+				"document.querySelector('#permissions-dialog').contains(document.activeElement)"
+			)
+		).toBe(true);
+		await keypress('Escape', 'Escape', 27);
 		expect(await evaluate("document.querySelector('#permissions-dialog').open")).toBe(false);
-		expect(await evaluate("document.activeElement.hasAttribute('data-manage-saved-access')")).toBe(true);
 		await evaluate("document.querySelector('#remote-directory-dialog').showModal()");
 		await capture('directory-dialog-desktop.png');
-		await keypress('Escape','Escape',27);
+		await keypress('Escape', 'Escape', 27);
 		expect(await evaluate("document.querySelector('#remote-directory-dialog').open")).toBe(false);
 		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
 			state.currentView='provider';render(${JSON.stringify(snapshot)},{preserveDirty:false});})()`);
@@ -542,6 +689,14 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe('http://192.0.2.31:1234/v1');
 		await click('#cancel-provider-editor');
+		await evaluate(
+			"import('./providers.js').then(({renderProviderAccounts})=>renderProviderAccounts())"
+		);
+		expect(
+			await evaluate(
+				"[...document.querySelectorAll('[data-provider-id]')].map(item=>({id:item.dataset.providerId,action:item.dataset.providerAction}))"
+			)
+		).toContainEqual({ id: 'ollama', action: 'endpoint' });
 		await click('[data-provider-id=ollama][data-provider-action=endpoint]');
 		expect(
 			await evaluate("window.providerQa.calls.filter(call=>call.operation==='remove').at(-1)")
@@ -660,7 +815,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			deviceScaleFactor: 1,
 			mobile: false
 		});
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('model-narrow-200pct-error.png');
 		expect(
 			await evaluate(
@@ -669,7 +826,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		).toBe(false);
 		// Reproduce the real installer retry race without Docker or a billed request.
 		// Only IPC is controlled; clicks go through Chromium's native pointer events.
-		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		await evaluate(`(async()=>{
 			document.documentElement.style.fontSize='';
 			const {state,createAdminState}=await import('./state.js');
@@ -677,20 +839,21 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const {bindRuntimeEvents}=await import('./runtime.js');
 			Object.assign(state,createAdminState());
 			const qa=window.installQa={names:[],reads:0,installs:0,readPending:false,release:null,name:'duplicate-name'};
-			const snapshot=()=>({...${JSON.stringify(snapshot)},phase:'not_installed',homeDir:'/disposable-installs/'+qa.name,services:[],installationReadiness:{ok:true},config:{...${JSON.stringify(snapshot.config)},deployment:{...${JSON.stringify(snapshot.config.deployment)},projectName:qa.name}}});
+			const snapshot=()=>({...${JSON.stringify(snapshot)},identity:{ref:{kind:'local-docker',homeDir:'/disposable-installs/'+qa.name},name:qa.name,location:'/disposable-installs/'+qa.name},lifecycle:{state:'known',value:'not-installed',observedAt:'2026-10-22T00:00:00.000Z'},services:{state:'known',value:[],observedAt:'2026-10-22T00:00:00.000Z'},docker:{...${JSON.stringify(snapshot.docker)},homeDir:'/disposable-installs/'+qa.name,config:{...${JSON.stringify(snapshot.docker.config)},deployment:{...${JSON.stringify(snapshot.docker.config.deployment)},projectName:qa.name}},installationReadiness:{ok:true}}});
 			state.api={
 				installationReadiness:async()=>({ok:true}),
 				prepareNewInstance:async value=>{if(qa.readPending)throw Error('Wait for the current operation to finish');qa.name=value.name;qa.names.push(value.name);},
 				snapshot:async()=>{if(++qa.reads===2){qa.readPending=true;return new Promise(resolve=>{qa.release=()=>{qa.readPending=false;resolve(snapshot());};});}return snapshot();},
-				install:async()=>{if(++qa.installs===1)throw Error('Instance name is already in use.');return {...snapshot(),phase:'setup_incomplete',services:[{name:'assistant',state:'running',health:'healthy',running:true}]};},
+			install:async()=>{if(++qa.installs===1)throw Error('Instance name is already in use.');return {...snapshot(),lifecycle:{state:'known',value:'setup-incomplete',observedAt:'2026-10-22T00:00:00.000Z'},services:{state:'known',value:[{name:'assistant',state:'running',health:'healthy',running:true}],observedAt:'2026-10-22T00:00:00.000Z'}};},
 				providers:async()=>({providers:[]})};
 			renderWelcome({defaultInstance:{homeDir:'/disposable-installs/default',available:false},instancesDirectory:'/disposable-installs',recentInstances:[]});
 			renderInstallationReadiness({ok:true});bindInstanceEvents();bindRuntimeEvents();
 		})()`);
 		const waitInstall = async (expression: string) => {
 			const deadline = Date.now() + 10000;
-			while (!await evaluate(expression)) {
-				if (Date.now() > deadline) throw new Error(`Install renderer did not settle: ${expression}`);
+			while (!(await evaluate(expression))) {
+				if (Date.now() > deadline)
+					throw new Error(`Install renderer did not settle: ${expression}`);
 				await Bun.sleep(10);
 			}
 		};
@@ -698,19 +861,35 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await value('#install-instance-name', 'duplicate-name');
 		await pointerClick('#install');
 		await waitInstall('window.installQa.readPending');
-		expect(await evaluate("!document.querySelector('#install-section').hidden && document.querySelector('#install').getBoundingClientRect().height>0")).toBe(true);
-		expect(await evaluate("document.querySelector('#install').disabled && document.body.dataset.busy==='true'")).toBe(true);
+		expect(
+			await evaluate(
+				"!document.querySelector('#install-section').hidden && document.querySelector('#install').getBoundingClientRect().height>0"
+			)
+		).toBe(true);
+		expect(
+			await evaluate(
+				"document.querySelector('#install').disabled && document.body.dataset.busy==='true'"
+			)
+		).toBe(true);
 		await capture('install-failure-recovery-busy.png');
 		await pointerClick('#install');
 		expect(await evaluate('window.installQa.names')).toEqual(['duplicate-name']);
 		await evaluate('window.installQa.release(); void 0');
-		await waitInstall("document.body.dataset.busy==='false' && document.querySelector('#install-status').getAttribute('role')==='alert'");
-		expect(await evaluate("!document.querySelector('#install-status').hidden && document.querySelector('#install-status').textContent")).toBe('Instance name is already in use.');
+		await waitInstall(
+			"document.body.dataset.busy==='false' && document.querySelector('#install-status').getAttribute('role')==='alert'"
+		);
+		expect(
+			await evaluate(
+				"!document.querySelector('#install-status').hidden && document.querySelector('#install-status').textContent"
+			)
+		).toBe('Instance name is already in use.');
 		expect(await evaluate("document.querySelector('#install').disabled")).toBe(false);
 		await capture('install-failure-retry-ready.png');
 		await value('#install-instance-name', 'distinct-name');
 		await pointerClick('#install');
-		await waitInstall("document.body.dataset.busy==='false' && document.body.dataset.phase==='setup_incomplete'");
+		await waitInstall(
+			"document.body.dataset.busy==='false' && document.body.dataset.phase==='setup_incomplete'"
+		);
 		expect(await evaluate('window.installQa.names')).toEqual(['duplicate-name', 'distinct-name']);
 		expect(await evaluate('window.installQa.installs')).toBe(2);
 		expect(await evaluate('window.installQa.reads')).toBe(3);
@@ -718,7 +897,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
 			state.providersLoaded=true;state.currentView='overview';
-			render({...window.overviewQa,phase:'ready',connectionLabel:'Krang',homeDir:'/opt/stacks/agent',target:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'}});
+			render({...window.overviewQa,
+				identity:{ref:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'},name:'ssh-agent',location:'/opt/stacks/agent'},
+				deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{warnings:[],providerLabel:'Krang'}},
+				docker:{...window.overviewQa.docker,homeDir:'/opt/stacks/agent',configPath:'/opt/stacks/agent/state/stack.json'}
+			});
 		})()`);
 		for (const view of ['overview', 'provider', 'connections', 'system']) {
 			await pointerClick(`[data-view="${view}"]`);
@@ -726,7 +909,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		}
 		expect(await evaluate("document.querySelector('#provider-fields').disabled")).toBe(false);
 		expect(await evaluate("document.querySelector('#transfer-fields').disabled")).toBe(false);
-		await evaluate(`(async()=>{const {state}=await import('./state.js');window.logQa=[];state.api.logs=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');window.logQa=[];state.api.logs=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`
+		);
 		await click('#load-logs');
 		expect(await evaluate('window.logQa.at(-1)')).toBeNull();
 		// Every hosting connection uses the same actual screens. This deliberately does
@@ -736,39 +921,71 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const {render}=await import('./snapshot.js');
 			state.api.providers=async()=>{throw Error('Remote view attempted local provider discovery');};
 			state.currentView='overview';
-			render({phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',providerLabel:'Azure Container Apps · experimental',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent',services:[],containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}'}],logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent console'}],warnings:[],platformState:'Scaled to zero',capabilities:{start:{supported:true},stop:{supported:true},restart:{supported:false,reason:'Ordered replacement uses deployment tooling.'},settings:{supported:false,reason:'Manage settings in deployment tooling.'},transfer:{supported:false,reason:'No local instance folder.'}},clientUrl:'https://agent.example.com'}});
+			render({
+				identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},
+				lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'externally-managed'},
+				deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{providerLabel:'Azure Container Apps · experimental',state:'Scaled to zero',clientUrl:'https://agent.example.com',containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}'}],logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent console'}],warnings:[]}},
+				services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[]},
+				operations:{'host.start':{support:'supported',availability:{state:'ready'}},'host.stop':{support:'supported',availability:{state:'ready'}},'host.restart':{support:'unsupported',reason:'Ordered replacement uses deployment tooling.'},'host.logs':{support:'supported',availability:{state:'ready'}},'agent.providers':{support:'unsupported',reason:'Connect to the agent first.'},'agent.connect':{support:'unsupported',reason:'Use the deployment address.'},'agent.remote':{support:'unsupported',reason:'Connect to the agent first.'},'data.backup':{support:'unsupported',reason:'No local instance folder.'},'data.restoreData':{support:'unsupported',reason:'No local instance folder.'},'data.restoreInstance':{support:'unsupported',reason:'No local instance folder.'},'docker.update':{support:'unsupported',reason:'Managed by the deployment platform.'}},
+				pendingChanges:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{pending:false}},
+				agent:{access:{state:'not-inspected',reason:'Connect explicitly.'},account:{state:'not-inspected',reason:'Connect explicitly.'},models:{state:'not-inspected',reason:'Connect explicitly.'},readiness:{state:'not-inspected',reason:'Connect explicitly.'}},
+				apps:{config:{state:'not-inspected',reason:'Not managed through this connection.'},connections:{state:'not-inspected',reason:'Connect explicitly.'},status:{state:'not-inspected',reason:'Not managed through this connection.'}},
+				data:{recovery:{state:'not-inspected',reason:'Not managed through this connection.'}}
+			});
 		})()`);
-		expect(await evaluate("!document.querySelector('#view-overview').hidden && !document.querySelector('#mobile-navigation').hidden")).toBe(true);
-		expect(await evaluate("document.querySelector('#restart-stack').disabled && !document.querySelector('#restart-stack').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"!document.querySelector('#view-overview').hidden && !document.querySelector('#mobile-navigation').hidden"
+			)
+		).toBe(true);
+		expect(
+			await evaluate(
+				"document.querySelector('#restart-stack').disabled && !document.querySelector('#restart-stack').hidden"
+			)
+		).toBe(true);
 		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
-		expect(await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")).toBe('cloud-agent · cloud');
+		expect(
+			await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")
+		).toBe('cloud-agent · cloud');
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			const {bindHostingEvents}=await import('./hosting.js');
 			window.hostingQa={actions:0,approved:false,dialogFails:true};
 			state.api.confirmRestart=async()=>{if(window.hostingQa.dialogFails) throw Error('Native confirmation unavailable'); return window.hostingQa.approved;};
-			state.api.action=async()=>{window.hostingQa.actions++;return {...state.currentSnapshot,hosting:{...state.currentSnapshot.hosting,warnings:['Azure accepted start. Agent readiness remains unverified.']}};};
+			state.api.action=async()=>{window.hostingQa.actions++;return {...state.currentSnapshot,deployment:{...state.currentSnapshot.deployment,value:{...state.currentSnapshot.deployment.value,warnings:['Azure accepted start. Agent readiness remains unverified.']}}};};
 			bindHostingEvents();
 		})()`);
 		await click('#start-stack');
-		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Native confirmation unavailable');
-		expect(await evaluate("document.body.dataset.busy")).toBe('false');
+		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe(
+			'Native confirmation unavailable'
+		);
+		expect(await evaluate('document.body.dataset.busy')).toBe('false');
 		await evaluate('window.hostingQa.dialogFails=false');
 		await click('#start-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(0);
 		await evaluate('window.hostingQa.approved=true');
 		await click('#start-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(1);
-		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe('Request submitted. Check platform status.');
-		expect(await evaluate("document.querySelector('#runtime-status-detail').textContent")).toContain('readiness remains unverified');
+		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe(
+			'fhold started. Saved settings applied.'
+		);
+		expect(
+			await evaluate("document.querySelector('#runtime-status-detail').textContent")
+		).toContain('readiness remains unverified');
 		await capture('aca-overview-desktop.png');
 		const expectedNavigation = ['overview', 'provider', 'connections', 'system'];
-		expect(await evaluate("[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view)")).toEqual(expectedNavigation);
-		expect(await evaluate(`({
+		expect(
+			await evaluate(
+				"[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view)"
+			)
+		).toEqual(expectedNavigation);
+		expect(
+			await evaluate(`({
 			navigation:[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view),
 			apps:[...document.querySelectorAll('[data-connection-app]')].map(app=>app.dataset.connectionApp),
 			system:[...document.querySelector('#view-system').children].map(section=>section.id)
-		})`)).toEqual(managementStructure);
+		})`)
+		).toEqual(managementStructure);
 		for (const view of ['provider', 'connections', 'system']) {
 			await pointerClick(`[data-view="${view}"]`);
 			expect(await evaluate(`!document.querySelector('#view-${view}').hidden`)).toBe(true);
@@ -777,51 +994,105 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate("document.querySelector('#import-export').open=true");
 		await value('#log-source', 'console');
 		await click('#load-logs');
-		expect(await evaluate('window.logQa.at(-1)')).toEqual({type:'console'});
-		expect(await evaluate("document.querySelector('#transfer-fields').disabled && document.querySelector('#export-backup').matches(':disabled') && !document.querySelector('#transfer-fields-unavailable').hidden")).toBe(true);
+		expect(await evaluate('window.logQa.at(-1)')).toEqual({ type: 'console' });
+		expect(
+			await evaluate(
+				"document.querySelector('#transfer-fields').disabled && document.querySelector('#export-backup').matches(':disabled') && !document.querySelector('#transfer-fields-unavailable').hidden"
+			)
+		).toBe(true);
 		await capture('aca-export-unavailable.png');
 		await pointerClick('[data-view="provider"]');
-		expect(await evaluate("document.querySelector('#add-provider-service').matches(':disabled') && !document.querySelector('#provider-fields-unavailable').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"document.querySelector('#add-provider-service').matches(':disabled') && !document.querySelector('#provider-fields-unavailable').hidden"
+			)
+		).toBe(true);
 		await click('#add-provider-service');
 		expect(await evaluate("document.querySelector('#provider-editor').hidden")).toBe(true);
 		await evaluate("document.querySelector('#add-provider-service').focus()");
 		expect(await evaluate("document.activeElement.id==='add-provider-service'")).toBe(false);
 		await pointerClick('[data-view="connections"]');
 		await pointerClick('#discord-connection > summary');
-		expect(await evaluate("document.querySelector('#discord').matches(':disabled') && !document.querySelector('#discord-fields-unavailable').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"document.querySelector('#discord').matches(':disabled') && !document.querySelector('#discord-fields-unavailable').hidden"
+			)
+		).toBe(true);
 		await capture('aca-discord-unavailable.png');
 		await pointerClick('[data-view="overview"]');
 		await click('#restart-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(1);
-		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 620,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('aca-overview-narrow.png');
 		for (const width of [320, 620, 1120]) {
-			await command('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:false});
-			for (const view of ['overview','provider','connections','system']) {
+			await command('Emulation.setDeviceMetricsOverride', {
+				width,
+				height: 900,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+			for (const view of ['overview', 'provider', 'connections', 'system']) {
 				await evaluate(`import('./ui.js').then(({showView})=>showView('${view}'))`);
-				expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+				expect(
+					await evaluate(
+						'document.documentElement.scrollWidth<=document.documentElement.clientWidth'
+					)
+				).toBe(true);
 				await capture(`aca-${view}-${width}.png`);
 			}
 		}
 		await evaluate("document.documentElement.style.fontSize='200%'");
 		await capture('aca-system-200pct.png');
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await evaluate("document.documentElement.style.fontSize=''");
 		await evaluate("import('./ui.js').then(({showView})=>showView('overview'))");
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			const {render}=await import('./snapshot.js');
-			render({phase:'remote',hosting:{...state.currentSnapshot.hosting,ref:{kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'},location:'/opt/stacks/agent',services:[{name:'assistant',state:'running',health:'healthy'}],pendingRestart:{required:true},capabilities:{...state.currentSnapshot.hosting.capabilities,restart:{supported:true}}}});
+			render({...state.currentSnapshot,
+				identity:{ref:{kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'},name:'cloud-agent',location:'/opt/stacks/agent'},
+				deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{warnings:[],providerLabel:'lab'}},
+				services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]},
+				operations:{...state.currentSnapshot.operations,'host.restart':{support:'supported',availability:{state:'ready'}}},
+				pendingChanges:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{pending:true}},
+				docker:{...window.overviewQa.docker,homeDir:'/opt/stacks/agent',configPath:'/opt/stacks/agent/state/stack.json',pendingRestart:{required:true}}
+			});
 		})()`);
-		expect(await evaluate("!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Pending restart'")).toBe(true);
-		expect(await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")).toBe('cloud-agent · lab');
-		await evaluate(`(async()=>{const {bindRestartEvents}=await import('./restart.js');bindRestartEvents();})()`);
+		expect(
+			await evaluate(
+				"!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Pending restart'"
+			)
+		).toBe(true);
+		expect(
+			await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")
+		).toBe('cloud-agent · lab');
+		await evaluate(
+			`(async()=>{const {bindRestartEvents}=await import('./restart.js');bindRestartEvents();})()`
+		);
 		await click('#apply-pending-restart');
 		expect(await evaluate('window.hostingQa.actions')).toBe(2);
-		expect(await evaluate("!document.querySelector('#view-overview').hidden && !document.querySelector('#pending-restart').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"!document.querySelector('#view-overview').hidden && !document.querySelector('#pending-restart').hidden"
+			)
+		).toBe(true);
 		// App settings is a page, independent of the selected remote/local instance.
-		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');const {manageHostingConnections}=await import('./hosting.js');
 			const {bindAdminSettingsEvents}=await import('./settings.js');
@@ -842,10 +1113,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.hostingInstances=async()=>{throw Error('SSH sign-in failed. Review native SSH configuration.');};
 			bindAdminSettingsEvents();await manageHostingConnections();
 		})()`);
-		expect(await evaluate("!document.querySelector('#admin-settings').hidden && document.body.dataset.adminSettings==='true'")).toBe(true);
+		expect(
+			await evaluate(
+				"!document.querySelector('#admin-settings').hidden && document.body.dataset.adminSettings==='true'"
+			)
+		).toBe(true);
 		expect(await evaluate("document.querySelector('#admin-update-channel').value")).toBe('stable');
 		expect(await evaluate("document.querySelector('#app-shell').inert")).toBe(true);
-		expect(await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")).toBe(true);
+		expect(
+			await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")
+		).toBe(true);
 		await capture('admin-settings-stable-desktop.png');
 		await evaluate("document.querySelector('#admin-settings-back').focus()");
 		await keypress('Tab', 'Tab', 9);
@@ -854,11 +1131,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await keypress('Tab', 'Tab', 9);
 			expect(await evaluate('document.activeElement.getAttribute("aria-label")')).toBe(label);
 		}
-		for (const id of ['admin-update-channel', 'admin-update-automatic', 'admin-updates-save', 'admin-update-check']) {
+		for (const id of [
+			'admin-update-channel',
+			'admin-update-automatic',
+			'admin-updates-save',
+			'admin-update-check'
+		]) {
 			await keypress('Tab', 'Tab', 9);
 			expect(await evaluate('document.activeElement.id')).toBe(id);
 		}
-		await value('#admin-update-channel','beta','change');
+		await value('#admin-update-channel', 'beta', 'change');
 		await click('#admin-updates-save');
 		expect(await evaluate('window.appQa.snapshot.settings.updates.channel')).toBe('beta');
 		await click('#admin-update-check');
@@ -868,50 +1150,83 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('#admin-update-install');
 		expect(await evaluate('window.appQa.installs')).toBe(1);
 		await click('button[aria-label="Check Krang"]');
-		expect(await evaluate("document.querySelector('#hosting-manager-status').textContent")).toContain('needs attention');
+		expect(
+			await evaluate("document.querySelector('#hosting-manager-status').textContent")
+		).toContain('needs attention');
 		await click('#hosting-check-details button');
 		expect(await evaluate('window.connectionQa.repair')).toBe(1);
-		expect(await evaluate("document.querySelector('#hosting-manager-status').textContent")).toContain('ready');
+		expect(
+			await evaluate("document.querySelector('#hosting-manager-status').textContent")
+		).toContain('ready');
 		await click('button[aria-label="Edit Krang"]');
 		await capture('hosting-connection-editor-desktop.png');
 		expect(await evaluate("document.querySelector('#hosting-id').readOnly")).toBe(true);
-		await value('#hosting-label','Krang lab');
-		await value('#hosting-roots','/opt/stacks');
+		await value('#hosting-label', 'Krang lab');
+		await value('#hosting-roots', '/opt/stacks');
 		await click('#hosting-save');
-		expect(await evaluate('window.connectionQa.connections.find(item=>item.id==="krang").roots')).toEqual(['/opt/stacks']);
+		expect(
+			await evaluate('window.connectionQa.connections.find(item=>item.id==="krang").roots')
+		).toEqual(['/opt/stacks']);
 		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('krang');
 		await capture('hosting-connections-desktop.png');
 		await click('button[aria-label="Remove Krang lab"]');
 		expect(await evaluate('window.connectionQa.removed')).toBe(0);
 		await click('#hosting-new');
-		await value('#hosting-label','Second host'); await value('#hosting-host','second'); await click('#hosting-save');
-		expect(await evaluate('window.connectionQa.connections.find(item=>item.id==="second-host").host')).toBe('second');
+		await value('#hosting-label', 'Second host');
+		await value('#hosting-host', 'second');
+		await click('#hosting-save');
+		expect(
+			await evaluate('window.connectionQa.connections.find(item=>item.id==="second-host").host')
+		).toBe('second');
 		await evaluate('window.connectionQa.approve=true');
 		await click('button[aria-label="Remove Second host"]');
 		expect(await evaluate('window.connectionQa.removed')).toBe(1);
-		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 620,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('hosting-connections-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('admin-settings-narrow-200pct.png');
 		await evaluate("document.documentElement.style.fontSize=''");
 		await click('#admin-settings-back');
-		expect(await evaluate("document.querySelector('#admin-settings').hidden && !document.querySelector('#app-shell').inert")).toBe(true);
-		await evaluate("document.querySelector('#app-shell').hidden=true;document.querySelector('#instance-welcome').hidden=false;document.querySelector('#instance-options').hidden=true;document.querySelector('#open-hosting').hidden=false");
+		expect(
+			await evaluate(
+				"document.querySelector('#admin-settings').hidden && !document.querySelector('#app-shell').inert"
+			)
+		).toBe(true);
+		await evaluate(
+			"document.querySelector('#app-shell').hidden=true;document.querySelector('#instance-welcome').hidden=false;document.querySelector('#instance-options').hidden=true;document.querySelector('#open-hosting').hidden=false"
+		);
 		await click('#hosting-discover');
-		expect(await evaluate("document.querySelector('#hosting-status').textContent")).toContain('SSH sign-in failed');
+		expect(await evaluate("document.querySelector('#hosting-status').textContent")).toContain(
+			'SSH sign-in failed'
+		);
 		expect(await evaluate("document.querySelector('#hosting-status').hidden")).toBe(false);
-		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(0);
+		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(
+			0
+		);
 		await capture('hosting-discovery-error.png');
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			state.api.hostingInstances=()=>new Promise((_resolve,reject)=>window.rejectOldDiscovery=reject);
 			document.querySelector('#hosting-discover').click();
 		})()`);
-		await evaluate(`document.querySelector('#hosting-connection').value='local';document.querySelector('#hosting-connection').dispatchEvent(new Event('change'));window.rejectOldDiscovery(Error('Old connection failure'));`);
+		await evaluate(
+			`document.querySelector('#hosting-connection').value='local';document.querySelector('#hosting-connection').dispatchEvent(new Event('change'));window.rejectOldDiscovery(Error('Old connection failure'));`
+		);
 		expect(await evaluate("document.querySelector('#hosting-status').hidden")).toBe(true);
-		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(0);
+		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(
+			0
+		);
 		// Walk the real chooser/creation/import controls. Only native IPC is a fixture;
 		// no host, selected instance, container or user directory is changed.
 		await evaluate(`(async()=>{
@@ -931,74 +1246,154 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.recentInstances=[];renderWelcome(window.instanceQaWelcome);bindInstanceRestoreEvents();
 			document.querySelector('#install-instance-name').value='personal-agent';
 		})()`);
-		await command('Emulation.setDeviceMetricsOverride', { width:1120, height:780, deviceScaleFactor:1, mobile:false });
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		await capture('instances-first-use-desktop.png');
 		// Browsing from a cloud instance preserves its view behind the chooser;
 		// finishing discovery must refresh controls, not navigate back to that view.
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');render({phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/agent'},name:'cloud-agent',location:'/agent',services:[],warnings:[],capabilities:{start:{supported:true},stop:{supported:true},restart:{supported:false},settings:{supported:false},transfer:{supported:false}}}});state.dirtyForms.add('preferences-form');})()`);
-		await value('#instance-picker','open-another','change');
-		expect(await evaluate("!document.querySelector('#open-hosting').hidden && document.querySelector('#app-shell').hidden")).toBe(true);
+		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');render({
+			identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/agent'},name:'cloud-agent',location:'/agent'},
+			lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'externally-managed'},
+			deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{warnings:[]}},
+			services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[]},
+			operations:{'host.start':{support:'supported',availability:{state:'ready'}},'host.stop':{support:'supported',availability:{state:'ready'}},'host.restart':{support:'unsupported',reason:'No restart.'},'agent.providers':{support:'unsupported',reason:'Connect first.'}},
+			pendingChanges:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{pending:false}},
+			agent:{access:{state:'not-inspected',reason:'Connect explicitly.'},account:{state:'not-inspected',reason:'Connect explicitly.'},models:{state:'not-inspected',reason:'Connect explicitly.'},readiness:{state:'not-inspected',reason:'Connect explicitly.'}},
+			apps:{config:{state:'not-inspected',reason:'Not managed.'},connections:{state:'not-inspected',reason:'Connect explicitly.'},status:{state:'not-inspected',reason:'Not managed.'}},
+			data:{recovery:{state:'not-inspected',reason:'Not managed.'}}
+		});state.dirtyForms.add('preferences-form');})()`);
+		await value('#instance-picker', 'open-another', 'change');
+		expect(
+			await evaluate(
+				"!document.querySelector('#open-hosting').hidden && document.querySelector('#app-shell').hidden"
+			)
+		).toBe(true);
 		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('local');
-		expect(await evaluate("document.querySelector('#hosting-instance-list .instance-name').textContent")).toBe('april');
-		expect(await evaluate("document.querySelector('#instance-welcome').getAttribute('aria-busy')")).toBe('false');
-		expect(await evaluate("window.providerQa.state.currentSnapshot.hosting.name")).toBe('cloud-agent');
+		expect(
+			await evaluate("document.querySelector('#hosting-instance-list .instance-name').textContent")
+		).toBe('april');
+		expect(
+			await evaluate("document.querySelector('#instance-welcome').getAttribute('aria-busy')")
+		).toBe('false');
+		expect(await evaluate('window.providerQa.state.currentSnapshot.identity.name')).toBe(
+			'cloud-agent'
+		);
 		await capture('instances-from-aca-desktop.png');
 		await click('#hosting-back');
-		expect(await evaluate("document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden"
+			)
+		).toBe(true);
 		expect(await evaluate("window.providerQa.state.dirtyForms.has('preferences-form')")).toBe(true);
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.currentSnapshot=null;state.dirtyForms.clear();renderWelcome(window.instanceQaWelcome);})()`);
-		expect(await evaluate("document.querySelector('#begin-new-instance').classList.contains('primary')")).toBe(true);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.currentSnapshot=null;state.dirtyForms.clear();renderWelcome(window.instanceQaWelcome);})()`
+		);
+		expect(
+			await evaluate("document.querySelector('#begin-new-instance').classList.contains('primary')")
+		).toBe(true);
 		await click('#connect-host');
 		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('local');
-		expect(await evaluate("!document.querySelector('#choose-instance').hidden && document.querySelector('#hosting-open-folder').hidden")).toBe(true);
+		expect(
+			await evaluate(
+				"!document.querySelector('#choose-instance').hidden && document.querySelector('#hosting-open-folder').hidden"
+			)
+		).toBe(true);
 		await capture('instances-local-chooser-desktop.png');
 		await click('#choose-instance');
 		expect(await evaluate('window.instanceQa.opens.length')).toBe(0);
 		await click('#hosting-back');
 		expect(await evaluate('document.activeElement.id')).toBe('connect-host');
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');const welcome={...window.instanceQaWelcome,recentInstances:[{kind:'local',name:'april',homeDir:'/home/user/fhold/instances/april',available:true},{kind:'hosted',name:'lab-agent',connectionLabel:'Krang',ref:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/lab-agent'},available:true}]};state.recentInstances=welcome.recentInstances;renderWelcome(welcome);})()`);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');const welcome={...window.instanceQaWelcome,recentInstances:[{kind:'local',name:'april',homeDir:'/home/user/fhold/instances/april',available:true},{kind:'hosted',name:'lab-agent',connectionLabel:'Krang',ref:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/lab-agent'},available:true}]};state.recentInstances=welcome.recentInstances;renderWelcome(welcome);})()`
+		);
 		await capture('instances-recents-desktop.png');
 		await click('#recent-instances button');
-		expect(await evaluate('window.instanceQa.opens.at(-1).homeDir')).toBe('/home/user/fhold/instances/april');
-		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(false);
+		expect(await evaluate('window.instanceQa.opens.at(-1).homeDir')).toBe(
+			'/home/user/fhold/instances/april'
+		);
+		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(
+			false
+		);
 		await capture('instances-open-error.png');
 		await click('#connect-host');
-		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(true);
-		await value('#hosting-connection','krang','change');
-		expect(await evaluate("!document.querySelector('#hosting-open-folder').hidden && document.querySelector('#choose-instance').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(
+			true
+		);
+		await value('#hosting-connection', 'krang', 'change');
+		expect(
+			await evaluate(
+				"!document.querySelector('#hosting-open-folder').hidden && document.querySelector('#choose-instance').hidden"
+			)
+		).toBe(true);
 		await capture('instances-ssh-chooser-desktop.png');
 		await click('#hosting-instance-list button');
-		expect(await evaluate('window.instanceQa.opens.at(-1).ref')).toEqual({kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/lab-agent'});
+		expect(await evaluate('window.instanceQa.opens.at(-1).ref')).toEqual({
+			kind: 'ssh-docker',
+			connectionId: 'krang',
+			remoteHome: '/opt/stacks/lab-agent'
+		});
 		await capture('instances-ssh-open-error.png');
-		await evaluate("import('./hosting.js').then(({showHostingChooser})=>showHostingChooser('krang'))");
-		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(true);
-		await command('Emulation.setDeviceMetricsOverride', { width:620,height:900,deviceScaleFactor:1,mobile:false });
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await evaluate(
+			"import('./hosting.js').then(({showHostingChooser})=>showHostingChooser('krang'))"
+		);
+		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(
+			true
+		);
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 620,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('instances-ssh-chooser-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('instances-ssh-chooser-200pct.png');
 		await evaluate("document.documentElement.style.fontSize=''");
-		await command('Emulation.setDeviceMetricsOverride', { width:1120,height:780,deviceScaleFactor:1,mobile:false });
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1120,
+			height: 780,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
 		await click('#hosting-manage');
 		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('krang');
-		const discoveryCount = await evaluate('window.instanceQa.discoveries.length') as number;
+		const discoveryCount = (await evaluate('window.instanceQa.discoveries.length')) as number;
 		await click('#admin-settings-back');
 		expect(await evaluate('window.instanceQa.discoveries.length')).toBeGreaterThan(discoveryCount);
 		expect(await evaluate("document.querySelector('#open-hosting').hidden")).toBe(false);
 		await click('#hosting-install');
-		expect(await evaluate("document.querySelector('#install-home').value")).toBe('/opt/stacks/personal-agent');
-		expect(await evaluate("document.querySelector('#install-section [data-setup-location]').textContent")).toBe('On Krang lab');
+		expect(await evaluate("document.querySelector('#install-home').value")).toBe(
+			'/opt/stacks/personal-agent'
+		);
+		expect(
+			await evaluate("document.querySelector('#install-section [data-setup-location]').textContent")
+		).toBe('On Krang lab');
 		expect(await evaluate('window.instanceQa.prepares.length')).toBe(0);
 		await capture('instances-new-ssh-desktop.png');
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.installConnection=undefined;renderWelcome(window.instanceQaWelcome);})()`);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.installConnection=undefined;renderWelcome(window.instanceQaWelcome);})()`
+		);
 		await click('#begin-instance-import');
 		expect(await evaluate("document.querySelector('#instance-restore-back').hidden")).toBe(true);
-		await value('#instance-restore-source','/home/user/fhold/backups/april-export');
-		await value('#instance-restore-home','/home/user/fhold/instances/restored-agent');
+		await value('#instance-restore-source', '/home/user/fhold/backups/april-export');
+		await value('#instance-restore-home', '/home/user/fhold/instances/restored-agent');
 		await capture('instances-import-choose-desktop.png');
 		await click('#preview-instance-restore');
-		expect(await evaluate('window.instanceQa.prepares.at(-1)')).toEqual({kind:'local',homeDir:'/home/user/fhold/instances/restored-agent'});
+		expect(await evaluate('window.instanceQa.prepares.at(-1)')).toEqual({
+			kind: 'local',
+			homeDir: '/home/user/fhold/instances/restored-agent'
+		});
 		expect(await evaluate("document.querySelector('#instance-import-review').hidden")).toBe(false);
 		expect(await evaluate('window.instanceQa.imports')).toBe(0);
 		await capture('instances-import-review-desktop.png');
@@ -1006,25 +1401,52 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate('window.instanceQa.confirmations')).toBe(1);
 		expect(await evaluate('window.instanceQa.imports')).toBe(0);
 		await click('#instance-restore-back');
-		expect(await evaluate("document.querySelector('#instance-restore-source').value")).toBe('/home/user/fhold/backups/april-export');
-		expect(await evaluate("document.querySelector('#instance-restore-home').value")).toBe('/home/user/fhold/instances/restored-agent');
+		expect(await evaluate("document.querySelector('#instance-restore-source').value")).toBe(
+			'/home/user/fhold/backups/april-export'
+		);
+		expect(await evaluate("document.querySelector('#instance-restore-home').value")).toBe(
+			'/home/user/fhold/instances/restored-agent'
+		);
 		expect(await evaluate("document.querySelector('#apply-instance-restore').disabled")).toBe(true);
-		await evaluate(`(async()=>{const {state}=await import('./state.js');const {showHostingChooser}=await import('./hosting.js');window.connectionQa.connections.push({id:'cloud',kind:'azure-container-apps',label:'Cloud test',subscriptionId:'synthetic',resourceGroup:'agents'});state.api.hostingFeatures=async()=>({installation:false});state.api.hostingInstances=async()=>[];await showHostingChooser('cloud');})()`);
-		expect(await evaluate("['hosting-install','hosting-import','hosting-open-folder'].every(id=>{const control=document.getElementById(id);return !control.hidden&&control.disabled})")).toBe(true);
+		await evaluate(
+			`(async()=>{const {state}=await import('./state.js');const {showHostingChooser}=await import('./hosting.js');window.connectionQa.connections.push({id:'cloud',kind:'azure-container-apps',label:'Cloud test',subscriptionId:'synthetic',resourceGroup:'agents'});state.api.hostingFeatures=async()=>({installation:false});state.api.hostingInstances=async()=>[];await showHostingChooser('cloud');})()`
+		);
+		expect(
+			await evaluate(
+				"['hosting-install','hosting-import','hosting-open-folder'].every(id=>{const control=document.getElementById(id);return !control.hidden&&control.disabled})"
+			)
+		).toBe(true);
 		expect(await evaluate("document.querySelector('#hosting-creation-help').hidden")).toBe(false);
 		await capture('instances-cloud-creation-unavailable.png');
-		await evaluate(`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`);
+		await evaluate(
+			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
+		);
 		expect(await evaluate("document.querySelector('#error-home').hidden")).toBe(true);
 		await capture('instance-error-desktop.png');
-		await command('Emulation.setDeviceMetricsOverride',{width:320,height:900,deviceScaleFactor:1,mobile:false});
-		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 320,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
 		await capture('instance-error-320.png');
-		await evaluate("document.querySelector('#error-state').hidden=true;document.querySelector('#loading-state').hidden=false");
-		await command('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-		expect(await evaluate("Number.parseFloat(getComputedStyle(document.querySelector('.loading-mark')).animationDuration)")).toBeLessThan(0.001);
+		await evaluate(
+			"document.querySelector('#error-state').hidden=true;document.querySelector('#loading-state').hidden=false"
+		);
+		await command('Emulation.setEmulatedMedia', {
+			features: [{ name: 'prefers-reduced-motion', value: 'reduce' }]
+		});
+		expect(
+			await evaluate(
+				"Number.parseFloat(getComputedStyle(document.querySelector('.loading-mark')).animationDuration)"
+			)
+		).toBeLessThan(0.001);
 		await capture('initial-loading-reduced-motion.png');
 		expect(hashSources()).toEqual(sourceHashes);
-		writeFileSync(join(root,'accessibility.json'),JSON.stringify(accessibility,null,2));
+		writeFileSync(join(root, 'accessibility.json'), JSON.stringify(accessibility, null, 2));
 		writeFileSync(
 			join(root, 'qa-manifest.json'),
 			JSON.stringify(
@@ -1041,7 +1463,13 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		);
 		console.info(`Chromium account QA artifacts: ${root}`);
-		expect(accessibility.flatMap(({screen,violations})=>violations.filter(({impact})=>impact==='serious'||impact==='critical').map(({id,nodes})=>({screen,id,nodes})))).toEqual([]);
+		expect(
+			accessibility.flatMap(({ screen, violations }) =>
+				violations
+					.filter(({ impact }) => impact === 'serious' || impact === 'critical')
+					.map(({ id, nodes }) => ({ screen, id, nodes }))
+			)
+		).toEqual([]);
 	} finally {
 		socket?.close();
 		processHandle.kill();

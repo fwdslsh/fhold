@@ -11,7 +11,9 @@ const hide = (id, value) => {
 	if (byId(id)) byId(id).hidden = value;
 };
 const field = (id) => byId(id)?.value || '';
-const home = () => state.currentSnapshot?.homeDir;
+// Target-bound async work must never compare a local home path: cloud instances
+// have no home and two different cloud targets would otherwise both be undefined.
+const home = () => JSON.stringify(state.currentSnapshot?.identity?.ref || null);
 const selectedId = () => state.providerEditor?.provider || field('provider');
 const endpointPresets = {
 	ollama: { name: 'Ollama', placeholder: 'http://server-address:11434/v1' },
@@ -513,7 +515,10 @@ export function renderProviders(settings) {
 	state.providerSummaries = (settings.providers || [])
 		.slice()
 		.sort((left, right) => left.name.localeCompare(right.name));
-	state.providerCurrentModel = settings.currentModel;
+	// An inaccessible inventory is neither an empty provider list nor evidence
+	// about the current model.  Keep the last selection out of the UI rather
+	// than guessing from a host-owned config file.
+	state.providerCurrentModel = settings.inventoryUnavailable ? undefined : settings.currentModel;
 	state.providerConfigurationIssue = settings.configurationIssue;
 	if (
 		state.lastReadiness &&
@@ -524,6 +529,20 @@ export function renderProviders(settings) {
 	renderProviderOptions();
 	renderProviderAccounts();
 	updateModelControls();
+	if (settings.inventoryUnavailable)
+		setStatus(
+			'provider-default-status',
+			'AI inventory is unavailable.',
+			'Connect to the native agent and refresh the setup list before changing its default model.',
+			'error'
+		);
+	if (settings.write?.saved && settings.write.effective === 'unconfirmed')
+		setStatus(
+			'provider-default-status',
+			'Setup was saved, but is not yet confirmed.',
+			'OpenCode has not confirmed the change. Reconnect and test a model before relying on it.',
+			'neutral'
+		);
 }
 
 export async function loadProviders(withNotice = true, force = false) {
@@ -757,9 +776,9 @@ export function renderReadiness(result) {
 		id,
 		result.ok ? 'This model responded successfully.' : 'This model could not respond.',
 		result.ok
-			? `Tested ${target.model} in this visit. Testing alone does not change the default.`
+			? `${result.warning ? `Partial setup: ${result.warning} ` : ''}Tested ${target.model} in this visit. Testing alone does not change the default.`
 			: result.error || 'Check the saved setup and try again.',
-		result.ok ? 'success' : 'error'
+		result.ok ? (result.warning ? 'warning' : 'success') : 'error'
 	);
 	if (!target.current && state.providerEditor?.provider === target.provider) {
 		const alreadyDefault =
@@ -769,8 +788,8 @@ export function renderReadiness(result) {
 			'provider-editor-message',
 			result.ok
 				? alreadyDefault
-					? 'This model responded in this check. It is already your default model.'
-					: 'This model responded in this check. Choose Use this model to make it your default.'
+					? `This model responded in this check.${result.warning ? ` Partial setup: ${result.warning}` : ''} It is already your default model.`
+					: `This model responded in this check.${result.warning ? ` Partial setup: ${result.warning}` : ''} Choose Use this model to make it your default.`
 				: state.providerEditor.endpoint && state.providerEditor.saved
 					? 'Endpoint setup is saved and enabled, but the response test failed. Check the setup and try again. Testing did not change your default model.'
 					: 'The response test failed. Check the setup and try again. Testing did not change your default model.'
@@ -785,7 +804,10 @@ export async function verifyProvider(
 	{ provider = selectedId(), model = selectedModel(), current = false } = {}
 ) {
 	if (!provider || !model || state.operationInFlight || state.activeOAuth) return false;
-	const wasSetup = state.currentSnapshot?.phase === 'setup_incomplete' || state.awaitingSetupFinish;
+	const wasSetup =
+		(state.currentSnapshot?.lifecycle?.state === 'known' &&
+			state.currentSnapshot.lifecycle.value === 'setup-incomplete') ||
+		state.awaitingSetupFinish;
 	clearTest();
 	state.lastReadinessProvider = provider;
 	state.lastReadinessModel = model;
@@ -1125,7 +1147,11 @@ export function bindProvidersEvents() {
 			return;
 		state.awaitingSetupFinish = false;
 		hide('finish-provider-setup', true);
-		renderPhase(state.currentSnapshot.phase);
+		renderPhase(
+			state.currentSnapshot.lifecycle?.state === 'known'
+				? state.currentSnapshot.lifecycle.value
+				: 'ready'
+		);
 		showView('overview', { focus: true });
 	});
 	on('start-provider-oauth', 'click', async () => {

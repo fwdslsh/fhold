@@ -8,7 +8,13 @@ import { sshArgs } from '../hosting/ssh-native.js';
 import { hostingFailure, runHostingProcess } from '../hosting/process.js';
 import { packTransfer, unpackTransfer, preserveTransferMetadata } from './transfer.js';
 import type { HostingConnection } from '../hosting/types.js';
-import type { InstanceManagement, ManagementMethod, ManagedSnapshot } from './types.js';
+import type {
+	InstanceManagement,
+	ManagementMethod,
+	ManagedSnapshot,
+	ManagementRequestArgs,
+	ManagementRequestMap
+} from './types.js';
 import { SshTunnel } from './tunnel.js';
 
 export const SSH_MANAGEMENT_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting session';
@@ -111,11 +117,11 @@ export class SshInstanceManagement implements InstanceManagement {
 		for (const pending of this.pending.values()) pending.reject(error);
 		this.pending.clear();
 	}
-	async rpc<T = unknown>(
+	private async request(
 		method: ManagementMethod,
 		value?: unknown,
 		...extra: unknown[]
-	): Promise<T> {
+	): Promise<unknown> {
 		this.connect();
 		const id = ++this.serial;
 		const result = await new Promise<unknown>((resolve, reject) => {
@@ -126,7 +132,13 @@ export class SshInstanceManagement implements InstanceManagement {
 		});
 		if (method === 'remote' && result && typeof result === 'object' && 'running' in result)
 			this.nativeSetup = result.running === true;
-		return result as T;
+		return result;
+	}
+	async rpc<M extends ManagementMethod>(
+		method: M,
+		...args: ManagementRequestArgs<M>
+	): Promise<ManagementRequestMap[M]['result']> {
+		return (await this.request(method, ...args)) as ManagementRequestMap[M]['result'];
 	}
 	private location(path: string): string {
 		const at = this.connection.host.lastIndexOf('@');
@@ -153,16 +165,16 @@ export class SshInstanceManagement implements InstanceManagement {
 	}
 	async uploadFile(local: string): Promise<string> {
 		if (!lstatSync(local).isFile()) throw Error('Choose a regular input file on this computer.');
-		const root = await this.rpc<string>('transferCreate');
+		const root = await this.rpc('transferCreate');
 		const target = join(root, 'input');
 		await this.copyFile(local, target, true);
 		return target;
 	}
-	async call<T = unknown>(
-		method: ManagementMethod,
-		value?: unknown,
-		...extra: unknown[]
-	): Promise<T> {
+	async call<M extends ManagementMethod>(
+		method: M,
+		...args: ManagementRequestArgs<M>
+	): Promise<ManagementRequestMap[M]['result']>;
+	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
 		if (method === 'backup') {
 			if (
 				!value ||
@@ -175,15 +187,15 @@ export class SshInstanceManagement implements InstanceManagement {
 			const exists = lstatSync(destination, { throwIfNoEntry: false });
 			if (exists && (!exists.isDirectory() || readdirSync(destination).length))
 				throw Error('Choose an empty export directory.');
-			const root = await this.rpc<string>('transferCreate');
+			const root = await this.rpc('transferCreate');
 			const local = mkdtempSync(join(tmpdir(), 'fhold-transfer-download-'));
 			try {
-				const result = await this.rpc<T>(
+				const result = await this.request(
 					method,
 					{ ...value, destination: join(root, 'export') },
 					...extra
 				);
-				const archive = await this.rpc<string>('transferPack', root);
+				const archive = await this.rpc('transferPack', root);
 				await this.copyFile(join(local, 'transfer.tgz'), archive, false);
 				await unpackTransfer(join(local, 'transfer.tgz'), join(local, 'unpacked'));
 				mkdirSync(destination, { recursive: true, mode: 0o700 });
@@ -226,26 +238,26 @@ export class SshInstanceManagement implements InstanceManagement {
 					await this.rpc('transferRelease', staged.root);
 					this.imports.delete(source);
 				}
-				const root = await this.rpc<string>('transferCreate');
+				const root = await this.rpc('transferCreate');
 				const local = mkdtempSync(join(tmpdir(), 'fhold-transfer-upload-'));
 				try {
 					await packTransfer(source, join(local, 'transfer.tgz'));
 					await this.copyFile(join(local, 'transfer.tgz'), join(root, 'transfer.tgz'), true);
-					staged = { root, source: await this.rpc<string>('transferUnpack', root) };
+					staged = { root, source: await this.rpc('transferUnpack', root) };
 					this.imports.set(source, staged);
 				} finally {
 					rmSync(local, { recursive: true, force: true });
 				}
 			}
 			if (!staged) throw Error('Preview this import before applying it.');
-			const result = await this.rpc<Record<string, unknown>>(
-				method,
-				{ ...value, sourceHome: staged.source },
-				...extra
-			);
-			return { ...result, sourceHome: source } as T;
+			const result = await this.request(method, { ...value, sourceHome: staged.source }, ...extra);
+			if (!result || typeof result !== 'object' || Array.isArray(result))
+				throw new Error(
+					'Remote import returned an invalid plan. Inspect the selected instance before retrying.'
+				);
+			return { ...result, sourceHome: source };
 		}
-		const result = await this.rpc<T>(method, value, ...extra);
+		const result = await this.request(method, value, ...extra);
 		if (method === 'snapshot') {
 			const snapshot = result as ManagedSnapshot;
 			if (snapshot.connectionDetails) {
@@ -279,6 +291,13 @@ export class SshInstanceManagement implements InstanceManagement {
 			}
 		}
 		return result;
+	}
+	/**
+	 * Passive status for composed snapshots. Unlike `call('snapshot')`, this
+	 * deliberately does not acquire a loopback browser forward.
+	 */
+	async inspectPassive(): Promise<ManagedSnapshot> {
+		return this.rpc('snapshot');
 	}
 	busy(): boolean {
 		return this.nativeSetup;

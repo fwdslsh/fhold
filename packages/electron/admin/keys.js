@@ -26,7 +26,11 @@ export function bindKeyEvents() {
 		if (state.operationInFlight) return;
 		const select = byId('key-rotation-credential');
 		const username = select.value;
-		if (!state.currentConfig?.credentials[username]) return;
+		const apps =
+			state.currentSnapshot?.apps?.config?.state === 'known'
+				? state.currentSnapshot.apps.config.value
+				: undefined;
+		if (!apps?.credentials[username]) return;
 		if (
 			!window.confirm(
 				`Rotate the key for “${username}”? The old key will stop working. Update every external app using it. Permissions and conversations stay unchanged.`

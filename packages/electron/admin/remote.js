@@ -53,18 +53,20 @@ function renderRecallStatus(review, error) {
 }
 
 export function renderRemoteStatus(snapshot) {
-	// General inspection never invokes native hook inventory or preserves stale readiness.
-	renderRecallStatus(snapshot.codexRecall, snapshot.codexRecallError);
+	// General inspection never invokes native hook inventory.  Remote worker
+	// setup is a named agent operation, not a Docker-config feature.
+	renderRecallStatus(undefined);
+	const remote = snapshot.operations?.['agent.remote'];
+	const available = remote?.support === 'supported' && remote.availability?.state === 'ready';
 	for (const name of ['claude', 'codex']) {
-		const enabled = snapshot.config.assistant[`${name}Remote`] === true;
 		setBadge(
 			byId(`${name}-remote-status`),
-			enabled ? 'Startup enabled · client connection not checked' : 'Startup off',
+			available ? 'Available after explicit setup' : 'Unavailable for this instance',
 			'neutral'
 		);
 		for (const button of all(`[data-remote-connect="${name}"]`))
-			button.disabled = state.operationInFlight || !enabled;
-		for (const button of all(`[data-remote-disable="${name}"]`)) button.hidden = !enabled;
+			button.disabled = state.operationInFlight || !available;
+		for (const button of all(`[data-remote-disable="${name}"]`)) button.hidden = true;
 	}
 }
 
@@ -119,7 +121,8 @@ async function loadRecall() {
 
 export function remoteStageText(progress) {
 	if (progress.error) return progress.error;
-	if (progress.enabled) return 'Startup enabled. Connect your client and verify a real request.';
+	if (progress.enabled && !progress.running && progress.stage !== 'failed')
+		return 'Startup enabled. Connect your client and verify a real request.';
 	return (
 		{
 			starting: 'Preparing your agent…',
@@ -131,7 +134,7 @@ export function remoteStageText(progress) {
 			enabling: 'Enabling remote startup…',
 			pairing: 'Getting your connection details…',
 			connection: 'Your private connection details are below.',
-			failed: 'Setup did not finish. Remote startup is off.'
+			failed: 'Setup did not finish. The existing startup setting was preserved.'
 		}[progress.stage] ?? 'Preparing remote access…'
 	);
 }
@@ -362,7 +365,8 @@ export function bindRemoteEvents() {
 		clearTimeout(timer);
 		if (running) {
 			byId('remote-cancel').disabled = true;
-			byId('remote-stage').textContent = 'Cancelling setup and leaving startup off…';
+			byId('remote-stage').textContent =
+				'Cancelling setup; the existing startup setting will be preserved…';
 			try {
 				showProgress(await state.api.remote({ action: 'cancel', tool }));
 			} catch (error) {

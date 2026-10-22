@@ -66,7 +66,8 @@ function nativeFixture() {
 							type: 'string',
 							key: 'account',
 							title: 'Choose account',
-							options: [{ label: 'Personal', value: 'personal' }]
+							options: [{ label: 'Personal', value: 'personal', hint: 'Use your personal plan' }],
+							when: { key: 'region', op: 'eq', value: 'us' }
 						}
 					]
 				}
@@ -178,7 +179,8 @@ describe('Native OpenCode v2 setup', () => {
 								type: 'select',
 								key: 'account',
 								message: 'Choose account',
-								options: [{ label: 'Personal', value: 'personal' }]
+								options: [{ label: 'Personal', value: 'personal', hint: 'Use your personal plan' }],
+								when: { key: 'region', op: 'eq', value: 'us' }
 							}
 						]
 					}

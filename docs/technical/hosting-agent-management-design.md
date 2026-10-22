@@ -1,15 +1,19 @@
 # Separating hosting management from agent management
 
-Status: reviewed design proposal, not implemented. Reviewed against main
-`451f4c9ae806c10693c009f82afc3fb03523ee92b1b6` on October 22, 2026.
+Status: implemented on `codex/hosting-agent-management`, pending merge and release.
+The original design was reviewed against main
+`451f4c9ae806c10693c009f82afc3df3f872b86b` on October 22, 2026.
 The software architecture and software engineering reviews were independent;
-their recommendations are consolidated here. No live instances were changed or
-new cloud behavior qualified during this review.
+their recommendations are consolidated here. Implementation evidence and limits
+are recorded in the [verification record](../operations/hosting-agent-management-verification.md).
+No live instances were changed and no cloud mutation was qualified by this refactor.
 
-This is the next design after the [hosting-provider foundation](hosting-provider-architecture.md).
+The [implemented architecture](hosting-provider-architecture.md) describes the
+resulting dependency boundaries and extension pattern.
 The [hosting guide](../hosting.md) remains authoritative for shipped capabilities.
 The [core principles](core-principles.md) remain the active product contract;
-update them with implementation, not as a declaration that this proposal shipped.
+they are updated alongside the implementation. Branch implementation is not a
+declaration that artifacts have been released or live cloud behavior qualified.
 
 ## Decision
 
@@ -47,7 +51,12 @@ hosting operation. A workflow that genuinely requires both composes them explici
 and reports each result. Connecting to a different host is not migrating an agent:
 moving state, identity or recovery ownership remains a separate explicit operation.
 
-## What the current code gets right, and where it couples the layers
+## Baseline audit that motivated the implementation
+
+The findings below describe the pre-refactor baseline, not the current branch.
+The typed composition root, normalized observations and consumer migration replace
+these couplings; retained SSH wire names are compatibility details, not a second
+public management interface.
 
 Preserve the shared library, the built-in composition root, native authentication,
 existing local domain functions and the persistent SSH management session. Preserve
@@ -295,10 +304,8 @@ isolation. Existing default-on workers can pair without an artificial deployment
 change when their native setup allows it. Account, process and client readiness
 remain separate observations.
 
-The current cancellation path also writes the worker disabled and activates
-Compose, and `localInstanceManagement.close()` waits for that cancellation. Thus
-side-effect-free session close is a target design, not a claim about today's code.
-Separate and regression-test this path: closing login cancels its temporary process,
+The baseline cancellation path wrote the worker disabled and activated Compose.
+The implementation replaces that behavior: closing login cancels its temporary process,
 while any already authorized deployment change retains an explicit workflow result.
 Never undo a confirmed change or trigger another deployment apply merely because
 a client disconnects. Do not widen native trust/consent during this extraction.
@@ -448,13 +455,13 @@ coupling incrementally. Do not make all management HTTP, move the host CLI into
 the Assistant, use Guardian as a privileged control plane, invent a universal
 filesystem, duplicate account state or add speculative infrastructure.
 
-The main unresolved implementation question is the ACA route for native preference
-writes and persistent interactive setup. That requires an early, isolated transport
-experiment, not a product-wide design delay. The common contracts, local/SSH
-extraction and native HTTP subset can proceed independently. Its result determines
-which extra ACA operations can be enabled and whether a later architectural
-decision is needed; unsupported operations remain honest and useful diagnostics
-remain available.
+The ACA execution experiment found the installed native console requires a terminal
+and does not establish unattended typed process I/O. Consequently, this implementation
+uses the explicit authenticated HTTPS subset and leaves preference-file edits and
+guided worker setup unavailable through ACA. It adds no image helper, terminal
+scraping, cloud SDK or management daemon. A future route needs independent
+qualification before enabling those operations; the contracts/local/SSH extraction
+do not depend on that future work. Details are in the verification record.
 
 ## External platform evidence
 

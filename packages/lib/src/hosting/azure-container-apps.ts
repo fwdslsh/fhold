@@ -341,6 +341,11 @@ export function azureContainerAppsProvider(
 					},
 					name: app.name,
 					location: app.id,
+					actionEffects: {
+						start: 'request-platform-state',
+						stop: 'request-platform-state',
+						restart: 'restart-runtime'
+					},
 					capabilities: {
 						...capabilities(['start', 'stop']),
 						start: lifecycle,
@@ -369,6 +374,13 @@ export function azureContainerAppsProvider(
 					services: [
 						{
 							name: 'assistant',
+							imageProvenance: {
+								configuredReferences: [
+									...new Set(
+										(app.properties.template?.containers ?? []).map((container) => container.image)
+									)
+								]
+							},
 							state: platformState,
 							health: app.properties.provisioningState || 'Unknown'
 						}

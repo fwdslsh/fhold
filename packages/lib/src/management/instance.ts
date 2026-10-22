@@ -6,42 +6,21 @@ import {
 	type CodexSandbox,
 	type RemoteEnableSession
 } from '../control-plane/remote.js';
-import {
-	beginProviderOAuth,
-	completeProviderOAuth,
-	configureGuardianModeratorModel,
-	setProviderApiKey,
-	testAssistantReadiness,
-	type AssistantReadiness
-} from '../control-plane/opencode.js';
-import { classifyInstall, markInstalled, requireInstall } from '../control-plane/state.js';
+import { classifyInstall, requireInstall } from '../control-plane/state.js';
 import { connectionDetails } from '../control-plane/connection.js';
 import { createFholdState, stackConfigFile } from '../control-plane/foundation.js';
 import {
 	defaultStackConfig,
 	isCodexSandbox,
-	isCredentialUsername,
 	parseStackConfig,
 	readStackConfig,
-	isInstanceName
+	isInstanceName,
+	isCredentialUsername
 } from '../control-plane/stack-config.js';
 import { ensureDockerReady, assertProjectOwnership } from '../control-plane/docker.js';
 import { isPortalName } from '../control-plane/portal-credential-store.js';
-import {
-	listProviderSettings,
-	saveProviderEndpoint,
-	discoverProviderModels,
-	useProviderModel,
-	removeProviderSetup
-} from '../control-plane/provider-settings.js';
-import { mutateStack, savePortalTokens } from '../control-plane/operations.js';
+import { savePortalTokens } from '../control-plane/operations.js';
 import { portalSecretConfigured } from '../control-plane/portal-settings.js';
-import { readCredentialKey } from '../control-plane/credential-store.js';
-import {
-	inspectLocalInstance,
-	operateLocalInstance,
-	localInstanceLogs
-} from '../hosting/local-docker.js';
 import {
 	recoverySnapshot,
 	recoveryStatus,
@@ -62,13 +41,16 @@ import {
 	removeAdminCredential,
 	rotateAdminCredential,
 	saveAdminConfig,
-	confirmedAdminAction
+	confirmedAdminAction,
+	completeInstanceSetup
 } from './domain.js';
 import type {
 	ManagedSnapshot,
 	ManagementMethod,
 	InstanceManagement,
-	StackAction
+	StackAction,
+	ManagementRequestArgs,
+	ManagementRequestMap
 } from './types.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -78,22 +60,26 @@ import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
 import { packTransfer, unpackTransfer } from './transfer.js';
 import { publishedConnections } from './connections.js';
 import { withAssistantEndpoint } from '../control-plane/opencode.js';
+import type { LocalManagementHostPort } from './contracts.js';
+import { LocalAgentServices } from './agent-services.js';
+import { readCredentialKey } from '../control-plane/credential-store.js';
 
 /** The same target-bound domain operations run locally or in the owning SSH host CLI. */
 export function localInstanceManagement(
 	homeDir: string,
-	options: { setupName?: string; openUrl?: (url: string) => void } = {}
+	options: { setupName?: string; openUrl?: (url: string) => void; host: LocalManagementHostPort }
 ): InstanceManagement {
+	let closed = false;
+	const lifetime = new AbortController();
 	let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
 	let remoteStarting = false;
-	let pendingOAuth:
-		| { homeDir: string; provider: string; method: number; attemptID: string }
-		| undefined;
-	let verifiedModel:
-		| { homeDir: string; readiness: Extract<AssistantReadiness, { ok: true }> }
-		| undefined;
 	const handlers = new Map<string, (value?: unknown, ...extra: unknown[]) => unknown>();
 	const managedState = () => createFholdState(homeDir);
+	const agent = new LocalAgentServices(
+		() => state(),
+		options.openUrl,
+		(readiness) => completeInstanceSetup(homeDir, readiness)
+	);
 	const transfers = new Set<string>();
 	function handleAdmin(
 		channel: string,
@@ -112,39 +98,6 @@ export function localInstanceManagement(
 			opencode: connectionDetails(homeDir, 'opencode'),
 			mcp: connectionDetails(homeDir, 'mcp'),
 			claude: connectionDetails(homeDir, 'claude')
-		};
-	}
-
-	function oauthInput(value: unknown): {
-		provider: string;
-		method: number;
-		inputs?: Record<string, string>;
-	} {
-		if (!value || typeof value !== 'object' || Array.isArray(value)) {
-			throw new Error('Invalid provider sign-in request.');
-		}
-		const input = value as { provider?: unknown; method?: unknown; inputs?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.method !== 'number') {
-			throw new Error('Provider and sign-in method are required.');
-		}
-		if (
-			input.inputs !== undefined &&
-			(!input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs))
-		) {
-			throw new Error('Invalid provider sign-in fields.');
-		}
-		if (
-			input.inputs &&
-			Object.values(input.inputs as Record<string, unknown>).some(
-				(item) => typeof item !== 'string'
-			)
-		) {
-			throw new Error('Invalid provider sign-in fields.');
-		}
-		return {
-			provider: input.provider,
-			method: input.method,
-			...(input.inputs ? { inputs: input.inputs as Record<string, string> } : {})
 		};
 	}
 
@@ -177,7 +130,7 @@ export function localInstanceManagement(
 		const current = state();
 		const config = readStackConfig(current.homeDir);
 		if (!config.ok) throw new Error(config.error);
-		const hosting = await inspectLocalInstance(current.homeDir);
+		const hosting = await options.host.inspect(current.homeDir);
 		const details = connectionSnapshot(current.homeDir);
 		let connectionError: string | undefined;
 		try {
@@ -222,19 +175,8 @@ export function localInstanceManagement(
 
 	async function runAdminAction(action: StackAction): Promise<ManagedSnapshot> {
 		const current = state();
-		await operateLocalInstance(current.homeDir, action);
+		await options.host.operate(current.homeDir, action);
 		return adminSnapshot();
-	}
-
-	async function completeAdminReadiness(
-		homeDir: string,
-		readiness: AssistantReadiness
-	): Promise<void> {
-		if (!readiness.ok) return;
-		mutateStack(homeDir, () => {
-			configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
-			markInstalled(homeDir);
-		});
 	}
 
 	handleAdmin('codexRecall', async (_event, value: unknown) => {
@@ -257,6 +199,7 @@ export function localInstanceManagement(
 		const current = state();
 		if (input.action === 'connection') {
 			const output = await remoteConnection(current, tool);
+			if (closed) throw new Error('This instance session was closed.');
 			for (const url of remoteBrowserUrls(output)) options.openUrl?.(url);
 			return { tool, stage: 'connection', output, running: false, enabled: true };
 		}
@@ -273,7 +216,9 @@ export function localInstanceManagement(
 				const session = await beginRemoteEnable(current, tool, {
 					trusted: input.trusted === true,
 					sandbox: input.sandbox as CodexSandbox | undefined,
+					signal: lifetime.signal,
 					update(progress) {
+						if (closed) return;
 						for (const url of remoteBrowserUrls(progress.output)) {
 							if (opened.has(url)) continue;
 							opened.add(url);
@@ -281,6 +226,11 @@ export function localInstanceManagement(
 						}
 					}
 				});
+				if (closed) {
+					session.cancel();
+					await session.done;
+					throw new Error('This instance session was closed.');
+				}
 				activeRemote = { homeDir: current.homeDir, session };
 				return session.snapshot();
 			} finally {
@@ -345,167 +295,18 @@ export function localInstanceManagement(
 	});
 	handleAdmin('logs', async (_event) => {
 		const current = state();
-		return (await localInstanceLogs(current.homeDir, { tail: 250 })).slice(-200_000);
+		return (await options.host.logs(current.homeDir, { tail: 250 })).slice(-200_000);
 	});
-	handleAdmin('providers', (_event) => {
-		const current = state();
-		return listProviderSettings(current.homeDir);
-	});
-	handleAdmin('providerKey', async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object') throw new Error('Invalid provider settings');
-		const input = value as { provider?: unknown; key?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.key !== 'string') {
-			throw new Error('Provider and key are required.');
-		}
-		const current = state();
-		verifiedModel = undefined;
-		await setProviderApiKey(current.homeDir, input.provider, input.key);
-	});
-	handleAdmin('providerEndpoint', (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid AI service settings.');
-		const input = value as {
-			provider?: unknown;
-			name?: unknown;
-			url?: unknown;
-			model?: unknown;
-			key?: unknown;
-		};
-		if (
-			typeof input.provider !== 'string' ||
-			typeof input.name !== 'string' ||
-			typeof input.url !== 'string' ||
-			typeof input.model !== 'string' ||
-			(input.key !== undefined && typeof input.key !== 'string')
-		)
-			throw new Error('Service, URL and model are required.');
-		verifiedModel = undefined;
-		return saveProviderEndpoint(state().homeDir, {
-			provider: input.provider,
-			name: input.name,
-			url: input.url,
-			model: input.model,
-			...(typeof input.key === 'string' ? { key: input.key } : {})
-		});
-	});
-	handleAdmin('providerModels', (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid server settings.');
-		const input = value as { url?: unknown; key?: unknown };
-		if (typeof input.url !== 'string' || (input.key !== undefined && typeof input.key !== 'string'))
-			throw new Error('Server URL is required.');
-		return discoverProviderModels(state().homeDir, {
-			url: input.url,
-			...(typeof input.key === 'string' ? { key: input.key } : {})
-		});
-	});
-	handleAdmin('providerUse', async (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid model selection.');
-		const input = value as { provider?: unknown; model?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.model !== 'string')
-			throw new Error('Service and model are required.');
-		const current = state();
-		if (
-			!verifiedModel ||
-			verifiedModel.homeDir !== current.homeDir ||
-			verifiedModel.readiness.provider !== input.provider ||
-			verifiedModel.readiness.model !== input.model
-		)
-			throw new Error('Test this model before using it for your agent.');
-		const settings = await useProviderModel(current.homeDir, input.provider, input.model);
-		await completeAdminReadiness(current.homeDir, verifiedModel.readiness);
-		return settings;
-	});
-	handleAdmin('providerRemove', (_event, value: unknown) => {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid saved setup.');
-		const input = value as { provider?: unknown; endpoint?: unknown };
-		if (
-			typeof input.provider !== 'string' ||
-			(input.endpoint !== undefined && typeof input.endpoint !== 'boolean')
-		)
-			throw new Error('Service is required.');
-		verifiedModel = undefined;
-		return removeProviderSetup(state().homeDir, input.provider, {
-			endpoint: input.endpoint === true
-		});
-	});
-	handleAdmin('providerOAuthStart', async (_event, value: unknown) => {
-		const input = oauthInput(value);
-		const current = state();
-		const authorization = await beginProviderOAuth(
-			current.homeDir,
-			input.provider,
-			input.method,
-			input.inputs
-		);
-		pendingOAuth = {
-			homeDir: current.homeDir,
-			provider: input.provider,
-			method: input.method,
-			attemptID: authorization.attemptID
-		};
-		options.openUrl?.(authorization.url);
-		return authorization;
-	});
-	handleAdmin('providerOAuthFinish', async (_event, value: unknown) => {
-		const input = oauthInput(value);
-		const rawCode = (value as { code?: unknown }).code;
-		if (rawCode !== undefined && typeof rawCode !== 'string') {
-			throw new Error('Invalid provider authorization code.');
-		}
-		const current = state();
-		if (
-			!pendingOAuth ||
-			pendingOAuth.homeDir !== current.homeDir ||
-			pendingOAuth.provider !== input.provider ||
-			pendingOAuth.method !== input.method
-		)
-			throw new Error('Start provider sign-in for this instance first.');
-		await completeProviderOAuth(current.homeDir, input.provider, pendingOAuth.attemptID, rawCode);
-		pendingOAuth = undefined;
-		verifiedModel = undefined;
-	});
-	handleAdmin('readiness', (_event, value: unknown) => {
-		if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
-			throw new Error('Invalid provider readiness request.');
-		}
-		const rawProvider = (value as { provider?: unknown } | undefined)?.provider;
-		const rawModel = (value as { model?: unknown } | undefined)?.model;
-		if (rawProvider !== undefined && typeof rawProvider !== 'string') {
-			throw new Error('Invalid readiness provider.');
-		}
-		if (rawModel !== undefined && (typeof rawModel !== 'string' || !rawProvider))
-			throw new Error('Choose a service for this model test.');
-		const current = state();
-		return testAssistantReadiness(current.homeDir, {
-			...(rawProvider ? { provider: rawProvider } : {}),
-			...(typeof rawModel === 'string' ? { model: rawModel } : {})
-		}).then(async (readiness) => {
-			verifiedModel = readiness.ok ? { homeDir: current.homeDir, readiness } : undefined;
-			// A successful candidate test is not a default-model choice. Complete
-			// new setup after explicit Use; checking the existing default is enough.
-			const settings = readiness.ok ? await listProviderSettings(current.homeDir) : undefined;
-			if (
-				!rawProvider ||
-				(readiness.ok &&
-					settings?.currentModel?.provider === readiness.provider &&
-					settings?.currentModel?.model === readiness.model)
-			) {
-				await completeAdminReadiness(current.homeDir, readiness);
-			}
-			return readiness;
-		});
-	});
-	handleAdmin('assistantPassword', (_event) => {
-		const current = state();
-		const details = connectionDetails(current.homeDir, 'opencode', {
-			showAssistantPassword: true
-		});
-		if (!details.password) throw new Error('OpenCode password is unavailable.');
-		return { password: details.password };
-	});
+	handleAdmin('providers', () => agent.providers());
+	handleAdmin('providerKey', (_event, value) => agent.setKey(value));
+	handleAdmin('providerEndpoint', (_event, value) => agent.endpoint(value));
+	handleAdmin('providerModels', (_event, value) => agent.models(value));
+	handleAdmin('providerUse', (_event, value) => agent.use(value));
+	handleAdmin('providerRemove', (_event, value) => agent.remove(value));
+	handleAdmin('providerOAuthStart', (_event, value) => agent.oauthStart(value));
+	handleAdmin('providerOAuthFinish', (_event, value) => agent.oauthFinish(value));
+	handleAdmin('readiness', (_event, value) => agent.readiness(value));
+	handleAdmin('assistantPassword', () => agent.password());
 	handleAdmin('credential', async (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid credential operation');
 		const input = value as { action?: unknown; username?: unknown; policy?: unknown };
@@ -520,14 +321,13 @@ export function localInstanceManagement(
 		else throw new Error('Invalid credential operation');
 		return adminSnapshot();
 	});
-	handleAdmin('credentialKey', (_event, value: unknown) => {
+	handleAdmin('credentialKey', (_event, value) => {
 		if (!isCredentialUsername(value)) throw new Error('Invalid credential username.');
 		const current = state();
 		const config = readStackConfig(current.homeDir);
 		if (!config.ok) throw new Error(config.error);
-		if (!Object.hasOwn(config.config.credentials, value)) {
+		if (!Object.hasOwn(config.config.credentials, value))
 			throw new Error(`Unknown credential: ${value}`);
-		}
 		return { username: value, key: readCredentialKey(current.homeDir, value) };
 	});
 	handleAdmin('mapPortalUser', async (_event, value: unknown) => {
@@ -639,25 +439,34 @@ export function localInstanceManagement(
 			return method === 'transferPack' ? archive : join(value, 'unpacked', 'payload');
 		});
 	return {
-		async call<T>(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<T> {
+		async call<M extends ManagementMethod>(
+			method: M,
+			...args: ManagementRequestArgs<M>
+		): Promise<ManagementRequestMap[M]['result']> {
+			if (closed) throw new Error('This instance session is closed. Open it again.');
+			const [value, ...extra] = args;
 			const handler = handlers.get(method);
 			if (!handler) throw Error('Unsupported instance operation.');
 			if (method.startsWith('provider') || method === 'readiness') {
 				const current = state();
 				const endpoint = (
-					await publishedConnections(current.homeDir, await inspectLocalInstance(current.homeDir))
+					await publishedConnections(current.homeDir, await options.host.inspect(current.homeDir))
 				).assistant;
 				if (!endpoint) throw Error('Start this instance before managing its AI services.');
 				return await withAssistantEndpoint(
 					current.homeDir,
 					endpoint,
-					async () => (await handler(value, ...extra)) as T
+					async () => (await handler(value, ...extra)) as ManagementRequestMap[M]['result']
 				);
 			}
-			return (await handler(value, ...extra)) as T;
+			return (await handler(value, ...extra)) as ManagementRequestMap[M]['result'];
 		},
 		busy: () => remoteStarting || !!activeRemote?.session.snapshot().running,
 		async close() {
+			if (closed) return;
+			closed = true;
+			lifetime.abort();
+			agent.close();
 			activeRemote?.session.cancel();
 			await activeRemote?.session.done;
 			for (const directory of transfers) rmSync(directory, { recursive: true, force: true });

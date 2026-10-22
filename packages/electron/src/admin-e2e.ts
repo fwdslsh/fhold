@@ -19,13 +19,35 @@ import {
 } from '@fhold/lib';
 import { installFromAdmin } from './admin-domain.js';
 
-import { adminSnapshot as readAdminSnapshot, createAdminWindow, registerAdminIpc, runAdminAction } from './admin-app.js';
+import {
+	adminSnapshot as readAdminSnapshot,
+	createAdminWindow,
+	registerAdminIpc,
+	runAdminAction
+} from './admin-app.js';
 import type { AdminSnapshot } from './admin-types.js';
 
 async function adminSnapshot(): Promise<AdminSnapshot> {
 	const snapshot = await readAdminSnapshot();
-	if (snapshot.phase === 'remote') throw new Error('The local installer fixture selected a remote instance.');
+	if (snapshot.lifecycle.state === 'known' && snapshot.lifecycle.value === 'externally-managed')
+		throw new Error('The local installer fixture selected an externally managed instance.');
 	return snapshot;
+}
+
+function dockerConfig(snapshot: AdminSnapshot) {
+	if (!snapshot.docker) throw new Error('The local fixture did not expose Docker configuration.');
+	return snapshot.docker.config;
+}
+function services(snapshot: AdminSnapshot) {
+	return snapshot.services.state === 'known' ? snapshot.services.value : [];
+}
+function pendingChanges(snapshot: AdminSnapshot) {
+	return snapshot.pendingChanges.state === 'known' ? snapshot.pendingChanges.value : undefined;
+}
+function appConfig(snapshot: AdminSnapshot) {
+	if (snapshot.apps.config.state !== 'known')
+		throw new Error('App configuration was not observed.');
+	return snapshot.apps.config.value;
 }
 
 type RendererWaitState = { ready: boolean; error: string };
@@ -137,42 +159,95 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 		),
 		'Selecting a page did not close navigation and focus its heading.'
 	);
-	visualAudits.push({ keyboard: 'Tab, Shift+Tab, instance picker, Enter, Space, page selection', passed: true });
+	visualAudits.push({
+		keyboard: 'Tab, Shift+Tab, instance picker, Enter, Space, page selection',
+		passed: true
+	});
 }
 
 async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 	const press = async (keyCode: string, modifiers: Array<'shift'> = [], waitFrame = true) => {
 		window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
-		if (keyCode === 'Return') window.webContents.sendInputEvent({ type: 'char', keyCode, modifiers });
+		if (keyCode === 'Return')
+			window.webContents.sendInputEvent({ type: 'char', keyCode, modifiers });
 		window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
-		if (waitFrame) await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
+		if (waitFrame)
+			await window.webContents.executeJavaScript(
+				'new Promise(resolve => requestAnimationFrame(resolve))'
+			);
 	};
-	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus(); window.scrollTo(0,0)');
+	await window.webContents.executeJavaScript(
+		'document.body.tabIndex=-1; document.body.focus(); window.scrollTo(0,0)'
+	);
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'skip-link'"), 'Welcome skip link was not first in keyboard order.');
+	assert(
+		await window.webContents.executeJavaScript("document.activeElement.id === 'skip-link'"),
+		'Welcome skip link was not first in keyboard order.'
+	);
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.matches('[data-admin-settings]')"), 'Welcome settings was not keyboard reachable.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"document.activeElement.matches('[data-admin-settings]')"
+		),
+		'Welcome settings was not keyboard reachable.'
+	);
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'First launch did not prioritize new setup in keyboard order.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"document.activeElement.id === 'begin-new-instance'"
+		),
+		'First launch did not prioritize new setup in keyboard order.'
+	);
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-instance-import'"), 'Import was not next to new setup.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"document.activeElement.id === 'begin-instance-import'"
+		),
+		'Import was not next to new setup.'
+	);
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'connect-host'"), 'Existing instance browse was not keyboard reachable.');
+	assert(
+		await window.webContents.executeJavaScript("document.activeElement.id === 'connect-host'"),
+		'Existing instance browse was not keyboard reachable.'
+	);
 	await press('Tab', ['shift']);
 	await press('Tab', ['shift']);
 	await press('Return');
-	assert(await window.webContents.executeJavaScript("!document.querySelector('#install-section').hidden && document.activeElement.id === 'install-instance-name'"), 'Setup did not reveal the one install form and move focus to its name.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"!document.querySelector('#install-section').hidden && document.activeElement.id === 'install-instance-name'"
+		),
+		'Setup did not reveal the one install form and move focus to its name.'
+	);
 	await press('Tab', ['shift']);
-	assert(await window.webContents.executeJavaScript("document.activeElement.matches('#install-section [data-instance-switch]')"), 'Cancel was not reachable from naming.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"document.activeElement.matches('#install-section [data-instance-switch]')"
+		),
+		'Cancel was not reachable from naming.'
+	);
 	await press('Return', [], false);
-	await waitForRenderer(window, "document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.body.dataset.phase==='welcome'", 'Cancel returns to Welcome through the normal renderer reload', 10_000);
+	await waitForRenderer(
+		window,
+		"document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.body.dataset.phase==='welcome'",
+		'Cancel returns to Welcome through the normal renderer reload',
+		10_000
+	);
 	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus()');
 	await press('Tab');
 	await press('Tab');
 	await press('Tab');
-	assert(await window.webContents.executeJavaScript("document.activeElement.id === 'begin-new-instance'"), 'Setup was not keyboard reachable after cancelling.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"document.activeElement.id === 'begin-new-instance'"
+		),
+		'Setup was not keyboard reachable after cancelling.'
+	);
 	await press('Return');
-	visualAudits.push({ keyboard: 'Welcome choices, Enter, install-name focus, Shift+Tab, Cancel', passed: true });
+	visualAudits.push({
+		keyboard: 'Welcome choices, Enter, install-name focus, Shift+Tab, Cancel',
+		passed: true
+	});
 }
 
 function requiredEnvironment(name: string): string {
@@ -274,7 +349,10 @@ async function capture(
 		return await Promise.race([
 			captureScreenshot(window, directory, name, preserveFocus),
 			new Promise<never>((_resolve, reject) => {
-				timeout = setTimeout(() => reject(new Error(`Rendered screenshot/audit timed out: ${name}`)), 45_000);
+				timeout = setTimeout(
+					() => reject(new Error(`Rendered screenshot/audit timed out: ${name}`)),
+					45_000
+				);
 			})
 		]);
 	} finally {
@@ -394,7 +472,7 @@ async function assertRenderedFloor(window: BrowserWindow, label: string): Promis
 async function assertRadioLabelClick(window: BrowserWindow, id: string): Promise<void> {
 	window.focus();
 	window.webContents.focus();
-	const point = await window.webContents.executeJavaScript(`(async () => {
+	const point = (await window.webContents.executeJavaScript(`(async () => {
 		const input = document.getElementById(${JSON.stringify(id)});
 		const label = input?.labels?.[0];
 		if (input?.type !== 'radio' || !label || input.checked || input.disabled) throw new Error('Expected an enabled, unselected radio with an associated label.');
@@ -403,12 +481,21 @@ async function assertRadioLabelClick(window: BrowserWindow, id: string): Promise
 		const rect = label.getBoundingClientRect();
 		if (rect.width < 44 || rect.height < 44) throw new Error('The radio label is not a 44px pointer target.');
 		return {x:Math.round(rect.left + rect.width / 2),y:Math.round(rect.top + rect.height / 2)};
-	})()`) as { x: number; y: number };
+	})()`)) as { x: number; y: number };
 	window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
 	window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point });
 	window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point });
-	await waitForRenderer(window, `document.getElementById(${JSON.stringify(id)}).checked`, `real label click selects ${id}`);
-	visualAudits.push({ pointer: 'native radio associated label', id, targetMinimum: 44, activationPassed: true });
+	await waitForRenderer(
+		window,
+		`document.getElementById(${JSON.stringify(id)}).checked`,
+		`real label click selects ${id}`
+	);
+	visualAudits.push({
+		pointer: 'native radio associated label',
+		id,
+		targetMinimum: 44,
+		activationPassed: true
+	});
 }
 
 async function openControlDisclosures(window: BrowserWindow, selector: string): Promise<void> {
@@ -423,21 +510,29 @@ async function openControlDisclosures(window: BrowserWindow, selector: string): 
 		for (const details of ancestors.reverse()) details.open = true;
 		control.scrollIntoView({block:'center'});
 	})()`);
-	await waitForRenderer(window, `(() => {
+	await waitForRenderer(
+		window,
+		`(() => {
 		const control = document.querySelector(${JSON.stringify(selector)});
 		const rect = control.getBoundingClientRect();
 		const style = getComputedStyle(control);
 		return !control.closest('details:not([open])') && rect.width > 0 && rect.height > 0 &&
 			style.display !== 'none' && style.visibility !== 'hidden';
-	})()`, `visible control ${selector}`, 10_000);
+	})()`,
+		`visible control ${selector}`,
+		10_000
+	);
 }
 
 async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<string[]> {
 	const originalSize = window.getSize().join('x');
-	const viewport = await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');
+	const viewport = await window.webContents.executeJavaScript(
+		'({width:innerWidth,height:innerHeight})'
+	);
 	const screenshots: string[] = [];
 	try {
-		assert(await window.webContents.executeJavaScript(`(async () => {
+		assert(
+			await window.webContents.executeJavaScript(`(async () => {
 			const snapshot = await window.fholdAdmin.snapshot();
 			const picker = document.querySelector('#instance-picker');
 			return picker.tagName === 'SELECT' && picker.value === snapshot.homeDir &&
@@ -448,8 +543,12 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 				!document.querySelector('#selected-instance-path') &&
 				document.querySelector('#overview-home').textContent === snapshot.homeDir &&
 				document.querySelector('#assistant-summary').textContent === 'Running normally';
-		})()`), 'Sidebar did not expose a simple named picker with identity/runtime details on Overview.');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		})()`),
+			'Sidebar did not expose a simple named picker with identity/runtime details on Overview.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=system]').click()"
+		);
 		screenshots.push(await capture(window, outputDir, '04d-sidebar-system.png'));
 
 		// Presentation-only extremes use the ordinary renderer. They never alter
@@ -460,14 +559,20 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 			render({...snapshot, homeDir:'/home/person/fhold/instances/' + 'long-folder-'.repeat(14),
 				config:{...snapshot.config,deployment:{...snapshot.config.deployment,projectName:'personal-agent-' + 'a'.repeat(48)}}});
 		})()`);
-		assert(await window.webContents.executeJavaScript(`(() => {
+		assert(
+			await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
 			return picker.selectedOptions[0].textContent.length > 50 && picker.getBoundingClientRect().height < 60 &&
 				document.querySelector('.sidebar').scrollWidth <= document.querySelector('.sidebar').clientWidth + 1;
-		})()`), 'Long identity spilled out of the instance picker.');
+		})()`),
+			'Long identity spilled out of the instance picker.'
+		);
 		screenshots.push(await capture(window, outputDir, '04e-picker-long-name.png'));
-		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); })()");
-		assert(await window.webContents.executeJavaScript(`(async () => {
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); })()"
+		);
+		assert(
+			await window.webContents.executeJavaScript(`(async () => {
 			const {state} = await import('./state.js');
 			const {refresh} = await import('./snapshot.js');
 			const original = state.api;
@@ -478,26 +583,44 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 					!document.querySelector('#runtime-status-detail').hidden &&
 					!document.querySelector('#services .status-badge.success');
 			} finally {state.api = original;}
-		})()`), 'Failed status read kept a misleading healthy Overview.');
+		})()`),
+			'Failed status read kept a misleading healthy Overview.'
+		);
 		screenshots.push(await capture(window, outputDir, '04f-overview-unavailable.png'));
 		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
-		await waitForRenderer(window, "document.querySelector('#assistant-summary').textContent === 'Running normally' && document.querySelector('#runtime-status-detail').hidden", 'automatic status recovers on focus');
+		await waitForRenderer(
+			window,
+			"document.querySelector('#assistant-summary').textContent === 'Running normally' && document.querySelector('#runtime-status-detail').hidden",
+			'automatic status recovers on focus'
+		);
 		for (const zoom of [1, 2]) {
 			await sizeViewport(window, 640, 640, zoom);
-			await window.webContents.executeJavaScript("document.querySelector('#mobile-navigation').open=true; window.scrollTo(0,0)");
-			assert(await window.webContents.executeJavaScript(`(() => {
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#mobile-navigation').open=true; window.scrollTo(0,0)"
+			);
+			assert(
+				await window.webContents.executeJavaScript(`(() => {
 				const visible = (element) => {
 					const box = element.getBoundingClientRect();
 					return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
 				};
 				return visible(document.querySelector('#instance-picker')) &&
 					[...document.querySelectorAll('.sidebar button,.sidebar select')].filter(visible).every(control => control.getBoundingClientRect().height >= 44);
-			})()`), `Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`);
+			})()`),
+				`Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`
+			);
 			await assertRenderedFloor(window, `expanded sidebar at ${zoom * 100}% zoom`);
 			// Keyboard focus can scroll the long System view. Show the actual sidebar
 			// header in responsive screenshots without clearing its tested focus state.
 			await window.webContents.executeJavaScript('window.scrollTo(0, 0)');
-			screenshots.push(await capture(window, outputDir, zoom === 1 ? '04g-sidebar-narrow.png' : '04h-sidebar-zoom.png', true));
+			screenshots.push(
+				await capture(
+					window,
+					outputDir,
+					zoom === 1 ? '04g-sidebar-narrow.png' : '04h-sidebar-zoom.png',
+					true
+				)
+			);
 		}
 	} finally {
 		await sizeViewport(window, viewport.width, viewport.height);
@@ -507,8 +630,13 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 			document.querySelector('[data-view=overview]').click();
 		})()`);
 	}
-	assert(window.getSize().join('x') === originalSize, 'Sidebar interaction changed the user window size.');
-	progress('sidebar: named picker without footer, Overview identity/runtime, automatic recovery, keyboard, narrow/200% zoom and stable size passed');
+	assert(
+		window.getSize().join('x') === originalSize,
+		'Sidebar interaction changed the user window size.'
+	);
+	progress(
+		'sidebar: named picker without footer, Overview identity/runtime, automatic recovery, keyboard, narrow/200% zoom and stable size passed'
+	);
 	return screenshots;
 }
 
@@ -610,7 +738,12 @@ async function connectProviderUi(
 		'native model choices after saving sign-in',
 		180_000
 	);
-	assert(await window.webContents.executeJavaScript("(async () => !(await import('./state.js')).state.lastReadiness?.ok)()"), 'Saving sign-in unexpectedly tested a paid response.');
+	assert(
+		await window.webContents.executeJavaScript(
+			"(async () => !(await import('./state.js')).state.lastReadiness?.ok)()"
+		),
+		'Saving sign-in unexpectedly tested a paid response.'
+	);
 	const model = process.env.FH_ADMIN_E2E_MODEL || 'gpt-5.6-luna';
 	await window.webContents.executeJavaScript(`(() => {
 		const select = document.querySelector('#provider-model');
@@ -619,16 +752,33 @@ async function connectProviderUi(
 		select.dispatchEvent(new Event('change', {bubbles:true}));
 		document.querySelector('#test-provider').click();
 	})()`);
-	await waitForRenderer(window, "(await import('./state.js')).state.lastReadiness?.ok === true && !document.querySelector('#use-provider-model').hidden && document.body.dataset.busy !== 'true'", 'explicit exact-model response test', 180_000);
+	await waitForRenderer(
+		window,
+		"(await import('./state.js')).state.lastReadiness?.ok === true && !document.querySelector('#use-provider-model').hidden && document.body.dataset.busy !== 'true'",
+		'explicit exact-model response test',
+		180_000
+	);
 	const readiness = (await window.webContents.executeJavaScript(
 		"(async () => (await import('./state.js')).state.lastReadiness)()"
 	)) as Record<string, unknown>;
 	assert(readiness.ok === true, `Provider readiness failed: ${JSON.stringify(readiness)}`);
-	assert(readiness.provider === provider && readiness.model === model, 'Native readiness did not confirm the exact chosen provider/model.');
+	assert(
+		readiness.provider === provider && readiness.model === model,
+		'Native readiness did not confirm the exact chosen provider/model.'
+	);
 	progress('explicit exact-model response completed');
-	assert(await window.webContents.executeJavaScript("!document.querySelector('#view-provider').hidden"), 'Response test unexpectedly navigated away.');
-	await window.webContents.executeJavaScript("document.querySelector('#use-provider-model').click()");
-	await waitForRenderer(window, `(await import('./state.js')).state.providerCurrentModel?.provider === ${JSON.stringify(provider)} && (await import('./state.js')).state.providerCurrentModel?.model === ${JSON.stringify(model)} && document.querySelector('#provider-editor').hidden && document.body.dataset.busy !== 'true'`, 'explicit native default model selection');
+	assert(
+		await window.webContents.executeJavaScript("!document.querySelector('#view-provider').hidden"),
+		'Response test unexpectedly navigated away.'
+	);
+	await window.webContents.executeJavaScript(
+		"document.querySelector('#use-provider-model').click()"
+	);
+	await waitForRenderer(
+		window,
+		`(await import('./state.js')).state.providerCurrentModel?.provider === ${JSON.stringify(provider)} && (await import('./state.js')).state.providerCurrentModel?.model === ${JSON.stringify(model)} && document.querySelector('#provider-editor').hidden && document.body.dataset.busy !== 'true'`,
+		'explicit native default model selection'
+	);
 	if (
 		await window.webContents.executeJavaScript(
 			"!document.querySelector('#finish-provider-setup').hidden"
@@ -678,7 +828,10 @@ async function run(): Promise<Record<string, unknown>> {
 	registerAdminIpc();
 	const window = createAdminWindow({ show: true });
 	window.webContents.on('console-message', (event) => {
-		if (event.level === 'error') process.stderr.write(`[admin-e2e renderer] ${providerKey ? event.message.replaceAll(providerKey, '[redacted]') : event.message}\n`);
+		if (event.level === 'error')
+			process.stderr.write(
+				`[admin-e2e renderer] ${providerKey ? event.message.replaceAll(providerKey, '[redacted]') : event.message}\n`
+			);
 	});
 	window.setTitle('fhold Admin — automated UI test');
 	window.on('page-title-updated', (event) => event.preventDefault());
@@ -697,7 +850,10 @@ async function run(): Promise<Record<string, unknown>> {
 	// health checks below all exercise the real application and Docker daemon.
 	dialog.showMessageBox = (async (...args: unknown[]) => {
 		const prompt = args.at(-1) as Electron.MessageBoxOptions;
-		assert(prompt.defaultId === 0 && prompt.cancelId === 0, 'Interrupting action did not default to postponement.');
+		assert(
+			prompt.defaultId === 0 && prompt.cancelId === 0,
+			'Interrupting action did not default to postponement.'
+		);
 		assert(prompt.buttons?.length === 2, 'Restart choice is missing.');
 		const response = confirmations.shift();
 		assert(response !== undefined, `Unexpected interruption prompt: ${prompt.message}`);
@@ -716,7 +872,12 @@ async function run(): Promise<Record<string, unknown>> {
 			!existsSync(join(homeDir, 'state')),
 			'Welcome seeded the default home before selection.'
 		);
-		assert(await window.webContents.executeJavaScript("document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.querySelector('#recent-instances-section').hidden"), 'First launch should show only setup/open choices, not a form or nonexistent home.');
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#install-section').hidden && !document.querySelector('#instance-options').hidden && document.querySelector('#recent-instances-section').hidden"
+			),
+			'First launch should show only setup/open choices, not a form or nonexistent home.'
+		);
 		await assertRenderedFloor(window, 'instance welcome');
 		const welcomeScreenshot = await capture(window, outputDir, '00-instance-welcome.png');
 		await sizeViewport(window, 640, 640);
@@ -732,47 +893,103 @@ async function run(): Promise<Record<string, unknown>> {
 		await welcomeKeyboardNavigation(window);
 		await assertRenderedFloor(window, 'new-agent naming at 200% zoom');
 		const zoomNamingScreenshot = await capture(window, outputDir, '00e-new-instance-name-zoom.png');
-		await window.webContents.executeJavaScript("document.querySelector('#install-advanced > summary').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#install-advanced > summary').click()"
+		);
 		await assertRenderedFloor(window, 'custom agent folder at 200% zoom');
-		const zoomFolderScreenshot = await capture(window, outputDir, '00f-new-instance-folder-zoom.png');
-		await window.webContents.executeJavaScript("document.querySelector('#install-instance-name').focus()");
-		await waitForRenderer(window, "!document.querySelector('#install').disabled", 'installation prerequisites');
-		for (const selector of ['#install-advanced > summary', '#install-home', '#install-browse', '#install-automatic-ports', '#install']) {
+		const zoomFolderScreenshot = await capture(
+			window,
+			outputDir,
+			'00f-new-instance-folder-zoom.png'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#install-instance-name').focus()"
+		);
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#install').disabled",
+			'installation prerequisites'
+		);
+		for (const selector of [
+			'#install-advanced > summary',
+			'#install-home',
+			'#install-browse',
+			'#install-automatic-ports',
+			'#install'
+		]) {
 			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
 			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
-			await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(resolve))');
-			assert(await window.webContents.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(selector)})`), `New setup keyboard traversal did not reach ${selector}.`);
+			await window.webContents.executeJavaScript(
+				'new Promise(resolve => requestAnimationFrame(resolve))'
+			);
+			assert(
+				await window.webContents.executeJavaScript(
+					`document.activeElement === document.querySelector(${JSON.stringify(selector)})`
+				),
+				`New setup keyboard traversal did not reach ${selector}.`
+			);
 		}
-		assert(await window.webContents.executeJavaScript("(() => { const r = document.querySelector('#install').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), 'Continue to setup was not reachable with keyboard scrolling at 200% zoom.');
-		const zoomFolderActionsScreenshot = await capture(window, outputDir, '00g-new-instance-folder-zoom-actions.png', true);
+		assert(
+			await window.webContents.executeJavaScript(
+				"(() => { const r = document.querySelector('#install').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"
+			),
+			'Continue to setup was not reachable with keyboard scrolling at 200% zoom.'
+		);
+		const zoomFolderActionsScreenshot = await capture(
+			window,
+			outputDir,
+			'00g-new-instance-folder-zoom-actions.png',
+			true
+		);
 		await sizeViewport(window, 1120, 780);
 		const originalPicker = dialog.showOpenDialog;
 		const incompatibleHome = join(outputDir, 'legacy-instance');
 		mkdirSync(otherHome);
 		mkdirSync(incompatibleHome);
 		writeFileSync(join(incompatibleHome, 'user-data'), 'preserve this');
-		await window.webContents.executeJavaScript("document.querySelector('#install-advanced').open = false");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#install-advanced').open = false"
+		);
 		await assertRenderedFloor(window, 'new-agent naming');
 		const newInstanceScreenshot = await capture(window, outputDir, '00c-new-instance-name.png');
-		const suggestedHome = await window.webContents.executeJavaScript("document.querySelector('#install-home').value");
+		const suggestedHome = await window.webContents.executeJavaScript(
+			"document.querySelector('#install-home').value"
+		);
 		try {
 			dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
-			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
-			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#install-section [data-instance-switch]').click()"
+			);
+			await waitForRenderer(
+				window,
+				"document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'",
+				'Cancel reload completed',
+				10000
+			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-			await waitForRenderer(window, "!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'", 'local instance discovery completed', 10000);
+			await waitForRenderer(
+				window,
+				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
+				'local instance discovery completed',
+				10000
+			);
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
 			);
-			await waitForRenderer(window,
+			await waitForRenderer(
+				window,
 				"document.body.dataset.phase === 'welcome' && document.body.dataset.busy === 'false' && !document.querySelector('#choose-instance').disabled",
-				'cancelled existing-folder picker returns to available Welcome controls', 10_000);
+				'cancelled existing-folder picker returns to available Welcome controls',
+				10_000
+			);
 			assert(
 				await window.webContents.executeJavaScript("document.body.dataset.phase === 'welcome'"),
 				'Cancelled folder selection left welcome.'
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
-			await window.webContents.executeJavaScript("document.querySelector('#begin-new-instance').click(); document.querySelector('#install-advanced > summary').click()");
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#begin-new-instance').click(); document.querySelector('#install-advanced > summary').click()"
+			);
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#install-browse').click()"
 			);
@@ -787,10 +1004,22 @@ async function run(): Promise<Record<string, unknown>> {
 				),
 				'Cancelling new-instance folder selection changed the selection.'
 			);
-			await window.webContents.executeJavaScript("document.querySelector('#install-section [data-instance-switch]').click()");
-			await waitForRenderer(window, "document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'", "Cancel reload completed", 10000);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#install-section [data-instance-switch]').click()"
+			);
+			await waitForRenderer(
+				window,
+				"document.body.dataset.phase==='welcome' && document.body.dataset.busy!=='true'",
+				'Cancel reload completed',
+				10000
+			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-			await waitForRenderer(window, "!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'", 'local instance discovery completed', 10000);
+			await waitForRenderer(
+				window,
+				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
+				'local instance discovery completed',
+				10000
+			);
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [incompatibleHome] });
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#choose-instance').click()"
@@ -804,10 +1033,16 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			assert(!existsSync(join(incompatibleHome, 'state')), 'Invalid folder was modified.');
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [otherHome] });
-			await window.webContents.executeJavaScript("document.querySelector('#choose-instance').click()");
-			await waitForRenderer(window,
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#choose-instance').click()"
+			);
+			await waitForRenderer(
+				window,
 				"document.body.dataset.busy === 'false' && document.querySelector('#notice-message').textContent.includes('No fhold instance was found')",
-				'empty folder rejected as an existing instance', 10_000, true);
+				'empty folder rejected as an existing instance',
+				10_000,
+				true
+			);
 			assert(!existsSync(join(otherHome, 'state')), 'Opening an empty folder began installation.');
 			await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
 			await window.webContents.executeJavaScript(`(() => {
@@ -857,7 +1092,10 @@ async function run(): Promise<Record<string, unknown>> {
 				"document.body.dataset.phase === 'welcome'",
 				'cancelled install draft'
 			);
-			assert(!existsSync(join(otherHome, 'state')), 'Cancelling installed the chosen empty folder.');
+			assert(
+				!existsSync(join(otherHome, 'state')),
+				'Cancelling installed the chosen empty folder.'
+			);
 			await window.webContents.executeJavaScript(`(() => {
 				document.querySelector('#begin-new-instance').click();
 				document.querySelector('#install-instance-name').value = ${JSON.stringify(projectName)};
@@ -1074,7 +1312,9 @@ async function run(): Promise<Record<string, unknown>> {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
 		progress('refreshing native provider inventory');
-		await window.webContents.executeJavaScript("document.querySelector('#provider-saved-accounts').open=true; document.querySelector('#load-providers').click(); undefined");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#provider-saved-accounts').open=true; document.querySelector('#load-providers').click(); undefined"
+		);
 		await waitForRenderer(
 			window,
 			"(await import('./state.js')).state.providersLoaded && !(await import('./state.js')).state.providerLoadPromise",
@@ -1118,10 +1358,14 @@ async function run(): Promise<Record<string, unknown>> {
 			};
 			progress('provider sign-in remained incomplete without claiming a verification attempt');
 			markInstalled(homeDir);
-			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
-			await waitForRenderer(window,
+			await window.webContents.executeJavaScript(
+				"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+			);
+			await waitForRenderer(
+				window,
 				"document.body.dataset.phase === 'ready' && !(await import('./state.js')).state.snapshotPromise && !document.querySelector('#primary-nav').hidden",
-				'the explicitly marked management-only phase');
+				'the explicitly marked management-only phase'
+			);
 			await window.webContents.executeJavaScript(`(() => {
 				const overview = document.querySelector('[data-view=overview]');
 				if (!overview.getBoundingClientRect().height || overview.disabled) throw new Error('Overview navigation is not rendered and available.');
@@ -1255,7 +1499,7 @@ async function run(): Promise<Record<string, unknown>> {
 		progress(
 			'native remote setup opens from Admin with explicit trust and safe sandbox choices; no subscription login was performed'
 		);
-		const remoteStartupBeforeRecall = (await adminSnapshot()).config.assistant.codexRemote;
+		const remoteStartupBeforeRecall = dockerConfig(await adminSnapshot()).assistant.codexRemote;
 		await openControlDisclosures(window, '[data-codex-recall-review]');
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-codex-recall-review]').click()"
@@ -1279,7 +1523,9 @@ async function run(): Promise<Record<string, unknown>> {
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		await runAdminAction('restart');
-		await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
+		await window.webContents.executeJavaScript(
+			"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+		);
 		await waitForRenderer(
 			window,
 			"document.querySelector('#codex-recall-status').textContent === 'Not checked' && !(await import('./state.js')).state.snapshotPromise",
@@ -1289,8 +1535,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		const recallSnapshot = await adminSnapshot();
 		assert(
-			recallSnapshot.codexRecall === undefined &&
-				recallSnapshot.config.assistant.codexRemote === remoteStartupBeforeRecall,
+			dockerConfig(recallSnapshot).assistant.codexRemote === remoteStartupBeforeRecall,
 			'Status implicitly reviewed native hooks or enabled remote startup.'
 		);
 		await openControlDisclosures(window, '[data-codex-recall-review]');
@@ -1429,12 +1674,23 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 
 		const containerId = async () => {
-			const result = await runDocker(['inspect', '--format', '{{.Id}}', `${projectName}-assistant-1`]);
+			const result = await runDocker([
+				'inspect',
+				'--format',
+				'{{.Id}}',
+				`${projectName}-assistant-1`
+			]);
 			assert(result.ok, 'Could not inspect the isolated Assistant.');
 			return result.stdout.trim();
 		};
 		const runtimeSettings = async () => {
-			const result = await runDocker(['exec', `${projectName}-assistant-1`, 'printenv', 'TZ', 'FH_AUTOMATIC_MEMORY']);
+			const result = await runDocker([
+				'exec',
+				`${projectName}-assistant-1`,
+				'printenv',
+				'TZ',
+				'FH_AUTOMATIC_MEMORY'
+			]);
 			assert(result.ok, 'Could not read non-secret runtime settings.');
 			return result.stdout.trim();
 		};
@@ -1459,7 +1715,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'Postponed save applied runtime settings.'
 		);
 		assert(
-			(await adminSnapshot()).pendingRestart?.required,
+			pendingChanges(await adminSnapshot())?.pending,
 			'Pending state was not saved with the instance.'
 		);
 		await window.webContents.executeJavaScript(
@@ -1501,7 +1757,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'Recreated Assistant did not load saved settings.'
 		);
 		assert(
-			!(await adminSnapshot()).pendingRestart?.required,
+			!pendingChanges(await adminSnapshot())?.pending,
 			'Successful apply left a pending alert.'
 		);
 		progress(
@@ -1542,10 +1798,20 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#claude-connection').open=true; document.querySelector('#claude-permissions-form').closest('details.connection-method').open=true"
 		);
-		await waitForRenderer(window, "document.querySelector('#claude-permissions-form').getBoundingClientRect().height>0 && !document.querySelector('#claude-permissions-form').closest('details:not([open])')", 'Claude Desktop method and permission controls are visible before submission');
+		await waitForRenderer(
+			window,
+			"document.querySelector('#claude-permissions-form').getBoundingClientRect().height>0 && !document.querySelector('#claude-permissions-form').closest('details:not([open])')",
+			'Claude Desktop method and permission controls are visible before submission'
+		);
 		await openControlDisclosures(window, '#save-claude-permissions');
-		await window.webContents.executeJavaScript("document.querySelector('#claude-permissions-form').requestSubmit()");
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#claude-credential').value && !document.querySelector('#claude-connect-details').hidden", 'explicit Claude Desktop connection creation');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#claude-permissions-form').requestSubmit()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelector('#claude-credential').value && !document.querySelector('#claude-connect-details').hidden",
+			'explicit Claude Desktop connection creation'
+		);
 		const claudeRecipe = (await window.webContents.executeJavaScript(`(() => ({
 			url: document.querySelector('#claude-url')?.textContent,
 			credential: document.querySelector('#claude-credential')?.value,
@@ -1560,7 +1826,10 @@ async function run(): Promise<Record<string, unknown>> {
 			downloadHidden?: boolean;
 		};
 		assert(claudeRecipe.url?.endsWith('/mcp'), 'Claude recipe omitted the MCP endpoint.');
-		assert(claudeRecipe.credential?.startsWith('claude-desktop'), 'Claude recipe omitted its explicitly created access identity.');
+		assert(
+			claudeRecipe.credential?.startsWith('claude-desktop'),
+			'Claude recipe omitted its explicitly created access identity.'
+		);
 		assert(
 			claudeRecipe.extension?.includes('matching GitHub release') &&
 				claudeRecipe.download?.startsWith('https://github.com/fwdslsh/fhold/releases/download/') &&
@@ -1569,23 +1838,51 @@ async function run(): Promise<Record<string, unknown>> {
 			'Claude recipe omitted the matching public extension download.'
 		);
 		await assertRenderedFloor(window, 'Claude Desktop recipe');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#claude-connect-details').getBoundingClientRect().height>0 && !document.querySelector('#claude-connect-details').closest('details:not([open])')"), 'Claude Desktop connection recipe was hidden at capture.');
-		await window.webContents.executeJavaScript("document.querySelector('#claude-connect-details').scrollIntoView({block:'center'})");
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#claude-connect-details').getBoundingClientRect().height>0 && !document.querySelector('#claude-connect-details').closest('details:not([open])')"
+			),
+			'Claude Desktop connection recipe was hidden at capture.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#claude-connect-details').scrollIntoView({block:'center'})"
+		);
 		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png', true);
 		await openControlDisclosures(window, '#save-mcp-permissions');
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#mcp-connection').open=true; document.querySelector('#mcp-permissions-form').requestSubmit()"
 		);
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#mcp-credential').value && !document.querySelector('#mcp-connect-details').hidden", 'explicit MCP connection creation');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelector('#mcp-credential').value && !document.querySelector('#mcp-connect-details').hidden",
+			'explicit MCP connection creation'
+		);
 		await assertRadioLabelClick(window, 'mcp-policy-chat');
 		await assertRadioLabelClick(window, 'mcp-policy-read');
 		const previousClipboard = await clipboard.readText();
 		try {
-			await window.webContents.executeJavaScript("document.querySelector('[data-copy-client-key=\"mcp\"]').click()");
-			await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('Connection key copied.')", 'explicit IPC connection-key copy');
-			const username = await window.webContents.executeJavaScript("document.querySelector('#mcp-credential').value") as string;
-			assert(await clipboard.readText() === readFileSync(join(homeDir, 'state/credentials', username, 'key'), 'utf8').trim(), 'Copy did not place the exact selected connection key on the clipboard.');
-			assert(await window.webContents.executeJavaScript("!document.querySelector('#credential-key, #mcp-key')"), 'Copy revealed a private key in the renderer.');
+			await window.webContents.executeJavaScript(
+				'document.querySelector(\'[data-copy-client-key="mcp"]\').click()'
+			);
+			await waitForRenderer(
+				window,
+				"document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('Connection key copied.')",
+				'explicit IPC connection-key copy'
+			);
+			const username = (await window.webContents.executeJavaScript(
+				"document.querySelector('#mcp-credential').value"
+			)) as string;
+			assert(
+				(await clipboard.readText()) ===
+					readFileSync(join(homeDir, 'state/credentials', username, 'key'), 'utf8').trim(),
+				'Copy did not place the exact selected connection key on the clipboard.'
+			);
+			assert(
+				await window.webContents.executeJavaScript(
+					"!document.querySelector('#credential-key, #mcp-key')"
+				),
+				'Copy revealed a private key in the renderer.'
+			);
 		} finally {
 			await clipboard.writeText(previousClipboard);
 		}
@@ -1597,12 +1894,16 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		progress('all three complete client connection recipes rendered');
 		await assertRenderedFloor(window, 'MCP connection recipe');
-		await window.webContents.executeJavaScript("document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})"
+		);
 		const mcpScreenshot = await capture(window, outputDir, '04g-mcp.png', true);
 		await sizeViewport(window, 640, 640, 2);
 		await keyboardNavigation(window);
 		await assertRenderedFloor(window, 'MCP recipe at minimum size and 200% zoom');
-		await window.webContents.executeJavaScript("document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#mcp-connect-details').scrollIntoView({block:'start'})"
+		);
 		const narrowMcpScreenshot = await capture(window, outputDir, '04h-mcp-reflow.png', true);
 		await sizeViewport(window, 1120, 780);
 
@@ -1660,12 +1961,29 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#mcp-connection').open=true;
 			document.querySelector('#mcp-connections-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#pending-restart').hidden", 'MCP app save with restart postponed');
-		assert(await containerId() === beforeAppSave, 'Postponing an app settings restart recreated the Assistant.');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#slack-channels').value==='C012TEST'"), 'Saving MCP settings discarded another app draft.');
-		assert((await adminSnapshot()).config.portals.slack.access.channels.length === 0, 'Saving MCP settings silently persisted the Slack draft.');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && !document.querySelector('#pending-restart').hidden",
+			'MCP app save with restart postponed'
+		);
+		assert(
+			(await containerId()) === beforeAppSave,
+			'Postponing an app settings restart recreated the Assistant.'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#slack-channels').value==='C012TEST'"
+			),
+			'Saving MCP settings discarded another app draft.'
+		);
+		assert(
+			dockerConfig(await adminSnapshot()).portals.slack.access.channels.length === 0,
+			'Saving MCP settings silently persisted the Slack draft.'
+		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#apply-pending-restart').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#apply-pending-restart').click()"
+		);
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
@@ -1696,23 +2014,46 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#dialog-policy-full').checked=true;
 			document.querySelector('#permissions-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window, "document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'cancelled Full access escalation');
-		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'read', 'Cancelling Full access escalated the saved identity.');
-		await window.webContents.executeJavaScript("document.querySelector('#cancel-permissions').click(); window.confirm=()=>true; void 0");
+		await waitForRenderer(
+			window,
+			"document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'",
+			'cancelled Full access escalation'
+		);
+		assert(
+			appConfig(await adminSnapshot()).credentials['e2e-reader'].policy === 'read',
+			'Cancelling Full access escalated the saved identity.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#cancel-permissions').click(); window.confirm=()=>true; void 0"
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-manage-saved-access="e2e-reader"]').click();
 			document.querySelector('#dialog-policy-full').checked=true;
 			document.querySelector('#permissions-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window, "!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'confirmed Full access escalation');
-		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'full', 'Confirmed Full access was not saved.');
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'",
+			'confirmed Full access escalation'
+		);
+		assert(
+			appConfig(await adminSnapshot()).credentials['e2e-reader'].policy === 'full',
+			'Confirmed Full access was not saved.'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-manage-saved-access="e2e-reader"]').click();
 			document.querySelector('#dialog-policy-read').checked=true;
 			document.querySelector('#permissions-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window, "!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'", 'restored Read access after confirmed Full');
-		assert((await adminSnapshot()).config.credentials['e2e-reader'].policy === 'read', 'Read access was not restored for the guarded MCP test.');
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#permissions-dialog').open && document.body.dataset.busy!=='true'",
+			'restored Read access after confirmed Full'
+		);
+		assert(
+			appConfig(await adminSnapshot()).credentials['e2e-reader'].policy === 'read',
+			'Read access was not restored for the guarded MCP test.'
+		);
 
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#discord-connection').open=true;
@@ -1873,8 +2214,8 @@ async function run(): Promise<Record<string, unknown>> {
 
 		const savedPreferences = await adminSnapshot();
 		assert(
-			savedPreferences.config.assistant.timezone === 'Europe/London' &&
-				savedPreferences.config.assistant.automaticMemory === false,
+			dockerConfig(savedPreferences).assistant.timezone === 'Europe/London' &&
+				dockerConfig(savedPreferences).assistant.automaticMemory === false,
 			'Agent preferences were not persisted after restart and renderer reload.'
 		);
 		confirmations.push(1);
@@ -1893,10 +2234,18 @@ async function run(): Promise<Record<string, unknown>> {
 			'CLI automatic memory re-enabled through explicit Admin apply after verifying the persisted opt-out'
 		);
 		const finalSnapshot = await adminSnapshot();
-		assert(finalSnapshot.config.gateway.enabled, 'Guardian configuration was not persisted.');
-		assert(finalSnapshot.config.assistant.automaticMemory, 'Automatic memory was not restored.');
 		assert(
-			finalSnapshot.portalMappings.discord?.users['123456789012345678']?.startsWith('discord-user-'),
+			dockerConfig(finalSnapshot).gateway.enabled,
+			'Guardian configuration was not persisted.'
+		);
+		assert(
+			dockerConfig(finalSnapshot).assistant.automaticMemory,
+			'Automatic memory was not restored.'
+		);
+		assert(
+			appConfig(finalSnapshot).portalMappings.discord?.users['123456789012345678']?.startsWith(
+				'discord-user-'
+			),
 			'Discord credential mapping was not persisted.'
 		);
 		const originalConfig = readFileSync(join(homeDir, 'state', 'stack.json'), 'utf8');
@@ -1921,8 +2270,14 @@ async function run(): Promise<Record<string, unknown>> {
 		await sizeViewport(window, 640, 640);
 		await assertRenderedFloor(window, 'narrow recent-instance list');
 		window.setSize(managedWindowSize[0], managedWindowSize[1]);
-		await window.webContents.executeJavaScript("document.querySelector('#hosting-install').click()");
-		await waitForRenderer(window, "!document.querySelector('#install-section').hidden && document.body.dataset.busy!=='true'", 'new setup from local chooser');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#hosting-install').click()"
+		);
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#install-section').hidden && document.body.dataset.busy!=='true'",
+			'new setup from local chooser'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#install-advanced > summary').click();
 			document.querySelector('#install-home').value = ${JSON.stringify(otherHome)};
@@ -2037,7 +2392,9 @@ async function run(): Promise<Record<string, unknown>> {
 		if (provider && providerKey) await connectProviderUi(window, provider, providerKey);
 		else {
 			markInstalled(otherHome);
-			await window.webContents.executeJavaScript("(async () => { await (await import('./snapshot.js')).refresh(); })()");
+			await window.webContents.executeJavaScript(
+				"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+			);
 			await waitForRenderer(
 				window,
 				"document.body.dataset.phase === 'ready' && !(await import('./state.js')).state.snapshotPromise && !document.querySelector('#primary-nav').hidden",
@@ -2051,7 +2408,12 @@ async function run(): Promise<Record<string, unknown>> {
 			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
 			window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
 			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
-			await waitForRenderer(window, "!document.querySelector('#view-overview').hidden", 'second instance Overview through ordinary navigation', 10_000);
+			await waitForRenderer(
+				window,
+				"!document.querySelector('#view-overview').hidden",
+				'second instance Overview through ordinary navigation',
+				10_000
+			);
 		}
 		const secondInstanceScreenshot = await capture(
 			window,
@@ -2103,9 +2465,12 @@ async function run(): Promise<Record<string, unknown>> {
 			),
 			'A stale sign-in step was accepted after switching.'
 		);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=connections]').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=connections]').click()"
+		);
 		await openControlDisclosures(window, '#assistant-bind');
-		assert(await window.webContents.executeJavaScript(`(() => {
+		assert(
+			await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
 			window.confirm = () => false;
 			document.querySelector('#assistant-bind').value = '192.0.2.77';
@@ -2113,9 +2478,18 @@ async function run(): Promise<Record<string, unknown>> {
 			picker.value = ${JSON.stringify(homeDir)};
 			picker.dispatchEvent(new Event('change'));
 			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#assistant-bind').value === '192.0.2.77';
-		})()`), 'Cancelling a recent-instance switch lost the selection or draft.');
-		assert((await adminSnapshot()).homeDir === otherHome, 'Cancelled picker switch changed the actual managed home.');
-		const instancePickerScreenshot = await capture(window, outputDir, '06c-recent-instance-picker.png');
+		})()`),
+			'Cancelling a recent-instance switch lost the selection or draft.'
+		);
+		assert(
+			(await adminSnapshot()).docker?.homeDir === otherHome,
+			'Cancelled picker switch changed the actual managed home.'
+		);
+		const instancePickerScreenshot = await capture(
+			window,
+			outputDir,
+			'06c-recent-instance-picker.png'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			window.confirm = () => true;
 			const picker = document.querySelector('#instance-picker');
@@ -2130,7 +2504,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'returning to the original instance'
 		);
 		assert(
-			(await adminSnapshot()).services.every((service) => service.state === 'running'),
+			services(await adminSnapshot()).every((service) => service.state === 'running'),
 			'Switching stopped the original stack.'
 		);
 		assert(process.env.FH_HOME === homeDir, 'Instance selection mutated the global FH_HOME.');
@@ -2143,14 +2517,20 @@ async function run(): Promise<Record<string, unknown>> {
 		const checkpointDirectory = join(outputDir, 'runtime-checkpoints');
 		const beforeRecoverySave = await containerId();
 		const recoveryWindowSize = window.getSize().join('x');
-		const recoveryViewport = await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');
+		const recoveryViewport = await window.webContents.executeJavaScript(
+			'({width:innerWidth,height:innerHeight})'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
 			document.querySelector('#runtime-recovery').open = true;
 			document.querySelector('#runtime-recovery').scrollIntoView({block:'start'});
 		})()`);
 		await assertRenderedFloor(window, 'portable versus runtime recovery');
-		const runtimeRecoveryOffScreenshot = await capture(window, outputDir, '07-runtime-recovery-off.png');
+		const runtimeRecoveryOffScreenshot = await capture(
+			window,
+			outputDir,
+			'07-runtime-recovery-off.png'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#runtime-recovery-enabled').checked = true;
 			document.querySelector('#runtime-recovery-enabled').dispatchEvent(new Event('change', {bubbles:true}));
@@ -2165,52 +2545,126 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#runtime-recovery-directory').dispatchEvent(new Event('input', {bubbles:true}));
 			document.querySelector('#runtime-recovery-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window,
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Checkpoint settings saved.') && !document.querySelector('#pending-restart').hidden",
-			'saved recovery settings without initializing or restarting');
-		assert(await containerId() === beforeRecoverySave, 'Saving recovery restarted the Assistant.');
-		assert(!existsSync(join(checkpointDirectory, 'descriptor.json')), 'Saving settings initialized the namespace.');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').disabled && document.querySelector('#restore-runtime-recovery').disabled"), 'Offline actions were enabled with live writers.');
-		assert(await window.webContents.executeJavaScript("window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"), 'Backend initialized with live writers.');
+			'saved recovery settings without initializing or restarting'
+		);
+		assert(
+			(await containerId()) === beforeRecoverySave,
+			'Saving recovery restarted the Assistant.'
+		);
+		assert(
+			!existsSync(join(checkpointDirectory, 'descriptor.json')),
+			'Saving settings initialized the namespace.'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#initialize-recovery').disabled && document.querySelector('#restore-runtime-recovery').disabled"
+			),
+			'Offline actions were enabled with live writers.'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"
+			),
+			'Backend initialized with live writers.'
+		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click()"
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
-		await waitForRenderer(window,
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.') && !document.querySelector('#initialize-recovery').disabled",
-			'confirmed stop enables offline recovery operations');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+			'confirmed stop enables offline recovery operations'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=system]').click()"
+		);
 		await openControlDisclosures(window, '#initialize-recovery');
 		confirmations.push(0);
 		const promptsBeforeInitCancellation = prompts.length;
-		await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#initialize-recovery').click()"
+		);
 		await waitForPrompt(promptsBeforeInitCancellation + 1);
-		await waitForRenderer(window, "document.body.dataset.busy !== 'true'", 'cancelled recovery remains idle');
-		assert(!existsSync(join(checkpointDirectory, 'descriptor.json')), 'Cancelling initialized the namespace.');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy !== 'true'",
+			'cancelled recovery remains idle'
+		);
+		assert(
+			!existsSync(join(checkpointDirectory, 'descriptor.json')),
+			'Cancelling initialized the namespace.'
+		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#initialize-recovery').click()");
-		await waitForRenderer(window,
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#initialize-recovery').click()"
+		);
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('New destination initialized.')",
-			'explicit initialization of an unused destination');
-		assert(existsSync(join(checkpointDirectory, 'descriptor.json')), 'Native namespace was not initialized.');
+			'explicit initialization of an unused destination'
+		);
+		assert(
+			existsSync(join(checkpointDirectory, 'descriptor.json')),
+			'Native namespace was not initialized.'
+		);
 		const initializedDescriptor = readFileSync(join(checkpointDirectory, 'descriptor.json'));
-		assert(await window.webContents.executeJavaScript("window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, () => true)"), 'Native initialization accepted an existing namespace.');
-		assert(readFileSync(join(checkpointDirectory, 'descriptor.json')).equals(initializedDescriptor), 'Refused reinitialization modified checkpoint authority.');
-		const operatorContainers = await runDocker(['ps', '-a', '--filter', `label=com.docker.compose.project=${projectName}`, '--format', '{{.Names}}']);
-		assert(operatorContainers.ok && !operatorContainers.stdout.includes('-recovery-'), 'A failed operator run left its container behind.');
-		await window.webContents.executeJavaScript("document.querySelector('#inspect-recovery').click()");
-		await waitForRenderer(window,
+		assert(
+			await window.webContents.executeJavaScript(
+				"window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, () => true)"
+			),
+			'Native initialization accepted an existing namespace.'
+		);
+		assert(
+			readFileSync(join(checkpointDirectory, 'descriptor.json')).equals(initializedDescriptor),
+			'Refused reinitialization modified checkpoint authority.'
+		);
+		const operatorContainers = await runDocker([
+			'ps',
+			'-a',
+			'--filter',
+			`label=com.docker.compose.project=${projectName}`,
+			'--format',
+			'{{.Names}}'
+		]);
+		assert(
+			operatorContainers.ok && !operatorContainers.stdout.includes('-recovery-'),
+			'A failed operator run left its container behind.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#inspect-recovery').click()"
+		);
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#runtime-recovery-details').value.startsWith('{')",
-			'read-only image coverage inspection');
+			'read-only image coverage inspection'
+		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click()"
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
-		await waitForRenderer(window,
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.') && document.querySelector('#pending-restart').hidden",
-			'starting initialized recovery with saved settings');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+			'starting initialized recovery with saved settings'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=system]').click()"
+		);
 		await openControlDisclosures(window, '#check-recovery-status');
-		const customState = await runDocker(['exec', `${projectName}-assistant-1`, 'bun', '--no-env-file', '-e',
-			`const fs=require('node:fs');const {Database}=require('bun:sqlite');fs.mkdirSync('/tmp/fhold-custom-client',{recursive:true});fs.writeFileSync('/tmp/fhold-custom-client/settings.json','preserved operator settings');const db=new Database('/tmp/fhold-custom-client/state.sqlite');db.exec("PRAGMA journal_mode=WAL;CREATE TABLE state(value TEXT);INSERT INTO state VALUES('preserved SQLite data')");db.close();`]);
+		const customState = await runDocker([
+			'exec',
+			`${projectName}-assistant-1`,
+			'bun',
+			'--no-env-file',
+			'-e',
+			`const fs=require('node:fs');const {Database}=require('bun:sqlite');fs.mkdirSync('/tmp/fhold-custom-client',{recursive:true});fs.writeFileSync('/tmp/fhold-custom-client/settings.json','preserved operator settings');const db=new Database('/tmp/fhold-custom-client/state.sqlite');db.exec("PRAGMA journal_mode=WAL;CREATE TABLE state(value TEXT);INSERT INTO state VALUES('preserved SQLite data')");db.close();`
+		]);
 		assert(customState.ok, 'Could not create synthetic custom state using native SQLite.');
 		const publishedBefore = Date.now();
 		await window.webContents.executeJavaScript(`(async () => {
@@ -2223,16 +2677,50 @@ async function run(): Promise<Record<string, unknown>> {
 			}
 			throw new Error('No fresh accepted checkpoint of the custom state.');
 		})()`);
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-status').textContent.includes('Checkpoint accepted.')"), 'Admin did not display actual accepted publication.');
-		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()");
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#runtime-recovery-status').textContent.includes('Checkpoint accepted.')"
+			),
+			'Admin did not display actual accepted publication.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()"
+		);
 		await assertRenderedFloor(window, 'running runtime recovery');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open && document.querySelector('#runtime-recovery-storage').getBoundingClientRect().height > 0"), 'Runtime recovery controls were not visible for their rendered audit.');
-		const runtimeRecoveryReadyScreenshot = await capture(window, outputDir, '07b-runtime-recovery-ready.png', true);
-		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()");
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#runtime-recovery').open && document.querySelector('#runtime-recovery-storage').getBoundingClientRect().height > 0"
+			),
+			'Runtime recovery controls were not visible for their rendered audit.'
+		);
+		const runtimeRecoveryReadyScreenshot = await capture(
+			window,
+			outputDir,
+			'07b-runtime-recovery-ready.png',
+			true
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()"
+		);
 		await assertRenderedFloor(window, 'additional runtime paths and SQLite coverage');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open && document.querySelector('#runtime-recovery-sqlite').getBoundingClientRect().height > 0"), 'Additional SQLite controls were not visible for their rendered audit.');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"), 'Keyboard traversal changed saved recovery timing fields.');
-		const runtimeRecoveryAdvancedScreenshot = await capture(window, outputDir, '07c-runtime-recovery-advanced.png', true);
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#runtime-recovery-advanced').open && document.querySelector('#runtime-recovery-sqlite').getBoundingClientRect().height > 0"
+			),
+			'Additional SQLite controls were not visible for their rendered audit.'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#runtime-recovery-interval').value === '2' && document.querySelector('#runtime-recovery-max-unsaved').value === '120'"
+			),
+			'Keyboard traversal changed saved recovery timing fields.'
+		);
+		const runtimeRecoveryAdvancedScreenshot = await capture(
+			window,
+			outputDir,
+			'07c-runtime-recovery-advanced.png',
+			true
+		);
 		await sizeViewport(window, 640, 640, 2);
 		await assertRenderedFloor(window, 'runtime recovery at minimum size and 200% zoom');
 		const narrowRecoveryFields = await window.webContents.executeJavaScript(`(async () => {
@@ -2246,46 +2734,100 @@ async function run(): Promise<Record<string, unknown>> {
 			dirty: [...state.dirtyForms]
 			};
 		})()`);
-		assert(narrowRecoveryFields.interval === '2' && narrowRecoveryFields.maxUnsaved === '120', `Recovery timing fields changed during narrow keyboard traversal: ${JSON.stringify(narrowRecoveryFields)}.`);
-		const runtimeRecoveryNarrowScreenshot = await capture(window, outputDir, '07d-runtime-recovery-reflow.png', true);
+		assert(
+			narrowRecoveryFields.interval === '2' && narrowRecoveryFields.maxUnsaved === '120',
+			`Recovery timing fields changed during narrow keyboard traversal: ${JSON.stringify(narrowRecoveryFields)}.`
+		);
+		const runtimeRecoveryNarrowScreenshot = await capture(
+			window,
+			outputDir,
+			'07d-runtime-recovery-reflow.png',
+			true
+		);
 		await sizeViewport(window, recoveryViewport.width, recoveryViewport.height);
-		await window.webContents.executeJavaScript("document.querySelector('#runtime-recovery-advanced').open = false");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#runtime-recovery-advanced').open = false"
+		);
 		const priorContainer = await containerId();
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click()"
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
-		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.')", 'final managed checkpoint and stopped writers');
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.')",
+			'final managed checkpoint and stopped writers'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=system]').click()"
+		);
 		await openControlDisclosures(window, '#restore-runtime-recovery');
 		confirmations.push(0);
 		const promptsBeforeRestoreCancellation = prompts.length;
-		await window.webContents.executeJavaScript("document.querySelector('#restore-runtime-recovery').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#restore-runtime-recovery').click()"
+		);
 		await waitForPrompt(promptsBeforeRestoreCancellation + 1);
-		await waitForRenderer(window, "document.body.dataset.busy !== 'true'", 'cancelled offline restore');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy !== 'true'",
+			'cancelled offline restore'
+		);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#restore-runtime-recovery').click()");
-		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery validated.')", 'native offline restore leaves writers stopped');
-		assert((await adminSnapshot()).services.length === 0, 'Offline validation started a service.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#restore-runtime-recovery').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('Recovery validated.')",
+			'native offline restore leaves writers stopped'
+		);
+		assert(services(await adminSnapshot()).length === 0, 'Offline validation started a service.');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click()"
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
-		await waitForRenderer(window, "document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'transparent same-instance recovery after container removal');
-		assert(await containerId() !== priorContainer, 'Recovery reused the old container.');
-		const restoredCustomState = await runDocker(['exec', `${projectName}-assistant-1`, 'bun', '--no-env-file', '-e',
-			`const fs=require('node:fs');const {Database}=require('bun:sqlite');if(fs.readFileSync('/tmp/fhold-custom-client/settings.json','utf8')!=='preserved operator settings')throw Error('settings lost');const db=new Database('/tmp/fhold-custom-client/state.sqlite',{readonly:true});if(db.query('PRAGMA integrity_check').get().integrity_check!=='ok'||db.query('SELECT value FROM state').get().value!=='preserved SQLite data')throw Error('database lost');console.log('custom state restored');db.close();`]);
-		assert(restoredCustomState.ok && restoredCustomState.stdout.includes('custom state restored'), 'Custom files/SQLite did not survive fresh containers.');
-		assert(window.getSize().join('x') === recoveryWindowSize, 'Recovery controls resized the Admin window.');
-		progress('real managed recovery: deferred save, stop/cancel/init/inspect/start/checkpoint/offline restore and cold custom-file/SQLite resume passed');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')",
+			'transparent same-instance recovery after container removal'
+		);
+		assert((await containerId()) !== priorContainer, 'Recovery reused the old container.');
+		const restoredCustomState = await runDocker([
+			'exec',
+			`${projectName}-assistant-1`,
+			'bun',
+			'--no-env-file',
+			'-e',
+			`const fs=require('node:fs');const {Database}=require('bun:sqlite');if(fs.readFileSync('/tmp/fhold-custom-client/settings.json','utf8')!=='preserved operator settings')throw Error('settings lost');const db=new Database('/tmp/fhold-custom-client/state.sqlite',{readonly:true});if(db.query('PRAGMA integrity_check').get().integrity_check!=='ok'||db.query('SELECT value FROM state').get().value!=='preserved SQLite data')throw Error('database lost');console.log('custom state restored');db.close();`
+		]);
+		assert(
+			restoredCustomState.ok && restoredCustomState.stdout.includes('custom state restored'),
+			'Custom files/SQLite did not survive fresh containers.'
+		);
+		assert(
+			window.getSize().join('x') === recoveryWindowSize,
+			'Recovery controls resized the Admin window.'
+		);
+		progress(
+			'real managed recovery: deferred save, stop/cancel/init/inspect/start/checkpoint/offline restore and cold custom-file/SQLite resume passed'
+		);
 
 		// Exercise full import/export through the real renderer and IPC. Only
 		// human dialog choices are simulated, never Docker or native databases.
-		const instanceAuth = Buffer.from(`user:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`).toString('base64');
+		const instanceAuth = Buffer.from(
+			`user:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`
+		).toString('base64');
 		const nativeSession = await fetch(`http://127.0.0.1:${assistantPort}/session`, {
-			method: 'POST', headers: { authorization: `Basic ${instanceAuth}`, 'content-type': 'application/json' },
-			body: JSON.stringify({ title: 'Full-instance preservation check' }), signal: AbortSignal.timeout(10_000)
+			method: 'POST',
+			headers: { authorization: `Basic ${instanceAuth}`, 'content-type': 'application/json' },
+			body: JSON.stringify({ title: 'Full-instance preservation check' }),
+			signal: AbortSignal.timeout(10_000)
 		});
 		assert(nativeSession.ok, 'Could not create the native preservation session.');
-		const savedSession = await nativeSession.json() as { id: string; title: string };
+		const savedSession = (await nativeSession.json()) as { id: string; title: string };
 		const fullExport = join(outputDir, 'full-instance-export');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
@@ -2295,79 +2837,189 @@ async function run(): Promise<Record<string, unknown>> {
 			document.querySelector('#backup-destination').value=${JSON.stringify(fullExport)};
 		})()`);
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('all containers stopped')", 'full export rejects live writers', 30_000, true);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#backup-form').requestSubmit()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.includes('all containers stopped')",
+			'full export rejects live writers',
+			30_000,
+			true
+		);
 		assert(!existsSync(fullExport), 'Live export wrote a destination.');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#stop-stack').click()");
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelectorAll('#services .service').length===0", 'stopped source before full export');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click(); document.querySelector('#stop-stack').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelectorAll('#services .service').length===0",
+			'stopped source before full export'
+		);
 		const sourceIntent = readFileSync(join(homeDir, 'state/stack.json'));
 		const sourceKey = readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'));
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click(); document.querySelector('#import-export').open=true");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=system]').click(); document.querySelector('#import-export').open=true"
+		);
 		confirmations.push(0);
 		const cancelledExportPrompt = prompts.length + 1;
-		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#backup-form').requestSubmit()"
+		);
 		await waitForPrompt(cancelledExportPrompt);
-		await waitForRenderer(window,
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy !== 'true' && !document.querySelector('#export-backup').disabled && document.querySelector('#backup-scope').value === 'instance'",
-			'cancelled full export leaves the ordinary export action available', 10_000);
+			'cancelled full export leaves the ordinary export action available',
+			10_000
+		);
 		assert(!existsSync(fullExport), 'Cancelled full export wrote a destination.');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#backup-form').requestSubmit()");
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#backup-summary').textContent.includes('full-instance items exported')", 'full stopped export');
-		assert(JSON.parse(readFileSync(join(fullExport, 'fhold-backup.json'), 'utf8')).scope === 'instance', 'Full export did not publish its manifest.');
-		await window.webContents.executeJavaScript("document.querySelector('#backup-form').scrollIntoView({block:'start'})");
-		const fullExportScreenshot = await capture(window, outputDir, '08-full-instance-export.png', true);
-		await window.webContents.executeJavaScript("document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))");
-		await waitForRenderer(window, "!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'", 'local chooser before full import');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#backup-form').requestSubmit()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelector('#backup-summary').textContent.includes('full-instance items exported')",
+			'full stopped export'
+		);
+		assert(
+			JSON.parse(readFileSync(join(fullExport, 'fhold-backup.json'), 'utf8')).scope === 'instance',
+			'Full export did not publish its manifest.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#backup-form').scrollIntoView({block:'start'})"
+		);
+		const fullExportScreenshot = await capture(
+			window,
+			outputDir,
+			'08-full-instance-export.png',
+			true
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))"
+		);
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
+			'local chooser before full import'
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#hosting-import').click()");
-		await waitForRenderer(window, "!document.querySelector('#instance-import-section').hidden && document.body.dataset.busy!=='true'", 'import from local chooser');
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#instance-import-section').hidden && document.body.dataset.busy!=='true'",
+			'import from local chooser'
+		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#instance-restore-source').value=${JSON.stringify(fullExport)};
 			document.querySelector('#instance-restore-home').value=${JSON.stringify(fullRestoredHome)};
 			document.querySelector('#instance-restore-source').dispatchEvent(new Event('input'));
 			document.querySelector('#instance-restore-form').requestSubmit();
 		})()`);
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#apply-instance-restore').disabled", 'full import preview');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && !document.querySelector('#apply-instance-restore').disabled",
+			'full import preview'
+		);
 		assert(!existsSync(fullRestoredHome), 'Full import preview seeded the target.');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#install-section').hidden && !document.querySelector('#instance-import-section').hidden"), 'Fresh installation remained available while full import was selected.');
-		await window.webContents.executeJavaScript("document.querySelector('#instance-restore-back').focus()");
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#install-section').hidden && !document.querySelector('#instance-import-section').hidden"
+			),
+			'Fresh installation remained available while full import was selected.'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#instance-restore-back').focus()"
+		);
 		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
-		await waitForRenderer(window, `document.activeElement?.id === 'instance-restore-source' &&
+		await waitForRenderer(
+			window,
+			`document.activeElement?.id === 'instance-restore-source' &&
 			document.querySelector('#instance-import-review').hidden && document.querySelector('#apply-instance-restore').disabled &&
 			document.querySelector('#instance-restore-source').value === ${JSON.stringify(fullExport)} &&
-			document.querySelector('#instance-restore-home').value === ${JSON.stringify(fullRestoredHome)}`, 'import Back preserves choices and invalidates the preview');
+			document.querySelector('#instance-restore-home').value === ${JSON.stringify(fullRestoredHome)}`,
+			'import Back preserves choices and invalidates the preview'
+		);
 		assert(!existsSync(fullRestoredHome), 'Import Back wrote the destination.');
 		window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'char', keyCode: 'Return' });
 		window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled", 'Enter previews import without applying it');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled",
+			'Enter previews import without applying it'
+		);
 		assert(!existsSync(fullRestoredHome), 'Enter applied import instead of previewing it.');
-		await window.webContents.executeJavaScript("document.querySelector('#instance-import-review').scrollIntoView({block:'start'})");
-		const fullImportScreenshot = await capture(window, outputDir, '08a-full-instance-import.png', true);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#instance-import-review').scrollIntoView({block:'start'})"
+		);
+		const fullImportScreenshot = await capture(
+			window,
+			outputDir,
+			'08a-full-instance-import.png',
+			true
+		);
 		confirmations.push(0);
 		const cancelledImportPrompt = prompts.length + 1;
-		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#apply-instance-restore').click()"
+		);
 		await waitForPrompt(cancelledImportPrompt);
-		await waitForRenderer(window,
+		await waitForRenderer(
+			window,
 			"document.body.dataset.busy === 'false' && !document.querySelector('#instance-import-section').hidden && !document.querySelector('#instance-import-review').hidden && !document.querySelector('#apply-instance-restore').disabled",
-			'cancelled full import preserves the review and re-enables its visible action', 10_000);
+			'cancelled full import preserves the review and re-enables its visible action',
+			10_000
+		);
 		assert(!existsSync(fullRestoredHome), 'Cancelled full import changed its destination.');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('#apply-instance-restore').click()");
-		await waitForRenderer(window, "document.body.dataset.phase==='ready' && document.body.dataset.busy!=='true'", 'full import preserves the completed instance, without setup or startup');
-		assert(readFileSync(join(fullRestoredHome, 'state/stack.json')).equals(sourceIntent), 'Full import changed instance intent.');
-		assert(readFileSync(join(fullRestoredHome, 'state/secrets/fhold_opencode_password')).equals(sourceKey), 'Full import replaced the native account key.');
-		assert((await adminSnapshot()).services.length === 0, 'Full import started a service.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#apply-instance-restore').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase==='ready' && document.body.dataset.busy!=='true'",
+			'full import preserves the completed instance, without setup or startup'
+		);
+		assert(
+			readFileSync(join(fullRestoredHome, 'state/stack.json')).equals(sourceIntent),
+			'Full import changed instance intent.'
+		);
+		assert(
+			readFileSync(join(fullRestoredHome, 'state/secrets/fhold_opencode_password')).equals(
+				sourceKey
+			),
+			'Full import replaced the native account key.'
+		);
+		assert(services(await adminSnapshot()).length === 0, 'Full import started a service.');
 		confirmations.push(1);
-		await window.webContents.executeJavaScript("document.querySelector('[data-view=overview]').click(); document.querySelector('#start-stack').click()");
-		await waitForRenderer(window, "document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')", 'explicit start of the restored instance');
-		const restoredSession = await fetch(`http://127.0.0.1:${assistantPort}/session/${savedSession.id}`, { headers: { authorization: `Basic ${instanceAuth}` }, signal: AbortSignal.timeout(10_000) });
-		assert(restoredSession.ok && (await restoredSession.json() as { title: string }).title === savedSession.title, 'Native session was not visible after full import/start.');
-		assert(window.getSize().join('x') === recoveryWindowSize, 'Full import/export resized the Admin window.');
-		progress('full stopped instance: live-writer refusal, cancel/confirm, export, empty-folder preview/import, unchanged keys/intent and native session after explicit startup passed');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click(); document.querySelector('#start-stack').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')",
+			'explicit start of the restored instance'
+		);
+		const restoredSession = await fetch(
+			`http://127.0.0.1:${assistantPort}/session/${savedSession.id}`,
+			{ headers: { authorization: `Basic ${instanceAuth}` }, signal: AbortSignal.timeout(10_000) }
+		);
+		assert(
+			restoredSession.ok &&
+				((await restoredSession.json()) as { title: string }).title === savedSession.title,
+			'Native session was not visible after full import/start.'
+		);
+		assert(
+			window.getSize().join('x') === recoveryWindowSize,
+			'Full import/export resized the Admin window.'
+		);
+		progress(
+			'full stopped instance: live-writer refusal, cancel/confirm, export, empty-folder preview/import, unchanged keys/intent and native session after explicit startup passed'
+		);
 		assert(confirmations.length === 0, 'An expected interruption prompt was not shown.');
 		succeeded = true;
 		return {
@@ -2384,10 +3036,38 @@ async function run(): Promise<Record<string, unknown>> {
 			visibleSetupJourneyComplete: Boolean(provider && providerKey),
 			managementUiFixtureUsed: !provider,
 			startupRecoveryVerified: true,
-			welcomeVerified: { separateSetupOpenImportChoices: true, singleEditableName: true, cancelAndKeyboardFocus: true, optionalFolderLocation: true, emptyExistingFolderRefused: true, narrowAndZoom: true, zoomActionsReachable: true },
+			welcomeVerified: {
+				separateSetupOpenImportChoices: true,
+				singleEditableName: true,
+				cancelAndKeyboardFocus: true,
+				optionalFolderLocation: true,
+				emptyExistingFolderRefused: true,
+				narrowAndZoom: true,
+				zoomActionsReachable: true
+			},
 			restorePreservationVerified: true,
-			fullInstanceVerified: { liveWriterRefused: true, cancelledOperationsPreserved: true, backPreservesChoicesAndInvalidatesPreview: true, enterPreviewsOnly: true, previewReadOnly: true, containersStayStopped: true, identityAndKeysPreserved: true, nativeSessionResumed: true, home: fullRestoredHome },
-			sidebarVerified: { recentInstancePicker: true, footerRemoved: true, identityAndRuntimeOnOverview: true, automaticStatusRecovery: true, unavailableStatusFixture: true, longNameFixture: true, labeledActions: true, narrowAndZoom: true, windowSizeStable: true },
+			fullInstanceVerified: {
+				liveWriterRefused: true,
+				cancelledOperationsPreserved: true,
+				backPreservesChoicesAndInvalidatesPreview: true,
+				enterPreviewsOnly: true,
+				previewReadOnly: true,
+				containersStayStopped: true,
+				identityAndKeysPreserved: true,
+				nativeSessionResumed: true,
+				home: fullRestoredHome
+			},
+			sidebarVerified: {
+				recentInstancePicker: true,
+				footerRemoved: true,
+				identityAndRuntimeOnOverview: true,
+				automaticStatusRecovery: true,
+				unavailableStatusFixture: true,
+				longNameFixture: true,
+				labeledActions: true,
+				narrowAndZoom: true,
+				windowSizeStable: true
+			},
 			instanceWelcomeVerified: {
 				defaultOneClick: true,
 				folderSelectionAndCancellation: true,
@@ -2425,15 +3105,38 @@ async function run(): Promise<Record<string, unknown>> {
 				restartPersistence: true,
 				noRemoteStartup: true
 			},
-			restartConfirmation: { prompts, deferredSave: true, pendingAfterReopen: true, realContainerRecreated: true, runtimeSettingsVerified: true, windowSizePreserved: true },
-			runtimeRecoveryVerified: { savedWithoutRestart: true, noAutomaticInitialization: true, liveWriterRefused: true, cancelVerified: true, readOnlyInspect: true, acceptedPublication: true, stoppedRestore: true, coldContainerCustomFilesAndSqlite: true, windowSizeStable: true },
+			restartConfirmation: {
+				prompts,
+				deferredSave: true,
+				pendingAfterReopen: true,
+				realContainerRecreated: true,
+				runtimeSettingsVerified: true,
+				windowSizePreserved: true
+			},
+			runtimeRecoveryVerified: {
+				savedWithoutRestart: true,
+				noAutomaticInitialization: true,
+				liveWriterRefused: true,
+				cancelVerified: true,
+				readOnlyInspect: true,
+				acceptedPublication: true,
+				stoppedRestore: true,
+				coldContainerCustomFilesAndSqlite: true,
+				windowSizeStable: true
+			},
 			agentPreferencesVerified: {
 				timezone: 'Europe/London',
 				memoryOptOutPersisted: true,
 				automaticMemoryRestored: true
 			},
 			connectionRecipesVerified: ['opencode', 'claude', 'mcp'],
-			appSettingsVerified: { explicitConnectionCreation: true, privateKeyCopyViaIpc: true, anotherAppDraftPreservedWithoutSaving: true, restartPostponedWithoutContainerChange: true, cancelledFullAccessPreserved: true },
+			appSettingsVerified: {
+				explicitConnectionCreation: true,
+				privateKeyCopyViaIpc: true,
+				anotherAppDraftPreservedWithoutSaving: true,
+				restartPostponedWithoutContainerChange: true,
+				cancelledFullAccessPreserved: true
+			},
 			networkDetailsVerified: {
 				mcpApiLabels: true,
 				fullMcpAndHealthUrls: true,
@@ -2529,7 +3232,10 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 	process.env.XDG_CONFIG_HOME = join(outputDir, 'host-config');
 	const prior = JSON.parse(readFileSync(join(outputDir, 'report.json'), 'utf8'));
 	const expectedHome = prior.fullInstanceVerified?.home;
-	assert(typeof expectedHome === 'string' && existsSync(expectedHome), 'The completed walkthrough did not retain its restored instance.');
+	assert(
+		typeof expectedHome === 'string' && existsSync(expectedHome),
+		'The completed walkthrough did not retain its restored instance.'
+	);
 	const preferencesPath = join(outputDir, 'host-config', 'fhold', 'hosting.json');
 	const preferences = readFileSync(preferencesPath, 'utf8');
 	const intent = readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8');
@@ -2541,32 +3247,85 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 	const size = window.getSize().join('x');
 	try {
 		await waitForLoad(window);
-		await waitForRenderer(window, "document.body.dataset.phase === 'ready' && !document.querySelector('#app-shell').hidden", 'automatic instance reopening in a new Electron process');
-		assert(await window.webContents.executeJavaScript(`document.querySelector('#instance-picker').value === ${JSON.stringify(expectedHome)} && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`), 'A fresh app launch did not select the last-used instance.');
-		assert(await window.webContents.executeJavaScript("document.querySelector('#instance-welcome').hidden && !document.querySelector('.sidebar .brand-subtitle')"), 'Reopened instance showed Welcome or the removed sidebar subtitle.');
-		assert(window.getTitle() === 'fhold Admin', 'Native window title still contains the old subtitle.');
-		assert((await adminSnapshot()).services.length === 0, 'Automatically reopening the instance started a container.');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'ready' && !document.querySelector('#app-shell').hidden",
+			'automatic instance reopening in a new Electron process'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				`document.querySelector('#instance-picker').value === ${JSON.stringify(expectedHome)} && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`
+			),
+			'A fresh app launch did not select the last-used instance.'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#instance-welcome').hidden && !document.querySelector('.sidebar .brand-subtitle')"
+			),
+			'Reopened instance showed Welcome or the removed sidebar subtitle.'
+		);
+		assert(
+			window.getTitle() === 'fhold Admin',
+			'Native window title still contains the old subtitle.'
+		);
+		assert(
+			services(await adminSnapshot()).length === 0,
+			'Automatically reopening the instance started a container.'
+		);
 		const reopened = await capture(window, outputDir, '09-reopened-instance.png');
 		await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
 			picker.value = 'open-another';
 			picker.dispatchEvent(new Event('change', {bubbles:true}));
 		})()`);
-		await waitForRenderer(window, "!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'", 'browse other instances after automatic reopening');
-		assert(await window.webContents.executeJavaScript("(async () => !!(await window.fholdAdmin.welcome()).selectedInstance)()"), 'Browsing cleared the current instance before an explicit Open.');
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
+			'browse other instances after automatic reopening'
+		);
+		assert(
+			await window.webContents.executeJavaScript(
+				'(async () => !!(await window.fholdAdmin.welcome()).selectedInstance)()'
+			),
+			'Browsing cleared the current instance before an explicit Open.'
+		);
 		await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
-		assert(await window.webContents.executeJavaScript("document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden"), 'Back did not return to the selected instance.');
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#instance-welcome').hidden && !document.querySelector('#app-shell').hidden"
+			),
+			'Back did not return to the selected instance.'
+		);
 		window.webContents.reload();
 		await waitForLoad(window);
-		await waitForRenderer(window, "document.body.dataset.phase === 'ready'", 'selected instance survives a cancelled browse and renderer reload');
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'ready'",
+			'selected instance survives a cancelled browse and renderer reload'
+		);
 		assert(window.getSize().join('x') === size, 'Reopening or switching resized the window.');
-		assert(readFileSync(preferencesPath, 'utf8') === preferences, 'Automatic reopening rewrote recent-instance preferences.');
-		assert(readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8') === intent, 'Automatic reopening changed instance intent.');
+		assert(
+			readFileSync(preferencesPath, 'utf8') === preferences,
+			'Automatic reopening rewrote recent-instance preferences.'
+		);
+		assert(
+			readFileSync(join(expectedHome, 'state', 'stack.json'), 'utf8') === intent,
+			'Automatic reopening changed instance intent.'
+		);
 		const welcome = await capture(window, outputDir, '09a-manual-instance-selection.png');
-		progress('new process reopened the previous instance read-only; browsing/Back preserved it across renderer reload without resizing or container startup');
+		progress(
+			'new process reopened the previous instance read-only; browsing/Back preserved it across renderer reload without resizing or container startup'
+		);
 		return {
 			ok: true,
-			instanceLaunchVerified: { automaticReopen: true, welcomeOnlyOnFirstOrManualLaunch: true, noHomeOrPreferenceWrites: true, noContainerStartup: true, subtitleRemoved: true, windowSizeStable: true },
+			instanceLaunchVerified: {
+				automaticReopen: true,
+				welcomeOnlyOnFirstOrManualLaunch: true,
+				noHomeOrPreferenceWrites: true,
+				noContainerStartup: true,
+				subtitleRemoved: true,
+				windowSizeStable: true
+			},
 			screenshots: [reopened, welcome],
 			visualAudits
 		};
@@ -2581,7 +3340,10 @@ async function main(): Promise<void> {
 	try {
 		const report = await (reopenedLaunch ? verifyReopenedLaunch() : run());
 		if (outputDir)
-			writeFileSync(join(outputDir, reopenedLaunch ? 'reopen-report.json' : 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+			writeFileSync(
+				join(outputDir, reopenedLaunch ? 'reopen-report.json' : 'report.json'),
+				`${JSON.stringify(report, null, 2)}\n`
+			);
 		process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 		app.exit(0);
 	} catch (error) {

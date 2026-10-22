@@ -4,6 +4,30 @@ import { type StackConfig } from '../control-plane/stack-config.js';
 import type { InstanceRef } from '../hosting/types.js';
 import { type recoverySnapshot } from '../control-plane/recovery.js';
 import { type CodexRecallReview } from '../control-plane/codex-recall.js';
+import type { BackupManifest } from '../control-plane/backup.js';
+import type {
+	InstanceBackupManifest,
+	InstanceRestorePlan
+} from '../control-plane/instance-backup.js';
+import type { RestorePlan } from '../control-plane/restore.js';
+import type { recoveryStatus, runRecoveryOperation } from '../control-plane/recovery.js';
+import type {
+	ProviderEndpointInput,
+	ProviderSettings
+} from '../control-plane/provider-settings.js';
+import type { AssistantReadiness, ProviderOAuthAuthorization } from './agent-access.js';
+import type {
+	BackupRequest,
+	CodexRecallRequest,
+	DirectoryListing,
+	PortalTokenRequest,
+	PortalUserMappingRequest,
+	RecoveryRequest,
+	RemoteSetupResult,
+	RemoteSetupRequest,
+	RestoreRequest
+} from './contracts.js';
+export type { DirectoryListing } from './contracts.js';
 export type ManagedSnapshot = {
 	target?: Extract<InstanceRef, { kind: 'ssh-docker' }>;
 	connectionLabel?: string;
@@ -72,13 +96,90 @@ export const MANAGEMENT_METHODS = [
 	'transferUnpack'
 ] as const;
 export type ManagementMethod = (typeof MANAGEMENT_METHODS)[number];
+
+/**
+ * The fixed SSH/stdin envelope's compatibility map. Values still arrive as
+ * untrusted JSON and are validated by the named domain operation before use.
+ * Keep these method names and request shapes while peers advertise them.
+ */
+export type ManagementRequestMap = {
+	directory: { input: string | undefined; result: DirectoryListing; extra: [] };
+	codexRecall: { input: CodexRecallRequest; result: CodexRecallReview; extra: [] };
+	remote: { input: RemoteSetupRequest; result: RemoteSetupResult; extra: [] };
+	snapshot: { input: undefined; result: ManagedSnapshot; extra: [] };
+	install: { input: StackConfig; result: ManagedSnapshot; extra: [automaticPorts?: boolean] };
+	saveConfig: {
+		input: { config: StackConfig; baseConfig: StackConfig };
+		result: ManagedSnapshot;
+		extra: [];
+	};
+	action: {
+		input: { action: StackAction; confirmed: boolean };
+		result: ManagedSnapshot;
+		extra: [];
+	};
+	logs: { input: undefined; result: string; extra: [] };
+	providers: { input: undefined; result: ProviderSettings; extra: [] };
+	providerKey: { input: { provider: string; key: string }; result: void; extra: [] };
+	providerEndpoint: { input: ProviderEndpointInput; result: ProviderSettings; extra: [] };
+	providerModels: { input: { url: string; key?: string }; result: string[]; extra: [] };
+	providerUse: { input: { provider: string; model: string }; result: ProviderSettings; extra: [] };
+	providerRemove: {
+		input: { provider: string; endpoint?: boolean };
+		result: ProviderSettings;
+		extra: [];
+	};
+	providerOAuthStart: {
+		input: { provider: string; method: number; inputs?: Record<string, string> };
+		result: ProviderOAuthAuthorization;
+		extra: [];
+	};
+	providerOAuthFinish: {
+		input: { provider: string; method: number; inputs?: Record<string, string>; code?: string };
+		result: void;
+		extra: [];
+	};
+	readiness: {
+		input: { provider?: string; model?: string } | undefined;
+		result: AssistantReadiness;
+		extra: [];
+	};
+	assistantPassword: { input: undefined; result: { password: string }; extra: [] };
+	credential: {
+		input:
+			| { action: 'create'; username: string; policy: string }
+			| { action: 'rotate' | 'remove'; username: string };
+		result: ManagedSnapshot;
+		extra: [];
+	};
+	credentialKey: { input: string; result: { username: string; key: string }; extra: [] };
+	mapPortalUser: { input: PortalUserMappingRequest; result: ManagedSnapshot; extra: [] };
+	portalToken: { input: PortalTokenRequest; result: ManagedSnapshot; extra: [] };
+	backup: { input: BackupRequest; result: BackupManifest | InstanceBackupManifest; extra: [] };
+	recovery: {
+		input: RecoveryRequest;
+		result:
+			| Awaited<ReturnType<typeof recoveryStatus>>
+			| Awaited<ReturnType<typeof runRecoveryOperation>>;
+		extra: [];
+	};
+	restoreData: { input: RestoreRequest; result: RestorePlan; extra: [] };
+	restoreInstance: { input: RestoreRequest; result: InstanceRestorePlan; extra: [] };
+	update: { input: { confirmed: boolean; pull?: boolean }; result: ManagedSnapshot; extra: [] };
+	transferCreate: { input: undefined; result: string; extra: [] };
+	transferRelease: { input: string; result: void; extra: [] };
+	transferPack: { input: string; result: string; extra: [] };
+	transferUnpack: { input: string; result: string; extra: [] };
+};
+export type ManagementRequestArgs<M extends ManagementMethod> =
+	ManagementRequestMap[M]['input'] extends undefined
+		? [value?: ManagementRequestMap[M]['input'], ...extra: ManagementRequestMap[M]['extra']]
+		: [value: ManagementRequestMap[M]['input'], ...extra: ManagementRequestMap[M]['extra']];
 export interface InstanceManagement {
-	call<T = unknown>(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<T>;
+	call<M extends ManagementMethod>(
+		method: M,
+		...args: ManagementRequestArgs<M>
+	): Promise<ManagementRequestMap[M]['result']>;
 	busy(): boolean;
 	close(): Promise<void>;
 }
-export type DirectoryListing = {
-	path: string;
-	parent: string;
-	directories: Array<{ name: string; path: string }>;
-};

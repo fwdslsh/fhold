@@ -56,6 +56,7 @@ const api: AdminApi = {
 	providerOAuthStart: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerOAuthStart, value),
 	providerOAuthFinish: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerOAuthFinish, value),
 	readiness: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.readiness, value),
+	connectAgent: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.connectAgent, value),
 	assistantPassword: () => ipcRenderer.invoke(ADMIN_CHANNELS.assistantPassword),
 	copyText: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.copyText, value),
 	openExternal: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.openExternal, value),

@@ -1,33 +1,63 @@
 import { expect, test } from 'bun:test';
-import { capabilities, type InstanceSession } from '@fhold/lib';
+import { supportedOperation, type ComposedInstanceSession } from '@fhold/lib';
 import { runSessionCommand } from './hosting-command.js';
 
 function fixture() {
 	const calls: unknown[] = [],
 		output: string[] = [];
-	const snapshot = {
-		ref: { kind: 'azure-container-apps' as const, connectionId: 'azure', resourceId: '/resource' },
-		name: 'agent',
-		location: '/resource',
-		capabilities: capabilities(['start', 'stop', 'restart']),
-		services: [],
-		warnings: [],
-		clientUrl: 'https://agent.example.com'
+	const ref = {
+		kind: 'azure-container-apps' as const,
+		connectionId: 'azure',
+		resourceId: '/resource'
 	};
-	const session: InstanceSession = {
-		ref: snapshot.ref,
-		inspect: async () => snapshot,
-		logs: async (value) => {
+	const host = {
+		inspect: supportedOperation(async () => {
+			throw Error('not used');
+		}),
+		logs: supportedOperation(async (value) => {
 			calls.push(['logs', value]);
 			return 'log text';
-		},
-		console: async (value) => {
+		}),
+		console: supportedOperation(async (value) => {
 			calls.push(['console', value]);
-		},
-		operate: async (action, confirmed, options) => {
-			calls.push([action, confirmed, options]);
-			return { snapshot, pending: true };
-		}
+		}),
+		start: supportedOperation(async () => {
+			throw Error('not used');
+		}),
+		stop: supportedOperation(async () => {
+			throw Error('not used');
+		}),
+		restart: supportedOperation(async (_value, context) => {
+			calls.push(['restart', context.confirmed]);
+			return { snapshot: {} as never };
+		})
+	};
+	const session: ComposedInstanceSession = {
+		ref,
+		host,
+		agent: {} as never,
+		apps: {} as never,
+		data: {} as never,
+		close: async () => {},
+		inspect: async () => ({
+			identity: { ref, name: 'agent', location: '/resource' },
+			lifecycle: {
+				state: 'known',
+				value: 'externally-managed',
+				observedAt: new Date().toISOString()
+			},
+			deployment: {
+				state: 'known',
+				value: { warnings: [], clientUrl: 'https://agent.example.com' },
+				observedAt: new Date().toISOString()
+			},
+			services: { state: 'known', value: [], observedAt: new Date().toISOString() },
+			operations: {},
+			pendingChanges: { state: 'not-inspected', reason: 'none' },
+			agent: {} as never,
+			apps: {} as never,
+			data: {}
+		})
 	};
 	return {
 		calls,
@@ -56,8 +86,8 @@ test('common hosted commands use provider operations and do not need a Docker ho
 	expect(f.calls[1]).toEqual(['console', { replica: 'replica-1' }]);
 	await f.run(['connect', 'opencode', '--json']);
 	expect(JSON.parse(f.output[1]!)).toMatchObject({ url: 'https://agent.example.com' });
-	await f.run(['restart', '--confirm', '--revision', 'agent--one']);
-	expect(f.calls[2]).toEqual(['restart', true, { revision: 'agent--one' }]);
+	await f.run(['restart', '--confirm']);
+	expect(f.calls[2]).toEqual(['restart', true]);
 });
 test('unknown and irrelevant arguments never cause lifecycle mutations or silently choose local behavior', async () => {
 	const f = fixture();
@@ -73,6 +103,6 @@ test('unknown and irrelevant arguments never cause lifecycle mutations or silent
 	])
 		await expect(f.run(argv)).rejects.toThrow();
 	expect(f.calls).toEqual([]);
-	delete f.session.console;
+	f.session.host.console = undefined as never;
 	await expect(f.run(['console'])).rejects.toThrow('does not expose');
 });

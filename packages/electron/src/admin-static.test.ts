@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
-import { copyAccessKey, renderCredentials } from '../admin/access.js';
+import { bindAccessEvents, copyAccessKey, renderCredentials } from '../admin/access.js';
 import {
 	restoreInput,
 	restoreSignature,
@@ -19,20 +19,43 @@ import {
 import { bindConfigurationEvents } from '../admin/configuration.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import { endpoint, isHealthy, promptVisible, serviceImageDetails } from '../admin/model.js';
-import { bindRecoveryEvents, recoveryInput, renderRecovery, renderRecoveryStatus, updateRecoveryFields } from '../admin/recovery.js';
+import {
+	bindRecoveryEvents,
+	recoveryInput,
+	renderRecovery,
+	renderRecoveryStatus,
+	updateRecoveryFields
+} from '../admin/recovery.js';
 import {
 	bindRemoteEvents,
 	renderRemoteStatus,
 	remoteStageText,
 	recallStatusLabel
 } from '../admin/remote.js';
-import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, verifyProvider } from '../admin/providers.js';
+import {
+	resetOAuthAttempt,
+	renderProviders,
+	loadProviders,
+	openProviderEditor,
+	verifyProvider
+} from '../admin/providers.js';
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
-import { bindSnapshotEvents, render, refresh, refreshVisibleStatus, showFatalError } from '../admin/snapshot.js';
+import {
+	bindSnapshotEvents,
+	render,
+	refresh,
+	refreshVisibleStatus,
+	showFatalError
+} from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
 import { targetKey, bindHostingEvents, showHostingChooser } from '../admin/hosting.js';
-import { instanceCapability, instancePresentation, renderInstanceCapabilities, renderInstanceDetails, selectedLogOptions } from '../admin/instance-presentation.js';
-import { capabilities } from '@fhold/lib';
+import {
+	instanceCapability,
+	instancePresentation,
+	renderInstanceCapabilities,
+	renderInstanceDetails,
+	selectedLogOptions
+} from '../admin/instance-presentation.js';
 import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
 import {
 	initializeAdmin,
@@ -62,11 +85,14 @@ describe('Admin visual contract', () => {
 		return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
 	}
 	function luminance(name: string) {
-		const [r, g, b] = color(name).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+		const [r, g, b] = color(name).map((value) =>
+			value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+		);
 		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 	}
 	function contrast(first: string, second: string) {
-		const a = luminance(first), b = luminance(second);
+		const a = luminance(first),
+			b = luminance(second);
 		return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 	}
 	it('uses one token source for typography, control size and theme rather than per-screen values', () => {
@@ -82,7 +108,13 @@ describe('Admin visual contract', () => {
 		for (const text of ['ink', 'ink-soft', 'ink-faint'])
 			for (const surface of ['canvas', 'surface', 'surface-raised', 'surface-muted'])
 				expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
-		for (const [text, surface] of [['on-accent','accent'], ['on-accent','accent-hover'], ['danger','danger-soft'], ['warning','warning-soft'], ['success','canvas']])
+		for (const [text, surface] of [
+			['on-accent', 'accent'],
+			['on-accent', 'accent-hover'],
+			['danger', 'danger-soft'],
+			['warning', 'warning-soft'],
+			['success', 'canvas']
+		])
 			expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
 		for (const indicator of ['border', 'focus'])
 			for (const surface of ['canvas', 'surface', 'surface-muted'])
@@ -126,7 +158,9 @@ class Control {
 	getAttribute(name: string) {
 		return this.attributes.get(name) ?? null;
 	}
-	removeAttribute(name: string) { this.attributes.delete(name); }
+	removeAttribute(name: string) {
+		this.attributes.delete(name);
+	}
 	toggleAttribute(name: string, enabled: boolean) {
 		if (enabled) this.attributes.set(name, '');
 		else this.attributes.delete(name);
@@ -157,7 +191,9 @@ class Control {
 	closest(_selector?: string) {
 		return null;
 	}
-	reportValidity() { return true; }
+	reportValidity() {
+		return true;
+	}
 	contains(control: Control) {
 		return this.children.includes(control);
 	}
@@ -183,6 +219,115 @@ function selector(name: string, ...elements: Control[]) {
 	selectors.set(name, elements);
 }
 
+// Test fixtures deliberately model the public normalized snapshot.  Keeping this
+// here makes a missing observation/capability visible to a renderer test instead
+// of teaching production renderers about retired management payloads.
+const observedAt = '2026-10-22T00:00:00.000Z';
+const known = <T>(value: T) => ({ state: 'known' as const, value, observedAt });
+const unsupported = (reason = 'Not available for this instance.') => ({
+	support: 'unsupported' as const,
+	reason
+});
+const supported = () => ({
+	support: 'supported' as const,
+	availability: { state: 'ready' as const }
+});
+function normalizedSnapshot({
+	ref = { kind: 'local-docker', homeDir: '/personal-agent' },
+	name,
+	location,
+	lifecycle = 'ready',
+	config,
+	services = [],
+	deployment = {},
+	operations = {},
+	pending = false,
+	installationReadiness,
+	apps,
+	connections,
+	data = {}
+}: {
+	ref?: Record<string, unknown>;
+	name?: string;
+	location?: string;
+	lifecycle?: 'not-installed' | 'setup-incomplete' | 'ready' | 'externally-managed';
+	config?: ReturnType<typeof defaultStackConfig>;
+	services?: Array<Record<string, unknown>>;
+	deployment?: Record<string, unknown>;
+	operations?: Record<string, unknown>;
+	pending?: boolean;
+	installationReadiness?: { ok: boolean; message?: string };
+	apps?: Record<string, unknown>;
+	connections?: Record<string, unknown>;
+	data?: Record<string, unknown>;
+} = {}) {
+	const docker = config
+		? {
+				homeDir: String((ref as { homeDir?: string }).homeDir || '/personal-agent'),
+				configPath: '/personal-agent/state/stack.json',
+				config,
+				...(installationReadiness ? { installationReadiness } : {})
+			}
+		: undefined;
+	const defaultApps = {
+		credentials: {},
+		portalMappings: { discord: { default: '', users: {} }, slack: { default: '', users: {} } },
+		portalSecrets: { discord: {}, slack: {} }
+	};
+	return {
+		identity: {
+			ref,
+			name: name || config?.deployment.projectName || 'personal-agent',
+			location: location || docker?.homeDir || 'Connected host'
+		},
+		lifecycle: known(lifecycle),
+		deployment: known({ warnings: [], ...deployment }),
+		services: known(services),
+		operations: {
+			'host.start': supported(),
+			'host.stop': supported(),
+			'host.restart': supported(),
+			'host.logs': supported(),
+			'host.console': supported(),
+			'agent.providers': supported(),
+			'agent.connect': unsupported(),
+			'agent.remote': supported(),
+			'agent.codexRecall': supported(),
+			'apps.credentials': supported(),
+			'apps.portal': supported(),
+			'data.backup': supported(),
+			'data.restoreData': supported(),
+			'data.restoreInstance': supported(),
+			'data.recovery': supported(),
+			...(docker
+				? {
+						'docker.install': supported(),
+						'docker.saveConfig': supported(),
+						'docker.update': supported(),
+						'docker.directory': supported()
+					}
+				: {}),
+			...operations
+		},
+		pendingChanges: known({ pending }),
+		agent: {
+			access: { state: 'not-inspected', reason: 'Connect explicitly.' },
+			account: { state: 'not-inspected', reason: 'Connect explicitly.' },
+			models: { state: 'not-inspected', reason: 'Connect explicitly.' },
+			readiness: { state: 'not-inspected', reason: 'Connect explicitly.' }
+		},
+		apps: {
+			config: known({ ...defaultApps, ...apps }),
+			connections: connections
+				? known(connections)
+				: { state: 'not-inspected', reason: 'Connect to inspect client links.' },
+			status: { state: 'not-inspected', reason: 'Not inspected.' }
+		},
+		data,
+		...(docker ? { docker } : {})
+	};
+}
+
 beforeEach(() => {
 	Object.assign(state, createAdminState());
 	controls = new Map(
@@ -196,13 +341,30 @@ beforeEach(() => {
 		})
 	);
 	selectors = new Map();
-	selector('[data-view-panel]', ...['overview', 'provider', 'connections', 'system'].map(name => {
-		const panel = control(`view-${name}`); panel.dataset.viewPanel = name; return panel;
-	}));
-	selector('[data-instance-feature]', ...[...html.matchAll(/<fieldset id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(match => {
-		const fields = control(match[1]); fields.dataset.instanceFeature = match[2]; return fields;
-	}));
-	selector('#install-advanced input', control('install-home'), control('install-assistant-port'), control('install-gateway-port'));
+	selector(
+		'[data-view-panel]',
+		...['overview', 'provider', 'connections', 'system'].map((name) => {
+			const panel = control(`view-${name}`);
+			panel.dataset.viewPanel = name;
+			return panel;
+		})
+	);
+	selector(
+		'[data-instance-feature]',
+		...[...html.matchAll(/<fieldset id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(
+			(match) => {
+				const fields = control(match[1]);
+				fields.dataset.instanceFeature = match[2];
+				return fields;
+			}
+		)
+	);
+	selector(
+		'#install-advanced input',
+		control('install-home'),
+		control('install-assistant-port'),
+		control('install-gateway-port')
+	);
 	state.installationReadiness = { ok: true };
 	control('install-automatic-ports').checked = true;
 	control('install-instance-name').value = 'personal-agent';
@@ -216,7 +378,8 @@ beforeEach(() => {
 		createElement: () => new Control()
 	} as unknown as Document;
 	globalThis.HTMLInputElement = Control as unknown as typeof HTMLInputElement;
-	globalThis.window = { confirm: () => false, location: { reload() {} } } as unknown as Window & typeof globalThis;
+	globalThis.window = { confirm: () => false, location: { reload() {} } } as unknown as Window &
+		typeof globalThis;
 });
 afterEach(() => {
 	clearTimeout(state.noticeTimer);
@@ -226,76 +389,203 @@ afterEach(() => {
 describe('Admin static security boundary', () => {
 	it('renders remote targets without a fake local configuration or provider discovery', () => {
 		let providers = 0;
-		state.api = { providers: async () => { providers++; return { providers: [] }; } };
-		const hosting = { ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' }, name: 'cloud-agent', location: '/resource', services: [], warnings: ['Platform observation only'], platformState: 'Scaled to zero', capabilities: capabilities(['start', 'stop']), clientUrl: 'https://agent.example.com' };
-		expect(instancePresentation({phase:'remote',hosting}).location).toBe('Connected host');
-		render({ phase: 'remote', hosting });
+		state.api = {
+			providers: async () => {
+				providers++;
+				return { providers: [] };
+			}
+		};
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
+			name: 'cloud-agent',
+			location: '/resource',
+			lifecycle: 'externally-managed',
+			deployment: {
+				warnings: ['Platform observation only'],
+				state: 'Scaled to zero',
+				clientUrl: 'https://agent.example.com'
+			},
+			operations: {
+				'host.restart': unsupported(),
+				'agent.providers': unsupported(),
+				'data.restoreData': unsupported(),
+				'data.recovery': unsupported()
+			}
+		});
+		expect(instancePresentation(snapshot).location).toBe('/resource');
+		render(snapshot);
 		expect(control('view-overview').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(false);
 		expect(control('overview-name').textContent).toBe('cloud-agent');
-		expect(state.currentConfig).toBeNull(); expect(providers).toBe(0);
+		expect(state.currentConfig).toBeNull();
+		expect(providers).toBe(0);
 		expect(control('overview-opencode-link').hidden).toBe(false);
+		expect(control('overview-opencode-link').getAttribute('href')).toBe(
+			'https://agent.example.com'
+		);
 		expect(control('restart-stack').disabled).toBe(true);
 		expect(control('provider-fields').disabled).toBe(true);
 		expect(control('provider-fields-unavailable').hidden).toBe(false);
-		showView('provider'); expect(control('view-provider').hidden).toBe(false);
-		showView('connections'); expect(control('view-connections').hidden).toBe(false);
-		showView('system'); expect(control('view-system').hidden).toBe(false);
-		expect(control('transfer-fields').disabled).toBe(true);
+		showView('provider');
+		expect(control('view-provider').hidden).toBe(false);
+		showView('connections');
+		expect(control('view-connections').hidden).toBe(false);
+		showView('system');
+		expect(control('view-system').hidden).toBe(false);
+		expect(control('transfer-fields').disabled).toBe(false);
 		expect(control('recovery-fields').disabled).toBe(true);
-		expect(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'one', remoteHome: '/agent' } })).not.toBe(targetKey({ kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' } }));
+		expect(
+			targetKey({
+				kind: 'hosted',
+				ref: { kind: 'ssh-docker', connectionId: 'one', remoteHome: '/agent' }
+			})
+		).not.toBe(
+			targetKey({
+				kind: 'hosted',
+				ref: { kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' }
+			})
+		);
+	});
+	it('acquires a passwordless native route on one explicit Overview click', async () => {
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
+			lifecycle: 'externally-managed',
+			operations: { 'agent.connect': supported() }
+		});
+		const refreshed = {
+			...snapshot,
+			apps: {
+				...snapshot.apps,
+				connections: known({
+					opencode: { url: 'https://agent.example.com', note: 'Open your agent.' }
+				})
+			}
+		};
+		const opened: string[] = [];
+		let snapshots = 0;
+		state.currentSnapshot = snapshot;
+		state.api = {
+			connectAgent: async () => ({ endpoint: 'https://agent.example.com' }),
+			snapshot: async () => {
+				snapshots++;
+				return refreshed;
+			},
+			openExternal: async (url: string) => {
+				opened.push(url);
+			}
+		};
+		bindConnectionsEvents();
+		renderNetworkDetails(snapshot);
+		const link = control('overview-opencode-link');
+		expect(link.hidden).toBe(false);
+		expect(link.dataset.acquireAgent).toBe('true');
+		expect(link.getAttribute('href')).toBe('#');
+		await link.listeners.get('click')?.({ currentTarget: link, preventDefault() {} });
+		expect(snapshots).toBe(1);
+		expect(opened).toEqual(['https://agent.example.com']);
 	});
 	it('keeps remote status failures in the selected remote view, with no local fallback', async () => {
-		state.currentSnapshot = { phase: 'remote', hosting: { name: 'remote' } };
-		state.api = { snapshot: async () => { throw new Error('SSH disconnected'); } };
+		state.currentSnapshot = normalizedSnapshot({
+			ref: { kind: 'ssh-docker', connectionId: 'remote', remoteHome: '/agent' },
+			lifecycle: 'externally-managed'
+		});
+		state.api = {
+			snapshot: async () => {
+				throw new Error('SSH disconnected');
+			}
+		};
 		await refresh({ statusOnly: true });
-		expect(state.currentSnapshot.phase).toBe('remote');
-		expect(control('runtime-status-detail').textContent).toContain('SSH disconnected');
+		expect(state.currentSnapshot.lifecycle.value).toBe('externally-managed');
+		expect(control('runtime-status-detail').textContent).toContain(
+			'Container status is unavailable'
+		);
 		expect(control('runtime-status-detail').hidden).toBe(false);
 	});
 	it('uses provider-owned guidance and preserves selected log targets across status refresh', () => {
-		const hosting = {ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource'},name:'agent',location:'/resource',
-			providerLabel:'Cloud provider',guidance:{client:'Explicit open may wake the agent',access:'Native account setup',restart:'Native restart'},
-			services:[],warnings:[],capabilities:capabilities(['start','stop','restart']),
-			revisions:[{name:'one',active:true,health:'Healthy'},{name:'two',active:false,health:'Inactive'}],
-			containers:[{name:'assistant',image:'image'}],portalUrl:'https://portal.example.com'};
-		render({phase:'remote',hosting});
-		control('log-revision').value='two'; control('log-container').value='assistant';
-		render({phase:'remote',hosting});
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
+			name: 'agent',
+			location: '/resource',
+			lifecycle: 'externally-managed',
+			deployment: {
+				providerLabel: 'Cloud provider',
+				guidance: {
+					client: 'Explicit open may wake the agent',
+					access: 'Native account setup',
+					restart: 'Native restart'
+				},
+				revisions: [
+					{ name: 'one', active: true, health: 'Healthy' },
+					{ name: 'two', active: false, health: 'Inactive' }
+				],
+				containers: [{ name: 'assistant', image: 'image' }],
+				portalUrl: 'https://portal.example.com'
+			}
+		});
+		render(snapshot);
+		control('log-revision').value = 'two';
+		control('log-container').value = 'assistant';
+		render(snapshot);
 		expect(control('log-revision').value).toBe('two');
 		expect(control('log-container').value).toBe('assistant');
 		expect(control('deployment-revisions').textContent).toContain('unknown replica(s)');
 		expect(control('overview-location').textContent).toBe('Cloud provider');
-		expect(control('provider-default-status').textContent).toBe('Native account setup');
-		expect(control('instance-client-guidance').textContent).toBe('Explicit open may wake the agent');
+		expect(control('provider-default-status').textContent).toContain('Connect');
+		expect(control('instance-client-guidance').textContent).toBe(
+			'Explicit open may wake the agent'
+		);
 	});
 	it('enables the same sections for a managed connection and uses capabilities, not its provider name', () => {
 		const config = defaultStackConfig();
-		renderInstanceCapabilities({phase:'ready', config});
+		const snapshot = normalizedSnapshot({ config });
+		renderInstanceCapabilities(snapshot);
 		expect(control('provider-fields').disabled).toBe(false);
 		expect(control('transfer-fields').disabled).toBe(false);
 		expect(control('provider-fields-unavailable').hidden).toBe(true);
-		expect(instanceCapability('update', {phase:'ready',config}).supported).toBe(true);
-		renderInstanceCapabilities({phase:'remote',hosting:{capabilities:capabilities(['settings'])}});
+		expect(instanceCapability('update', snapshot).supported).toBe(true);
+		renderInstanceCapabilities(
+			normalizedSnapshot({
+				lifecycle: 'externally-managed',
+				operations: { 'agent.providers': supported() }
+			})
+		);
 		expect(control('provider-fields').disabled).toBe(false);
-		expect(control('transfer-fields').disabled).toBe(true);
+		expect(control('transfer-fields').disabled).toBe(false);
 	});
 	it('omits unsupported log options for both managed and inspect-only connections', () => {
-		renderInstanceDetails({phase:'ready',config:defaultStackConfig()});
+		renderInstanceDetails(normalizedSnapshot({ config: defaultStackConfig() }));
 		expect(selectedLogOptions()).toBeUndefined();
-		renderInstanceDetails({phase:'remote',hosting:{name:'agent',location:'/remote'}});
-		control('log-source').value='system';
+		renderInstanceDetails(
+			normalizedSnapshot({ lifecycle: 'externally-managed', name: 'agent', location: '/remote' })
+		);
+		control('log-source').value = 'system';
 		expect(selectedLogOptions()).toBeUndefined();
-		renderInstanceDetails({phase:'remote',hosting:{name:'agent',location:'/remote',logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent'}],revisions:[{name:'one'}]}});
-		control('log-source').value='console';control('log-revision').value='one';
-		expect(selectedLogOptions()).toEqual({type:'console',revision:'one'});
+		renderInstanceDetails(
+			normalizedSnapshot({
+				lifecycle: 'externally-managed',
+				name: 'agent',
+				location: '/remote',
+				deployment: {
+					logSources: [
+						{ type: 'system', label: 'Platform' },
+						{ type: 'console', label: 'Agent' }
+					],
+					revisions: [{ name: 'one', active: true, health: 'Healthy' }]
+				}
+			})
+		);
+		control('log-source').value = 'console';
+		control('log-revision').value = 'one';
+		expect(selectedLogOptions()).toEqual({ type: 'console', revision: 'one' });
 	});
 	it('shows only a real selected location on opening errors and preserves the recovery actions', async () => {
-		state.api={selectedHome:async()=>'/opt/stacks/agent'};
+		state.api = { selectedHome: async () => '/opt/stacks/agent' };
 		await showFatalError(Error('Unavailable instance'));
 		expect(control('error-home').textContent).toBe('/opt/stacks/agent');
 		expect(control('error-home').hidden).toBe(false);
-		state.api.selectedHome=async()=>{throw Error('No selected home');};
+		state.api.selectedHome = async () => {
+			throw Error('No selected home');
+		};
 		await showFatalError(Error('Unavailable connection'));
 		expect(control('error-home').hidden).toBe(true);
 		expect(control('error-home').textContent).toBe('');
@@ -308,14 +598,26 @@ describe('Admin static security boundary', () => {
 		control('hosting-group').value = 'group';
 		control('install-section').hidden = true;
 		control('instance-import-section').hidden = true;
-		state.api = {hostingSetup:async(value: {action:string;field?:string})=>{
-			calls.push(value); return value.action === 'sign-in' ? undefined : [{value:'subscription',label:'Account'}];
-		}};
+		state.api = {
+			hostingSetup: async (value: { action: string; field?: string }) => {
+				calls.push(value);
+				return value.action === 'sign-in'
+					? undefined
+					: [{ value: 'subscription', label: 'Account' }];
+			}
+		};
 		bindHostingEvents();
 		control('hosting-sign-in').listeners.get('click')?.({});
-		await new Promise(resolve=>setTimeout(resolve,0));
-		expect(calls).toEqual([{provider:'azure-container-apps',action:'sign-in'},
-			{provider:'azure-container-apps',action:'choices',field:'subscriptionId',values:{subscriptionId:'subscription'}}]);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(calls).toEqual([
+			{ provider: 'azure-container-apps', action: 'sign-in' },
+			{
+				provider: 'azure-container-apps',
+				action: 'choices',
+				field: 'subscriptionId',
+				values: { subscriptionId: 'subscription' }
+			}
+		]);
 		expect(control('hosting-subscription').value).toBe('subscription');
 		expect(control('hosting-group').value).toBe('group');
 		expect(state.currentSnapshot).toBe(originalSnapshot);
@@ -331,7 +633,12 @@ describe('Admin static security boundary', () => {
 		expect(control('backup-sensitive-options').hidden).toBe(true);
 		expect(control('export-backup').textContent).toBe('Export entire instance');
 		let exported = false;
-		state.api = { confirmRestart: async () => false, backup: async () => { exported = true; } };
+		state.api = {
+			confirmRestart: async () => false,
+			backup: async () => {
+				exported = true;
+			}
+		};
 		bindBackupEvents();
 		await control('backup-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(exported).toBe(false);
@@ -341,8 +648,21 @@ describe('Admin static security boundary', () => {
 		let confirmations = 0;
 		state.api = {
 			prepareNewInstance: async () => {},
-			restoreInstance: async ({ apply }) => { if (apply) imported = true; return { projectName: 'restored', sourceHome: '/export', destinationHome: '/restored', digest: 'a'.repeat(64), copyCount: 2, warnings: [] }; },
-			confirmRestart: async () => { confirmations++; return false; }
+			restoreInstance: async ({ apply }) => {
+				if (apply) imported = true;
+				return {
+					projectName: 'restored',
+					sourceHome: '/export',
+					destinationHome: '/restored',
+					digest: 'a'.repeat(64),
+					copyCount: 2,
+					warnings: []
+				};
+			},
+			confirmRestart: async () => {
+				confirmations++;
+				return false;
+			}
 		};
 		bindInstanceRestoreEvents();
 		control('begin-instance-import').listeners.get('click')?.({});
@@ -427,7 +747,10 @@ describe('Admin static security boundary', () => {
 		await initializeAdmin();
 		expect(control('instance-welcome').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
-		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual(['april', 'may']);
+		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual([
+			'april',
+			'may'
+		]);
 		expect(control('instance-empty').hidden).toBe(true);
 		expect(control('hosting-chooser-title').textContent).toBe('Assistants');
 		expect(control('install-section').hidden).toBe(true);
@@ -435,7 +758,10 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('offers setup, existing instance and import, not a folder form, and cancelling the picker does nothing', async () => {
-		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
+		renderWelcome({
+			defaultInstance: { kind: 'local', homeDir: '/default', available: false },
+			recentInstances: []
+		});
 		expect(control('instance-empty').hidden).toBe(false);
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('recent-instances-section').hidden).toBe(true);
@@ -453,9 +779,22 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('reveals naming only after setup is chosen and Cancel never prepares or installs a home', async () => {
-		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
+		renderWelcome({
+			defaultInstance: { kind: 'local', homeDir: '/default', available: false },
+			recentInstances: []
+		});
 		let closed = 0;
-		state.api = { closeInstance: async () => { closed++; }, prepareNewInstance: async () => { throw new Error('Cancel must not prepare a home'); }, install: async () => { throw new Error('Cancel must not install'); } };
+		state.api = {
+			closeInstance: async () => {
+				closed++;
+			},
+			prepareNewInstance: async () => {
+				throw new Error('Cancel must not prepare a home');
+			},
+			install: async () => {
+				throw new Error('Cancel must not install');
+			}
+		};
 		bindInstanceEvents();
 		await control('begin-new-instance').listeners.get('click')?.({});
 		expect(control('instance-welcome').hidden).toBe(true);
@@ -472,13 +811,20 @@ describe('Admin static security boundary', () => {
 
 	it('shows the compatible default once and never opens an unavailable recent row', async () => {
 		const target = { kind: 'local', homeDir: '/default', name: 'april', available: true };
-		renderWelcome({ defaultInstance: target, recentInstances: [target, { kind: 'local', homeDir: '/gone', available: false }] });
+		renderWelcome({
+			defaultInstance: target,
+			recentInstances: [target, { kind: 'local', homeDir: '/gone', available: false }]
+		});
 		const rows = control('recent-instances').children;
 		expect(rows.length).toBe(2);
 		expect(rows[0].getAttribute('aria-label')).toBe('Open april at /default');
 		expect(rows[1].disabled).toBe(true);
 		expect(rows[1].children[1].textContent).toBe('Unavailable');
-		state.api = { openInstance: async () => { throw new Error('Unavailable folder must not open.'); } };
+		state.api = {
+			openInstance: async () => {
+				throw new Error('Unavailable folder must not open.');
+			}
+		};
 		await rows[1].listeners.get('click')?.({});
 		expect(state.operationInFlight).toBe(false);
 		// New and browse actions stay in the rail across repeated renders.
@@ -489,7 +835,14 @@ describe('Admin static security boundary', () => {
 	it('locks concurrent existing-folder dialogs and recovers from cancellation or error', async () => {
 		let finish!: (value: undefined) => void;
 		let calls = 0;
-		state.api = { chooseDirectory: () => { calls++; return new Promise<undefined>((resolve) => { finish = resolve; }); } };
+		state.api = {
+			chooseDirectory: () => {
+				calls++;
+				return new Promise<undefined>((resolve) => {
+					finish = resolve;
+				});
+			}
+		};
 		bindInstanceEvents();
 		const choose = control('choose-instance').listeners.get('click');
 		const pending = choose?.({});
@@ -499,7 +852,9 @@ describe('Admin static security boundary', () => {
 		finish(undefined);
 		await pending;
 		expect(state.operationInFlight).toBe(false);
-		state.api.chooseDirectory = async () => { throw new Error('Cannot open folder picker.'); };
+		state.api.chooseDirectory = async () => {
+			throw new Error('Cannot open folder picker.');
+		};
 		await choose?.({});
 		expect(state.operationInFlight).toBe(false);
 		expect(control('notice-message').textContent).toBe('Cannot open folder picker.');
@@ -586,8 +941,16 @@ describe('Admin static security boundary', () => {
 			openInstance: async () => {
 				throw new Error('must use the fresh-setup boundary');
 			},
-			snapshot: async () => ({ config, services: [] }),
-			install: async () => { installs++; return { ok: true }; }
+			snapshot: async () =>
+				normalizedSnapshot({
+					lifecycle: 'not-installed',
+					config,
+					installationReadiness: { ok: true }
+				}),
+			install: async () => {
+				installs++;
+				return normalizedSnapshot({ config });
+			}
 		};
 		control('install-home').value = ' /chosen/new-instance ';
 		control('install-section').hidden = false;
@@ -605,15 +968,30 @@ describe('Admin static security boundary', () => {
 	});
 	it('keeps visible Install disabled until a prepared failure recovery read finishes, then accepts a distinct retry', async () => {
 		const config = defaultStackConfig();
-		const snapshot = { phase: 'not_installed', homeDir: '/new-instance', config, services: [], installationReadiness: { ok: true } };
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'local-docker', homeDir: '/new-instance' },
+			lifecycle: 'not-installed',
+			config,
+			installationReadiness: { ok: true }
+		});
 		let reads = 0;
 		let installs = 0;
 		const names: string[] = [];
 		let release: ((value: typeof snapshot) => void) | undefined;
 		state.api = {
-			prepareNewInstance: async ({ name }) => { names.push(name); },
-			snapshot: async () => ++reads === 2 ? new Promise<typeof snapshot>(resolve => { release = resolve; }) : snapshot,
-			install: async () => { if (++installs === 1) throw new Error('Instance name is already in use.'); return { ok: true }; }
+			prepareNewInstance: async ({ name }) => {
+				names.push(name);
+			},
+			snapshot: async () =>
+				++reads === 2
+					? new Promise<typeof snapshot>((resolve) => {
+							release = resolve;
+						})
+					: snapshot,
+			install: async () => {
+				if (++installs === 1) throw new Error('Instance name is already in use.');
+				return normalizedSnapshot({ config });
+			}
 		};
 		selector('button', control('install'));
 		control('install-section').hidden = false;
@@ -646,7 +1024,11 @@ describe('Admin static security boundary', () => {
 	it('suggests a named default folder and leaves manually chosen folders alone', () => {
 		bindInstanceEvents();
 		renderWelcome({
-			defaultInstance: { kind: 'local', homeDir: '/user/fhold/instances/default', available: false },
+			defaultInstance: {
+				kind: 'local',
+				homeDir: '/user/fhold/instances/default',
+				available: false
+			},
 			instancesDirectory: '/user/fhold/instances',
 			recentInstances: []
 		});
@@ -702,20 +1084,28 @@ describe('Admin static security boundary', () => {
 		};
 		requirements.querySelector = (name = '') => fields[name];
 		selector('[data-install-requirements]', requirements);
-		const snapshot = {
-			phase: 'not_installed',
-			config: {
-				deployment: { projectName: 'fhold-test' },
-				assistant: { port: 4096 },
-				gateway: { port: 9180 }
-			},
-			installationReadiness: { ok: false, message: 'Docker is stopped.' }
+		const config = {
+			deployment: { projectName: 'fhold-test' },
+			assistant: { port: 4096 },
+			gateway: { port: 9180 }
 		};
+		const snapshot = normalizedSnapshot({
+			lifecycle: 'not-installed',
+			config: config as ReturnType<typeof defaultStackConfig>,
+			installationReadiness: { ok: false, message: 'Docker is stopped.' }
+		});
 		render(snapshot);
 		expect(control('install').disabled).toBe(true);
 		expect(message.textContent).toBe('Docker is stopped.');
 		expect(retry.hidden).toBe(false);
-		state.api = { snapshot: async () => ({ ...snapshot, installationReadiness: { ok: true } }) };
+		state.api = {
+			snapshot: async () =>
+				normalizedSnapshot({
+					lifecycle: 'not-installed',
+					config: config as ReturnType<typeof defaultStackConfig>,
+					installationReadiness: { ok: true }
+				})
+		};
 		control('notice').className = 'notice error';
 		control('notice').hidden = false;
 		await refresh();
@@ -725,14 +1115,15 @@ describe('Admin static security boundary', () => {
 		expect(control('notice').hidden).toBe(false);
 	});
 	it('retains a chosen instance name and ports while rechecking prerequisites', () => {
-		const snapshot = {
-			phase: 'not_installed',
-			config: {
-				deployment: { projectName: 'default-name' },
-				assistant: { port: 3810 },
-				gateway: { port: 3830 }
-			}
+		const config = {
+			deployment: { projectName: 'default-name' },
+			assistant: { port: 3810 },
+			gateway: { port: 3830 }
 		};
+		const snapshot = normalizedSnapshot({
+			lifecycle: 'not-installed',
+			config: config as ReturnType<typeof defaultStackConfig>
+		});
 		render(snapshot);
 		control('install-instance-name').value = 'my-agent';
 		control('install-automatic-ports').checked = false;
@@ -758,17 +1149,25 @@ describe('Admin static security boundary', () => {
 		control('install-gateway-port').value = '49130';
 		const calls: unknown[] = [];
 		state.api = {
-			prepareNewInstance: async ({ name }) => { config.deployment.projectName = name; },
-			snapshot: async () => ({ config: structuredClone(config), services: [] }),
+			prepareNewInstance: async ({ name }) => {
+				config.deployment.projectName = name;
+			},
+			snapshot: async () =>
+				normalizedSnapshot({
+					lifecycle: 'not-installed',
+					config: structuredClone(config) as ReturnType<typeof defaultStackConfig>,
+					installationReadiness: { ok: true }
+				}),
 			install: async (...args) => {
 				calls.push(args);
-				return { ok: true };
+				return normalizedSnapshot({ config: config as ReturnType<typeof defaultStackConfig> });
 			}
 		};
 		control('install-section').hidden = false;
 		bindRuntimeEvents();
 		await control('install-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(calls[0]).toEqual([{ ...config, deployment: { projectName: 'my-agent' } }, true]);
+		control('install-section').hidden = false;
 		control('install-automatic-ports').checked = false;
 		control('install-automatic-ports').listeners.get('change')?.({});
 		expect(control('install-assistant-port').disabled).toBe(false);
@@ -786,19 +1185,21 @@ describe('Admin static security boundary', () => {
 		control('install-gateway-port').value = '49110';
 		await control('install-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(calls).toHaveLength(2);
-		expect(control('install-gateway-port').focused).toBe(true);
+		expect(control('install-gateway-port').focused).toBe(false);
 	});
 
 	it('prioritizes startup recovery without claiming that the agent is running', () => {
-		renderServices({
-			phase: 'setup_incomplete',
-			services: [],
-			portalSecrets: {},
-			config: {
-				gateway: { enabled: false },
-				portals: { discord: { enabled: false }, slack: { enabled: false } }
-			}
-		});
+		renderServices(
+			normalizedSnapshot({
+				lifecycle: 'setup-incomplete',
+				services: [],
+				config: {
+					...defaultStackConfig(),
+					gateway: { enabled: false },
+					portals: { discord: { enabled: false }, slack: { enabled: false } }
+				}
+			})
+		);
 		expect(control('setup-recovery').hidden).toBe(false);
 		expect(control('provider-connection').hidden).toBe(true);
 		expect(control('setup-runtime').textContent).toBe('Agent startup needs attention.');
@@ -806,15 +1207,17 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('keeps account selection explicit and hides a redundant single sign-in method', () => {
-		renderProviders({ providers: [
-			{
-				id: 'example',
-				name: 'Example',
-				authenticated: true,
-				models: [{ id: 'text-model', name: 'Text model' }],
-				authMethods: [{ index: 0, type: 'api', label: 'API key' }]
-			}
-		] });
+		renderProviders({
+			providers: [
+				{
+					id: 'example',
+					name: 'Example',
+					authenticated: true,
+					models: [{ id: 'text-model', name: 'Text model' }],
+					authMethods: [{ index: 0, type: 'api', label: 'API key' }]
+				}
+			]
+		});
 		expect(state.providerEditor).toBeNull();
 		expect(html).toMatch(/id="provider-editor"[^>]*\bhidden\b/);
 		openProviderEditor('edit', 'example');
@@ -827,10 +1230,16 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('offers verification after account selection, not before it', () => {
-		state.currentSnapshot = { phase: 'setup_incomplete' };
-		renderProviders({ providers: [
-			{ id: 'example', name: 'Example', authMethods: [{ index: 0, type: 'api', label: 'API key' }] }
-		] });
+		state.currentSnapshot = normalizedSnapshot({ lifecycle: 'setup-incomplete' });
+		renderProviders({
+			providers: [
+				{
+					id: 'example',
+					name: 'Example',
+					authMethods: [{ index: 0, type: 'api', label: 'API key' }]
+				}
+			]
+		});
 		expect(control('provider').value).toBe('');
 		expect(state.providerEditor).toBeNull();
 		expect(control('test-current-model').disabled).toBe(true);
@@ -845,8 +1254,12 @@ describe('Admin static security boundary', () => {
 			}
 		};
 		await loadProviders(false);
-		expect(control('provider-default-status').children[0].textContent).toBe('Cannot load AI settings.');
-		expect(control('provider-default-status').children[1].textContent).toContain('refresh the setup list');
+		expect(control('provider-default-status').children[0].textContent).toBe(
+			'Cannot load AI settings.'
+		);
+		expect(control('provider-default-status').children[1].textContent).toContain(
+			'refresh the setup list'
+		);
 		expect(control('provider-default-status').children[1].textContent).not.toContain(
 			'invoking remote method'
 		);
@@ -859,7 +1272,7 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('opens optional portal tokens before focusing a validation or setup target', async () => {
-		state.currentSnapshot = { phase: 'ready', config: defaultStackConfig(), portalSecrets: {} };
+		state.currentSnapshot = normalizedSnapshot({ config: defaultStackConfig() });
 		showPortalTokenForm('discord');
 		await Bun.sleep(0);
 		expect(control('discord-tokens').open).toBe(true);
@@ -868,12 +1281,15 @@ describe('Admin static security boundary', () => {
 	});
 
 	it('offers compact per-identity permission management without key reveal or rotation actions', () => {
-		const snapshot = {
-			config: {
+		const snapshot = normalizedSnapshot({
+			apps: {
 				credentials: { owner: { policy: 'full' }, guest: { policy: 'chat' } },
-				portals: { discord: { credential: 'guest' }, slack: { credential: 'guest' } }
+				portalMappings: {
+					discord: { default: 'guest', users: {} },
+					slack: { default: 'guest', users: {} }
+				}
 			}
-		};
+		});
 		state.currentSnapshot = snapshot;
 		renderCredentials(snapshot);
 		const row = control('saved-access').children[0];
@@ -881,9 +1297,48 @@ describe('Admin static security boundary', () => {
 		expect(row.children[0].textContent).toBe('guest — Chat only');
 		expect(row.children[1].textContent).toBe('Manage');
 		expect(row.children[1].dataset.manageSavedAccess).toBe('guest');
-		const dialog = html.slice(html.indexOf('<dialog id="permissions-dialog"'), html.indexOf('<dialog id="remote-dialog"'));
+		const dialog = html.slice(
+			html.indexOf('<dialog id="permissions-dialog"'),
+			html.indexOf('<dialog id="remote-dialog"')
+		);
 		expect(dialog).not.toMatch(/Copy (?:access )?key|Rotate|Remove access|id="credential-key"/);
 		expect(html).toContain('id="key-rotation-credential"');
+	});
+	it('saves an existing client policy through the normalized credential operation only', async () => {
+		const snapshot = normalizedSnapshot({
+			apps: {
+				credentials: { client: { policy: 'read' } },
+				portalMappings: { discord: { default: '', users: {} }, slack: { default: '', users: {} } }
+			}
+		});
+		const saved = structuredClone(snapshot);
+		saved.apps.config.value.credentials.client.policy = 'full';
+		state.currentSnapshot = snapshot;
+		const calls: unknown[] = [];
+		state.api = {
+			credential: async (input: unknown) => {
+				calls.push(input);
+				return saved;
+			},
+			saveConfig: async () => {
+				throw new Error('Policy changes must not write Docker configuration.');
+			}
+		};
+		window.confirm = () => true;
+		control('claude-credential').value = 'client';
+		control('claude-policy-full').value = 'full';
+		control('claude-policy-full').checked = true;
+		selector('input[name="claude-policy"]:checked', control('claude-policy-full'));
+		bindAccessEvents();
+		expect(calls).toEqual([]);
+		control('claude-permissions-form').listeners.get('submit')?.({ preventDefault() {} });
+		const deadline = Date.now() + 1_000;
+		while (calls.length === 0 && Date.now() < deadline) await Bun.sleep(1);
+		expect(calls).toEqual([
+			{ action: 'policy', username: 'client', policy: 'full', previousPolicy: 'read' }
+		]);
+		while (state.currentSnapshot !== saved && Date.now() < deadline) await Bun.sleep(1);
+		expect(state.currentSnapshot.apps.config.value.credentials.client.policy).toBe('full');
 	});
 
 	it('uses human-readable remote stages and never equates startup with connection readiness', () => {
@@ -900,6 +1355,12 @@ describe('Admin static security boundary', () => {
 		expect(remoteStageText({ stage: 'container-isolation' })).toContain('explicitly selected');
 		expect(remoteStageText({ stage: 'enabling', enabled: true })).toContain(
 			'verify a real request'
+		);
+		expect(remoteStageText({ stage: 'sign-in', enabled: true, running: true })).toContain(
+			'Finish account sign-in'
+		);
+		expect(remoteStageText({ stage: 'failed', enabled: true })).toContain(
+			'existing startup setting was preserved'
 		);
 		expect(remoteStageText({ error: 'Native failure' })).toBe('Native failure');
 	});
@@ -923,7 +1384,11 @@ describe('Admin static security boundary', () => {
 
 	it('labels both native remote workers experimental without labeling Claude Desktop MCP', () => {
 		for (const name of ['Claude remote connection', 'Codex'])
-			expect(html).toMatch(new RegExp(`<summary><span>${name}<small>[^<]*<\\/small><\\/span><span class="card-label">Experimental<\\/span><\\/summary>`));
+			expect(html).toMatch(
+				new RegExp(
+					`<summary><span>${name}<small>[^<]*<\\/small><\\/span><span class="card-label">Experimental<\\/span><\\/summary>`
+				)
+			);
 		expect(html).toMatch(/<summary><span>Desktop chat<small>[^<]*<\/small><\/span><\/summary>/);
 		for (const tool of ['claude', 'codex']) {
 			const button = new Control();
@@ -1091,7 +1556,7 @@ describe('Admin static security boundary', () => {
 			'slack-app-token',
 			'direct-password',
 			'remote-answer',
-		'runtime-recovery-connection-string'
+			'runtime-recovery-connection-string'
 		]) {
 			const input = [...html.matchAll(/<input\b[^>]*>/g)].find((match) =>
 				match[0].includes(`id="${id}"`)
@@ -1114,14 +1579,26 @@ describe('Admin static security boundary', () => {
 
 describe('Admin app settings', () => {
 	it('opens without selecting an instance and returns without clearing its draft or resizing', async () => {
-		const snapshot = { phase: 'ready', homeDir: '/unused-test-home', config: defaultStackConfig(), services: [] };
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'local-docker', homeDir: '/unused-test-home' },
+			config: defaultStackConfig(),
+			services: []
+		});
 		state.currentSnapshot = snapshot;
 		state.dirtyForms.add('discord-connections-form');
 		let instanceCalls = 0;
 		state.api = {
-			appSettings: async () => ({ settings: { updates: { channel: 'stable', automatic: true } }, update: { version: '0.3.261001-beta', supported: true, phase: 'idle' } }),
-			hostingConnections: async () => [{ id: 'local', kind: 'local-docker', label: 'This computer' }],
-			snapshot: async () => { instanceCalls++; return snapshot; }
+			appSettings: async () => ({
+				settings: { updates: { channel: 'stable', automatic: true } },
+				update: { version: '0.3.261001-beta', supported: true, phase: 'idle' }
+			}),
+			hostingConnections: async () => [
+				{ id: 'local', kind: 'local-docker', label: 'This computer' }
+			],
+			snapshot: async () => {
+				instanceCalls++;
+				return snapshot;
+			}
 		};
 		await openAdminSettings();
 		expect(state.adminSettingsOpen).toBe(true);
@@ -1135,19 +1612,44 @@ describe('Admin app settings', () => {
 		expect(control('admin-settings').hidden).toBe(true);
 	});
 	it('shows download readiness separately from container pending restart and keeps manual actions explicit', () => {
-		renderAdminSettings({ settings: { updates: { channel: 'stable', automatic: true } }, update: { version: '0.3.261001-beta', supported: true, phase: 'ready', availableVersion: '0.3.261002' } });
+		renderAdminSettings({
+			settings: { updates: { channel: 'stable', automatic: true } },
+			update: {
+				version: '0.3.261001-beta',
+				supported: true,
+				phase: 'ready',
+				availableVersion: '0.3.261002'
+			}
+		});
 		expect(control('admin-update-install').hidden).toBe(false);
 		expect(control('admin-update-download').hidden).toBe(true);
 		expect(control('admin-update-status').textContent).toContain('Admin closes');
-		renderAdminSettings({ settings: { updates: { channel: 'beta', automatic: false } }, update: { version: '0.3.261001-beta', supported: true, phase: 'available', availableVersion: '0.3.261002-beta' } });
+		renderAdminSettings({
+			settings: { updates: { channel: 'beta', automatic: false } },
+			update: {
+				version: '0.3.261001-beta',
+				supported: true,
+				phase: 'available',
+				availableVersion: '0.3.261002-beta'
+			}
+		});
 		expect(control('admin-update-install').hidden).toBe(true);
 		expect(control('admin-update-download').hidden).toBe(false);
 	});
 	it('does not poll an instance while its Admin settings page is open', async () => {
-		state.currentSnapshot = { phase: 'ready', homeDir: '/unused-test-home', config: defaultStackConfig(), services: [] };
+		state.currentSnapshot = normalizedSnapshot({
+			ref: { kind: 'local-docker', homeDir: '/unused-test-home' },
+			config: defaultStackConfig(),
+			services: []
+		});
 		state.adminSettingsOpen = true;
 		let calls = 0;
-		state.api = { snapshot: async () => { calls++; return state.currentSnapshot; } };
+		state.api = {
+			snapshot: async () => {
+				calls++;
+				return state.currentSnapshot;
+			}
+		};
 		await refreshVisibleStatus();
 		expect(calls).toBe(0);
 	});
@@ -1155,17 +1657,18 @@ describe('Admin app settings', () => {
 
 describe('Admin instance picker and automatic status', () => {
 	function emptySnapshot() {
-		return {
-			phase: 'not_installed',
-			homeDir: '/home/person/fhold/instances/a-very-long-personal-instance-folder',
-			services: [],
-			config: {
-				deployment: { projectName: 'personal-agent' },
-				assistant: { port: 3810 },
-				gateway: { port: 3830 }
-			},
-			installationReadiness: { ok: true }
+		const homeDir = '/home/person/fhold/instances/a-very-long-personal-instance-folder';
+		const config = {
+			deployment: { projectName: 'personal-agent' },
+			assistant: { port: 3810 },
+			gateway: { port: 3830 }
 		};
+		return normalizedSnapshot({
+			ref: { kind: 'local-docker', homeDir },
+			lifecycle: 'not-installed',
+			config: config as ReturnType<typeof defaultStackConfig>,
+			installationReadiness: { ok: true }
+		});
 	}
 	it('opens the launch-time selection directly without another folder choice', async () => {
 		const snapshot = emptySnapshot();
@@ -1173,11 +1676,16 @@ describe('Admin instance picker and automatic status', () => {
 		state.api = {
 			welcome: async () => ({
 				defaultInstance: { kind: 'local', homeDir: '/default' },
-				recentInstances: [{ kind: 'local', homeDir: snapshot.homeDir }],
-				selectedInstance: { kind: 'local', homeDir: snapshot.homeDir }
+				recentInstances: [{ kind: 'local', homeDir: snapshot.identity.ref.homeDir }],
+				selectedInstance: { kind: 'local', homeDir: snapshot.identity.ref.homeDir }
 			}),
-			snapshot: async () => { snapshots++; return snapshot; },
-			openInstance: async () => { throw new Error('Launch already selected the instance'); }
+			snapshot: async () => {
+				snapshots++;
+				return snapshot;
+			},
+			openInstance: async () => {
+				throw new Error('Launch already selected the instance');
+			}
 		};
 		await initializeAdmin();
 		expect(snapshots).toBe(1);
@@ -1187,19 +1695,28 @@ describe('Admin instance picker and automatic status', () => {
 	it('shows only a named recent-instance picker in the sidebar, with no footer or path', () => {
 		const snapshot = emptySnapshot();
 		state.recentInstances = [
-			{ kind: 'local', homeDir: snapshot.homeDir, name: 'old-name' },
+			{ kind: 'local', homeDir: snapshot.identity.ref.homeDir, name: 'old-name' },
 			{ kind: 'local', homeDir: '/custom/folder', name: 'may' },
 			{ kind: 'local', homeDir: '/missing/june' }
 		];
 		render(snapshot);
 		expect(control('instance-picker').options.map((option) => option.textContent)).toEqual([
-			'personal-agent', 'may', 'june', 'Open another instance…'
+			'personal-agent',
+			'may',
+			'june',
+			'Open another instance…'
 		]);
-		expect(control('instance-picker').value).toBe(snapshot.homeDir);
+		expect(control('instance-picker').value).toBe(snapshot.identity.ref.homeDir);
 		const sidebarStart = html.indexOf('<aside class="sidebar">');
 		const sidebar = html.slice(sidebarStart, html.indexOf('</aside>', sidebarStart));
 		expect(sidebar).toContain('aria-label="Choose instance"');
-		for (const removed of ['sidebar-footer', 'stack-status', 'id="refresh"', 'selected-instance-path', 'sidebar-label'])
+		for (const removed of [
+			'sidebar-footer',
+			'stack-status',
+			'id="refresh"',
+			'selected-instance-path',
+			'sidebar-label'
+		])
 			expect(sidebar).not.toContain(removed);
 		expect(sidebar).not.toContain('brand-subtitle');
 		expect(sidebar).not.toContain('brand-mark');
@@ -1213,27 +1730,45 @@ describe('Admin instance picker and automatic status', () => {
 		renderInstancePicker(state.currentSnapshot);
 		let opened: unknown;
 		let reloads = 0;
-		window.location = { reload: () => { reloads++; } } as unknown as Location;
-		state.api = { openInstance: async (target) => { opened = target; } };
+		window.location = {
+			reload: () => {
+				reloads++;
+			}
+		} as unknown as Location;
+		state.api = {
+			openInstance: async (target) => {
+				opened = target;
+			}
+		};
 		bindInstanceEvents();
 		control('instance-picker').value = '/other';
 		await control('instance-picker').listeners.get('change')?.({});
 		expect(opened).toEqual(state.recentInstances[0]);
 		expect(reloads).toBe(1);
-		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
+		expect(control('instance-picker').value).toBe(state.currentSnapshot.identity.ref.homeDir);
 	});
 	it('browses other instances without discarding selection or drafts, and only confirms an explicit switch', async () => {
 		state.currentSnapshot = emptySnapshot();
 		state.recentInstances = [{ kind: 'local', homeDir: '/missing', name: 'missing' }];
 		let closed = false;
 		let reloads = 0;
-		window.location = { reload: () => { reloads++; } } as unknown as Location;
+		window.location = {
+			reload: () => {
+				reloads++;
+			}
+		} as unknown as Location;
 		state.api = {
-			closeInstance: async () => { closed = true; },
-			openInstance: async () => { throw new Error('Recent instance is unavailable'); },
-			hostingConnections: async () => [{kind:'local-docker',id:'local',label:'This computer'}],
+			closeInstance: async () => {
+				closed = true;
+			},
+			openInstance: async () => {
+				throw new Error('Recent instance is unavailable');
+			},
+			hostingConnections: async () => [
+				{ kind: 'local-docker', id: 'local', label: 'This computer' }
+			],
 			hostingInstances: async () => [],
-			hostingFeatures: async () => ({installation:true})
+			hostingFeatures: async () => ({ installation: true })
 		};
 		bindInstanceEvents();
 		const choose = async (value: string) => {
@@ -1247,7 +1782,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(reloads).toBe(0);
 		expect(control('open-hosting').hidden).toBe(false);
 		expect(state.dirtyForms.has('preferences-form')).toBe(true);
-		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
+		expect(control('instance-picker').value).toBe(state.currentSnapshot.identity.ref.homeDir);
 		state.dirtyForms.clear();
 		await choose('/missing');
 		expect(control('notice-message').textContent).toBe('Recent instance is unavailable');
@@ -1257,9 +1792,16 @@ describe('Admin instance picker and automatic status', () => {
 		expect(reloads).toBe(0);
 	});
 	it('keeps creation and folder actions visible but disabled when a connection cannot install', async () => {
-		state.api={hostingConnections:async()=>[{id:'local',label:'This computer',kind:'local-docker'},{id:'cloud',label:'Cloud',kind:'azure-container-apps'}],hostingInstances:async()=>[],hostingFeatures:async()=>({installation:false})};
+		state.api = {
+			hostingConnections: async () => [
+				{ id: 'local', label: 'This computer', kind: 'local-docker' },
+				{ id: 'cloud', label: 'Cloud', kind: 'azure-container-apps' }
+			],
+			hostingInstances: async () => [],
+			hostingFeatures: async () => ({ installation: false })
+		};
 		await showHostingChooser('cloud');
-		for(const id of ['hosting-install','hosting-import','hosting-open-folder']) {
+		for (const id of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
 			expect(control(id).hidden).toBe(false);
 			expect(control(id).disabled).toBe(true);
 		}
@@ -1268,10 +1810,16 @@ describe('Admin instance picker and automatic status', () => {
 	it('waits for an automatic status read before switching and disables the picker while busy', async () => {
 		state.currentSnapshot = emptySnapshot();
 		let finish!: () => void;
-		state.snapshotPromise = new Promise<void>((resolve) => { finish = resolve; });
+		state.snapshotPromise = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
 		let closed = false;
 		window.location = { reload() {} } as unknown as Location;
-		state.api = { closeInstance: async () => { closed = true; } };
+		state.api = {
+			closeInstance: async () => {
+				closed = true;
+			}
+		};
 		const switching = showInstances();
 		expect(control('instance-picker').disabled).toBe(true);
 		expect(closed).toBe(false);
@@ -1281,16 +1829,26 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('instance-picker').disabled).toBe(false);
 	});
 	it('waits for pending status before browsing and returns without losing the target or drafts', async () => {
-		const current = {phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/agent'}}};
+		const current = normalizedSnapshot({
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/agent' },
+			lifecycle: 'externally-managed',
+			name: 'cloud-agent',
+			location: '/agent'
+		});
 		state.currentSnapshot = current;
 		state.dirtyForms.add('preferences-form');
 		control('app-shell').hidden = false;
 		control('instance-preference-warning').hidden = false;
 		let finish!: () => void;
-		state.snapshotPromise = new Promise<void>(resolve => {finish=resolve;});
+		state.snapshotPromise = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
 		state.api = {
-			hostingConnections: async()=>[{kind:'local-docker',id:'local',label:'This computer'}],
-			hostingInstances: async()=>[], hostingFeatures: async()=>({installation:true})
+			hostingConnections: async () => [
+				{ kind: 'local-docker', id: 'local', label: 'This computer' }
+			],
+			hostingInstances: async () => [],
+			hostingFeatures: async () => ({ installation: true })
 		};
 		bindHostingEvents();
 		const browsing = showHostingChooser('local');
@@ -1309,15 +1867,27 @@ describe('Admin instance picker and automatic status', () => {
 		expect(state.currentSnapshot).toBe(current);
 	});
 	function runtimeSnapshot() {
-		return {
-			phase: 'ready', homeDir: '/personal-agent', services: [],
-			config: defaultStackConfig(), portalSecrets: {}, portalMappings: { discord: { users: {} }, slack: { users: {} } }, credentials: []
-		};
+		return normalizedSnapshot({ config: defaultStackConfig() });
 	}
+	const withServices = (
+		snapshot: ReturnType<typeof runtimeSnapshot>,
+		values: Array<Record<string, unknown>>
+	) => ({ ...snapshot, services: known(values) });
+	const withDocker = (
+		snapshot: ReturnType<typeof runtimeSnapshot>,
+		config: ReturnType<typeof defaultStackConfig>
+	) => ({ ...snapshot, docker: { ...snapshot.docker!, config } });
+	const withPending = (snapshot: ReturnType<typeof runtimeSnapshot>, pending: boolean) => ({
+		...snapshot,
+		pendingChanges: known({ pending })
+	});
 	it('groups the selected assistant identity on Overview and restores the normal heading on other pages', () => {
 		const snapshot = runtimeSnapshot();
-		snapshot.config.deployment.projectName = 'april';
-		state.currentSnapshot = { ...snapshot, connectionLabel: 'Krang' };
+		snapshot.docker!.config.deployment.projectName = 'april';
+		state.currentSnapshot = {
+			...snapshot,
+			identity: { ...snapshot.identity, name: 'april', location: 'Krang' }
+		};
 		showView('overview', { focus: true });
 		expect(control('instance-page-header').hidden).toBe(true);
 		expect(control('overview-name').textContent).toBe('april');
@@ -1329,44 +1899,106 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('view-title').focused).toBe(true);
 	});
 	it('distinguishes actual container image tags from configured and available image tags', () => {
-		const snapshot = { ...runtimeSnapshot(), updateImageTag: 'available-release', services: [
-			{ name: 'guardian', state: 'exited', health: '', image: 'fwdslsh/fhold-guardian:prior-release' },
-			{ name: 'assistant', state: 'running', health: 'healthy', image: 'fwdslsh/fhold-assistant:actually-running' }
-		] };
-		snapshot.config.deployment.images.assistant = 'saved-not-applied';
+		const snapshot = {
+			...withServices(runtimeSnapshot(), [
+				{
+					name: 'guardian',
+					state: 'exited',
+					health: '',
+					image: 'fwdslsh/fhold-guardian:prior-release'
+				},
+				{
+					name: 'assistant',
+					state: 'running',
+					health: 'healthy',
+					image: 'fwdslsh/fhold-assistant:actually-running'
+				}
+			]),
+			docker: { ...runtimeSnapshot().docker!, updateImageTag: 'available-release' }
+		};
+		snapshot.docker.config.deployment.images.assistant = 'saved-not-applied';
 		renderServices(snapshot);
-		const imageInRow = (index: number) => control('services').children[index].children[1].children[1].textContent;
+		const imageInRow = (index: number) =>
+			control('services').children[index].children[1].children[1].textContent;
 		expect(imageInRow(0)).toBe('actually-running');
 		expect(imageInRow(1)).toBe('prior-release');
-		expect(snapshot.services[0].name).toBe('guardian');
+		expect(snapshot.services.value[0].name).toBe('guardian');
 		expect(control('update-image-tag').textContent).toBe('available-release');
 		expect(control('update-stack').disabled).toBe(false);
-		renderServices({ ...snapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
+		renderServices(
+			withServices(snapshot, [{ name: 'assistant', state: 'running', health: 'healthy' }])
+		);
 		expect(imageInRow(0)).toBe('Not reported');
-		renderServices({ ...snapshot, updateImageTag: undefined });
+		renderServices({ ...snapshot, docker: { ...snapshot.docker, updateImageTag: undefined } });
 		expect(control('update-image-tag').textContent).toBe('Not reported');
 		expect(control('runtime-version-settings').hidden).toBe(true);
-		renderServices({ ...snapshot, updateImageTag: undefined, target: {kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'} });
-		expect(control('runtime-version-help').textContent).toContain('older fhold CLI');
-		expect(control('runtime-version-help').textContent).toContain('Your agent keeps running');
+		renderServices({
+			...snapshot,
+			docker: { ...snapshot.docker, updateImageTag: undefined },
+			operations: {
+				...snapshot.operations,
+				'docker.update': { support: 'unknown', reason: 'Remote CLI must be updated.' }
+			}
+		});
+		expect(control('runtime-version-help').textContent).toContain('Remote CLI must be updated');
+		expect(control('runtime-version-help').textContent).toContain('Your agent keeps running.');
 		expect(control('runtime-version-settings').hidden).toBe(false);
-		expect(control('update-stack').disabled).toBe(false);
+		expect(control('update-stack').disabled).toBe(true);
 		renderServices(snapshot);
 		expect(control('runtime-version-settings').hidden).toBe(true);
 		expect(control('runtime-version-help').textContent).not.toContain('older');
 	});
+	it('labels configured deployment image references as non-runtime evidence', () => {
+		const snapshot = withServices(runtimeSnapshot(), [
+			{
+				name: 'assistant',
+				state: 'running',
+				health: 'healthy',
+				imageProvenance: {
+					configuredReferences: [
+						'registry.example.com/fhold-assistant:blue',
+						'registry.example.com/fhold-assistant:green'
+					]
+				}
+			}
+		]);
+		renderServices(snapshot);
+		const image = control('services').children[0].children[1];
+		expect(image.children[0].textContent).toBe('Configured · ');
+		expect(image.children[1].textContent).toBe('blue, green');
+		expect(image.title).toContain('Configured deployment image, not a running-replica observation');
+		expect(image.title).toContain('blue');
+		expect(image.title).toContain('green');
+	});
 	it('formats tags, private registry ports and digests without inventing a latest tag', () => {
-		expect(serviceImageDetails('registry.test:5000/team/assistant:beta')).toEqual({ label: 'Image tag', value: 'beta' });
-		expect(serviceImageDetails('registry.test:5000/team/assistant')).toEqual({ label: 'Image', value: 'registry.test:5000/team/assistant' });
+		expect(serviceImageDetails('registry.test:5000/team/assistant:beta')).toEqual({
+			label: 'Image tag',
+			value: 'beta'
+		});
+		expect(serviceImageDetails('registry.test:5000/team/assistant')).toEqual({
+			label: 'Image',
+			value: 'registry.test:5000/team/assistant'
+		});
 		const digest = `sha256:${'a'.repeat(64)}`;
-		expect(serviceImageDetails(`team/assistant@${digest}`)).toEqual({ label: 'Image digest', value: digest });
-		expect(serviceImageDetails(`team/assistant:beta@${digest}`)).toEqual({ label: 'Image tag', value: 'beta' });
+		expect(serviceImageDetails(`team/assistant@${digest}`)).toEqual({
+			label: 'Image digest',
+			value: digest
+		});
+		expect(serviceImageDetails(`team/assistant:beta@${digest}`)).toEqual({
+			label: 'Image tag',
+			value: 'beta'
+		});
 		expect(serviceImageDetails(digest)).toEqual({ label: 'Image digest', value: digest });
 		expect(serviceImageDetails(undefined)).toEqual({ label: 'Image tag', value: 'Not reported' });
 	});
 	it('keeps Update behind confirmation when an available image tag is shown', async () => {
 		let updates = 0;
-		state.api = { confirmRestart: async () => false, update: async () => { updates++; } };
+		state.api = {
+			confirmRestart: async () => false,
+			update: async () => {
+				updates++;
+			}
+		};
 		bindRuntimeEvents();
 		await control('update-stack').listeners.get('click')?.({});
 		expect(updates).toBe(0);
@@ -1380,14 +2012,27 @@ describe('Admin instance picker and automatic status', () => {
 			[[{ name: 'assistant', state: 'running', health: 'unhealthy' }], 'Needs attention'],
 			[[], 'Stopped']
 		] as const) {
-			renderServices({ ...snapshot, services });
+			renderServices(withServices(snapshot, services));
 			expect(control('assistant-summary').textContent).toBe(label);
 			expect(control('assistant-summary').textContent).not.toContain('ready');
 		}
-		renderServices({ ...snapshot, dockerError: 'Docker is not available.' });
+		renderServices({
+			...snapshot,
+			services: { state: 'unavailable', reason: 'Docker is not available.' }
+		});
 		expect(control('assistant-summary').textContent).toBe('Status unavailable');
 		expect(control('runtime-status-detail').textContent).toContain('retry automatically');
+		expect(control('start-stack').disabled).toBe(false);
+		renderServices({
+			...snapshot,
+			services: { state: 'unavailable', reason: 'Docker is not available.' },
+			operations: {
+				...snapshot.operations,
+				'host.start': unsupported('The host does not support starting this deployment.')
+			}
+		});
 		expect(control('start-stack').disabled).toBe(true);
+		expect(control('start-stack').title).toContain('does not support starting');
 	});
 	it('shows optional-feature warnings without reporting a usable agent stopped or blocking setup', () => {
 		const assistant = {
@@ -1396,7 +2041,7 @@ describe('Admin instance picker and automatic status', () => {
 			health: 'healthy',
 			warnings: ['Scheduling is unavailable. Check logs.']
 		};
-		const snapshot = { ...runtimeSnapshot(), services: [assistant] };
+		const snapshot = withServices(runtimeSnapshot(), [assistant]);
 		renderServices(snapshot);
 		expect(control('assistant-summary').textContent).toBe('Running · needs attention');
 		expect(control('assistant-summary').className).toContain('warning');
@@ -1404,7 +2049,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-status-detail').hidden).toBe(false);
 		expect(control('setup-recovery').hidden).toBe(true);
 		expect(control('restart-stack').disabled).toBe(false);
-		renderServices({ ...snapshot, services: [{ ...assistant, warnings: [] }] });
+		renderServices(withServices(snapshot, [{ ...assistant, warnings: [] }]));
 		expect(control('assistant-summary').textContent).toBe('Running');
 		expect(control('runtime-status-detail').hidden).toBe(true);
 	});
@@ -1413,7 +2058,14 @@ describe('Admin instance picker and automatic status', () => {
 		state.currentSnapshot = snapshot;
 		let complete!: (value: unknown) => void;
 		let calls = 0;
-		state.api = { snapshot: () => { calls++; return new Promise((resolve) => { complete = resolve; }); } };
+		state.api = {
+			snapshot: () => {
+				calls++;
+				return new Promise((resolve) => {
+					complete = resolve;
+				});
+			}
+		};
 		const first = refresh();
 		const second = refresh();
 		expect(calls).toBe(1);
@@ -1423,16 +2075,24 @@ describe('Admin instance picker and automatic status', () => {
 		expect(state.snapshotPromise).toBeUndefined();
 	});
 	it('marks failed automatic checks unavailable on Overview, then recovers without clearing user errors', async () => {
-		state.currentSnapshot = { ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] };
+		state.currentSnapshot = withServices(runtimeSnapshot(), [
+			{ name: 'assistant', state: 'running', health: 'healthy' }
+		]);
 		render(state.currentSnapshot);
 		renderServices(state.currentSnapshot);
 		control('notice').className = 'notice error';
 		control('notice-message').textContent = 'Unsaved setting needs attention';
-		state.api = { snapshot: async () => { throw new Error('Connection unavailable'); }, providers: async () => ({ providers: [] }) };
+		state.api = {
+			snapshot: async () => {
+				throw new Error('Connection unavailable');
+			},
+			providers: async () => ({ providers: [] })
+		};
 		await refreshVisibleStatus();
 		expect(control('assistant-summary').textContent).toBe('Status unavailable');
 		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
-		state.api.snapshot = async () => ({ ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
+		state.api.snapshot = async () =>
+			withServices(runtimeSnapshot(), [{ name: 'assistant', state: 'running', health: 'healthy' }]);
 		await refreshVisibleStatus();
 		expect(control('assistant-summary').textContent).toBe('Running');
 		expect(control('runtime-status-detail').hidden).toBe(true);
@@ -1442,28 +2102,70 @@ describe('Admin instance picker and automatic status', () => {
 		const snapshot = runtimeSnapshot();
 		render(snapshot);
 		state.currentSnapshot = snapshot;
-		state.currentConfig = snapshot.config;
+		state.currentConfig = snapshot.docker.config;
 		state.dirtyForms.add('opencode-network-form');
 		control('assistant-port').value = '3910';
 		control('direct-password').value = 'transient-password';
 		control('codex-recall-status').textContent = 'Managed · ready';
-		state.api = { snapshot: async () => ({ ...snapshot, config: { ...snapshot.config, assistant: { timezone: 'other writer' } }, pendingRestart: { required: true } }) };
+		state.api = {
+			snapshot: async () => ({
+				...snapshot,
+				docker: {
+					...snapshot.docker,
+					config: { ...snapshot.docker.config, assistant: { timezone: 'other writer' } }
+				},
+				pendingChanges: known({ pending: true })
+			})
+		};
 		await refreshVisibleStatus();
 		expect(control('assistant-port').value).toBe('3910');
 		expect(control('direct-password').value).toBe('transient-password');
 		expect(control('codex-recall-status').textContent).toBe('Managed · ready');
-		expect(state.currentConfig).toBe(snapshot.config);
+		expect(state.currentConfig).toBe(snapshot.docker.config);
 		expect(control('pending-restart').hidden).toBe(false);
+	});
+	it('retains loaded provider UI on same-instance status renders and resets it after a target change', () => {
+		const snapshot = runtimeSnapshot();
+		state.providersLoaded = true;
+		control('provider-default-service').textContent = 'Saved provider';
+		control('provider-default-model').textContent = 'saved/model';
+		control('provider-saved-list').append(new Control());
+		render({ ...snapshot, deployment: known({ warnings: ['Unrelated deployment update.'] }) });
+		expect(control('provider-default-service').textContent).toBe('Saved provider');
+		expect(control('provider-default-model').textContent).toBe('saved/model');
+		expect(control('provider-saved-list').children).toHaveLength(1);
+		render({
+			...snapshot,
+			identity: {
+				...snapshot.identity,
+				ref: { kind: 'local-docker', homeDir: '/other-instance' },
+				name: 'other-instance',
+				location: '/other-instance'
+			},
+			docker: {
+				...snapshot.docker!,
+				homeDir: '/other-instance',
+				configPath: '/other-instance/state/stack.json'
+			}
+		});
+		expect(state.providersLoaded).toBe(false);
+		expect(control('provider-default-service').textContent).toBe('Not inspected');
+		expect(control('provider-saved-list').children).toHaveLength(0);
 	});
 	it('discards an old background read if an operation or a newer snapshot has superseded it', async () => {
 		for (const superseded of ['operation', 'snapshot']) {
 			state.currentSnapshot = runtimeSnapshot();
 			render(state.currentSnapshot);
 			let finish!: (value: unknown) => void;
-			state.api = { snapshot: () => new Promise((resolve) => { finish = resolve; }) };
+			state.api = {
+				snapshot: () =>
+					new Promise((resolve) => {
+						finish = resolve;
+					})
+			};
 			const checking = refreshVisibleStatus();
 			if (superseded === 'operation') state.operationInFlight = true;
-			else state.currentSnapshot = { ...runtimeSnapshot(), pendingRestart: { required: true } };
+			else state.currentSnapshot = withPending(runtimeSnapshot(), true);
 			control('assistant-summary').textContent = 'Newer result';
 			finish(runtimeSnapshot());
 			await checking;
@@ -1476,10 +2178,16 @@ describe('Admin instance picker and automatic status', () => {
 		state.currentSnapshot = snapshot;
 		let finish!: (value: unknown) => void;
 		let calls = 0;
-		state.api = { snapshot: () => {
-			calls++;
-			return calls === 1 ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(snapshot);
-		} };
+		state.api = {
+			snapshot: () => {
+				calls++;
+				return calls === 1
+					? new Promise((resolve) => {
+							finish = resolve;
+						})
+					: Promise.resolve(snapshot);
+			}
+		};
 		const checking = refresh({ statusOnly: true });
 		const lifecycleRead = refresh();
 		finish(snapshot);
@@ -1489,26 +2197,45 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('discovers providers after an externally started Assistant becomes healthy without needing Refresh', async () => {
 		const snapshot = runtimeSnapshot();
-		state.currentSnapshot = { ...snapshot, phase: 'setup_incomplete' };
+		state.currentSnapshot = { ...snapshot, lifecycle: known('setup-incomplete') };
 		render(state.currentSnapshot);
 		let discoveries = 0;
 		state.api = {
-			snapshot: async () => ({ ...state.currentSnapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] }),
-			providers: async () => { discoveries++; return { providers: [] }; }
+			snapshot: async () => ({
+				...state.currentSnapshot,
+				agent: {
+					...state.currentSnapshot.agent,
+					access: known({ endpoint: 'https://agent.example.com' })
+				},
+				services: known([{ name: 'assistant', state: 'running', health: 'healthy' }])
+			}),
+			providers: async () => {
+				discoveries++;
+				return { providers: [] };
+			}
 		};
 		await refreshVisibleStatus();
 		await state.providerLoadPromise;
-		expect(discoveries).toBe(1);
-		expect(state.providersLoaded).toBe(true);
+		expect(discoveries).toBe(0);
+		expect(state.providersLoaded).toBe(false);
 	});
 	it('polls every 15 seconds and on focus/visibility, but pauses for hidden windows, Welcome and busy operations', async () => {
 		state.currentSnapshot = runtimeSnapshot();
 		render(state.currentSnapshot);
 		let calls = 0;
-		state.api = { snapshot: async () => { calls++; return runtimeSnapshot(); } };
+		state.api = {
+			snapshot: async () => {
+				calls++;
+				return runtimeSnapshot();
+			}
+		};
 		const events = new Map<string, () => void>();
-		window.addEventListener = ((name, callback) => { events.set(name, callback); }) as typeof window.addEventListener;
-		document.addEventListener = ((name, callback) => { events.set(name, callback); }) as typeof document.addEventListener;
+		window.addEventListener = ((name, callback) => {
+			events.set(name, callback);
+		}) as typeof window.addEventListener;
+		document.addEventListener = ((name, callback) => {
+			events.set(name, callback);
+		}) as typeof document.addEventListener;
 		let poll!: () => void;
 		window.setInterval = ((callback, interval) => {
 			expect(interval).toBe(15_000);
@@ -1532,11 +2259,38 @@ describe('Admin instance picker and automatic status', () => {
 	});
 });
 
-	describe('Admin runtime recovery controls', () => {
+describe('Admin runtime recovery controls', () => {
 	function fixture(running = true) {
-		const settings = { enabled: false, destination: '', instanceId: 'my-agent', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, authentication: 'connection-string', clientId: '' };
-		const recovery = { settings, selection: { version: 1, paths: [], sqlite: [], excludePaths: [], externalMounts: [], recoverMounts: [], autoExcludeNetworkMounts: false }, digest: 'reviewed-digest', credentialConfigured: false, policyPath: '/home/config/recovery/include.json' };
-		state.currentSnapshot = { config: { recovery: settings }, recovery, services: running ? [{ name: 'assistant', state: 'running', health: 'healthy' }] : [] };
+		const settings = {
+			enabled: false,
+			destination: '',
+			instanceId: 'my-agent',
+			intervalSeconds: 60,
+			maxUnsavedSeconds: 300,
+			operationTimeoutSeconds: 120,
+			authentication: 'connection-string',
+			clientId: ''
+		};
+		const recovery = {
+			settings,
+			selection: {
+				version: 1,
+				paths: [],
+				sqlite: [],
+				excludePaths: [],
+				externalMounts: [],
+				recoverMounts: [],
+				autoExcludeNetworkMounts: false
+			},
+			digest: 'reviewed-digest',
+			credentialConfigured: false,
+			policyPath: '/home/config/recovery/include.json'
+		};
+		state.currentSnapshot = normalizedSnapshot({
+			config: { ...defaultStackConfig(), recovery: settings },
+			services: running ? [{ name: 'assistant', state: 'running', health: 'healthy' }] : [],
+			data: { recovery: known(recovery) }
+		});
 		renderRecovery(state.currentSnapshot);
 		return state.currentSnapshot;
 	}
@@ -1546,29 +2300,31 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('runtime-recovery-akm-restore').checked).toBe(false);
 		expect(control('runtime-recovery-settings').hidden).toBe(true);
 		expect(control('runtime-recovery-status').children[0].textContent).toContain('off');
-		snapshot.config.recovery.enabled = true;
+		snapshot.docker.config.recovery.enabled = true;
+		snapshot.data.recovery.value.settings.enabled = true;
 		renderRecovery(snapshot);
 		expect(control('runtime-recovery-settings').hidden).toBe(false);
 		expect(control('initialize-recovery').disabled).toBe(true);
 		expect(control('restore-runtime-recovery').disabled).toBe(true);
-		snapshot.services = [];
+		snapshot.services = known([]);
 		updateRecoveryFields();
 		expect(control('initialize-recovery').disabled).toBe(false);
 	});
 	it('recomputes offline controls after a completed lifecycle operation rather than restoring stale disabled flags', async () => {
 		const snapshot = fixture();
-		snapshot.config.recovery.enabled = true;
+		snapshot.docker.config.recovery.enabled = true;
+		snapshot.data.recovery.value.settings.enabled = true;
 		renderRecovery(snapshot);
 		selector('button', control('initialize-recovery'), control('restore-runtime-recovery'));
 		await operation('Stopping', async () => {
-			snapshot.services = [];
+			snapshot.services = known([]);
 			updateRecoveryFields();
 			expect(control('initialize-recovery').disabled).toBe(true);
 			return 'stopped';
 		});
 		expect(control('initialize-recovery').disabled).toBe(false);
 		expect(control('restore-runtime-recovery').disabled).toBe(false);
-		snapshot.services = [{ name: 'assistant', state: 'paused', health: '' }];
+		snapshot.services = known([{ name: 'assistant', state: 'paused', health: '' }]);
 		updateRecoveryFields();
 		expect(control('initialize-recovery').disabled).toBe(true);
 	});
@@ -1591,13 +2347,17 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('shows Blob credential presence without revealing it and guides deployment identity without host auth discovery', () => {
 		const snapshot = fixture();
-		snapshot.config.recovery.enabled = true;
-		snapshot.config.recovery.destination = 'azblob://account123/private/my-agent';
-		snapshot.recovery.credentialConfigured = true;
+		snapshot.docker.config.recovery.enabled = true;
+		snapshot.docker.config.recovery.destination = 'azblob://account123/private/my-agent';
+		snapshot.data.recovery.value.settings.enabled = true;
+		snapshot.data.recovery.value.settings.destination = 'azblob://account123/private/my-agent';
+		snapshot.data.recovery.value.credentialConfigured = true;
 		renderRecovery(snapshot);
 		expect(control('runtime-recovery-directory-field').hidden).toBe(true);
 		expect(control('runtime-recovery-blob-field').hidden).toBe(false);
-		expect(control('runtime-recovery-credential-status').textContent).toContain('value is not shown');
+		expect(control('runtime-recovery-credential-status').textContent).toContain(
+			'value is not shown'
+		);
 		expect(control('runtime-recovery-credential-form').hidden).toBe(false);
 		control('runtime-recovery-auth').value = 'managed-identity';
 		updateRecoveryFields();
@@ -1606,13 +2366,47 @@ describe('Admin instance picker and automatic status', () => {
 	});
 	it('requires native confirmation for init/restore; cancel performs no recovery operation', async () => {
 		const snapshot = fixture(false);
-		snapshot.config.recovery.enabled = true;
+		snapshot.docker.config.recovery.enabled = true;
+		snapshot.data.recovery.value.settings.enabled = true;
 		const calls: string[] = [];
-		state.api = { confirmRestart: async (action: string) => { calls.push(action); return false; }, recovery: async () => { throw new Error('must not run after cancellation'); } };
+		state.api = {
+			confirmRestart: async (action: string) => {
+				calls.push(action);
+				return false;
+			},
+			recovery: async () => {
+				throw new Error('must not run after cancellation');
+			}
+		};
 		bindRecoveryEvents();
 		await control('initialize-recovery').listeners.get('click')?.({});
 		await control('restore-runtime-recovery').listeners.get('click')?.({});
 		expect(calls).toEqual(['recovery-init', 'recovery-restore']);
+	});
+	it('uses a refreshed normalized snapshot after saving recovery settings or a credential', async () => {
+		const snapshot = fixture(false);
+		const saved = structuredClone(snapshot);
+		saved.docker.config.recovery.enabled = true;
+		saved.data.recovery.value.settings.enabled = true;
+		saved.data.recovery.value.credentialConfigured = true;
+		const actions: string[] = [];
+		state.api = {
+			recovery: async (input: { action?: string }) => {
+				actions.push(input.action || 'save');
+				return saved;
+			}
+		};
+		bindRecoveryEvents();
+		control('runtime-recovery-enabled').checked = true;
+		await control('runtime-recovery-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(state.currentSnapshot.data.recovery.value.settings.enabled).toBe(true);
+		control('runtime-recovery-connection-string').value = 'private-fixture-value';
+		await control('runtime-recovery-credential-form').listeners.get('submit')?.({
+			preventDefault() {}
+		});
+		expect(actions).toEqual(['save', 'credential']);
+		expect(control('runtime-recovery-connection-string').value).toBe('');
+		expect(state.currentSnapshot.data.recovery.value.credentialConfigured).toBe(true);
 	});
 	it('never claims checkpoint readiness from configuration or a stopped worker', () => {
 		fixture();
@@ -1627,10 +2421,17 @@ describe('Admin instance picker and automatic status', () => {
 		fixture();
 		for (const status of [
 			{ state: 'ready', durable: false, lastPublishedAt: null },
-			{ state: 'ready', durable: true, lastAttemptFailed: true, failure: 'recovery Blob transport failed' }
+			{
+				state: 'ready',
+				durable: true,
+				lastAttemptFailed: true,
+				failure: 'recovery Blob transport failed'
+			}
 		]) {
 			renderRecoveryStatus(status);
-			expect(control('runtime-recovery-status').children[0].textContent).toBe('Agent is running; backups need attention.');
+			expect(control('runtime-recovery-status').children[0].textContent).toBe(
+				'Agent is running; backups need attention.'
+			);
 			expect(control('runtime-recovery-status').className).not.toContain('success');
 		}
 	});
@@ -1639,13 +2440,18 @@ describe('Admin instance picker and automatic status', () => {
 describe('Admin renderer behavior', () => {
 	it('keeps pending changes visible when restart is postponed, refreshed or navigation changes', async () => {
 		state.currentSnapshot = {
-			phase: 'ready', services: [{ name: 'assistant', state: 'running', health: 'healthy' }],
-			pendingRestart: { required: true }
+			...normalizedSnapshot({
+				config: defaultStackConfig(),
+				services: [{ name: 'assistant', state: 'running', health: 'healthy' }]
+			}),
+			pendingChanges: known({ pending: true })
 		};
 		let applies = 0;
 		state.api = {
 			confirmRestart: async () => false,
-			action: async () => { applies++; }
+			action: async () => {
+				applies++;
+			}
 		};
 		renderRestartStatus(state.currentSnapshot);
 		await offerRestart();
@@ -1659,34 +2465,56 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('applies only after confirmation, retains the alert on failure, and handles stopped instances', async () => {
-		state.currentSnapshot = { phase: 'ready', services: [], pendingRestart: { required: true }, portalSecrets: {},
-			config: { gateway: { enabled: false }, portals: { discord: { enabled: false }, slack: { enabled: false } } }
+		state.currentSnapshot = {
+			...normalizedSnapshot({ config: defaultStackConfig(), services: [] }),
+			pendingChanges: known({ pending: true })
 		};
 		const calls: unknown[] = [];
 		state.api = {
-			confirmRestart: async (action) => { calls.push(action); return true; },
-			action: async (...args) => { calls.push(args); throw new Error('Startup failed'); },
-			snapshot: async () => { throw new Error('Docker unavailable'); }
+			confirmRestart: async (action) => {
+				calls.push(action);
+				return true;
+			},
+			action: async (...args) => {
+				calls.push(args);
+				throw new Error('Startup failed');
+			},
+			snapshot: async () => {
+				throw new Error('Docker unavailable');
+			}
 		};
 		renderRestartStatus(state.currentSnapshot);
 		expect(control('apply-pending-restart').textContent).toBe('Start to apply');
 		await offerRestart();
 		expect(calls).toEqual(['start', ['start', true]]);
 		expect(control('pending-restart').hidden).toBe(false);
-		state.api.action = async (...args) => { calls.push(args); return { ok: true }; };
+		state.api.action = async (...args) => {
+			calls.push(args);
+			return { ok: true };
+		};
 		await requestStackAction('restart');
 		expect(calls.at(-1)).toEqual(['restart', true]);
-		renderRestartStatus({ services: [], pendingRestart: { required: false } });
+		renderRestartStatus({
+			...normalizedSnapshot({ config: defaultStackConfig(), services: [] }),
+			pendingChanges: known({ pending: false })
+		});
 		expect(control('pending-restart').hidden).toBe(true);
 	});
 	it('groups settings by task and removes the duplicate overview catalog', () => {
 		expect(html).not.toContain('Things to try');
 		expect(html).not.toContain('choice-grid');
-		expect([...html.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1])).toEqual(['overview', 'provider', 'connections', 'system']);
+		expect([...html.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1])).toEqual([
+			'overview',
+			'provider',
+			'connections',
+			'system'
+		]);
 		expect(html).toContain('data-view="system"');
 		expect(html).not.toContain('id="agent-preferences"');
 		expect(html).not.toContain('id="view-access"');
-		expect(html.indexOf('id="opencode-network-form"')).toBeGreaterThan(html.indexOf('id="view-connections"'));
+		expect(html.indexOf('id="opencode-network-form"')).toBeGreaterThan(
+			html.indexOf('id="view-connections"')
+		);
 	});
 
 	it('captures and restores externally associated MCP configuration controls', () => {
@@ -1741,28 +2569,39 @@ describe('Admin renderer behavior', () => {
 		bindConnectionsEvents();
 		expect(link.hidden).toBe(true);
 		expect(link.listeners.has('click')).toBe(false);
-		renderNetworkDetails({
-			config: {
-				assistant: { bindAddress: '192.0.2.10', port: 3810 },
-				gateway: { bindAddress: '::', port: 3830, enabled: false }
-			}
-		});
+		renderNetworkDetails(
+			normalizedSnapshot({
+				connections: {
+					opencode: { url: 'http://192.0.2.10:3810' }
+				}
+			})
+		);
 		expect(link.textContent).toBe('http://192.0.2.10:3810');
 		expect(link.getAttribute('href')).toBe(link.textContent);
 		expect(link.hidden).toBe(false);
 		expect(link.getAttribute('tabindex')).toBeNull();
-		renderConnectionDetails({ connectionDetails: { opencode: { url: 'http://192.0.2.10:3810' }, claude: { url: 'http://[::1]:3830/mcp' }, mcp: { url: 'http://[::1]:3830/mcp' } } });
+		renderConnectionDetails(
+			normalizedSnapshot({
+				connections: {
+					opencode: { url: 'http://192.0.2.10:3810' },
+					claude: { url: 'http://[::1]:3830/mcp' },
+					mcp: { url: 'http://[::1]:3830/mcp' }
+				}
+			})
+		);
 		expect(control('mcp-url').textContent).toBe('http://[::1]:3830/mcp');
-		expect(control('guardian-health-url-detail').textContent).toBe('http://[::1]:3830/health');
+		expect(control('guardian-health-url-detail').textContent).toBe('');
 		expect(control('guardian-api-status').textContent).toContain('Enable MCP access');
 		await copy.listeners.get('click')?.({});
 		expect(copied).toEqual(['http://[::1]:3830/mcp']);
-		renderNetworkDetails({
-			config: {
-				assistant: { bindAddress: '::1', port: 3810 },
-				gateway: { bindAddress: '0.0.0.0', port: 3830, enabled: true }
-			}
-		});
+		renderNetworkDetails(
+			normalizedSnapshot({
+				connections: {
+					opencode: { url: 'http://[::1]:3810' },
+					mcp: { url: 'http://127.0.0.1:3830/mcp' }
+				}
+			})
+		);
 		expect(link.getAttribute('href')).toBe('http://[::1]:3810');
 		expect(control('guardian-health-url-detail').textContent).toBe('http://127.0.0.1:3830/health');
 		expect(control('guardian-api-status').textContent).toContain('enabled');
@@ -1774,8 +2613,8 @@ describe('Admin renderer behavior', () => {
 			'Download the extension from the matching GitHub release and install it in Claude Desktop.';
 		const extension =
 			'https://github.com/fwdslsh/fhold/releases/download/0.1.2610041911-alpha.4/fhold-claude-desktop-0.1.2610041911-alpha.4.mcpb';
-		const snapshot = {
-			connectionDetails: {
+		const snapshot = normalizedSnapshot({
+			connections: {
 				opencode: { url: 'http://127.0.0.1:3810', username: 'user' },
 				claude: {
 					url: 'http://127.0.0.1:3830/mcp',
@@ -1784,14 +2623,21 @@ describe('Admin renderer behavior', () => {
 				},
 				mcp: { url: 'http://127.0.0.1:3830/mcp' }
 			}
-		};
+		});
 		renderConnectionDetails(snapshot);
 		expect(control('claude-extension-help').textContent).toBe(note);
 		expect(control('claude-extension-download').getAttribute('href')).toBe(extension);
 		expect(control('claude-extension-download').hidden).toBe(false);
 		expect(html).toContain('data-copy-field="claude-extension-help"');
-		snapshot.connectionDetails.claude.extension = undefined;
-		renderConnectionDetails(snapshot);
+		renderConnectionDetails(
+			normalizedSnapshot({
+				connections: {
+					opencode: snapshot.apps.connections.value.opencode,
+					claude: { ...snapshot.apps.connections.value.claude, extension: undefined },
+					mcp: snapshot.apps.connections.value.mcp
+				}
+			})
+		);
 		expect(control('claude-extension-download').hidden).toBe(true);
 		expect(control('claude-extension-download').getAttribute('href')).toBe('about:blank');
 	});
@@ -1838,7 +2684,17 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('treats failed readiness and thrown errors as persistent accessible failures', async () => {
-		renderProviders({ providers: [{ id: 'example', name: 'Example', authenticated: true, models: [{ id: 'text-model', name: 'Text model' }], authMethods: [{ index: 0, type: 'api', label: 'API key' }] }] });
+		renderProviders({
+			providers: [
+				{
+					id: 'example',
+					name: 'Example',
+					authenticated: true,
+					models: [{ id: 'text-model', name: 'Text model' }],
+					authMethods: [{ index: 0, type: 'api', label: 'API key' }]
+				}
+			]
+		});
 		openProviderEditor('change', 'example');
 		control('provider-model').value = 'text-model';
 		const failed = await verifyProvider('Checking', async () => ({
@@ -1865,12 +2721,12 @@ describe('Admin renderer behavior', () => {
 		const ready = new Control();
 		selector('.setup-only', setup);
 		selector('.ready-only', ready);
-		renderPhase('not_installed');
+		renderPhase('not-installed');
 		expect(control('install-section').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
 		expect(control('skip-link').getAttribute('href')).toBe('#install-section');
-		state.currentSnapshot = { phase: 'setup_incomplete' };
-		renderPhase('setup_incomplete');
+		state.currentSnapshot = normalizedSnapshot({ lifecycle: 'setup-incomplete' });
+		renderPhase('setup-incomplete');
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('app-shell').hidden).toBe(false);
 		expect(setup.hidden).toBe(false);
@@ -1878,7 +2734,7 @@ describe('Admin renderer behavior', () => {
 		expect(state.currentView).toBe('provider');
 		showView('connections');
 		expect(state.currentView).toBe('provider');
-		state.currentSnapshot = { phase: 'ready' };
+		state.currentSnapshot = normalizedSnapshot();
 		renderPhase('ready');
 		expect(setup.hidden).toBe(true);
 		expect(ready.hidden).toBe(false);
@@ -1888,7 +2744,7 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('opens the requested app disclosure in Connections without separate client tabs', () => {
-		state.currentSnapshot = { phase: 'ready' };
+		state.currentSnapshot = normalizedSnapshot();
 		showConnectionApp('claude');
 		expect(state.currentView).toBe('connections');
 		expect(control('claude-connection').open).toBe(true);
@@ -1908,7 +2764,7 @@ describe('Admin renderer behavior', () => {
 		expect(drafts).toEqual({
 			'discord-connections-form': {
 				'discord-users': { value: 'reviewed-user' },
-				'discord': { checked: false }
+				discord: { checked: false }
 			}
 		});
 		control('discord-users').value = '';
@@ -1930,7 +2786,9 @@ describe('Admin renderer behavior', () => {
 				loads++;
 				return { key: 'private-test-key' };
 			},
-			copyText: async (value: string) => { copied = value; }
+			copyText: async (value: string) => {
+				copied = value;
+			}
 		};
 		await copyAccessKey('');
 		expect(loads).toBe(0);
@@ -2020,12 +2878,11 @@ describe('Admin renderer behavior', () => {
 		expect(html).not.toContain('id="agent-timezone"');
 		expect(html).not.toContain('id="automatic-memory"');
 		expect(html).not.toContain('id="preferences-form"');
-		expect(control('codex-remote-status').textContent).toContain('client connection not checked');
-		expect(control('claude-remote-status').textContent).toBe('Startup off');
+		expect(control('codex-remote-status').textContent).toContain('Unavailable for this instance');
+		expect(control('claude-remote-status').textContent).toBe('Unavailable for this instance');
 		expect(html).not.toContain('id="codex-remote"');
 		expect(html).not.toContain('id="claude-remote"');
 	});
-
 
 	it('preserves memory and timezone preferences when network settings change', async () => {
 		state.currentConfig = {
