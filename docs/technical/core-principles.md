@@ -181,7 +181,9 @@ default is `~/fhold/instances/default`. CLI home selection is an explicit
 `FH_HOME`, then cwd. Admin reopens the last-used compatible instance once per app
 launch, using its existing recent-folder list. First launch or an unavailable/
 incompatible previous home shows Welcome without seeding or adopting a folder.
-Manual switching keeps Welcome open across renderer reloads. `~/fhold`
+Browsing other instances preserves the selected instance and drafts; Back returns
+without switching. Only explicit Open replaces the target. Cancelling setup/import
+returns to Welcome without starting a stack. `~/fhold`
 may also hold backups/docs; it is not itself an instance or a new configuration layer.
 Home selection is canonical; default changes never relocate existing homes or
 rename their persisted project identity. Each home has stable independent project
@@ -197,12 +199,20 @@ service, automatic restart or second configuration store is introduced.
 Overview shows observed container image tags independently of saved intent and
 runtime health. The available image tag comes from the managing tool's bundled
 runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
-latest version. Update preserves explicit custom image pins and native confirmation.
+latest version. If Compose omits a reference, a bounded, image-only Docker inspect
+fills it from the actual container. Optional metadata failures never block management.
+Older SSH CLIs explain missing metadata and offer explicit host-tool repair, never
+invent versions from saved intent or the desktop release. Update preserves explicit
+custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh
 or update. Availability checks are preflight, not a reservation until Compose starts.
 Welcome starts with setup/open choices, or a compact named recent list, without
-a redundant welcome heading. New setup is an Install → Connect → Ready wizard;
+a redundant welcome heading. Open another instance leads directly to one location
+chooser for local/SSH/cloud discovery; local and remote folders use their native
+pickers. Host connections live in app Settings, separately from agent Apps. Returning
+from Settings refreshes discovery without selecting a target. Button-state updates
+never navigate between screens. New setup is an Install → Connect → Ready wizard;
 naming is requested once and optional folder/port settings share collapsed Advanced.
 The setup screen omits a redundant creation heading. Import has a separate Welcome
 entry point and a Choose folders → Review & import workflow, not an accordion

@@ -2,7 +2,7 @@
 
 ## Admin settings and app updates
 
-**Settings** on Welcome and **Admin settings** in the sidebar/error view open
+**Settings** on Welcome, the sidebar and the error view opens
 the app's own settings page, without changing the selected instance or its
 drafts. Host connections now live on this page, not in a modal or the instance
 picker. Add/Edit/Check/Remove and confirmed SSH CLI repair retain their native
@@ -41,8 +41,9 @@ the release. See [release gates](release.md).
 ## Overview image information
 
 Overview shows each existing container's image tag from Docker's Compose status,
-not the tag saved in instance settings. Stopped containers retain their reported
-image tag; missing metadata says Unavailable. Digest-only images show their digest,
+with one bounded image-only inspection when Compose omits it, not the tag saved
+in instance settings. Stopped containers retain their reported image tag; missing
+metadata says **Not reported**. Digest-only images show their digest,
 and an untagged reference is shown as-is without inventing a `latest` tag. The full
 reported reference is available on hover. Status and image version remain separate.
 
@@ -52,11 +53,36 @@ not the desktop app's version. This is not a live registry lookup; custom image
 pins remain preserved by the existing update operation. Matching tags do not
 disable Update or establish that mutable tags/content are current. Missing version
 metadata does not block management. No automatic container update or restart is added.
+An older SSH CLI that omits these fields gets an explanation and **Open host
+connections** action. Choose **Check → Install / update remote CLI**, explicitly
+confirm, then reopen the instance to use the new host process. This updates the
+host CLI only, not containers. Updating Admin alone cannot add metadata to an
+already-running remote CLI.
 
 Manually check mixed container versions, stopped/unhealthy services, missing Docker
 metadata, long custom tags, narrow widths and 200% text size. Confirm Update remains
 adjacent to its available tag, lifecycle actions are separate, refresh does not
 replace observed tags with saved intent, and cancelling Update performs no mutation.
+
+## Selecting, opening and creating instances
+
+Recent assistants open directly. **Open another instance…** in the sidebar goes
+straight to a location chooser, preserving the selected instance and unsaved forms;
+Back returns to it. First launch instead puts **New assistant** and **Import
+assistant…** first, with **Open an instance…** for existing installations. The
+chooser discovers the selected location automatically and offers the appropriate
+local/SSH folder picker. Creation/import are separate actions for that location;
+remote setup identifies its destination. Host connections live first in **Settings**,
+with a primary **Open instances** action and Edit/Check/Remove. Returning to the
+chooser refreshes the list but never opens an instance automatically.
+
+Verify first use, named local/SSH recents, local folder cancellation, unavailable
+homes, discovery failure/retry, host Edit/Check/repair/remove, and an in-flight
+status read before browsing. In particular, finishing discovery from an ACA view
+must not reopen it over the chooser. Back preserves target/drafts and focus; an
+explicit Open still uses native switch validation. Import review keeps its
+source/destination on Back and never applies without confirmation. Test desktop,
+narrow and 200% text layouts, keyboard order, visible errors and unchanged window size.
 
 ## Current wizard and Apps
 
@@ -67,7 +93,7 @@ Cancel action on the first step. After installation, Finish later leaves the
 agent running. Successful prerequisite checks
 are hidden; failures show guidance, official Docker/Compose links and retry.
 The sidebar combines the slash/picker and disclosures use filled headers and
-chevrons. Welcome offers a separate **Import an instance…** choice. Import has
+chevrons. Welcome offers a separate **Import assistant…** choice. Import has
 Choose folders → Review & import steps, independent export/destination controls
 and a separate review screen. Back exists only on review, keeps both choices
 and requires a new preview; Cancel exits. No installation control is moved,

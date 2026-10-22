@@ -95,15 +95,18 @@ export async function openAdminSettings(section) {
 	}
 }
 
-export function closeAdminSettings() {
+export function closeAdminSettings(options = {}) {
 	if (state.operationInFlight) return;
 	state.adminSettingsOpen = false;
 	delete document.body.dataset.adminSettings;
 	byId('admin-settings').hidden = true;
 	for (const id of appSurfaces) byId(id).inert = false;
 	if (previousSkip) byId('skip-link').setAttribute('href', previousSkip);
-	returnFocus?.focus();
-	if (returnScroll) window.scrollTo?.(returnScroll);
+	if (options.restore !== false) {
+		returnFocus?.focus();
+		if (returnScroll) window.scrollTo?.(returnScroll);
+		byId('open-hosting').dispatchEvent(new Event('hosting-refresh'));
+	}
 }
 
 async function updateOperation(action) {

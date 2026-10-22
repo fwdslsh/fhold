@@ -1,7 +1,7 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
 import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
-import { targetKey, targetLocation } from './hosting.js';
+import { showHostingChooser, targetKey, targetLocation } from './hosting.js';
 import { chooseManagedDirectory } from './directories.js';
 import { resetProviderState } from './providers.js';
 
@@ -48,13 +48,22 @@ export function renderInstancePicker(snapshot) {
 	byId('instance-picker').disabled = state.operationInFlight;
 }
 
-function confirmInstanceSwitch() {
+export function confirmInstanceSwitch() {
 	return (
 		!(state.dirtyForms.size || state.activeOAuth) ||
 		window.confirm(
 			'Switch instances? Unsaved changes and unfinished sign-in steps will be discarded. Running stacks will not be stopped.'
 		)
 	);
+}
+
+function showInstanceError(error) {
+	notice(message(error), 'error', { persist: true });
+	if (!byId('instance-welcome').hidden) {
+		setText('instance-preference-warning', message(error));
+		byId('instance-preference-warning').hidden = false;
+		byId('instance-preference-warning').setAttribute('role', 'alert');
+	}
 }
 
 function suggestInstanceHome() {
@@ -69,6 +78,10 @@ function suggestInstanceHome() {
 
 export function renderInstallationReadiness(readiness) {
 	state.installationReadiness = readiness;
+	for (const location of all('[data-setup-location]')) {
+		location.hidden = !state.installConnection || state.installConnection.id === 'local';
+		location.textContent = `On ${state.installConnection?.label || 'this computer'}`;
+	}
 	const ready = readiness?.ok === true;
 	const failed = readiness?.ok === false;
 	for (const requirements of all('[data-install-requirements]')) {
@@ -164,17 +177,19 @@ export function renderWelcome(welcome) {
 		targets.push(welcome.defaultInstance);
 	const existingSection = byId('existing-instance-section');
 	const begin = byId('begin-new-instance');
-	const importChoice = byId('begin-instance-import');
+	const createActions = byId('instance-create-actions');
+	const open = byId('connect-host');
 	const hasAvailable = targets.some((target) => target.available);
 	// DOM and visual order agree: first-time setup first, saved instances first
 	// when there is an actual compatible home to open. No automatic selection.
 	byId('instance-options').append(
 		...(hasAvailable
-			? [existingSection, begin, importChoice]
-			: [begin, existingSection, importChoice])
+			? [existingSection, open, createActions]
+			: [createActions, open, existingSection])
 	);
 	begin.className = hasAvailable ? 'secondary' : 'primary';
 	byId('instance-options').hidden = false;
+	byId('open-hosting').hidden = true;
 	const recent = byId('recent-instances');
 	recent.replaceChildren();
 	byId('recent-instances-section').hidden = !targets.length;
@@ -229,7 +244,7 @@ export async function openInstance(target) {
 		// from the previously managed instance survive a switch.
 		window.location.reload();
 	} catch (error) {
-		notice(message(error), 'error', { persist: true });
+		showInstanceError(error);
 	} finally {
 		setBusy(false);
 	}
@@ -267,7 +282,10 @@ export function bindInstanceEvents() {
 					? targetKey({ kind: 'hosted', ref: current.target })
 					: current?.homeDir || '';
 		byId('instance-picker').value = selected;
-		if (requested === 'open-another') await showInstances();
+		if (requested === 'open-another')
+			await showHostingChooser(
+				current?.target?.connectionId || current?.hosting?.ref?.connectionId
+			);
 		else {
 			const target = state.recentInstances.find((item) => targetKey(item) === requested);
 			if (target && targetKey(target) !== selected) await openInstance(target);
@@ -286,7 +304,7 @@ export function bindInstanceEvents() {
 		try {
 			directory = await state.api.chooseDirectory({ purpose: 'instance' });
 		} catch (error) {
-			notice(message(error), 'error', { persist: true });
+			showInstanceError(error);
 		} finally {
 			setBusy(false);
 		}

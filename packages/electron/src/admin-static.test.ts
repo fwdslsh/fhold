@@ -30,7 +30,7 @@ import { resetOAuthAttempt, renderProviders, loadProviders, openProviderEditor, 
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
 import { bindSnapshotEvents, render, refresh, refreshVisibleStatus } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
-import { renderHosted, targetKey, bindHostingEvents } from '../admin/hosting.js';
+import { renderHosted, targetKey, bindHostingEvents, showHostingChooser } from '../admin/hosting.js';
 import { capabilities } from '@fhold/lib';
 import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
 import {
@@ -96,6 +96,11 @@ class Control {
 	addEventListener(name: string, listener: (event: unknown) => unknown) {
 		this.listeners.set(name, listener);
 	}
+	dispatchEvent(event: Event) {
+		this.listeners.get(event.type)?.(event);
+		return true;
+	}
+	classList = { contains: (name: string) => this.className.split(' ').includes(name) };
 	append(...children: Control[]) {
 		for (const child of children) {
 			this.children = this.children.filter((item) => item !== child);
@@ -338,7 +343,7 @@ describe('Admin static security boundary', () => {
 		expect(control('instance-welcome').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
 		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual(['april', 'may']);
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'begin-new-instance', 'begin-instance-import']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'connect-host', 'instance-create-actions']);
 		expect(control('begin-new-instance').className).toBe('secondary');
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('skip-link').getAttribute('href')).toBe('#instance-welcome');
@@ -347,7 +352,7 @@ describe('Admin static security boundary', () => {
 	it('offers setup, existing instance and import, not a folder form, and cancelling the picker does nothing', async () => {
 		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
 		expect(control('begin-new-instance').className).toBe('primary');
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section', 'begin-instance-import']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['instance-create-actions', 'connect-host', 'existing-instance-section']);
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('recent-instances-section').hidden).toBe(true);
 		let opened = false;
@@ -394,7 +399,7 @@ describe('Admin static security boundary', () => {
 		expect(state.operationInFlight).toBe(false);
 		// Reordering on another render must move DOM nodes, not duplicate them.
 		renderWelcome({ defaultInstance: { ...target, available: false }, recentInstances: [] });
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['begin-new-instance', 'existing-instance-section', 'begin-instance-import']);
+		expect(control('instance-options').children.map((row) => row.id)).toEqual(['instance-create-actions', 'connect-host', 'existing-instance-section']);
 	});
 
 	it('locks concurrent existing-folder dialogs and recovers from cancellation or error', async () => {
@@ -1131,7 +1136,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(reloads).toBe(1);
 		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
 	});
-	it('returns to Welcome for another instance and preserves selection when switching is cancelled or fails', async () => {
+	it('browses other instances without discarding selection or drafts, and only confirms an explicit switch', async () => {
 		state.currentSnapshot = emptySnapshot();
 		state.recentInstances = [{ kind: 'local', homeDir: '/missing', name: 'missing' }];
 		let closed = false;
@@ -1139,7 +1144,10 @@ describe('Admin instance picker and automatic status', () => {
 		window.location = { reload: () => { reloads++; } } as unknown as Location;
 		state.api = {
 			closeInstance: async () => { closed = true; },
-			openInstance: async () => { throw new Error('Recent instance is unavailable'); }
+			openInstance: async () => { throw new Error('Recent instance is unavailable'); },
+			hostingConnections: async () => [{kind:'local-docker',id:'local',label:'This computer'}],
+			hostingInstances: async () => [],
+			hostingFeatures: async () => ({installation:true})
 		};
 		bindInstanceEvents();
 		const choose = async (value: string) => {
@@ -1151,14 +1159,16 @@ describe('Admin instance picker and automatic status', () => {
 		await choose('open-another');
 		expect(closed).toBe(false);
 		expect(reloads).toBe(0);
+		expect(control('open-hosting').hidden).toBe(false);
+		expect(state.dirtyForms.has('preferences-form')).toBe(true);
 		expect(control('instance-picker').value).toBe(state.currentSnapshot.homeDir);
 		state.dirtyForms.clear();
 		await choose('/missing');
 		expect(control('notice-message').textContent).toBe('Recent instance is unavailable');
 		expect(reloads).toBe(0);
 		await choose('open-another');
-		expect(closed).toBe(true);
-		expect(reloads).toBe(1);
+		expect(closed).toBe(false);
+		expect(reloads).toBe(0);
 	});
 	it('waits for an automatic status read before switching and disables the picker while busy', async () => {
 		state.currentSnapshot = emptySnapshot();
@@ -1174,6 +1184,34 @@ describe('Admin instance picker and automatic status', () => {
 		await switching;
 		expect(closed).toBe(true);
 		expect(control('instance-picker').disabled).toBe(false);
+	});
+	it('waits for pending status before browsing and returns without losing the target or drafts', async () => {
+		const current = {phase:'remote',hosting:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/agent'}}};
+		state.currentSnapshot = current;
+		state.dirtyForms.add('preferences-form');
+		control('app-shell').hidden = false;
+		control('instance-preference-warning').hidden = false;
+		let finish!: () => void;
+		state.snapshotPromise = new Promise<void>(resolve => {finish=resolve;});
+		state.api = {
+			hostingConnections: async()=>[{kind:'local-docker',id:'local',label:'This computer'}],
+			hostingInstances: async()=>[], hostingFeatures: async()=>({installation:true})
+		};
+		bindHostingEvents();
+		const browsing = showHostingChooser('local');
+		expect(control('app-shell').hidden).toBe(false);
+		expect(control('open-hosting').hidden).toBe(true);
+		finish();
+		await browsing;
+		expect(control('app-shell').hidden).toBe(true);
+		expect(control('open-hosting').hidden).toBe(false);
+		expect(control('instance-preference-warning').hidden).toBe(true);
+		expect(state.currentSnapshot).toBe(current);
+		expect(state.dirtyForms.has('preferences-form')).toBe(true);
+		await control('hosting-back').listeners.get('click')?.({});
+		expect(control('app-shell').hidden).toBe(false);
+		expect(control('instance-picker').focused).toBe(true);
+		expect(state.currentSnapshot).toBe(current);
 	});
 	function runtimeSnapshot() {
 		return {
@@ -1195,9 +1233,18 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('update-image-tag').textContent).toBe('available-release');
 		expect(control('update-stack').disabled).toBe(false);
 		renderServices({ ...snapshot, services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
-		expect(imageInRow(0)).toBe('Unavailable');
+		expect(imageInRow(0)).toBe('Not reported');
 		renderServices({ ...snapshot, updateImageTag: undefined });
-		expect(control('update-image-tag').textContent).toBe('Unavailable');
+		expect(control('update-image-tag').textContent).toBe('Not reported');
+		expect(control('runtime-version-settings').hidden).toBe(true);
+		renderServices({ ...snapshot, updateImageTag: undefined, target: {kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'} });
+		expect(control('runtime-version-help').textContent).toContain('older fhold CLI');
+		expect(control('runtime-version-help').textContent).toContain('Your agent keeps running');
+		expect(control('runtime-version-settings').hidden).toBe(false);
+		expect(control('update-stack').disabled).toBe(false);
+		renderServices(snapshot);
+		expect(control('runtime-version-settings').hidden).toBe(true);
+		expect(control('runtime-version-help').textContent).not.toContain('older');
 	});
 	it('formats tags, private registry ports and digests without inventing a latest tag', () => {
 		expect(serviceImageDetails('registry.test:5000/team/assistant:beta')).toEqual({ label: 'Image tag', value: 'beta' });
@@ -1206,7 +1253,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(serviceImageDetails(`team/assistant@${digest}`)).toEqual({ label: 'Image digest', value: digest });
 		expect(serviceImageDetails(`team/assistant:beta@${digest}`)).toEqual({ label: 'Image tag', value: 'beta' });
 		expect(serviceImageDetails(digest)).toEqual({ label: 'Image digest', value: digest });
-		expect(serviceImageDetails(undefined)).toEqual({ label: 'Image tag', value: 'Unavailable' });
+		expect(serviceImageDetails(undefined)).toEqual({ label: 'Image tag', value: 'Not reported' });
 	});
 	it('keeps Update behind confirmation when an available image tag is shown', async () => {
 		let updates = 0;
@@ -1650,6 +1697,7 @@ describe('Admin renderer behavior', () => {
 	});
 
 	it('locks duplicate operations and restores controls when the request completes', async () => {
+		control('instance-welcome').hidden = false;
 		const enabled = new Control();
 		const previouslyDisabled = new Control();
 		previouslyDisabled.disabled = true;

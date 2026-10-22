@@ -309,6 +309,30 @@ export function composePs(options: ComposeOptions): Promise<DockerResult> {
 	});
 }
 
+/** Compose may omit Image; inspect missing references, never unapplied intent.
+ * A failed inspection must not turn a successful status read into a failure.
+ */
+export async function completeContainerImages(rows: ComposePsRow[]): Promise<ComposePsRow[]> {
+	const missing = rows.filter((row) => !row.image?.trim() && row.id);
+	if (!missing.length) return rows;
+	const result = await runDocker(
+		['inspect', '--format', '{"id":{{json .Id}},"image":{{json .Config.Image}}}', ...missing.map((row) => row.id)],
+		{ timeoutMs: 5_000 }
+	);
+	const images = new Map<string, string>();
+	// Docker may emit valid records before a concurrent removal causes failure.
+	for (const line of result.stdout.split(/\r?\n/)) {
+		try {
+			const value: unknown = JSON.parse(line);
+			if (!value || typeof value !== 'object' || !('id' in value) || !('image' in value) ||
+				typeof value.id !== 'string' || typeof value.image !== 'string' || !value.image.trim()) continue;
+			for (const row of missing)
+				if (value.id.startsWith(row.id)) images.set(row.id, value.image);
+		} catch { /* Optional metadata never blocks management. */ }
+	}
+	return rows.map((row) => images.has(row.id) ? { ...row, image: images.get(row.id) } : row);
+}
+
 /** Optional-feature diagnostics never turn a successful status read into a failure. */
 export async function containerWarnings(id: string): Promise<string[]> {
 	const result = await runDocker(['inspect', '--format', '{{json .State.Health.Log}}', id], {

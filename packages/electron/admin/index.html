@@ -13,37 +13,18 @@
   <body>
     <main id="admin-settings" class="admin-settings-shell" tabindex="-1" hidden aria-labelledby="admin-settings-title">
       <button id="admin-settings-back" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button>
-      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Admin settings</h1><p class="page-description">Preferences for this app. Your agents’ settings stay with each instance.</p></header>
+      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Settings</h1><p class="page-description">Host connections and preferences for Admin.</p></header>
       <div class="admin-settings-sections">
-        <section class="panel form-stack" aria-labelledby="admin-updates-title">
-          <div class="section-heading"><h2 id="admin-updates-title">App updates</h2><span id="admin-app-version" class="help-text"></span></div>
-          <form id="admin-updates-form" class="form-stack">
-            <label class="field" for="admin-update-channel"><span>Update channel</span><select id="admin-update-channel" aria-describedby="admin-update-channel-help"><option value="stable">Stable — recommended</option><option value="beta">Beta — early testing</option><option value="alpha">Alpha — experimental builds</option></select></label>
-            <p id="admin-update-channel-help" class="help-text">Stable releases only. Switching channels never downgrades Admin.</p>
-            <label class="check-row"><input id="admin-update-automatic" type="checkbox" checked /><span>Check for and download updates automatically</span></label>
-            <p class="help-text">Downloaded updates install when you close Admin, or you can restart it sooner. Your agents keep running; containers and remote tools are not updated.</p>
-            <div class="button-row compact"><button id="admin-updates-save" class="secondary" type="submit">Save preferences</button></div>
-          </form>
-          <p id="admin-update-status" class="help-text" role="status" aria-live="polite">Loading update preferences…</p>
-          <progress id="admin-update-progress" max="100" aria-label="Admin update download" hidden></progress>
-          <p id="admin-settings-message" class="help-text" role="status" aria-live="polite" hidden></p>
-          <div class="button-row compact">
-            <button id="admin-update-check" class="secondary" type="button">Check now</button>
-            <button id="admin-update-download" class="secondary" type="button" hidden>Download update</button>
-            <button id="admin-update-install" class="primary" type="button" hidden>Restart Admin to update</button>
-            <a href="https://github.com/fwdslsh/fhold/releases" target="_blank" rel="noreferrer">Release notes &amp; downloads</a>
-          </div>
-        </section>
     <section id="hosting-manager" class="panel" aria-labelledby="hosting-manager-title">
       <header class="hosting-manager-header"><h2 id="hosting-manager-title">Host connections</h2></header>
-      <p class="help-text">Choose where your agents run. Sign-in stays with your computer’s SSH or Azure tools.</p>
+      <p class="help-text">Connect to an existing Docker host or Azure deployment. This computer is always available.</p>
       <div id="hosting-manager-list"></div>
       <p id="hosting-manager-status" class="help-text" role="status" aria-live="polite" hidden></p>
       <div id="hosting-check-details" class="form-stack" aria-live="polite"></div>
       <button id="hosting-new" class="secondary" type="button">Add connection</button>
       <form id="hosting-add-form" class="form-stack hosting-editor" hidden>
         <h3 id="hosting-editor-title">Add connection</h3>
-        <label class="field" for="hosting-label"><span>Name</span><input id="hosting-label" required placeholder="Krang" autocomplete="off" /></label>
+        <label class="field" for="hosting-label"><span>Connection name</span><input id="hosting-label" required placeholder="Home server" autocomplete="off" /></label>
         <label class="field" for="hosting-provider"><span>Hosting</span><select id="hosting-provider"><option value="ssh-docker">Docker over SSH</option><option value="azure-container-apps">Azure Container Apps (experimental)</option></select></label>
         <div id="hosting-ssh-fields" class="form-stack">
           <label class="field" for="hosting-host"><span>SSH host or config alias</span><input id="hosting-host" placeholder="user@server" autocomplete="off" /></label>
@@ -66,6 +47,25 @@
         <div class="button-row"><button id="hosting-save" class="primary" type="submit">Save connection</button><button id="hosting-edit-cancel" class="secondary" type="button">Cancel</button></div>
       </form>
     </section>
+        <section class="panel form-stack" aria-labelledby="admin-updates-title">
+          <div class="section-heading"><h2 id="admin-updates-title">App updates</h2><span id="admin-app-version" class="help-text"></span></div>
+          <form id="admin-updates-form" class="form-stack">
+            <label class="field" for="admin-update-channel"><span>Update channel</span><select id="admin-update-channel" aria-describedby="admin-update-channel-help"><option value="stable">Stable — recommended</option><option value="beta">Beta — early testing</option><option value="alpha">Alpha — experimental builds</option></select></label>
+            <p id="admin-update-channel-help" class="help-text">Stable releases only. Switching channels never downgrades Admin.</p>
+            <label class="check-row"><input id="admin-update-automatic" type="checkbox" checked /><span>Check for and download updates automatically</span></label>
+            <p class="help-text">Downloaded updates install when you close Admin, or you can restart it sooner. Your agents keep running; containers and remote tools are not updated.</p>
+            <div class="button-row compact"><button id="admin-updates-save" class="secondary" type="submit">Save preferences</button></div>
+          </form>
+          <p id="admin-update-status" class="help-text" role="status" aria-live="polite">Loading update preferences…</p>
+          <progress id="admin-update-progress" max="100" aria-label="Admin update download" hidden></progress>
+          <p id="admin-settings-message" class="help-text" role="status" aria-live="polite" hidden></p>
+          <div class="button-row compact">
+            <button id="admin-update-check" class="secondary" type="button">Check now</button>
+            <button id="admin-update-download" class="secondary" type="button" hidden>Download update</button>
+            <button id="admin-update-install" class="primary" type="button" hidden>Restart Admin to update</button>
+            <a href="https://github.com/fwdslsh/fhold/releases" target="_blank" rel="noreferrer">Release notes &amp; downloads</a>
+          </div>
+        </section>
       </div>
     </main>
 	    <a id="skip-link" class="skip-link" href="#main-content">Skip to content</a>
@@ -91,29 +91,31 @@
         </header>
         <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
         <div id="instance-options" class="instance-options">
-          <button id="begin-new-instance" class="primary" type="button">Set up a new agent</button>
           <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
             <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
               <h2 id="recent-instances-title">Recent instances</h2>
               <div id="recent-instances"></div>
             </section>
-            <button id="choose-instance" class="secondary instance-picker" type="button">Open existing instance…</button>
           </section>
-          <button id="begin-instance-import" class="text-button instance-import-choice" type="button">Import an instance…</button>
-		  <button id="connect-host" class="text-button" type="button">Connect to another computer or cloud…</button>
+          <button id="connect-host" class="secondary instance-picker" type="button">Open an instance…<span aria-hidden="true">→</span></button>
+          <div id="instance-create-actions" class="instance-create-actions">
+            <button id="begin-new-instance" class="primary" type="button">New assistant</button>
+            <button id="begin-instance-import" class="secondary" type="button">Import assistant…</button>
+          </div>
         </div>
 		<section id="open-hosting" class="form-stack hosting-chooser" hidden>
 		  <button id="hosting-back" class="text-button" type="button">← Back</button>
-		  <h2>Your instances</h2>
+		  <h2 id="hosting-chooser-title" tabindex="-1">Open an instance</h2>
 		  <div class="hosting-picker-row">
-            <label class="field" for="hosting-connection"><span>Computer or cloud</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
-            <button id="hosting-manage" class="secondary" type="button">Admin settings</button>
+            <label class="field" for="hosting-connection"><span>Location</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
+            <button id="hosting-manage" class="text-button" type="button">Manage connections</button>
 		  </div>
 		  <button id="hosting-discover" class="text-button" type="button" hidden>Try again</button>
             <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
-		  <div class="button-row"><button id="hosting-install" class="secondary" type="button" hidden>New instance</button><button id="hosting-import" class="text-button" type="button" hidden>Import instance…</button></div>
             <div id="hosting-instance-list" aria-live="polite"></div>
-		  <button id="hosting-open-folder" class="text-button" type="button" hidden>Open a folder…</button>
+            <button id="choose-instance" class="text-button hosting-folder-choice" type="button" hidden>Choose an instance folder…</button>
+		  <button id="hosting-open-folder" class="text-button hosting-folder-choice" type="button" hidden>Choose an instance folder…</button>
+		  <div class="hosting-create-actions"><button id="hosting-install" class="secondary" type="button" hidden>New assistant</button><button id="hosting-import" class="text-button" type="button" hidden>Import assistant…</button></div>
 		</section>
       </section>
     </main>
@@ -126,7 +128,7 @@
 	        <dl class="detail-list compact"><div><dt>Selected home</dt><dd id="error-home">Checking…</dd></div></dl>
 	        <button id="retry-snapshot" class="primary" type="button">Try again</button>
             <button class="secondary" type="button" data-instance-switch>Choose another instance</button>
-			<button class="text-button" type="button" data-admin-settings>Admin settings</button>
+			<button class="text-button" type="button" data-admin-settings>Settings</button>
 	      </section>
 	    </main>
 
@@ -141,6 +143,7 @@
           <li><span>3</span><bdi id="install-third-step">Ready</bdi></li>
         </ol>
         <h1 id="welcome-title" class="visually-hidden">Set up fhold</h1>
+        <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div id="install-requirements" class="install-requirements" data-install-requirements role="status" aria-live="polite">
           <strong data-requirement-title hidden>Docker needs attention</strong>
@@ -156,7 +159,7 @@
         </div>
         <form id="install-form">
           <label id="install-name-field" class="field" for="install-instance-name">
-            <span>Agent name</span>
+            <span>Assistant name</span>
             <input id="install-instance-name" type="text" value="personal-agent" required pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?" maxlength="63" title="Use 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number." autocomplete="off" spellcheck="false" aria-describedby="install-instance-name-help" />
           </label>
           <p id="install-instance-name-help" class="help-text">Lowercase letters, numbers and hyphens.</p>
@@ -203,6 +206,7 @@
           <li><span>2</span> Review &amp; import</li>
         </ol>
         <h1 id="instance-import-title" class="visually-hidden">Import an instance</h1>
+        <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="instance-import-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div class="install-requirements" data-install-requirements role="status" aria-live="polite">
           <strong data-requirement-title hidden>Docker needs attention</strong>
@@ -217,7 +221,7 @@
           </div>
         </div>
         <div id="instance-import-choices">
-          <p class="help-text">Continue an exported instance, including its conversations, sign-ins and settings.</p>
+          <p class="help-text">Continue an assistant from an entire-instance export, including conversations, sign-ins and settings.</p>
           <form id="instance-restore-form" class="form-stack">
             <div class="field">
               <label for="instance-restore-source">Export folder</label>
@@ -297,7 +301,7 @@
             </div>
           </section>
         </div>
-        <button class="nav-item admin-settings-link" type="button" data-admin-settings>Admin settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
+        <button class="nav-item admin-settings-link" type="button" data-admin-settings>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
       </aside>
 
       <div class="workspace">
@@ -397,10 +401,11 @@
               </div>
               <div class="runtime-update">
                 <div class="runtime-update-action">
-                  <span>Available image tag <code id="update-image-tag">Unavailable</code></span>
+                  <span>Available image tag <code id="update-image-tag">Checking…</code></span>
                   <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
-                <p class="help-text">Included with this fhold version. Custom image settings are kept.</p>
+                <p id="runtime-version-help" class="help-text">Included with this fhold version. Custom image settings are kept.</p>
+                <button id="runtime-version-settings" class="text-button" type="button" data-admin-settings hidden>Open host connections</button>
               </div>
               <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
               <div id="services" class="services" aria-live="polite"></div>

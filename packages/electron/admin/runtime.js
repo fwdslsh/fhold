@@ -6,7 +6,7 @@ import { updateRecoveryFields } from './recovery.js';
 import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
 import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
-import { renderHosted } from './hosting.js';
+import { renderHostedControls } from './hosting.js';
 
 export function renderPhase(phase) {
 	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
@@ -32,7 +32,7 @@ export function renderPhase(phase) {
 
 export function renderRuntimeControls(snapshot) {
 	if (snapshot.phase === 'remote') {
-		renderHosted(snapshot);
+		renderHostedControls(snapshot.hosting);
 		return;
 	}
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
@@ -48,7 +48,14 @@ export function renderRuntimeControls(snapshot) {
 }
 
 export function renderServices(snapshot) {
-	setText('update-image-tag', snapshot.updateImageTag || 'Unavailable');
+	const missingHostVersion = !snapshot.updateImageTag && snapshot.target?.kind === 'ssh-docker';
+	setText('update-image-tag', snapshot.updateImageTag || 'Not reported');
+	setText('runtime-version-help', missingHostVersion
+		? 'This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.'
+		: snapshot.updateImageTag
+			? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
+			: 'The managing tool did not report an update version. Update the fhold tools to restore version information. Your agent keeps running.');
+	byId('runtime-version-settings').hidden = !missingHostVersion;
 	renderConnectionStatus(snapshot);
 	updateGuardianGuide();
 	const unavailable = !!snapshot.dockerError;
@@ -83,7 +90,9 @@ export function renderServices(snapshot) {
 			name.textContent = friendlyServiceName(service.name);
 			const image = document.createElement('small');
 			image.className = 'service-image';
-			image.title = service.image || 'Docker did not report an image reference.';
+			image.title = service.image || (missingHostVersion
+				? 'Update the remote fhold CLI to report this container’s image reference.'
+				: 'Docker did not report an image reference.');
 			const details = serviceImageDetails(service.image);
 			const label = document.createElement('span');
 			label.textContent = `${details.label} `;

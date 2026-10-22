@@ -98,7 +98,7 @@ instance/recovery locations and a native local picker for export/import archives
 
 Install the native Azure CLI on this computer and explicitly sign in with
 `az login` or `fhold hosting login azure-container-apps`. In Admin, choose
-**Admin settings → Host connections → Add connection → Azure Container Apps**. **Sign in
+**Settings → Host connections → Add connection → Azure Container Apps**. **Sign in
 to Azure** opens the native browser flow; **Load subscriptions** uses an existing
 login. Choose a subscription and resource group, then save the connection.
 Add a scoped connection; fhold never changes your global Azure account
@@ -183,17 +183,24 @@ live read-only checks from adapter tests and unperformed cloud mutations.
 
 ## Admin and shared preferences
 
-Choose **Open another instance… → Connect to another computer or cloud…**, then
-select a connection. Instances are discovered automatically. **Admin settings →
+Choose **Open another instance…**, then select a **Location**. On first launch,
+use **Open an instance…**. Instances are discovered automatically; the folder
+action opens an unlisted local/SSH installation. Browsing keeps the selected
+instance and unsaved drafts intact; Back returns without a switch. **Settings →
 Host connections** offers the same SSH/ACA metadata as the CLI. Settings is
 available from Welcome and the management sidebar, without selecting an instance.
 The instance picker contains only recent instances and Open another instance. The page
-offers Add, Edit, Check and Remove; SSH checks offer an explicitly confirmed
+offers Add, Edit, Check and Remove; **Open instances** browses that host. SSH checks offer an explicitly confirmed
 **Install / update remote CLI** action. Errors remain visible in the hosted-agent
 picker, not hidden in the management sidebar. Display names, roots and SSH ports
 can be edited. Changing a host or Azure scope requires confirmation, clears only
 that connection's recent selections and closes its selected view. Removing a
 connection forgets metadata only: no instance is stopped or deleted.
+**New assistant** and **Import assistant…** start separate workflows on the
+selected location; neither action silently opens or starts an existing instance.
+Older host CLIs may not report image versions. Overview explains this and links
+to host connections; explicitly update the remote CLI, then reopen the instance.
+It reports the host CLI's bundled update image, never the desktop app's version.
 
 The same operations are available in the CLI:
 

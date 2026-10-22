@@ -74,6 +74,7 @@ summary {
 #view-title:focus,
 #error-state:focus,
 #instance-welcome:focus,
+#hosting-chooser-title:focus,
 #instance-import-section:focus,
 #instance-restore-review-title:focus,
 #install-section:focus {
@@ -1974,7 +1975,7 @@ body[data-busy="true"] #main-content {
 #instance-welcome .instance-options {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
-	gap: 12px;
+	gap: 16px;
 	margin-top: 28px;
 }
 #instance-welcome .instance-options > section {
@@ -2018,6 +2019,7 @@ body[data-busy="true"] #main-content {
 	width: 100%;
 	min-width: 0;
 	gap: 4px;
+	grid-template-columns: minmax(0, 1fr) auto;
 	padding: 12px 14px;
 	text-align: start;
 	background: var(--surface-muted);
@@ -2031,20 +2033,29 @@ body[data-busy="true"] #main-content {
 	color: var(--ink-soft);
 	font-size: 0.75rem;
 	font-weight: 400;
+	align-self: center;
+}
+#instance-welcome .instance-choice .instance-path {
+	grid-column: 1 / -1;
+}
+#instance-welcome #connect-host {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	text-align: start;
+}
+.instance-create-actions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+.instance-existing:not(:has(.instance-recents:not([hidden]))) {
+	display: none;
 }
 #instance-welcome .instance-picker {
 	margin-top: 0;
 	font-size: 0.875rem;
 	font-weight: 500;
-}
-#instance-welcome .instance-recents:not([hidden]) + .instance-picker {
-	margin-top: 12px;
-}
-#instance-welcome .instance-import-choice {
-	justify-self: center;
-	font-size: 0.875rem;
-	font-weight: 500;
-	color: var(--ink-soft);
 }
 @media (max-width: 760px) {
 	#instance-welcome {
@@ -2266,17 +2277,36 @@ body[data-admin-settings="true"] > :is(#loading-state, #instance-welcome, #error
 }
 .hosting-manager-header h2 { margin: 0; }
 .hosting-connection-row { padding: 16px 0; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.hosting-connection-description { min-width: 0; flex: 1 1 180px; }
+.hosting-connection-row .button-row { gap: 4px; }
+.hosting-connection-row .text-button { padding-inline: 10px; font-size: .875rem; color: var(--ink-soft); }
 .hosting-connection-row .help-text { margin: 4px 0 0; overflow-wrap: anywhere; }
 .hosting-editor { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
 #hosting-new { margin-top: 20px; }
 #hosting-check-details { margin: 16px 0; }
+#hosting-check-details:empty { display: none; }
 #hosting-check-details p { margin: 0; }
 .hosting-chooser h2 { margin: 0 0 8px; }
+.hosting-chooser { margin-top: 24px; }
+.hosting-chooser > #hosting-back { align-self: start; justify-self: start; padding-inline: 0; }
 .hosting-picker-row { display: flex; gap: 12px; align-items: end; }
 .hosting-picker-row .field, .hosting-picker-row input { flex: 1; min-width: 0; }
 .hosting-picker-row .field { margin: 0; }
+.hosting-picker-row > .text-button { font-size: .8125rem; padding-inline: 0; color: var(--ink-soft); }
 #hosting-instance-list { display: grid; gap: 8px; }
 #hosting-instance-list .instance-choice { width: 100%; }
+.hosting-folder-choice { justify-self: start; padding-inline: 0; color: var(--ink-soft); font-size: .875rem; }
+.hosting-create-actions { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
+.hosting-create-actions:not(:has(button:not([hidden]))) { display: none; }
+.setup-location { margin: -12px 0 24px; }
 .directory-list { display: grid; gap: 4px; max-height: 320px; overflow: auto; margin: 12px 0 20px; }
 .directory-choice { text-align: left; padding: 10px 12px; background: var(--surface-raised); border: 1px solid var(--border-soft); border-radius: 6px; color: var(--ink); }
-#instance-welcome:has(#open-hosting:not([hidden])) { max-width: 660px; width: min(100%, 660px); }
+#instance-welcome:has(#open-hosting:not([hidden])) { width: min(660px, calc(100% - 48px)); }
+@media (max-width: 520px) {
+	#instance-welcome:has(#open-hosting:not([hidden])) { width: calc(100% - 24px); }
+	.hosting-picker-row { flex-wrap: wrap; gap: 4px 12px; }
+	.hosting-picker-row .field { flex-basis: 100%; }
+	.hosting-connection-row { align-items: start; gap: 8px; }
+	.hosting-connection-row .button-row { flex-basis: 100%; flex-wrap: wrap; }
+	.instance-create-actions { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}

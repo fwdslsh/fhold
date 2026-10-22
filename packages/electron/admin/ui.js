@@ -68,7 +68,7 @@ export function setBusy(value) {
 		? byId('install-section')
 		: !byId('instance-import-section').hidden
 			? byId('instance-import-section')
-			: !state.currentSnapshot
+			: !byId('instance-welcome').hidden
 				? byId('instance-welcome')
 				: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
