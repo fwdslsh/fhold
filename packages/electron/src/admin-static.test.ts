@@ -1117,6 +1117,7 @@ describe('Admin instance picker and automatic status', () => {
 		for (const removed of ['sidebar-footer', 'stack-status', 'id="refresh"', 'selected-instance-path', 'sidebar-label'])
 			expect(sidebar).not.toContain(removed);
 		expect(sidebar).not.toContain('brand-subtitle');
+		expect(sidebar).not.toContain('brand-mark');
 		expect(html).not.toContain('Setup & settings');
 		expect(html).toContain('<title>fhold Admin</title>');
 		expect(html).toContain('id="overview-home" class="instance-path"');

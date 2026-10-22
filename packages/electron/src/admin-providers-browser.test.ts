@@ -264,6 +264,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#update-stack').closest('.runtime-update-action').contains(document.querySelector('#update-image-tag'))")).toBe(true);
 		expect(await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")).toBeNull();
 		await capture('overview-desktop.png');
+		expect(await evaluate("document.querySelector('.sidebar .brand-mark')")).toBeNull();
+		expect(await evaluate("Math.abs(document.querySelector('#instance-picker').getBoundingClientRect().width-document.querySelector('.sidebar-instance').getBoundingClientRect().width)<1")).toBe(true);
 		await evaluate(`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,updateImageTag:undefined,target:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'},services:[{name:'assistant',state:'running',health:'healthy'}]});})()`);
 		expect(await evaluate("document.querySelector('#runtime-version-settings').hidden")).toBe(false);
 		expect(await evaluate("document.querySelector('#runtime-version-help').textContent")).toContain('older fhold CLI');

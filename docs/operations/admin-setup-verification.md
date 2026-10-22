@@ -92,7 +92,7 @@ collapsed Advanced for folder/ports, Install below Advanced, and a single
 Cancel action on the first step. After installation, Finish later leaves the
 agent running. Successful prerequisite checks
 are hidden; failures show guidance, official Docker/Compose links and retry.
-The sidebar combines the slash/picker and disclosures use filled headers and
+The sidebar uses a full-width picker without a brand mark; disclosures use filled headers and
 chevrons. Welcome offers a separate **Import assistant…** choice. Import has
 Choose folders → Review & import steps, independent export/destination controls
 and a separate review screen. Back exists only on review, keeps both choices
@@ -181,7 +181,7 @@ inside the wizard. Native restart confirmation and postponement remain unchanged
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
-Check that the slash/picker stays on one row, disclosure headers are clearly
+Check that the picker fills the sidebar without a brand mark, disclosure headers are clearly
 interactive, and the requirement guides open normally before selecting a home.
 After installing in a disposable home, Finish later must not stop the agent;
 reopening must resume account setup. Review full import with a disposable export:

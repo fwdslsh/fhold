@@ -299,14 +299,6 @@ button.text-button:hover:not(:disabled) {
 	letter-spacing: -0.02em;
 }
 
-.brand-mark {
-	color: var(--accent);
-	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-	font-size: 2.5rem;
-	font-weight: 600;
-	line-height: 1;
-}
-
 .eyebrow,
 .card-label {
 	margin: 0;
@@ -408,15 +400,8 @@ button.text-button:hover:not(:disabled) {
 }
 
 .sidebar-instance {
-	display: flex;
-	align-items: center;
-	gap: 12px;
 	min-width: 0;
 	margin-bottom: 20px;
-}
-
-.sidebar-instance .brand-mark {
-	flex: 0 0 auto;
 }
 
 .sidebar-instance-picker {

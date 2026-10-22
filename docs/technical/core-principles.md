@@ -222,7 +222,7 @@ and invalidates the preview; Cancel exits the flow. First steps have one Cancel
 action, not duplicate Back/Cancel navigation. After installation, Finish later
 leaves the agent running. Native import protection remains the same. Disclosure controls
 share the ordinary filled control styling and explicit chevrons. The management
-sidebar combines the slash and named picker on one row without a second wordmark.
+sidebar uses a full-width named instance picker without a brand mark or wordmark.
 Read-only Docker/Compose checks run independently of instance selection so they
 do not block naming or create a home. Successful checks add no status clutter;
 missing prerequisites show actionable guidance and an explicit retry. Each stage has explicit navigation out of
