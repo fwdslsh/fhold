@@ -68,9 +68,11 @@ replace observed tags with saved intent, and cancelling Update performs no mutat
 
 Recent assistants open directly. **Open another instance…** in the sidebar goes
 straight to a location chooser, preserving the selected instance and unsaved forms;
-Back returns to it. First launch instead puts **New assistant** and **Import
-assistant…** first, with **Open an instance…** for existing installations. The
-chooser discovers the selected location automatically and offers the appropriate
+Back returns to it. First launch shows an assistant library: locations and separate
+**New assistant** / **Import assistant…** actions in a task rail, with recent
+assistants in a compact list. **Browse locations** opens existing installations.
+An empty recent list does not imply no installations exist. The chooser uses the
+same layout, discovers the selected location automatically and offers the appropriate
 local/SSH folder picker. Creation/import are separate actions for that location;
 remote setup identifies its destination. Host connections live first in **Settings**,
 with a primary **Open instances** action and Edit/Check/Remove. Returning to the
@@ -83,6 +85,22 @@ must not reopen it over the chooser. Back preserves target/drafts and focus; an
 explicit Open still uses native switch validation. Import review keeps its
 source/destination on Back and never applies without confirmation. Test desktop,
 narrow and 200% text layouts, keyboard order, visible errors and unchanged window size.
+
+The refined desktop layout uses a stable, top-aligned library rather than a
+centered launcher card. New/import retain distinct, consistently anchored wizard
+steps; compact task identifiers do not reintroduce the removed Welcome/Create
+headings. Overview groups the named assistant, observed status, location, path and
+OpenCode action in one identity block, followed by a single service/image/status
+inventory. There are no duplicate status summary cards. Settings uses connection
+and update-preference rows, with successful diagnostic detail collapsed. Small
+windows use compact navigation and wrapping lists, not window resizing. Instrument
+Sans and its OFL license ship locally; typography needs no network/font service.
+
+Visual qualification must inspect the actual renderer screenshots for first use,
+recents, local/SSH discovery, errors, new/import choose/review, Overview, Settings,
+the connection editor, narrow layouts and 200% text. The Chromium walkthrough uses
+synthetic IPC responses, not real SSH/Azure connectivity or provider readiness.
+Packaged startup remains a separate native preload/settings check.
 
 ## Current wizard and Apps
 

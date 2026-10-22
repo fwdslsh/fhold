@@ -41,6 +41,7 @@ export function renderHosted(snapshot) {
 	])
 		byId(id).hidden = true;
 	byId('app-shell').hidden = false;
+	byId('instance-page-header').hidden = false;
 	document.body.dataset.phase = 'ready';
 	for (const element of all('.setup-only, [data-view-panel], [data-view]')) element.hidden = true;
 	byId('view-hosted').hidden = false;
@@ -400,12 +401,19 @@ async function checkConnection(connection) {
 			!result.ok
 		);
 		const details = byId('hosting-check-details');
+		const checks = document.createElement('details');
+		checks.className = 'connection-diagnostics';
+		checks.open = !result.ok;
+		const summary = document.createElement('summary');
+		summary.textContent = 'Connection details';
+		checks.append(summary);
 		for (const check of result.checks) {
 			const line = document.createElement('p');
 			line.className = `help-text${check.ok ? '' : ' danger-text'}`;
 			line.textContent = `${check.name}: ${check.detail}`;
-			details.append(line);
+			checks.append(line);
 		}
+		details.append(checks);
 		if (connection.kind === 'ssh-docker' && result.repairable) {
 			const repair = document.createElement('button');
 			repair.type = 'button';

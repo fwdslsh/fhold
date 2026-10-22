@@ -343,16 +343,15 @@ describe('Admin static security boundary', () => {
 		expect(control('instance-welcome').hidden).toBe(false);
 		expect(control('app-shell').hidden).toBe(true);
 		expect(control('recent-instances').children.map((row) => row.children[0].textContent)).toEqual(['april', 'may']);
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['existing-instance-section', 'connect-host', 'instance-create-actions']);
-		expect(control('begin-new-instance').className).toBe('secondary');
+		expect(control('instance-empty').hidden).toBe(true);
+		expect(control('hosting-chooser-title').textContent).toBe('Assistants');
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('skip-link').getAttribute('href')).toBe('#instance-welcome');
 	});
 
 	it('offers setup, existing instance and import, not a folder form, and cancelling the picker does nothing', async () => {
 		renderWelcome({ defaultInstance: { kind: 'local', homeDir: '/default', available: false }, recentInstances: [] });
-		expect(control('begin-new-instance').className).toBe('primary');
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['instance-create-actions', 'connect-host', 'existing-instance-section']);
+		expect(control('instance-empty').hidden).toBe(false);
 		expect(control('install-section').hidden).toBe(true);
 		expect(control('recent-instances-section').hidden).toBe(true);
 		let opened = false;
@@ -397,9 +396,9 @@ describe('Admin static security boundary', () => {
 		state.api = { openInstance: async () => { throw new Error('Unavailable folder must not open.'); } };
 		await rows[1].listeners.get('click')?.({});
 		expect(state.operationInFlight).toBe(false);
-		// Reordering on another render must move DOM nodes, not duplicate them.
+		// New and browse actions stay in the rail across repeated renders.
 		renderWelcome({ defaultInstance: { ...target, available: false }, recentInstances: [] });
-		expect(control('instance-options').children.map((row) => row.id)).toEqual(['instance-create-actions', 'connect-host', 'existing-instance-section']);
+		expect(control('instance-empty').hidden).toBe(false);
 	});
 
 	it('locks concurrent existing-folder dialogs and recovers from cancellation or error', async () => {
@@ -1112,7 +1111,8 @@ describe('Admin instance picker and automatic status', () => {
 			'personal-agent', 'may', 'june', 'Open another instance…'
 		]);
 		expect(control('instance-picker').value).toBe(snapshot.homeDir);
-		const sidebar = html.slice(html.indexOf('<aside class="sidebar">'), html.indexOf('</aside>'));
+		const sidebarStart = html.indexOf('<aside class="sidebar">');
+		const sidebar = html.slice(sidebarStart, html.indexOf('</aside>', sidebarStart));
 		expect(sidebar).toContain('aria-label="Choose instance"');
 		for (const removed of ['sidebar-footer', 'stack-status', 'id="refresh"', 'selected-instance-path', 'sidebar-label'])
 			expect(sidebar).not.toContain(removed);
@@ -1220,6 +1220,20 @@ describe('Admin instance picker and automatic status', () => {
 			config: defaultStackConfig(), portalSecrets: {}, portalMappings: { discord: { users: {} }, slack: { users: {} } }, credentials: []
 		};
 	}
+	it('groups the selected assistant identity on Overview and restores the normal heading on other pages', () => {
+		const snapshot = runtimeSnapshot();
+		snapshot.config.deployment.projectName = 'april';
+		state.currentSnapshot = { ...snapshot, connectionLabel: 'Krang' };
+		showView('overview', { focus: true });
+		expect(control('instance-page-header').hidden).toBe(true);
+		expect(control('overview-name').textContent).toBe('april');
+		expect(control('overview-location').textContent).toBe('Krang');
+		expect(control('overview-name').focused).toBe(true);
+		showView('connections', { focus: true });
+		expect(control('instance-page-header').hidden).toBe(false);
+		expect(control('view-title').textContent).toBe('Apps');
+		expect(control('view-title').focused).toBe(true);
+	});
 	it('distinguishes actual container image tags from configured and available image tags', () => {
 		const snapshot = { ...runtimeSnapshot(), updateImageTag: 'available-release', services: [
 			{ name: 'guardian', state: 'exited', health: '', image: 'fwdslsh/fhold-guardian:prior-release' },
@@ -1227,7 +1241,7 @@ describe('Admin instance picker and automatic status', () => {
 		] };
 		snapshot.config.deployment.images.assistant = 'saved-not-applied';
 		renderServices(snapshot);
-		const imageInRow = (index: number) => control('services').children[index].children[0].children[1].children[1].textContent;
+		const imageInRow = (index: number) => control('services').children[index].children[1].children[1].textContent;
 		expect(imageInRow(0)).toBe('actually-running');
 		expect(imageInRow(1)).toBe('prior-release');
 		expect(snapshot.services[0].name).toBe('guardian');
@@ -1268,7 +1282,7 @@ describe('Admin instance picker and automatic status', () => {
 			...runtimeSnapshot()
 		};
 		for (const [services, label] of [
-			[[{ name: 'assistant', state: 'running', health: 'healthy' }], 'Running normally'],
+			[[{ name: 'assistant', state: 'running', health: 'healthy' }], 'Running'],
 			[[{ name: 'assistant', state: 'running', health: 'unhealthy' }], 'Needs attention'],
 			[[], 'Stopped']
 		] as const) {
@@ -1291,13 +1305,13 @@ describe('Admin instance picker and automatic status', () => {
 		const snapshot = { ...runtimeSnapshot(), services: [assistant] };
 		renderServices(snapshot);
 		expect(control('assistant-summary').textContent).toBe('Running · needs attention');
-		expect(control('overview-heading').textContent).toContain('running');
+		expect(control('assistant-summary').className).toContain('warning');
 		expect(control('runtime-status-detail').textContent).toContain('Scheduling is unavailable');
 		expect(control('runtime-status-detail').hidden).toBe(false);
 		expect(control('setup-recovery').hidden).toBe(true);
 		expect(control('restart-stack').disabled).toBe(false);
 		renderServices({ ...snapshot, services: [{ ...assistant, warnings: [] }] });
-		expect(control('assistant-summary').textContent).toBe('Running normally');
+		expect(control('assistant-summary').textContent).toBe('Running');
 		expect(control('runtime-status-detail').hidden).toBe(true);
 	});
 	it('coalesces overlapping snapshot reads without a manual refresh control', async () => {
@@ -1326,7 +1340,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
 		state.api.snapshot = async () => ({ ...runtimeSnapshot(), services: [{ name: 'assistant', state: 'running', health: 'healthy' }] });
 		await refreshVisibleStatus();
-		expect(control('assistant-summary').textContent).toBe('Running normally');
+		expect(control('assistant-summary').textContent).toBe('Running');
 		expect(control('runtime-status-detail').hidden).toBe(true);
 		expect(control('notice-message').textContent).toBe('Unsaved setting needs attention');
 	});

@@ -76,7 +76,7 @@ export const policyLabels = {
 export const viewMeta = {
 	overview: {
 		kicker: 'PERSONAL AGENT',
-		title: 'Your fhold',
+		title: 'Overview',
 		description: 'Your agent and its connections, at a glance.'
 	},
 	provider: {

@@ -95,11 +95,12 @@ export function renderServices(snapshot) {
 				: 'Docker did not report an image reference.');
 			const details = serviceImageDetails(service.image);
 			const label = document.createElement('span');
+			label.className = 'visually-hidden';
 			label.textContent = `${details.label} `;
 			const tag = document.createElement('code');
 			tag.textContent = details.value;
 			image.append(label, tag);
-			identity.append(name, image);
+			identity.append(name);
 			const status = document.createElement('span');
 			const healthy = isHealthy(service);
 			const degraded = healthy && service.warnings?.length > 0;
@@ -112,55 +113,24 @@ export function renderServices(snapshot) {
 						: [service.state, service.health].filter(Boolean).join(' · '),
 				degraded ? 'warning' : healthy ? 'success' : 'neutral'
 			);
-			row.append(identity, status);
+			row.append(identity, image, status);
 			services.append(row);
 		}
 	}
 	const assistant = snapshot.services.find((service) => service.name === 'assistant');
-	const guardian = snapshot.services.find((service) => service.name === 'guardian');
 	const degraded = isHealthy(assistant) && assistant.warnings?.length > 0;
-	setText(
-		'overview-heading',
-		unavailable
-			? 'Container status is unavailable.'
-			: isHealthy(assistant)
-				? degraded
-					? 'Your agent is running; some features need attention.'
-					: 'Your personal agent is ready.'
-				: assistant
-					? 'Your agent needs attention.'
-					: 'Your agent is stopped.'
-	);
-	setText(
-		'assistant-summary',
+	setBadge(
+		byId('assistant-summary'),
 		unavailable
 			? 'Status unavailable'
 			: isHealthy(assistant)
 				? degraded
 					? 'Running · needs attention'
-					: 'Running normally'
+					: 'Running'
 				: assistant
 					? 'Needs attention'
-					: 'Stopped'
-	);
-	setText(
-		'guardian-summary',
-		snapshot.config.gateway.enabled
-			? unavailable
-				? 'Status unavailable'
-				: isHealthy(guardian)
-					? 'Enabled and healthy'
-					: 'Enabled · needs attention'
-			: 'Not enabled'
-	);
-	const enabledPortals = ['discord', 'slack'].filter(
-		(portal) => snapshot.config.portals[portal].enabled
-	);
-	setText(
-		'portal-summary',
-		enabledPortals.length
-			? enabledPortals.map((portal) => portal[0].toUpperCase() + portal.slice(1)).join(' and ')
-			: 'None enabled'
+					: 'Stopped',
+		unavailable ? 'neutral' : degraded ? 'warning' : isHealthy(assistant) ? 'success' : 'neutral'
 	);
 	renderRuntimeControls(snapshot);
 	const needsRecovery = snapshot.phase === 'setup_incomplete' && !isHealthy(assistant);

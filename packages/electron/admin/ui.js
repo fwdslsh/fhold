@@ -174,6 +174,12 @@ export function showView(name, options = {}) {
 		button.setAttribute('aria-current', active ? 'page' : 'false');
 	}
 	const meta = viewMeta[name];
+	const overview = name === 'overview' && state.currentSnapshot?.phase === 'ready';
+	byId('instance-page-header').hidden = overview;
+	if (overview) {
+		setText('overview-name', state.currentSnapshot.config.deployment.projectName);
+		setText('overview-location', state.currentSnapshot.connectionLabel || 'This computer');
+	}
 	setText('mobile-navigation-label', `Navigation · ${meta.title}`);
 	if (window.matchMedia?.('(max-width: 700px)').matches) byId('mobile-navigation').open = false;
 	setText(
@@ -190,7 +196,7 @@ export function showView(name, options = {}) {
 			? 'Choose a provider and verify that your agent can respond.'
 			: meta.description
 	);
-	if (options.focus === true) byId('view-title').focus();
+	if (options.focus === true) byId(overview ? 'overview-name' : 'view-title').focus();
 }
 
 export function showConnectionApp(name) {

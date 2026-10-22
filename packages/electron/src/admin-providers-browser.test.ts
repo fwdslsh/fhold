@@ -22,7 +22,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 	const hashSources = () =>
 		Object.fromEntries(
 			readdirSync(admin)
-				.filter((name) => /\.(?:js|css|html)$/.test(name))
+				.filter((name) => /\.(?:js|css|html|ttf)$/.test(name))
 				.map((name) => [
 					name,
 					createHash('sha256')
@@ -45,7 +45,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				return new Response('window.providerQaReady = true;', {
 					headers: { 'content-type': 'text/javascript' }
 				});
-			if (!/^\/[a-z0-9.-]+\.(js|css|svg|png|ico)$/.test(path))
+			if (!/^\/[a-z0-9.-]+\.(js|css|svg|png|ico|ttf)$/.test(path))
 				return new Response('Not found', { status: 404 });
 			const file = Bun.file(join(admin, path.slice(1)));
 			if (!(await file.exists())) return new Response('Not found', { status: 404 });
@@ -232,6 +232,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				)
 			);
 		const capture = async (name: string) => {
+			await evaluate('document.fonts.ready.then(() => true)');
 			// Full-page captures start at the page origin so offscreen fixed
 			// controls are not composited into the middle of a tall screenshot.
 			await evaluate('window.scrollTo(0, 0)');
@@ -264,6 +265,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#update-stack').closest('.runtime-update-action').contains(document.querySelector('#update-image-tag'))")).toBe(true);
 		expect(await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")).toBeNull();
 		await capture('overview-desktop.png');
+		expect(await evaluate("document.querySelector('#overview-name').textContent")).toBe('april');
+		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe('This computer');
+		expect(await evaluate("document.querySelector('#instance-page-header').hidden")).toBe(true);
+		expect(await evaluate("document.querySelector('#services .service').children.length")).toBe(3);
+		expect(await evaluate("document.fonts.check('14px \"Instrument Sans\"')")).toBe(true);
+		expect(await evaluate("[...document.fonts].find(font=>font.family==='Instrument Sans')?.status")).toBe('loaded');
 		expect(await evaluate("document.querySelector('.sidebar .brand-mark')")).toBeNull();
 		expect(await evaluate("Math.abs(document.querySelector('#instance-picker').getBoundingClientRect().width-document.querySelector('.sidebar-instance').getBoundingClientRect().width)<1")).toBe(true);
 		await evaluate(`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,updateImageTag:undefined,target:{kind:'ssh-docker',connectionId:'krang',remoteHome:'/opt/stacks/agent'},services:[{name:'assistant',state:'running',health:'healthy'}]});})()`);
@@ -299,6 +306,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#provider-saved-accounts').open")).toBe(false);
 		expect(await count('test')).toBe(0);
 		await capture('model-current-unverified.png');
+		expect(await evaluate("document.querySelector('#instance-page-header').hidden")).toBe(false);
 		await click('#test-current-model');
 		expect(
 			await evaluate("window.providerQa.calls.filter(call=>call.operation==='test').at(-1)")
@@ -711,12 +719,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")).toBe(true);
 		await capture('admin-settings-stable-desktop.png');
 		await evaluate("document.querySelector('#admin-settings-back').focus()");
+		await keypress('Tab', 'Tab', 9);
+		expect(await evaluate('document.activeElement.id')).toBe('hosting-new');
 		for (const label of ['Open instances Krang', 'Edit Krang', 'Check Krang', 'Remove Krang']) {
 			await keypress('Tab', 'Tab', 9);
 			expect(await evaluate('document.activeElement.getAttribute("aria-label")')).toBe(label);
 		}
-		await keypress('Tab', 'Tab', 9);
-		expect(await evaluate('document.activeElement.id')).toBe('hosting-new');
 		for (const id of ['admin-update-channel', 'admin-update-automatic', 'admin-updates-save', 'admin-update-check']) {
 			await keypress('Tab', 'Tab', 9);
 			expect(await evaluate('document.activeElement.id')).toBe(id);

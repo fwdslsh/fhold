@@ -175,19 +175,8 @@ export function renderWelcome(welcome) {
 		!targets.some((target) => targetKey(target) === targetKey(welcome.defaultInstance))
 	)
 		targets.push(welcome.defaultInstance);
-	const existingSection = byId('existing-instance-section');
-	const begin = byId('begin-new-instance');
-	const createActions = byId('instance-create-actions');
-	const open = byId('connect-host');
-	const hasAvailable = targets.some((target) => target.available);
-	// DOM and visual order agree: first-time setup first, saved instances first
-	// when there is an actual compatible home to open. No automatic selection.
-	byId('instance-options').append(
-		...(hasAvailable
-			? [existingSection, open, createActions]
-			: [createActions, open, existingSection])
-	);
-	begin.className = hasAvailable ? 'secondary' : 'primary';
+	byId('instance-empty').hidden = targets.length > 0;
+	setText('hosting-chooser-title', 'Assistants');
 	byId('instance-options').hidden = false;
 	byId('open-hosting').hidden = true;
 	const recent = byId('recent-instances');

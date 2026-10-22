@@ -15,13 +15,11 @@
       <button id="admin-settings-back" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button>
       <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Settings</h1><p class="page-description">Host connections and preferences for Admin.</p></header>
       <div class="admin-settings-sections">
-    <section id="hosting-manager" class="panel" aria-labelledby="hosting-manager-title">
-      <header class="hosting-manager-header"><h2 id="hosting-manager-title">Host connections</h2></header>
-      <p class="help-text">Connect to an existing Docker host or Azure deployment. This computer is always available.</p>
+    <section id="hosting-manager" class="settings-section" aria-labelledby="hosting-manager-title">
+      <header class="hosting-manager-header"><div><h2 id="hosting-manager-title">Host connections</h2><p class="help-text">Your saved remote locations. This computer is always available.</p></div><button id="hosting-new" class="secondary" type="button">Add connection</button></header>
       <div id="hosting-manager-list"></div>
       <p id="hosting-manager-status" class="help-text" role="status" aria-live="polite" hidden></p>
       <div id="hosting-check-details" class="form-stack" aria-live="polite"></div>
-      <button id="hosting-new" class="secondary" type="button">Add connection</button>
       <form id="hosting-add-form" class="form-stack hosting-editor" hidden>
         <h3 id="hosting-editor-title">Add connection</h3>
         <label class="field" for="hosting-label"><span>Connection name</span><input id="hosting-label" required placeholder="Home server" autocomplete="off" /></label>
@@ -47,23 +45,21 @@
         <div class="button-row"><button id="hosting-save" class="primary" type="submit">Save connection</button><button id="hosting-edit-cancel" class="secondary" type="button">Cancel</button></div>
       </form>
     </section>
-        <section class="panel form-stack" aria-labelledby="admin-updates-title">
+        <section class="settings-section" aria-labelledby="admin-updates-title">
           <div class="section-heading"><h2 id="admin-updates-title">App updates</h2><span id="admin-app-version" class="help-text"></span></div>
           <form id="admin-updates-form" class="form-stack">
-            <label class="field" for="admin-update-channel"><span>Update channel</span><select id="admin-update-channel" aria-describedby="admin-update-channel-help"><option value="stable">Stable — recommended</option><option value="beta">Beta — early testing</option><option value="alpha">Alpha — experimental builds</option></select></label>
-            <p id="admin-update-channel-help" class="help-text">Stable releases only. Switching channels never downgrades Admin.</p>
-            <label class="check-row"><input id="admin-update-automatic" type="checkbox" checked /><span>Check for and download updates automatically</span></label>
-            <p class="help-text">Downloaded updates install when you close Admin, or you can restart it sooner. Your agents keep running; containers and remote tools are not updated.</p>
+            <div class="preference-row"><div><label for="admin-update-channel">Release channel</label><p id="admin-update-channel-help" class="help-text">Stable releases only. Switching channels never downgrades Admin.</p></div><select id="admin-update-channel" aria-describedby="admin-update-channel-help"><option value="stable">Stable</option><option value="beta">Beta</option><option value="alpha">Alpha</option></select></div>
+            <div class="preference-row"><div><label for="admin-update-automatic">Automatic updates</label><p class="help-text">Download in the background and install when you close Admin. Your agents keep running.</p></div><input id="admin-update-automatic" type="checkbox" checked /></div>
             <div class="button-row compact"><button id="admin-updates-save" class="secondary" type="submit">Save preferences</button></div>
           </form>
           <p id="admin-update-status" class="help-text" role="status" aria-live="polite">Loading update preferences…</p>
           <progress id="admin-update-progress" max="100" aria-label="Admin update download" hidden></progress>
           <p id="admin-settings-message" class="help-text" role="status" aria-live="polite" hidden></p>
-          <div class="button-row compact">
+          <div class="button-row compact update-actions">
             <button id="admin-update-check" class="secondary" type="button">Check now</button>
             <button id="admin-update-download" class="secondary" type="button" hidden>Download update</button>
             <button id="admin-update-install" class="primary" type="button" hidden>Restart Admin to update</button>
-            <a href="https://github.com/fwdslsh/fhold/releases" target="_blank" rel="noreferrer">Release notes &amp; downloads</a>
+            <a href="https://github.com/fwdslsh/fhold/releases" target="_blank" rel="noreferrer">Release notes ↗</a>
           </div>
         </section>
       </div>
@@ -83,40 +79,61 @@
       <p>Opening fhold…</p>
 	    </div>
 
-    <main id="instance-welcome" class="welcome-shell" tabindex="-1" hidden>
+    <main id="instance-welcome" class="instance-library" tabindex="-1" hidden>
       <section class="welcome-card instance-card" aria-label="Choose an instance">
         <header class="instance-intro">
-          <h1 class="instance-wordmark">f<span aria-hidden="true">/</span>hold</h1>
+          <p class="instance-wordmark">f<span aria-hidden="true">/</span>hold</p>
           <button class="text-button" type="button" data-admin-settings>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
         </header>
-        <p id="instance-preference-warning" class="help-text danger-text" role="status" hidden></p>
-        <div id="instance-options" class="instance-options">
+        <div class="library-layout">
+          <aside class="library-rail" aria-label="Instance locations and actions">
+            <div class="library-recent-navigation">
+              <span class="library-section-label">Library</span>
+              <span class="library-current">Recent assistants</span>
+              <button id="connect-host" class="library-browse" type="button">Browse locations <span aria-hidden="true">→</span></button>
+            </div>
+            <div class="library-host-navigation">
+              <button id="hosting-back" class="text-button" type="button">← Back</button>
+              <label class="field" for="hosting-connection"><span>Location</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
+              <button id="hosting-manage" class="text-button" type="button">Manage connections</button>
+            </div>
+            <div class="library-create">
+              <div id="instance-create-actions" class="instance-create-actions">
+                <button id="begin-new-instance" class="primary" type="button"><span aria-hidden="true">+</span> New assistant</button>
+                <button id="begin-instance-import" class="text-button" type="button">Import assistant…</button>
+              </div>
+              <div class="hosting-create-actions">
+                <button id="hosting-install" class="primary" type="button" hidden><span aria-hidden="true">+</span> New assistant</button>
+                <button id="hosting-import" class="text-button" type="button" hidden>Import assistant…</button>
+              </div>
+            </div>
+          </aside>
+          <div class="library-content">
+            <header class="library-heading"><h1 id="hosting-chooser-title" tabindex="-1">Assistants</h1></header>
+            <p id="instance-preference-warning" class="inline-status error" role="status" hidden></p>
+            <div id="instance-options" class="instance-options">
           <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
             <section id="recent-instances-section" class="instance-recents" aria-labelledby="recent-instances-title" hidden>
               <h2 id="recent-instances-title">Recent instances</h2>
               <div id="recent-instances"></div>
             </section>
           </section>
-          <button id="connect-host" class="secondary instance-picker" type="button">Open an instance…<span aria-hidden="true">→</span></button>
-          <div id="instance-create-actions" class="instance-create-actions">
-            <button id="begin-new-instance" class="primary" type="button">New assistant</button>
-            <button id="begin-instance-import" class="secondary" type="button">Import assistant…</button>
+              <div id="instance-empty" class="library-empty">
+                <h2>No recent assistants.</h2>
+                <p>Open an existing assistant by location, or install a new one.</p>
+              </div>
+            </div>
+            <section id="open-hosting" class="hosting-chooser" hidden aria-labelledby="hosting-chooser-title">
+              <div class="library-list-heading"><span>Available assistants</span><button id="hosting-discover" class="text-button" type="button" hidden>Try again</button></div>
+              <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
+              <div id="hosting-instance-list" aria-live="polite"></div>
+              <div class="library-folder-actions">
+                <button id="choose-instance" class="text-button hosting-folder-choice" type="button" hidden>Open an instance folder…</button>
+                <button id="hosting-open-folder" class="text-button hosting-folder-choice" type="button" hidden>Open an instance folder…</button>
+              </div>
+            </section>
           </div>
         </div>
-		<section id="open-hosting" class="form-stack hosting-chooser" hidden>
-		  <button id="hosting-back" class="text-button" type="button">← Back</button>
-		  <h2 id="hosting-chooser-title" tabindex="-1">Open an instance</h2>
-		  <div class="hosting-picker-row">
-            <label class="field" for="hosting-connection"><span>Location</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
-            <button id="hosting-manage" class="text-button" type="button">Manage connections</button>
-		  </div>
-		  <button id="hosting-discover" class="text-button" type="button" hidden>Try again</button>
-            <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
-            <div id="hosting-instance-list" aria-live="polite"></div>
-            <button id="choose-instance" class="text-button hosting-folder-choice" type="button" hidden>Choose an instance folder…</button>
-		  <button id="hosting-open-folder" class="text-button hosting-folder-choice" type="button" hidden>Choose an instance folder…</button>
-		  <div class="hosting-create-actions"><button id="hosting-install" class="secondary" type="button" hidden>New assistant</button><button id="hosting-import" class="text-button" type="button" hidden>Import assistant…</button></div>
-		</section>
       </section>
     </main>
 
@@ -134,7 +151,8 @@
 
 	    <main id="install-section" class="welcome-shell" tabindex="-1" hidden>
       <section class="welcome-card wizard-card" aria-labelledby="welcome-title">
-        <div class="wizard-navigation wizard-exit">
+        <div class="wizard-navigation">
+          <span class="wizard-title">New assistant</span>
           <button class="text-button" type="button" data-instance-switch>Cancel setup</button>
         </div>
         <ol id="install-progress" class="wizard-steps" aria-label="Setup progress">
@@ -197,7 +215,8 @@
 
     <main id="instance-import-section" class="welcome-shell" tabindex="-1" hidden>
       <section class="welcome-card wizard-card" aria-labelledby="instance-import-title">
-        <div class="wizard-navigation wizard-exit">
+        <div class="wizard-navigation">
+          <span class="wizard-title">Import assistant</span>
           <button id="instance-restore-back" class="text-button" type="button" hidden><span aria-hidden="true">←</span> Back</button>
           <button class="text-button" type="button" data-instance-switch>Cancel import</button>
         </div>
@@ -316,7 +335,7 @@
           </ol>
           <p id="setup-runtime" class="visually-hidden">Checking your agent…</p>
         </div>
-        <header class="page-header">
+        <header id="instance-page-header" class="page-header">
 	              <div>
             <p id="view-kicker" class="eyebrow" hidden>PERSONAL AGENT</p>
             <h1 id="view-title" tabindex="-1">Connect your AI</h1>
@@ -363,51 +382,39 @@
               <pre id="hosted-revisions" class="help-text" hidden></pre>
             </details>
           </section>
-          <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-heading">
-            <div class="hero-card ready-hero">
-              <div>
-                <h2 id="overview-heading" class="visually-hidden">Your personal agent</h2>
+          <section id="view-overview" class="view-panel ready-only" data-view-panel="overview" hidden aria-labelledby="overview-name">
+            <header class="overview-intro">
+              <div class="overview-identity">
+                <h1 id="overview-name" tabindex="-1">Your assistant</h1>
+                <div class="overview-context"><span id="assistant-summary" class="status-badge neutral">Checking…</span><span id="overview-location"></span></div>
                 <p id="overview-home" class="instance-path"></p>
-                <a id="overview-opencode-link" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode</a>
-                <button class="secondary" type="button" data-view-target="connections">Connect an app</button>
               </div>
-            </div>
+              <div class="overview-actions">
+                <a id="overview-opencode-link" class="primary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode <span aria-hidden="true">↗</span></a>
+                <button class="text-button" type="button" data-view-target="connections">Connect an app <span aria-hidden="true">→</span></button>
+              </div>
+            </header>
 
-            <fieldset class="summary-grid status-fieldset">
-              <legend class="visually-hidden">fhold status</legend>
-              <article class="summary-card">
-                <span class="card-label">Assistant</span>
-                <strong id="assistant-summary">Checking…</strong>
-              </article>
-              <article class="summary-card">
-                <span class="card-label">Guardian MCP</span>
-                <strong id="guardian-summary">Not enabled</strong>
-              </article>
-              <article class="summary-card">
-                <span class="card-label">Chat apps</span>
-                <strong id="portal-summary">None enabled</strong>
-              </article>
-            </fieldset>
-
-            <section class="panel" aria-labelledby="runtime-heading">
+            <section class="runtime-panel" aria-labelledby="runtime-heading">
               <div class="section-heading">
                 <div><h2 id="runtime-heading">Services</h2></div>
                 <div class="button-row compact">
                   <button id="start-stack" data-action="start" class="secondary" type="button">Start</button>
-                  <button id="restart-stack" data-action="restart" class="secondary" type="button">Restart</button>
-                  <button id="stop-stack" data-action="stop" class="danger subtle" type="button">Stop</button>
+                  <button id="restart-stack" data-action="restart" class="text-button" type="button">Restart</button>
+                  <button id="stop-stack" data-action="stop" class="text-button danger" type="button">Stop</button>
                 </div>
               </div>
+              <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
+              <div class="service-columns" aria-hidden="true"><span>Service</span><span>Image</span><span>Status</span></div>
+              <div id="services" class="services" aria-live="polite"></div>
               <div class="runtime-update">
                 <div class="runtime-update-action">
-                  <span>Available image tag <code id="update-image-tag">Checking…</code></span>
+                  <span>Available image <code id="update-image-tag">Checking…</code></span>
                   <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
                 <p id="runtime-version-help" class="help-text">Included with this fhold version. Custom image settings are kept.</p>
                 <button id="runtime-version-settings" class="text-button" type="button" data-admin-settings hidden>Open host connections</button>
               </div>
-              <p id="runtime-status-detail" class="help-text" role="status" aria-live="polite" hidden></p>
-              <div id="services" class="services" aria-live="polite"></div>
             </section>
 
           </section>
