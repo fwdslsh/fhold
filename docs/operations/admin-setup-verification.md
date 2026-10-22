@@ -1,5 +1,9 @@
 # Admin verification
 
+Apply the [Admin interface standards](../technical/admin-design-system.md) to all
+screens and reusable components. Do not qualify a design from only the library
+or Overview, or treat an axe pass as visual approval.
+
 ## Admin settings and app updates
 
 **Settings** on Welcome, the sidebar and the error view opens

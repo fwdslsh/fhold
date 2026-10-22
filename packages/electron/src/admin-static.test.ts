@@ -52,6 +52,43 @@ import {
 const admin = join(import.meta.dir, '..', 'admin');
 const html = readFileSync(join(admin, 'index.html'), 'utf8');
 
+describe('Admin visual contract', () => {
+	const css = readFileSync(join(admin, 'admin.css'), 'utf8');
+	const tokens = readFileSync(join(admin, 'design-tokens.css'), 'utf8');
+	function color(name: string) {
+		const hex = tokens.match(new RegExp(`--${name}:\\s*#([0-9a-f]{6});`))?.[1];
+		if (!hex) throw new Error(`Missing color token: ${name}`);
+		return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
+	}
+	function luminance(name: string) {
+		const [r, g, b] = color(name).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+	}
+	function contrast(first: string, second: string) {
+		const a = luminance(first), b = luminance(second);
+		return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+	}
+	it('uses one token source for typography, control size and theme rather than per-screen values', () => {
+		expect(html.indexOf('href="design-tokens.css"')).toBeLessThan(html.indexOf('href="admin.css"'));
+		expect(css).not.toMatch(/font-(?:size|weight):\s*[\d.]/);
+		expect(tokens).toContain('--control-height: 40px');
+		expect(tokens).toContain('@media (pointer: coarse)');
+		expect(tokens).toContain('--control-height: 44px');
+		expect(css).toContain('var(--control-height)');
+		expect(css).toContain('(prefers-reduced-motion: reduce)');
+	});
+	it('maintains measured AA text and required-boundary contrast for the shared dark palette', () => {
+		for (const text of ['ink', 'ink-soft', 'ink-faint'])
+			for (const surface of ['canvas', 'surface', 'surface-raised', 'surface-muted'])
+				expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
+		for (const [text, surface] of [['on-accent','accent'], ['on-accent','accent-hover'], ['danger','danger-soft'], ['warning','warning-soft'], ['success','canvas']])
+			expect(contrast(text, surface)).toBeGreaterThanOrEqual(4.5);
+		for (const indicator of ['border', 'focus'])
+			for (const surface of ['canvas', 'surface', 'surface-muted'])
+				expect(contrast(indicator, surface)).toBeGreaterThanOrEqual(3);
+	});
+});
+
 // A small DOM double exercises renderer decisions without installing a browser DOM library.
 // The real Chromium layout, keyboard, IPC and Docker journey runs in admin:e2e.
 class Control {
@@ -237,7 +274,7 @@ describe('Admin static security boundary', () => {
 	});
 	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
 		expect(html).toContain('Entire instance (must be stopped)');
-		expect(html).toContain('Import an entire instance instead');
+		expect(html).toContain('“Open another instance…” → “Import assistant…”');
 		expect(html).toContain('Choose a new or empty folder. Nothing is copied until you confirm.');
 		expect(html).toContain('The original instance must be stopped');
 		control('backup-scope').value = 'instance';
@@ -282,7 +319,7 @@ describe('Admin static security boundary', () => {
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
 		expect(html).toContain('Import / export');
 		expect(html).toContain('Ephemeral container support');
-		expect(html).toContain('different formats and are not interchangeable');
+		expect(html).toContain('Their format is not an import/export file');
 		expect(html).toContain('No native conversations or remote sign-ins');
 		expect(html).toContain('including after ordinary image upgrades');
 		expect(html).not.toContain('native tool versions must match');

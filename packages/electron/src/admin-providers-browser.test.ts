@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
 import { FH_RUNTIME_VERSION } from '../../lib/src/control-plane/release.js';
+import axe from 'axe-core';
 
 type DebuggerResult = {
 	result?: { value?: unknown };
@@ -220,6 +221,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
 			await idle();
 		};
+		const pointerClick = async (selector: string) => {
+			const point = await evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});target.scrollIntoView({block:'center'});const r=target.getBoundingClientRect();if(!r.width||!r.height)throw Error('Pointer target is not rendered');return {x:r.left+r.width/2,y:r.top+r.height/2};})()`) as { x: number; y: number };
+			await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+			await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+		};
 		const value = async (selector: string, value: string, event = 'input') => {
 			await evaluate(
 				`(()=>{const control=document.querySelector(${JSON.stringify(selector)});control.value=${JSON.stringify(value)};control.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));})()`
@@ -231,16 +237,25 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 					`window.providerQa.calls.filter(call=>call.operation===${JSON.stringify(operation)}).length`
 				)
 			);
+		await evaluate(axe.source);
+		const accessibility: Array<{ screen: string; width: number; violations: Array<{ id: string; impact: string; nodes: unknown[] }> }> = [];
 		const capture = async (name: string) => {
 			await evaluate('document.fonts.ready.then(() => true)');
+			const audit = await evaluate(`(async()=>{
+				const result=await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa','wcag22aa']}});
+				return {screen:${JSON.stringify(name)},width:innerWidth,violations:result.violations.map(({id,impact,nodes})=>({id,impact,nodes:nodes.map(({target,failureSummary})=>({target,failureSummary}))}))};
+			})()`) as (typeof accessibility)[number];
+			accessibility.push(audit);
 			// Full-page captures start at the page origin so offscreen fixed
 			// controls are not composited into the middle of a tall screenshot.
 			await evaluate('window.scrollTo(0, 0)');
 			const size = (await command('Page.getLayoutMetrics')).cssContentSize;
+			const modalSize = await evaluate("document.querySelector('dialog:modal')?{width:innerWidth,height:innerHeight}:null") as {width:number;height:number}|null;
+			const clipSize = modalSize || size;
 			const result = await command('Page.captureScreenshot', {
 				format: 'png',
 				captureBeyondViewport: true,
-				...(size ? { clip: { x: 0, y: 0, width: size.width, height: size.height, scale: 1 } } : {})
+				...(clipSize ? { clip: { x: 0, y: 0, width: clipSize.width, height: clipSize.height, scale: 1 } } : {})
 			});
 			if (typeof result.data !== 'string') throw new Error('Missing screenshot');
 			writeFileSync(join(root, name), Buffer.from(result.data, 'base64'));
@@ -281,10 +296,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate(`window.overviewQa.services[0].image='registry.example.com:5000/team/assistant:long-custom-image-tag-for-multiple-release-channels-2026';
 			import('./runtime.js').then(({renderServices})=>renderServices(window.overviewQa));`);
 		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('overview-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('overview-200pct.png');
 		await command('Emulation.setDeviceMetricsOverride', { width: 1120, height: 780, deviceScaleFactor: 1, mobile: false });
 		await evaluate(`(async()=>{
@@ -294,6 +309,60 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#assistant-summary').textContent")).toBe('Status unavailable');
 		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
 		await capture('overview-unavailable.png');
+		// Component coverage uses the same actual instance renderer, not standalone
+		// lookalikes. Only native IPC is synthetic; no lab instance is mutated.
+		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');state.currentView='connections';render(window.overviewQa,{preserveDirty:false});})()`);
+		await capture('apps-desktop.png');
+		for (const app of ['opencode','claude','codex','discord','slack','mcp']) {
+			await evaluate(`document.querySelector('#${app}-connection').open=true`);
+			if(app==='claude')await evaluate("document.querySelector('#claude-connection .connection-method').open=true");
+			await capture(`app-${app}-desktop.png`);
+		}
+		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
+		await capture('system-desktop.png');
+		for (const section of ['installation-details','import-export','runtime-recovery']) {
+			await evaluate(`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}`);
+			await capture(`system-${section}-desktop.png`);
+		}
+		for (const view of ['overview','provider','connections','system']) {
+			await evaluate(`import('./ui.js').then(({showView})=>showView(${JSON.stringify(view)}))`);
+			for (const width of [320,360,375,414,480,640,768,1024,1280,1440]) {
+				await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+				expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+				if([320,768,1280].includes(width))await capture(`${view}-${width}.png`);
+			}
+		}
+		await command('Emulation.setDeviceMetricsOverride',{width:1120,height:780,deviceScaleFactor:1,mobile:false});
+		// Native dialog presentation and Escape/focus containment, without starting
+		// vendor sign-in, changing a policy or granting tool access.
+		await evaluate(`(async()=>{const {bindRemoteEvents}=await import('./remote.js');const {showView}=await import('./ui.js');bindRemoteEvents();showView('connections');document.querySelector('#claude-connection').open=true;document.querySelectorAll('#claude-connection .connection-method')[1].open=true;})()`);
+		await pointerClick('[data-remote-enable="claude"]');
+		expect(await evaluate("document.querySelector('#remote-trust').checked")).toBe(false);
+		await capture('remote-dialog-desktop.png');
+		for(const id of ['remote-cancel','remote-begin']) {
+			await keypress('Tab','Tab',9);
+			expect(await evaluate('document.activeElement.id')).toBe(id);
+		}
+		await keypress('Tab','Tab',9,8);
+		expect(await evaluate('document.activeElement.id')).toBe('remote-cancel');
+		await keypress('Escape','Escape',27);
+		expect(await evaluate("document.querySelector('#remote-dialog').open")).toBe(false);
+		await evaluate(`(async()=>{const {bindAccessEvents}=await import('./access.js');bindAccessEvents();document.querySelector('#advanced-access').open=true;})()`);
+		await pointerClick('[data-manage-saved-access]');
+		await capture('permissions-dialog-desktop.png');
+		for(const id of ['cancel-permissions','save-permissions']) {
+			await keypress('Tab','Tab',9);
+			expect(await evaluate('document.activeElement.id')).toBe(id);
+		}
+		await keypress('Tab','Tab',9,8);
+		expect(await evaluate('document.activeElement.id')).toBe('cancel-permissions');
+		await keypress('Escape','Escape',27);
+		expect(await evaluate("document.querySelector('#permissions-dialog').open")).toBe(false);
+		expect(await evaluate("document.activeElement.hasAttribute('data-manage-saved-access')")).toBe(true);
+		await evaluate("document.querySelector('#remote-directory-dialog').showModal()");
+		await capture('directory-dialog-desktop.png');
+		await keypress('Escape','Escape',27);
+		expect(await evaluate("document.querySelector('#remote-directory-dialog').open")).toBe(false);
 		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
 			state.currentView='provider';render(${JSON.stringify(snapshot)},{preserveDirty:false});})()`);
 		expect(await evaluate("document.querySelector('#provider-default-service').textContent")).toBe(
@@ -586,7 +655,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			deviceScaleFactor: 1,
 			mobile: false
 		});
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('model-narrow-200pct-error.png');
 		expect(
 			await evaluate(
@@ -613,11 +682,6 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			renderWelcome({defaultInstance:{homeDir:'/disposable-installs/default',available:false},instancesDirectory:'/disposable-installs',recentInstances:[]});
 			renderInstallationReadiness({ok:true});bindInstanceEvents();bindRuntimeEvents();
 		})()`);
-		const pointerClick = async (selector: string) => {
-			const point = await evaluate(`(()=>{const target=document.querySelector(${JSON.stringify(selector)});target.scrollIntoView({block:'center'});const r=target.getBoundingClientRect();if(!r.width||!r.height)throw Error('Pointer target is not rendered');return {x:r.left+r.width/2,y:r.top+r.height/2};})()`) as { x: number; y: number };
-			await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
-			await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
-		};
 		const waitInstall = async (expression: string) => {
 			const deadline = Date.now() + 10000;
 			while (!await evaluate(expression)) {
@@ -678,7 +742,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#hosted-warnings').textContent")).toContain('readiness remains unverified');
 		await capture('hosted-agent-desktop.png');
 		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('hosted-agent-narrow.png');
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
@@ -761,10 +825,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('button[aria-label="Remove Second host"]');
 		expect(await evaluate('window.connectionQa.removed')).toBe(1);
 		await command('Emulation.setDeviceMetricsOverride', { width: 620, height: 900, deviceScaleFactor: 1, mobile: false });
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('hosting-connections-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('admin-settings-narrow-200pct.png');
 		await evaluate("document.documentElement.style.fontSize=''");
 		await click('#admin-settings-back');
@@ -844,10 +908,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate("import('./hosting.js').then(({showHostingChooser})=>showHostingChooser('krang'))");
 		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(true);
 		await command('Emulation.setDeviceMetricsOverride', { width:620,height:900,deviceScaleFactor:1,mobile:false });
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('instances-ssh-chooser-narrow.png');
 		await evaluate("document.documentElement.style.fontSize='200%'");
-		expect(await evaluate('document.documentElement.scrollWidth<=innerWidth')).toBe(true);
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
 		await capture('instances-ssh-chooser-200pct.png');
 		await evaluate("document.documentElement.style.fontSize=''");
 		await command('Emulation.setDeviceMetricsOverride', { width:1120,height:780,deviceScaleFactor:1,mobile:false });
@@ -880,7 +944,17 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#instance-restore-source').value")).toBe('/home/user/fhold/backups/april-export');
 		expect(await evaluate("document.querySelector('#instance-restore-home').value")).toBe('/home/user/fhold/instances/restored-agent');
 		expect(await evaluate("document.querySelector('#apply-instance-restore').disabled")).toBe(true);
+		await evaluate(`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`);
+		await capture('instance-error-desktop.png');
+		await command('Emulation.setDeviceMetricsOverride',{width:320,height:900,deviceScaleFactor:1,mobile:false});
+		expect(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')).toBe(true);
+		await capture('instance-error-320.png');
+		await evaluate("document.querySelector('#error-state').hidden=true;document.querySelector('#loading-state').hidden=false");
+		await command('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+		expect(await evaluate("Number.parseFloat(getComputedStyle(document.querySelector('.loading-mark')).animationDuration)")).toBeLessThan(0.001);
+		await capture('initial-loading-reduced-motion.png');
 		expect(hashSources()).toEqual(sourceHashes);
+		writeFileSync(join(root,'accessibility.json'),JSON.stringify(accessibility,null,2));
 		writeFileSync(
 			join(root, 'qa-manifest.json'),
 			JSON.stringify(
@@ -897,9 +971,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		);
 		console.info(`Chromium account QA artifacts: ${root}`);
+		expect(accessibility.flatMap(({screen,violations})=>violations.filter(({impact})=>impact==='serious'||impact==='critical').map(({id,nodes})=>({screen,id,nodes})))).toEqual([]);
 	} finally {
 		socket?.close();
 		processHandle.kill();
 		server.stop(true);
 	}
-}, 60_000);
+}, 120_000);
