@@ -413,7 +413,7 @@ UTC year/month/day plus a daily build number starting at 1. Examples:
 `0.2.2610081` and `0.3.2612225-beta.1`. Alpha, beta and rc suffixes remain
 supported. Release tools compare date and daily counter separately, including
 multi-digit builds and next-day resets, and accept the 0.1 → 0.2 boundary without
-rewriting historical tags. See the [release runbook](docs/operations/release.md#date-and-daily-build-from-02).
+rewriting historical tags. See the [release runbook](docs/operations/release.md#historical-02-date-and-daily-build).
 
 The Assistant now ships AKM 0.9.30 and matching 0.9.30202610090106 plugins for
 OpenCode, Claude and Codex, installed through their standard native mechanisms.

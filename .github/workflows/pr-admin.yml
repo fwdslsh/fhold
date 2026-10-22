@@ -1,0 +1,80 @@
+name: PR Admin AppImage
+run-name: 'Admin AppImage for PR #${{ github.event.number }}'
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-admin-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  appimage:
+    name: Download Linux AppImage (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - name: Build the PR's Admin
+        run: bun run --cwd packages/electron build:linux-x64
+      - name: Smoke the packaged Admin
+        run: |
+          VERSION="$(node -p 'require("./packages/electron/package.json").version')" \
+            node scripts/smoke-admin-artifact.mjs
+      - name: Identify the preview
+        id: preview
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          version="$(node -p 'require("./packages/electron/package.json").version')"
+          file="fhold-admin-pr-${PR_NUMBER}-${PR_HEAD_SHA:0:12}-x86_64-linux.AppImage"
+          path="packages/electron/dist/packages/${file}"
+          mv "packages/electron/dist/packages/fhold-admin-${version}-x86_64-linux.AppImage" "${path}"
+          printf 'file=%s\npath=%s\n' "${file}" "${path}" >> "$GITHUB_OUTPUT"
+      - name: Upload downloadable AppImage
+        id: upload
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          path: ${{ steps.preview.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+      - name: Show the download link
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          PREVIEW_FILE: ${{ steps.preview.outputs.file }}
+          PR_NUMBER: ${{ github.event.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Test this PR's Admin
+
+          [Download the Linux x86_64 AppImage](${ARTIFACT_URL})
+
+          Built from PR #${PR_NUMBER}, commit \`${PR_HEAD_SHA}\`.
+          Sign in to GitHub to download. Available for 14 days; no archive extraction needed.
+
+          After downloading:
+
+          \`\`\`sh
+          chmod +x ${PREVIEW_FILE}
+          ./${PREVIEW_FILE}
+          \`\`\`
+
+          This is an unreleased PR preview. Packaged startup was checked; this is not
+          full release qualification. The app still uses the published container images
+          by default; this workflow does not publish releases or container images.
+          EOF

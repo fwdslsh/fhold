@@ -27,6 +27,35 @@ all-profile Compose validation, native architecture image builds, vulnerability
 gates and startup/security smoke. GitHub is the canonical CI host; record actual
 workflow results before claiming a candidate passed GitHub gates.
 
+## Download a PR's Admin for manual testing
+
+Every PR targeting `main` gets an independent **PR Admin AppImage** workflow,
+including draft and documentation-only PRs. Opening, reopening, updating commits
+or retargeting a PR to `main` builds a fresh Linux x86_64 AppImage from its exact
+head commit. New updates cancel an older build still in progress for that PR.
+
+On the PR, open **Checks → Download Linux AppImage (x86_64) → Details**. The run's
+summary has a **Download the Linux x86_64 AppImage** link; the same file is listed
+under **Artifacts**. Sign in to GitHub to download it. Downloads are retained for
+14 days and are named `fhold-admin-pr-<number>-<commit>-x86_64-linux.AppImage`,
+so different PRs/updates are distinguishable. This is a direct AppImage download,
+not a ZIP; mark it executable and launch it:
+
+```bash
+chmod +x fhold-admin-pr-<number>-<commit>-x86_64-linux.AppImage
+./fhold-admin-pr-<number>-<commit>-x86_64-linux.AppImage
+```
+
+The workflow uses the normal locked Admin build and packaged renderer/bridge
+startup smoke, without waiting for container CI. It publishes no release,
+container image or version tag. Preview Admin builds retain the published runtime
+image defaults; they do not include unpublished container changes from the PR.
+Use a disposable instance when testing. This check is not full release qualification.
+Fork PRs use the same read-only workflow without secrets; GitHub may first require
+maintainer approval for a new contributor's workflow run.
+
+## Local integration coverage
+
 Materialize a disposable `FH_HOME` with `install --no-start`, then use
 `docker compose` with its managed stack, operator overlay and derived env.
 Validate `--profile gateway --profile discord --profile slack config --quiet`

@@ -99,7 +99,9 @@ describe('release manifest', () => {
 	});
 
 	test('native fhold plugin caches track the product release', () => {
-		const version = JSON.parse(readFileSync(join(ROOT, 'packages/skeleton/package.json'), 'utf8')).version;
+		const version = JSON.parse(
+			readFileSync(join(ROOT, 'packages/skeleton/package.json'), 'utf8')
+		).version;
 		for (const harness of ['claude', 'codex']) {
 			const plugin = JSON.parse(
 				readFileSync(join(ROOT, `plugins/fhold/.${harness}-plugin/plugin.json`), 'utf8')
@@ -165,6 +167,67 @@ describe('release workflows', () => {
 		for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith('.yml'))) {
 			expect(() => Bun.YAML.parse(readFileSync(join(WORKFLOWS, file), 'utf8'))).not.toThrow();
 		}
+	});
+
+	test('main-target PRs get an independent, unprivileged, smoke-tested Admin download', () => {
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'pr-admin.yml'), 'utf8')) as {
+			on: Record<
+				string,
+				{ branches: string[]; types: string[]; paths?: string[]; 'paths-ignore'?: string[] }
+			>;
+			permissions: Record<string, string>;
+			concurrency: { group: string; 'cancel-in-progress': boolean };
+			jobs: Record<
+				string,
+				{
+					needs?: unknown;
+					steps: Array<{
+						id?: string;
+						uses?: string;
+						run?: string;
+						with?: Record<string, unknown>;
+					}>;
+				}
+			>;
+		};
+		expect(Object.keys(workflow.on)).toEqual(['pull_request']);
+		expect(workflow.on.pull_request.branches).toEqual(['main']);
+		for (const event of ['opened', 'synchronize', 'reopened', 'edited'])
+			expect(workflow.on.pull_request.types).toContain(event);
+		expect(workflow.on.pull_request.paths).toBeUndefined();
+		expect(workflow.on.pull_request['paths-ignore']).toBeUndefined();
+		expect(workflow.permissions).toEqual({ contents: 'read' });
+		expect(workflow.concurrency.group).toContain('github.event.number');
+		expect(workflow.concurrency['cancel-in-progress']).toBe(true);
+		expect(Object.keys(workflow.jobs)).toEqual(['appimage']);
+		const job = workflow.jobs.appimage;
+		expect(job.needs).toBeUndefined();
+		const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+		expect(checkout?.with?.ref).toBe('${{ github.event.pull_request.head.sha }}');
+		expect(checkout?.with?.['persist-credentials']).toBe(false);
+		expect(job.steps.some((step) => step.run === 'bun install --frozen-lockfile')).toBe(true);
+		const build = job.steps.findIndex((step) => step.run?.includes('build:linux-x64'));
+		const smoke = job.steps.findIndex((step) =>
+			step.run?.includes('node scripts/smoke-admin-artifact.mjs')
+		);
+		const upload = job.steps.findIndex((step) => step.uses?.startsWith('actions/upload-artifact@'));
+		expect(build).toBeGreaterThan(-1);
+		expect(smoke).toBeGreaterThan(build);
+		expect(upload).toBeGreaterThan(smoke);
+		expect(job.steps[upload].with).toEqual({
+			path: '${{ steps.preview.outputs.path }}',
+			archive: false,
+			'if-no-files-found': 'error',
+			'retention-days': 14
+		});
+		const preview = job.steps.find((step) => step.id === 'preview');
+		expect(preview?.run).toContain(
+			'fhold-admin-pr-${PR_NUMBER}-${PR_HEAD_SHA:0:12}-x86_64-linux.AppImage'
+		);
+		const source = readFileSync(join(WORKFLOWS, 'pr-admin.yml'), 'utf8');
+		expect(source).toContain('steps.upload.outputs.artifact-url');
+		expect(source).toContain('GITHUB_STEP_SUMMARY');
+		expect(source).not.toContain('secrets.');
 	});
 
 	test('workflows use the reviewed stable Node 24 and composite action releases', () => {

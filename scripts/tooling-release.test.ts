@@ -21,7 +21,8 @@ test('tooling changes do not require container qualification', () => {
 			[
 				'packages/lib/src/hosting/ssh-docker.ts',
 				'packages/electron/admin/hosting.js',
-				'packages/cli/src/commands/hosting.ts'
+				'packages/cli/src/commands/hosting.ts',
+				'.github/workflows/pr-admin.yml'
 			],
 			() => '',
 			() => ''
