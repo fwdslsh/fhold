@@ -14,7 +14,9 @@ CLI/Admin may publish independently of the runtime. Their build version comes
 from the library manifest; the Skeleton and Claude Desktop manifests retain the
 last published runtime and extension versions. Tooling-only releases preserve
 those image/download defaults and run tooling/artifact gates, not unchanged
-container gates. Runtime or dependency-resolution changes require a full release.
+container gates. Runtime source or runtime dependency-resolution changes require
+a full release. Tooling-only dependency changes may rehoist unchanged packages;
+compare non-tooling consumers' resolved dependencies rather than lockfile paths.
 
 ## Product and ownership
 

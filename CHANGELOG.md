@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.3.261002-beta — Admin refinement and automatic updates
+
+Tooling-only Linux Admin and CLI release. Container images and the Claude Desktop
+extension retain their published `0.3.261000-beta` versions. This release does not
+upgrade running agents or remote host CLIs.
+
+Use the same Overview, Agent settings, Apps and System screens for every hosting
+connection. Unsupported settings remain visible and disabled with an explanation;
+uninspected settings are not represented as off. Show cloud status, image inventory
+and supported logs through the ordinary screens, without a separate hosted view.
+
+Refine the assistant library, recent connections, location browsing, new/import
+wizards and failed-open recovery using shared typography, spacing and components.
+Preserve the selected instance and drafts when browsing or visiting Settings.
+Long paths and narrow windows no longer displace the Overview actions.
+
+Read missing Compose image references from bounded native container inspection,
+without substituting saved intent for observed versions. Explain when an older
+SSH host CLI omits image fields and offer an explicitly confirmed CLI update.
 
 Add Admin settings for the desktop app itself, accessible from Welcome and any
 managed instance. Move host connection management there and keep the instance
@@ -15,6 +33,11 @@ restart. Agent containers and remote CLIs remain unchanged. Channel changes
 discard previously staged updates without downgrading. PR previews never
 self-update. Publish/checksum both native architecture feeds and validate their
 AppImage hashes before and after release upload.
+
+Classify lockfile changes by the dependencies non-tooling consumers actually
+resolve, including optional and peer edges. An Admin-only dependency addition or
+unchanged dependency rehoist no longer forces container publication; runtime
+resolution changes still require a full release.
 
 ## 0.3.261001-beta — Admin Overview and Azure host management
 
