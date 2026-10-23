@@ -9,10 +9,57 @@ import {
 } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
-import { parse, type ParseError } from 'jsonc-parser/lib/esm/main.js';
+import { applyEdits, modify, parse, type ParseError } from 'jsonc-parser/lib/esm/main.js';
 
 const MAX_PROVIDER_FILE_BYTES = 1024 * 1024;
 const MAX_PROVIDER_FILES = 128;
+
+export type NativePreferenceDocument = {
+	text: string;
+	value: Record<string, unknown>;
+};
+export type NativePreferenceStore = {
+	read(): Promise<NativePreferenceDocument>;
+	write(text: string): Promise<void>;
+};
+export type NativeSettingsWriteResult = {
+	saved: true;
+	effective: 'verified' | 'unconfirmed';
+	detail?: string;
+};
+
+/** Apply an owned JSONC preference patch without removing comments or unrelated keys. */
+export function editNativePreferenceJsonc(text: string, patch: Record<string, unknown>): string {
+	function edit(change: Record<string, unknown>, path: string[] = []): void {
+		for (const [key, value] of Object.entries(change)) {
+			if (['__proto__', 'constructor', 'prototype'].includes(key))
+				throw new Error('Invalid preferences field.');
+			const nested =
+				value !== null && typeof value === 'object' && !Array.isArray(value)
+					? (value as Record<string, unknown>)
+					: undefined;
+			if (nested) edit(nested, [...path, key]);
+			else
+				text = applyEdits(
+					text,
+					modify(text, [...path, key], value === null ? undefined : value, {
+						formattingOptions: { insertSpaces: true, tabSize: 2 }
+					})
+				);
+		}
+	}
+	edit(patch);
+	return text;
+}
+
+export async function saveNativePreferences(
+	store: NativePreferenceStore,
+	patch: Record<string, unknown>
+): Promise<NativeSettingsWriteResult> {
+	const current = await store.read();
+	await store.write(editNativePreferenceJsonc(current.text, patch));
+	return { saved: true, effective: 'unconfirmed' };
+}
 
 /** Match OpenCode's preferred global write target; fresh homes seed opencode.json. */
 export function nativePreferencesFile(home: string): string {

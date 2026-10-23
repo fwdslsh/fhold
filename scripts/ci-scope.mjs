@@ -155,6 +155,7 @@ export function changeScope(files, readBefore, readAfter) {
 				'.github/release-manifest.json',
 				'scripts/ci-scope.mjs',
 				'scripts/tooling-release.test.ts',
+				'scripts/management-architecture.test.ts',
 				'scripts/bump-release.mjs',
 				'scripts/bump-release.test.ts',
 				'scripts/validate-release-assets.mjs',

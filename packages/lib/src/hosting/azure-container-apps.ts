@@ -4,8 +4,9 @@ import {
 	runHostingTerminal,
 	type HostingProcess,
 	type HostingTerminal
-} from './process.js';
+} from '../control-plane/process.js';
 import { azureClient } from './azure-client.js';
+import { httpsAgentBindings } from '../management/https-agent-session.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -369,6 +370,13 @@ export function azureContainerAppsProvider(
 					services: [
 						{
 							name: 'assistant',
+							imageProvenance: {
+								configuredReferences: [
+									...new Set(
+										(app.properties.template?.containers ?? []).map((container) => container.image)
+									)
+								]
+							},
 							state: platformState,
 							health: app.properties.provisioningState || 'Unknown'
 						}
@@ -390,7 +398,15 @@ export function azureContainerAppsProvider(
 			}
 			return {
 				ref,
+				actionEffects: {
+					start: 'request-platform-state',
+					stop: 'request-platform-state',
+					restart: 'restart-runtime'
+				},
 				inspect,
+				applicationBindings() {
+					return httpsAgentBindings({ inspectHost: inspect });
+				},
 				async logs(options = {}) {
 					const args = [
 						'containerapp',

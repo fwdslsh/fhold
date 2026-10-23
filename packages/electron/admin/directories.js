@@ -3,7 +3,8 @@ import { byId, message } from './ui.js';
 
 /** Host paths use a remote directory picker; exports and source archives stay on this computer. */
 export async function chooseManagedDirectory(purpose) {
-	const connectionId = state.installConnection?.id || state.currentSnapshot?.target?.connectionId;
+	const connectionId =
+		state.installConnection?.id || state.currentSnapshot?.identity?.ref?.connectionId;
 	if (!connectionId || purpose === 'backup' || purpose === 'restore')
 		return state.api.chooseDirectory({ purpose });
 	const dialog = byId('remote-directory-dialog');
@@ -35,8 +36,7 @@ export async function chooseManagedDirectory(purpose) {
 			if (current === epoch) status.textContent = message(error);
 		}
 	}
-	const title =
-		state.installConnection?.label || state.currentSnapshot?.connectionLabel || 'Remote computer';
+	const title = state.installConnection?.label || 'Remote computer';
 	byId('remote-directory-title').textContent = `Choose a folder on ${title}`;
 	path.value = '';
 	byId('remote-directory-list').replaceChildren();

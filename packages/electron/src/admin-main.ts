@@ -92,8 +92,9 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					// Setup now chooses this target as part of Install, not a second form.
 					await window.fholdAdmin.prepareNewInstance({kind:'local',homeDir:folder.value,name:name.value});
 					const snapshot = await window.fholdAdmin.snapshot();
-					if (snapshot.phase !== 'not_installed') throw new Error('Smoke home is not fresh.');
-					if (snapshot.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
+					if (snapshot.lifecycle.state !== 'known' || snapshot.lifecycle.value !== 'not-installed')
+						throw new Error('Smoke home is not fresh.');
+					if (snapshot.docker?.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
 				})()`);
 			})(),
 			new Promise<never>((_resolve, reject) => {

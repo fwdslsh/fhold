@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, connect, isIP } from 'node:net';
-import { sshArgs } from '../hosting/ssh-native.js';
-import { hostingFailure } from '../hosting/process.js';
+import { sshArgs } from '../control-plane/ssh-native.js';
+import { hostingFailure } from '../control-plane/process.js';
 import type { HostingConnection } from '../hosting/types.js';
 
 async function availablePort(): Promise<number> {

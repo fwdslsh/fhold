@@ -128,6 +128,26 @@ cloud resources and owns no custom deployment configuration. Connection metadata
 and recents are shared in the host's `~/.config/fhold/hosting.json` (or XDG root),
 not copied into instance intent or backups. Remote targets never fall back to
 local files/containers; unsupported operations show a specific explanation.
+CLI and Admin consume one composed instance session with separately typed host,
+agent, app and data operations. Ordinary pages do not branch on hosting provider
+names; individual unavailable operations retain their place and explanation.
+Docker intent is an optional host-owned subview, never a synthetic cloud home.
+Passive status does not acquire forwards or contact/wake an idle native agent.
+Explicit native access and temporary sign-in belong to the selected session;
+closing it releases those resources, never stops a deployment or changes worker
+startup intent. Native model verification remains successful if optional host
+installation completion fails, with the partial result reported separately.
+Preference results distinguish saved intent from verified effective settings;
+neither implies a durable recovery checkpoint. Lifecycle effects come from host
+operation metadata, not provider branches in shared confirmation dialogs.
+Observed lifecycle eligibility is a separate deployment fact for UI display;
+it never mutates the operation-description catalog or preflights an invocation.
+Host capability negotiation belongs to the adapter, not a caller's preliminary
+status read. A direct operation negotiates its methods/features before dispatch;
+unknown optional capabilities do not become false upgrade requirements. Shared
+native transport and Docker host primitives sit below hosting and management.
+CLI `connect` defaults to MCP consistently and uses advertised route metadata to
+explain an OpenCode-only connection before requesting native credentials.
 Native host authentication stays with SSH/Azure. A fixed SSH command receives
 typed JSON and uses the native PATH plus standard `~/.local/bin`. Discovery reads
 managed Compose labels and bounded root/child/home candidates. Host-CLI repair is
@@ -360,7 +380,8 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 - Enabling Claude or Codex remote access enables its supervisor on every
   Assistant boot, independently of the scheduler. Missing/expired sign-in or
   native consent may prevent connection but does not silently unset that intent
-  or stop OpenCode. Guided setup cancellation/failure leaves startup off.
+  or stop OpenCode. Cancelling native sign-in preserves prior startup and sandbox
+  intent; cancelling later pairing does not undo an already applied confirmed change.
 - Built-in Codex/Claude hooks use root-owned native managed files. Managed-only
   settings prevent duplicate execution of their plugin hooks. Codex diagnostics
   verify the exact build inventory and distinguish managed readiness from user

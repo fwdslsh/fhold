@@ -3,8 +3,10 @@ import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
 import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { localInstanceManagement } from './instance.js';
+import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
 import { MANAGEMENT_METHODS, type InstanceManagement } from './types.js';
 import type { ManagementRequest, ManagementResponse } from './ssh.js';
+import { parseManagementArgs } from './wire-input.js';
 
 /** Native CLI session scope preserves OAuth, model verification and native prompt processes. */
 export async function serveManagementSession(
@@ -36,13 +38,14 @@ export async function serveManagementSession(
 				if (!instance) {
 					instance = localInstanceManagement(request.homeDir, {
 						setupName: request.setupName,
+						host: localDockerManagementHost(request.homeDir),
 						openUrl: (url) => write({ event: 'open-url', url })
 					});
 					instances.set(request.homeDir, instance);
 				}
-				const value = await withDockerMachineOutput(() =>
-					instance!.call(request.method, request.value, ...(request.extra ?? []))
-				);
+				const args = parseManagementArgs(request.method, request.value, request.extra);
+				const selected = instance;
+				const value = await withDockerMachineOutput(() => selected.call(request.method, ...args));
 				write({ id, ok: true, value });
 			} catch (error) {
 				write({

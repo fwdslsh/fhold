@@ -1,9 +1,13 @@
-import type { HostingConnection } from './types.js';
-
-// Native transport primitives do not depend on the hosting adapter or its domain.
+/**
+ * Native SSH transport primitives shared by hosting discovery and the retained
+ * management RPC. They deliberately do not import either adapter layer.
+ */
 export const HOSTING_WIRE_VERSION = 1;
 export const SSH_RPC_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc';
-export function sshArgs(connection: Extract<HostingConnection, { kind: 'ssh-docker' }>): string[] {
+
+export type SshTransportConnection = { host: string; port?: number };
+
+export function sshArgs(connection: SshTransportConnection): string[] {
 	return [
 		'-o',
 		'BatchMode=yes',
@@ -13,6 +17,7 @@ export function sshArgs(connection: Extract<HostingConnection, { kind: 'ssh-dock
 		connection.host
 	];
 }
+
 export type MachineRequest = {
 	version: 1;
 	action: 'hello' | 'list' | 'diagnose' | 'inspect' | 'logs' | 'start' | 'stop' | 'restart';

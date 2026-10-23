@@ -1,10 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-	normalizeSelection,
-	type RecoverySelection
-} from '../../../../containers/assistant/recovery/selection.mjs';
+import { normalizeSelection } from '../../../../containers/assistant/recovery/selection.mjs';
+import type {
+	RecoveryOperationResult,
+	RecoverySelection,
+	RecoverySettings,
+	RecoverySnapshot,
+	RecoveryStatus
+} from '../dto/recovery.js';
 import {
 	createFholdState,
 	managedComposeFile,
@@ -12,11 +16,7 @@ import {
 	writeFileAtomic
 } from './foundation.js';
 import { assertSafePortablePath } from './provider-files.js';
-import {
-	parseRecoverySettings,
-	recoveryDirectory,
-	type RecoverySettings
-} from './recovery-config.js';
+import { parseRecoverySettings, recoveryDirectory } from './recovery-config.js';
 import { readStackConfig, writeStackConfig } from './stack-config.js';
 import { mutateStack } from './operations.js';
 import { ensureRuntime, requireInstall } from './state.js';
@@ -33,7 +33,7 @@ import { acquireStackLock, releaseStackLock } from './lock.js';
 import { auditCompose } from './secret-audit.js';
 import { assertManagedHarnessImage } from './activation.js';
 
-export type { RecoverySettings, RecoverySelection };
+export type { RecoverySettings, RecoverySelection } from '../dto/recovery.js';
 export const RECOVERY_POLICY_FILE = 'config/recovery/include.json';
 const MAX_POLICY_BYTES = 4 * 1024 * 1024;
 
@@ -52,7 +52,7 @@ function recoveryDigest(settings: RecoverySettings, selection: RecoverySelection
 		.digest('hex');
 }
 
-export function recoverySnapshot(homeDir: string) {
+export function recoverySnapshot(homeDir: string): RecoverySnapshot {
 	const read = readStackConfig(homeDir);
 	if (!read.ok) throw new Error(read.error);
 	const selection = readRecoverySelection(homeDir);
@@ -118,7 +118,7 @@ export function saveRecoveryCredential(homeDir: string, value: unknown): void {
 }
 
 /** Read-only running durability status. No namespace initialization or takeover. */
-export async function recoveryStatus(homeDir: string): Promise<Record<string, unknown>> {
+export async function recoveryStatus(homeDir: string): Promise<RecoveryStatus> {
 	const state = createFholdState(homeDir);
 	requireInstall(homeDir);
 	const read = readStackConfig(homeDir);
@@ -169,7 +169,7 @@ export async function runRecoveryOperation(
 	homeDir: string,
 	action: 'inspect' | 'init' | 'restore',
 	confirmed = false
-): Promise<string> {
+): Promise<RecoveryOperationResult> {
 	if (!['inspect', 'init', 'restore'].includes(action))
 		throw new Error('Invalid recovery operation.');
 	if (action !== 'inspect' && !confirmed) throw new Error('Confirm this recovery operation first.');

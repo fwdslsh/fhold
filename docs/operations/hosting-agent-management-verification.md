@@ -1,0 +1,210 @@
+# Hosting and agent management verification
+
+This record accompanies the [management architecture](../technical/hosting-agent-management-design.md).
+It distinguishes library/transport evidence from actual hosting-platform behavior.
+Verification date: October 22, 2026. No existing personal instance was used as a
+disposable fixture and no Azure resources were created by this investigation.
+
+## ACA native execution feasibility
+
+The installed Azure CLI 2.91.0 implements `containerapp exec` as an interactive
+console. Its `containerapp_ssh` function creates a WebSocket connection and starts
+terminal reader/writer threads. The installed `_ssh_utils.get_stdin_writer` calls
+`tty.setcbreak(sys.stdin.fileno())` on Linux without checking for a terminal.
+
+A local, account-free experiment invoked that installed input-handler function
+with stdin redirected from `/dev/null`. It printed:
+
+```text
+azure-cli=2.91.0
+stdin_tty=False
+noninteractive_writer=error: (25, 'Inappropriate ioctl for device')
+```
+
+This was a function-level test of the shipped Azure CLI, not a live Container App
+test. It made no cloud requests and loaded no account credentials. Source review
+also found that terminal output combines the remote stdout/stderr channels for
+display. A reliably framed remote process exit result, long-lived private typed
+stdin and cancellation were not established.
+
+The official [container console guide](https://learn.microsoft.com/en-us/azure/container-apps/container-console)
+documents an interactive terminal and choosing a custom executable already in the
+image. The [upstream implementation](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli/azure/cli/command_modules/containerapp/_ssh_utils.py)
+illustrates that terminal behavior; the mutable upstream branch is not a version
+pin for the local experiment.
+
+Consequently, the supported native console is not qualified as an unattended
+management transport. The refactor must not pipe secrets into command arguments,
+scrape terminal prompts or add a generic image command on the assumption that the
+console provides typed RPC. The ordinary explicit interactive console remains useful.
+
+Authenticated native OpenCode HTTP access is independent of this limit. Its
+account inventory/authentication and readiness operations can be bound through
+the agent-management interface. Model/default and custom-endpoint writes still
+require native watched preference documents, and custom endpoint model discovery
+must run from the Assistant network. Claude/Codex guided setup requires the native
+session process. Those operations need a separately qualified route before their
+ACA capability can be enabled.
+
+## Native CLI compatibility checks
+
+In addition to synthetic wire tests, the retained released Linux x64 CLI
+`0.3.261002-beta` was executed directly (artifact SHA-256
+`129966cfd538a2af593ebf313bc92f1297f92943c78e1b6b7fafdb27d5890358`).
+The released and new compiled CLIs each installed into a different generated
+temporary home using `install --no-start`. No container was started.
+
+| Check | Observed result |
+| --- | --- |
+| Released binary `hosting rpc` with version-1 `hello` | Advertised published actions and individual management methods. |
+| New `SshInstanceManagement` client with its process factory bound to released `hosting session` | Passive snapshot returned the exact old test home and `setup_incomplete` phase; close ended the process. |
+| New compiled `hosting session` receiving the published JSON-line `{id, homeDir, method:"snapshot", extra:[]}` envelope | Returned the matching request ID, exact new test home, compatible config and `setup_incomplete` phase. |
+
+The process-factory check intentionally substitutes only the native transport
+launcher, not domain operations or responses. It proves local stdin/stdout wire
+compatibility with that released binary, not SSH authentication, live native
+accounts or a real cloud environment. The existing RPC-only synthetic test also
+retains a host that advertises no management session methods: status remains
+usable without launching an unsupported persistent session.
+
+## Implementation acceptance
+
+The October 22 implementation uses typed composed host, agent, app and data
+operations in CLI/Admin, one normalized snapshot and per-operation availability.
+Standalone app permission editing no longer passes a Docker configuration through
+the UI. A named policy operation checks the previous policy under the existing
+stack lock and preserves unrelated host intent. Older remote CLIs without that
+operation report it as unsupported rather than overwriting the full configuration.
+Public client links are whitelisted
+separately from explicitly acquired agent access. Configured ACA image references
+remain labelled configuration, not running-replica image observations.
+
+Final local checks on the source-frozen implementation:
+
+| Check | Result |
+| --- | --- |
+| `bun run check` | All six workspace typechecks passed. |
+| `FH_SOCKET_TESTS=1 bun run test` | 1,041 passed, zero failed; five opt-in image-backed tests skipped. |
+| Admin real-Chromium provider workflow | Passed, 298 assertions against the synthetic native API. No vendor account or billed inference. |
+| `bun run lint` | Passed its configured gate; repository style warnings remain. This is not a warning-free lint claim. |
+| CLI compile and Admin bundle | Both passed. |
+| Packaged Linux x64 AppImage startup | Passed with its real preload/renderer and an isolated temporary home/profile. |
+| `bun run docs:test` | Both documentation tests passed. |
+| Generated stopped test home: Compose `config --quiet`, all three profiles | Passed without starting containers. |
+| `git diff --check` | Passed. |
+
+Independent Terra architect and software-engineer reviews approved the final
+solution. Their focused checks covered typed request/results, per-operation host
+authority, normalized mutation replies, retained SSH compatibility, runtime
+replacement, cancellation, late-result isolation, no replay, loaded-provider UI
+retention and configured-versus-observed image provenance. Review findings were
+fixed and regression-tested, including first-install setup, revision selection,
+RPC-only remote status, recovery mutation rendering, app-policy editing and
+one-click SSH access.
+
+The initial PR AppImage smoke caught one embedded assertion still reading the
+old top-level configuration shape. It now reads the normalized optional Docker
+subview, with an architecture regression guard. Both reviewers approved that
+follow-up, and the actual rebuilt AppImage passed the startup smoke locally.
+
+No dependency pins, Assistant/container sources, backup formats or live deployments
+changed. The skipped image tests and real ACA signal/storage/scale qualification
+are not claimed by this tooling refactor. Dependency freshness and artifact/image
+qualification remain the separately documented merge/release gates.
+
+## PR review follow-up
+
+The 29 substantive inline review comments were addressed in a separate follow-up.
+Adapters now contribute their own application bindings; the common composer has
+one passive aggregate observation port and generates descriptions from its actual
+operation tree. Native HTTP/preference implementations sit below management, and
+shared agent, hosting and recovery DTOs have leaf ownership. Runtime import-graph
+checks cover the library, enforce control-plane dependency direction and detect
+executable cycles; they do not pretend erased type imports execute at runtime.
+
+CLI connect and archive workflows use the composed session, including availability,
+target-bound disposal and an explicitly held SSH-forward lease. String-method RPC
+and its action-shaped recovery payload remain private compatibility details, not
+a second public management API. Recovery checkpoint inspection still invokes the
+existing engine; it was not replaced with saved-settings inspection.
+
+Confirmation has one normalized request-context channel. Typed boundary parsers
+and a mapped handler table cover Admin IPC and native stdin. Native use cases
+accept those contract inputs instead of repeating unknown-shape validation.
+HTTPS connection state is explicit; cancellation propagates and genuine optional
+failures retain actionable redacted causes. Guided sign-in still prevents an
+instance switch until finished or explicitly cancelled.
+Boundary regressions also cover replacing only one saved Portal token, empty
+native prompt answers, strict remote enum values and preserving the selected
+system/console log source.
+
+A restricted execution sandbox produced a false SSH child-pipe EOF during test
+execution. The original, unchanged SSH test passed ten consecutive unrestricted
+runs; the engineer's combined transport/session/recovery qualification then passed
+36 tests with 175 assertions. The compiled CLI also handled separated persistent
+session requests. No product or test-fixture workaround was added. These local
+checks do not claim live SSH authentication or ACA qualification.
+
+### Second review pass
+
+The next 11 review threads added coverage for the actual server's additive
+`credentialPolicy` advertisement and the SSH adapter consuming it. Policy updates
+and other RPC-backed commands negotiate capabilities on first invocation, without
+a preliminary status read. Old hosts without the policy feature retain unrelated
+operations. A transient capability-query failure does not become a new preflight
+roadblock; the authoritative RPC still reports its own outcome.
+
+Lifecycle invocation no longer consults a hidden last-snapshot cache. The current
+snapshot supplies observed lifecycle eligibility for Admin, while a direct command
+rechecks current target authority. A stale denied observation cannot block a
+now-valid command before that check. CLI connect retains its fixed MCP default
+and rejects an unsupported client route before asking for native credentials.
+
+Both normalized input parsers and native handlers are complete mapped tables;
+their individual inputs/results and missing entries are compiler-checked. Shared
+credential/recovery envelope parsers serve Admin and native stdin. Typed use cases
+do not parse those DTOs again. Regression cases cover OAuth, stopped full exports,
+strict policy values, console selectors and blank native/form inputs.
+
+Shared DTOs live in `dto/`, session ports in `management/contracts.ts`, and HTTP
+mechanics beside their native client. The shared process/SSH and local Docker-host
+primitives live below hosting and management in `control-plane/`. Obsolete internal
+path facades were removed; published CLI wire compatibility remains covered.
+The architecture graph also forbids management runtime imports of hosting adapters.
+
+### Third review pass
+
+All three additional findings were addressed. Fresh-install names are checked by
+one shared hostname rule after final intent resolution. CLI and native Admin/SSH
+entry points also apply it before Docker probes. Regression tests cover config
+and environment names, no filesystem writes or Docker calls for rejected names,
+and explicit valid-name overrides. Existing-home configuration parsing remains
+unchanged.
+
+Operation descriptions are again pure projections of their registered operations.
+Observed lifecycle eligibility lives in `deployment.lifecycleCapabilities`; one
+provider-neutral renderer helper combines it with operation metadata. Tests verify
+the catalog equality and disabled Admin control, while retaining the stale-denied
+observation followed by a successful authoritative invocation case.
+
+The RPC binding helper now takes an options object instead of positional optional
+arguments, and its credential-policy explanation has one definition.
+The architect implemented and qualified the session seam; the independent engineer
+approved the combined changes after catching and verifying the CLI preflight fix.
+The final full suite, six workspace typechecks, lint gate, docs checks, CLI/Admin
+builds, real Chromium workflow, packaged AppImage smoke and all-profile stopped
+Compose validation passed again.
+
+## Qualification boundaries
+
+The implementation's shared contract tests establish operation dispatch, target
+binding, independent optional failures, lifetime cleanup and presentation. Synthetic
+HTTP/SSH/Azure fixtures do not establish native vendor sign-in, real cloud signal
+delivery, scale-to-zero, persistence after replica replacement or exclusive recovery
+ownership. Those remain explicit environment qualification tasks.
+
+Do not infer a completed checkpoint or released owner from platform request
+acceptance, zero replica count or successful revision provisioning. The existing
+Assistant recovery engine remains authoritative for its own durability/ownership
+facts. External deployment tooling retains provisioning and deployment-template
+ownership.

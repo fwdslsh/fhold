@@ -1,4 +1,9 @@
-export { hostingProvider, hostingConnectionSetup, openHostingInstance } from './provider.js';
+export {
+	hostingProvider,
+	hostingConnectionSetup,
+	openHostingInstance,
+	openInstanceSession
+} from './provider.js';
 export * from './types.js';
 export {
 	HostingPreferencesStore,
@@ -19,7 +24,7 @@ export {
 	sshArgs,
 	type MachineRequest,
 	type MachineResponse
-} from './ssh-native.js';
-export { runHostingProcess } from './process.js';
+} from '../control-plane/ssh-native.js';
+export { runHostingProcess } from '../control-plane/process.js';
 export { hostingMachineRequest } from './machine.js';
 export { checkHostingConnection, repairSshCli } from './maintenance.js';

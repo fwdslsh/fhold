@@ -1,6 +1,28 @@
-import type { StackConfig } from '../control-plane/stack-config.js';
-import type { RestartStatus } from '../control-plane/runtime-revision.js';
-import type { InstanceManagement, DirectoryListing } from '../management/types.js';
+import type { InstanceSessionBindings } from '../management/contracts.js';
+import type {
+	DirectoryListing,
+	HostingAction,
+	HostingActionEffect,
+	HostingActionOptions,
+	HostingLogOptions,
+	HostingResult,
+	HostingSnapshot,
+	InstanceRef,
+	InstanceSummary
+} from '../dto/hosting.js';
+export {
+	capabilities,
+	type DirectoryListing,
+	type HostingAction,
+	type HostingActionEffect,
+	type HostingActionOptions,
+	type HostingCapabilities,
+	type HostingLogOptions,
+	type HostingResult,
+	type HostingSnapshot,
+	type InstanceRef,
+	type InstanceSummary
+} from '../dto/hosting.js';
 
 export type HostingConnection =
 	| { kind: 'local-docker'; id: 'local'; label: string }
@@ -13,13 +35,6 @@ export type HostingConnection =
 			resourceGroup: string;
 	  };
 
-export type InstanceRef =
-	| { kind: 'local-docker'; connectionId: 'local'; homeDir: string }
-	| { kind: 'ssh-docker'; connectionId: string; remoteHome: string }
-	| { kind: 'azure-container-apps'; connectionId: string; resourceId: string };
-
-export type HostingAction = 'start' | 'stop' | 'restart';
-export type HostingActionOptions = { revision?: string };
 export type ConnectionCheck = {
 	ok: boolean;
 	repairable: boolean;
@@ -32,50 +47,10 @@ export type ConnectionSetup = {
 	signIn(): Promise<void>;
 	choices(field: string, values?: Record<string, string>): Promise<HostingChoice[]>;
 };
-export type HostingCapabilities = Record<
-	HostingAction | 'settings' | 'transfer',
-	{ supported: boolean; reason?: string }
->;
-export type InstanceSummary = { ref: InstanceRef; name: string; location: string };
-export type HostingSnapshot = InstanceSummary & {
-	capabilities: HostingCapabilities;
-	services: Array<{
-		name: string;
-		image?: string;
-		state: string;
-		health: string;
-		id?: string;
-		exitCode?: number | null;
-		warnings?: string[];
-	}>;
-	warnings: string[];
-	// Compose intent exists only on Docker hosts. ACA never fabricates StackConfig.
-	config?: StackConfig;
-	pendingRestart?: RestartStatus;
-	platformState?: string;
-	revisions?: Array<{ name: string; active: boolean; replicas?: number; health: string }>;
-	clientUrl?: string;
-	portalUrl?: string;
-	containers?: Array<{ name: string; image: string }>;
-	/** Omitted when the connection supports only its default service output. */
-	logSources?: Array<{ type: 'system' | 'console'; label: string }>;
-	providerLabel?: string;
-	guidance?: { access?: string; client?: string; restart?: string };
-};
-export type HostingResult = { snapshot: HostingSnapshot; message?: string; pending?: boolean };
-export type HostingLogOptions = {
-	tail?: number;
-	type?: 'system' | 'console';
-	revision?: string;
-	replica?: string;
-	container?: string;
-};
 export interface InstanceSession {
-	management?(options?: {
-		setupName?: string;
-		openUrl?: (url: string) => void;
-	}): InstanceManagement;
 	readonly ref: InstanceRef;
+	/** Static adapter semantics; they do not depend on a prior status read. */
+	readonly actionEffects: Record<HostingAction, HostingActionEffect>;
 	inspect(): Promise<HostingSnapshot>;
 	operate(
 		action: HostingAction,
@@ -84,6 +59,11 @@ export interface InstanceSession {
 	): Promise<HostingResult>;
 	logs(options?: HostingLogOptions): Promise<string>;
 	console?(options?: Pick<HostingLogOptions, 'revision' | 'replica' | 'container'>): Promise<void>;
+	/** Adds the selected adapter's agent/app/data bindings without provider switches in consumers. */
+	applicationBindings?(options?: {
+		setupName?: string;
+		openUrl?: (url: string) => void;
+	}): Omit<InstanceSessionBindings, 'ref' | 'host' | 'inspectHost'>;
 }
 export interface HostingProvider {
 	/** Provider-specific host setup and diagnostics; discovery itself is read-only. */
@@ -127,16 +107,4 @@ export function instanceKey(ref: InstanceRef): string {
 				? ref.remoteHome
 				: ref.resourceId
 	]);
-}
-
-export function capabilities(
-	supported: ReadonlyArray<keyof HostingCapabilities>,
-	reason = 'This operation is not available for this instance.'
-): HostingCapabilities {
-	return Object.fromEntries(
-		(['start', 'stop', 'restart', 'settings', 'transfer'] as const).map((name) => [
-			name,
-			supported.includes(name) ? { supported: true } : { supported: false, reason }
-		])
-	) as HostingCapabilities;
 }

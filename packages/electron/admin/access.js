@@ -12,9 +12,13 @@ const appLabels = {
 	mcp: 'this MCP app'
 };
 let editor;
+const appConfig = (snapshot) =>
+	snapshot.apps?.config?.state === 'known'
+		? snapshot.apps.config.value
+		: { credentials: {}, portalMappings: {}, portalSecrets: {} };
 
 export function credentialOptions(snapshot) {
-	return Object.entries(snapshot.config.credentials)
+	return Object.entries(appConfig(snapshot).credentials)
 		.sort(([a], [b]) => a.localeCompare(b))
 		.map(([value, config]) => ({ value, label: `${value} — ${policyLabels[config.policy]}` }));
 }
@@ -30,11 +34,12 @@ function choosePolicy(app, policy) {
 
 function usages(username) {
 	const snapshot = state.currentSnapshot;
+	const config = appConfig(snapshot);
 	const uses = [];
 	for (const portal of portals) {
-		if (snapshot.config.portals[portal].credential === username)
+		if (config.portalMappings?.[portal]?.default === username)
 			uses.push(`${appLabels[portal]} bot`);
-		for (const [userId, credential] of Object.entries(snapshot.portalMappings[portal]?.users || {}))
+		for (const [userId, credential] of Object.entries(config.portalMappings?.[portal]?.users || {}))
 			if (credential === username) uses.push(`${appLabels[portal]} user ${userId}`);
 	}
 	return uses;
@@ -56,19 +61,20 @@ function confirmPolicy(username, previous, policy, subject = `saved access “${
 
 function uniqueName(base) {
 	let name = base;
-	for (let suffix = 2; Object.hasOwn(state.currentConfig.credentials, name); suffix++)
+	for (let suffix = 2; Object.hasOwn(appConfig(state.currentSnapshot).credentials, name); suffix++)
 		name = `${base}-${suffix}`;
 	return name;
 }
 
 export function updateAppPermissions(app) {
 	const username = byId(`${app}-credential`).value;
-	const saved = state.currentConfig?.credentials[username]?.policy;
+	const configuration = appConfig(state.currentSnapshot);
+	const saved = configuration.credentials?.[username]?.policy;
 	const policy = selectedPolicy(app) || saved || 'read';
 	const changed =
 		saved &&
 		(saved !== policy ||
-			(portals.includes(app) && state.currentConfig.portals[app].credential !== username));
+			(portals.includes(app) && configuration.portalMappings?.[app]?.default !== username));
 	setText(
 		`${app}-policy-help`,
 		saved
@@ -123,6 +129,7 @@ export async function copyAccessKey(username) {
 }
 
 export function renderCredentials(snapshot) {
+	const config = appConfig(snapshot);
 	const choices = credentialOptions(snapshot);
 	const list = byId('saved-access');
 	list.replaceChildren();
@@ -146,25 +153,25 @@ export function renderCredentials(snapshot) {
 			state.dirtyForms.has(`${app}-connections-form`) ||
 			state.dirtyForms.has(`${app}-permissions-form`);
 		const selected =
-			portals.includes(app) && !dirty ? snapshot.config.portals[app].credential : field.value;
-		field.value = selected && Object.hasOwn(snapshot.config.credentials, selected) ? selected : '';
-		if (portals.includes(app) && !dirty)
-			choosePolicy(app, snapshot.config.credentials[selected]?.policy);
+			portals.includes(app) && !dirty ? config.portalMappings?.[app]?.default : field.value;
+		field.value = selected && Object.hasOwn(config.credentials, selected) ? selected : '';
+		if (portals.includes(app) && !dirty) choosePolicy(app, config.credentials[selected]?.policy);
 		if (clients.includes(app) && !dirty)
-			choosePolicy(app, snapshot.config.credentials[field.value]?.policy || 'read');
+			choosePolicy(app, config.credentials[field.value]?.policy || 'read');
 		updateAppPermissions(app);
 	}
 }
 
 export function renderMappings(snapshot) {
+	const config = appConfig(snapshot);
 	for (const portal of portals) {
 		const list = byId(`${portal}-mappings`);
 		list.replaceChildren();
-		for (const [userId, username] of Object.entries(snapshot.portalMappings[portal]?.users || {})) {
+		for (const [userId, username] of Object.entries(config.portalMappings?.[portal]?.users || {})) {
 			const row = document.createElement('div');
 			row.className = 'mapping-row';
 			const label = document.createElement('span');
-			label.textContent = `User ${userId} · ${policyLabels[snapshot.config.credentials[username]?.policy] || 'Unavailable'}`;
+			label.textContent = `User ${userId} · ${policyLabels[config.credentials[username]?.policy] || 'Unavailable'}`;
 			row.append(label);
 			const actions = document.createElement('div');
 			actions.className = 'button-row compact mapping-actions';
@@ -194,12 +201,12 @@ export function renderMappings(snapshot) {
 }
 
 function openEditor({ username, portal, userId } = {}) {
-	if (state.operationInFlight || !state.currentConfig) return;
+	if (state.operationInFlight || state.currentSnapshot?.apps?.config?.state !== 'known') return;
 	editor = {
 		username,
 		portal,
 		userId,
-		baseline: structuredClone(state.currentConfig),
+		baseline: structuredClone(appConfig(state.currentSnapshot)),
 		focus: document.activeElement
 	};
 	byId('permissions-form').reset();
@@ -243,7 +250,7 @@ function openEditor({ username, portal, userId } = {}) {
 	byId('permissions-impact').hidden = false;
 	setText('save-permissions', portal ? 'Save person permissions' : 'Save permissions');
 	byId(
-		`dialog-policy-${username ? state.currentConfig.credentials[username].policy : portal ? 'chat' : 'read'}`
+		`dialog-policy-${username ? appConfig(state.currentSnapshot).credentials[username].policy : portal ? 'chat' : 'read'}`
 	).checked = true;
 	byId('permissions-error').hidden = true;
 	byId('permissions-dialog').showModal();
@@ -264,14 +271,18 @@ async function saveEditor() {
 		draft.portal &&
 		!draft.userId &&
 		!draft.pendingUserId &&
-		Object.hasOwn(state.currentSnapshot.portalMappings[draft.portal]?.users || {}, userId)
+		Object.hasOwn(
+			appConfig(state.currentSnapshot).portalMappings?.[draft.portal]?.users || {},
+			userId
+		)
 	) {
-		const username = state.currentSnapshot.portalMappings[draft.portal].users[userId];
+		const username = appConfig(state.currentSnapshot).portalMappings[draft.portal].users[userId];
 		draft.username = username;
 		draft.userId = userId;
-		draft.baseline = structuredClone(state.currentConfig);
+		draft.baseline = structuredClone(appConfig(state.currentSnapshot));
 		byId('person-id').readOnly = true;
-		byId(`dialog-policy-${state.currentConfig.credentials[username].policy}`).checked = true;
+		byId(`dialog-policy-${appConfig(state.currentSnapshot).credentials[username].policy}`).checked =
+			true;
 		setText('permissions-heading', `Permissions for user ${userId}`);
 		setText(
 			'permissions-impact',
@@ -315,15 +326,18 @@ async function saveEditor() {
 			async () => {
 				let saved;
 				if (draft.username) {
-					const config = structuredClone(draft.baseline);
-					config.credentials[username].policy = policy;
-					saved = await state.api.saveConfig({ config, baseConfig: draft.baseline });
-					draft.baseline = structuredClone(saved.config);
+					saved = await state.api.credential({
+						action: 'policy',
+						username,
+						policy,
+						previousPolicy: draft.baseline.credentials[username].policy
+					});
+					draft.baseline = structuredClone(appConfig(saved));
 					render(saved);
 				} else {
 					saved = await state.api.credential({ action: 'create', username, policy });
 					draft.username = username;
-					draft.baseline = structuredClone(saved.config);
+					draft.baseline = structuredClone(appConfig(saved));
 					if (draft.portal) {
 						draft.pendingUserId = userId;
 						byId('person-id').readOnly = true;
@@ -357,8 +371,8 @@ async function saveEditor() {
 }
 
 async function saveClient(app) {
-	if (state.operationInFlight || !state.currentConfig) return;
-	const baseline = structuredClone(state.currentConfig);
+	if (state.operationInFlight || state.currentSnapshot?.apps?.config?.state !== 'known') return;
+	const baseline = structuredClone(appConfig(state.currentSnapshot));
 	let username = byId(`${app}-credential`).value;
 	const policy = selectedPolicy(app);
 	if (!['chat', 'read', 'full'].includes(policy)) return;
@@ -382,9 +396,12 @@ async function saveClient(app) {
 			async () => {
 				let saved;
 				if (username) {
-					const config = structuredClone(baseline);
-					config.credentials[username].policy = policy;
-					saved = await state.api.saveConfig({ config, baseConfig: baseline });
+					saved = await state.api.credential({
+						action: 'policy',
+						username,
+						policy,
+						previousPolicy: baseline.credentials[username].policy
+					});
 				} else {
 					username = uniqueName(app === 'claude' ? 'claude-desktop' : 'mcp-app');
 					saved = await state.api.credential({ action: 'create', username, policy });
@@ -430,13 +447,13 @@ export function bindAccessEvents() {
 			);
 			if (!button || state.operationInFlight) return;
 			const userId = button.dataset.userId;
-			const username = state.currentSnapshot.portalMappings[portal].users[userId];
+			const username = appConfig(state.currentSnapshot).portalMappings[portal].users[userId];
 			if (button.hasAttribute('data-change-person-permissions'))
 				return openEditor({ username, portal, userId });
-			const defaultId = state.currentConfig.portals[portal].credential;
+			const defaultId = appConfig(state.currentSnapshot).portalMappings[portal].default;
 			if (
 				!window.confirm(
-					`Use the bot’s ${policyLabels[state.currentConfig.credentials[defaultId].policy]} permissions for user ${userId}? This may grant more access. Conversations remain tied to their previous access identity when it changes.`
+					`Use the bot’s ${policyLabels[appConfig(state.currentSnapshot).credentials[defaultId].policy]} permissions for user ${userId}? This may grant more access. Conversations remain tied to their previous access identity when it changes.`
 				)
 			)
 				return;

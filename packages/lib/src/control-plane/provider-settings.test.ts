@@ -78,46 +78,106 @@ function nativeFixture(home: string, configPath: string, override: Record<string
 			...readConfiguration(join(home, 'config/opencode/opencode.json')),
 			...override
 		};
-		const definitions = configuration.providers as Record<string, {
-			name?: string; models?: Record<string, { name?: string }>;
-		}>;
+		const definitions = configuration.providers as Record<
+			string,
+			{
+				name?: string;
+				models?: Record<string, { name?: string }>;
+			}
+		>;
 		const auth = readConfiguration(authPath);
-		const policy = (configuration.policies ?? (configuration.experimental as { policies?: unknown } | undefined)?.policies ?? []) as Array<{ action: string; resource: string; effect: string }>;
-		const disabled = (provider: string) => policy.filter(rule => rule.action === 'provider.use' && rule.resource === provider).at(-1)?.effect === 'deny';
+		const policy = (configuration.policies ??
+			(configuration.experimental as { policies?: unknown } | undefined)?.policies ??
+			[]) as Array<{ action: string; resource: string; effect: string }>;
+		const disabled = (provider: string) =>
+			policy.filter((rule) => rule.action === 'provider.use' && rule.resource === provider).at(-1)
+				?.effect === 'deny';
 		const providerIds = ['native-catalog', ...Object.keys(definitions ?? {})];
 		const nativeModel = configuration.model as { providerID?: string; model?: string } | undefined;
-		const selection = typeof configuration.model === 'string' ? configuration.model :
-			nativeModel?.providerID && nativeModel.model ? `${nativeModel.providerID}/${nativeModel.model}` : '';
+		const selection =
+			typeof configuration.model === 'string'
+				? configuration.model
+				: nativeModel?.providerID && nativeModel.model
+					? `${nativeModel.providerID}/${nativeModel.model}`
+					: '';
 		const separator = selection.indexOf('/');
-		const preferred = separator > 0 ? { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) } : null;
+		const preferred =
+			separator > 0
+				? { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) }
+				: null;
 		const data = (value: unknown) => Response.json({ data: value });
 		if (path === '/api/info') return Response.json({ version: '2.0.29' });
-		if (path === '/api/config') return Response.json([{ type: 'document', info: {
-			...configuration,
-			// 2.0.29 normalizes both accepted input forms to top-level policies.
-			experimental: undefined,
-			policies: policy,
-			...(preferred ? { model: { providerID: preferred.providerID, model: preferred.id } } : {})
-		} }]);
+		if (path === '/api/config')
+			return Response.json([
+				{
+					type: 'document',
+					info: {
+						...configuration,
+						// 2.0.29 normalizes both accepted input forms to top-level policies.
+						experimental: undefined,
+						policies: policy,
+						...(preferred
+							? { model: { providerID: preferred.providerID, model: preferred.id } }
+							: {})
+					}
+				}
+			]);
 		if (path === '/api/model/default') return data(preferred);
-		if (path === '/api/provider') return data(providerIds.map(id => ({
-			id, name: definitions?.[id]?.name ?? id,
-			activation: disabled(id) ? 'disabled' : 'enabled'
-		})));
-		if (path === '/api/integration') return data([...new Set([...providerIds, ...Object.keys(auth)])].map(id => ({
-			id, name: id, methods: [{ type: 'key', label: 'API key' }],
-			connections: auth[id] ? [{ type: 'credential', id: 'cred-' + id, method: 'key' }]
-				: id === 'native-catalog' ? [{ type: 'env', name: 'FREE_NATIVE_FIXTURE' }] : []
-		})));
-		if (path === '/api/model') return data([
-			{ ...textModel, providerID: 'native-catalog' },
-			{ ...textModel, id: 'whisper', providerID: 'native-catalog', capabilities: { tools: false, input: ['audio'], output: ['text'] } },
-			{ ...textModel, id: 'deprecated-text', providerID: 'native-catalog', status: 'deprecated' },
-			...Object.entries(definitions ?? {}).flatMap(([id, provider]) => Object.entries(provider.models ?? {}).map(([model, value]) => ({
-				...textModel, id: model, providerID: id, name: value.name ?? model
-			})))
-		].filter(model => !disabled(model.providerID)));
-		if (path === '/api/credential') return data(Object.entries(auth).map(([integrationID, value]) => ({ id: 'cred-' + integrationID, integrationID, value })));
+		if (path === '/api/provider')
+			return data(
+				providerIds.map((id) => ({
+					id,
+					name: definitions?.[id]?.name ?? id,
+					activation: disabled(id) ? 'disabled' : 'enabled'
+				}))
+			);
+		if (path === '/api/integration')
+			return data(
+				[...new Set([...providerIds, ...Object.keys(auth)])].map((id) => ({
+					id,
+					name: id,
+					methods: [{ type: 'key', label: 'API key' }],
+					connections: auth[id]
+						? [{ type: 'credential', id: 'cred-' + id, method: 'key' }]
+						: id === 'native-catalog'
+							? [{ type: 'env', name: 'FREE_NATIVE_FIXTURE' }]
+							: []
+				}))
+			);
+		if (path === '/api/model')
+			return data(
+				[
+					{ ...textModel, providerID: 'native-catalog' },
+					{
+						...textModel,
+						id: 'whisper',
+						providerID: 'native-catalog',
+						capabilities: { tools: false, input: ['audio'], output: ['text'] }
+					},
+					{
+						...textModel,
+						id: 'deprecated-text',
+						providerID: 'native-catalog',
+						status: 'deprecated'
+					},
+					...Object.entries(definitions ?? {}).flatMap(([id, provider]) =>
+						Object.entries(provider.models ?? {}).map(([model, value]) => ({
+							...textModel,
+							id: model,
+							providerID: id,
+							name: value.name ?? model
+						}))
+					)
+				].filter((model) => !disabled(model.providerID))
+			);
+		if (path === '/api/credential')
+			return data(
+				Object.entries(auth).map(([integrationID, value]) => ({
+					id: 'cred-' + integrationID,
+					integrationID,
+					value
+				}))
+			);
 		const connect = /^\/api\/integration\/([^/]+)\/connect\/key$/.exec(path);
 		if (connect && request.method === 'POST') {
 			auth[decodeURIComponent(connect[1])] = { type: 'key', key: (body as { key: string }).key };
@@ -248,7 +308,9 @@ describe('Native provider manager settings', () => {
 		expect(
 			readConfiguration(join(current.home, 'synthetic-native-credentials.json'))['keyed-custom']
 		).toEqual({ type: 'key', key: 'synthetic-endpoint-key' });
-		expect(native.calls.find((call) => call.path === '/api/integration/keyed-custom/connect/key')).toMatchObject({
+		expect(
+			native.calls.find((call) => call.path === '/api/integration/keyed-custom/connect/key')
+		).toMatchObject({
 			method: 'POST'
 		});
 		expect(native.modelRequests).toHaveLength(0);
@@ -272,11 +334,13 @@ describe('Native provider manager settings', () => {
 		const policy = { model: { providerID: 'native-catalog', model: 'text-model' } };
 		writeFileSync(policyPath, JSON.stringify(policy));
 		const native = nativeFixture(current.home, current.configPath);
-		expect((await useProviderModel(current.home, 'native-catalog', 'text-model', native)).currentModel)
-			.toEqual({ provider: 'native-catalog', model: 'text-model' });
+		expect(
+			(await useProviderModel(current.home, 'native-catalog', 'text-model', native)).currentModel
+		).toEqual({ provider: 'native-catalog', model: 'text-model' });
 		expect(readConfiguration(policyPath)).toEqual(policy);
-		await expect(useProviderModel(current.home, 'existing', 'team/model', native))
-			.rejects.toThrow('default model is controlled');
+		await expect(useProviderModel(current.home, 'existing', 'team/model', native)).rejects.toThrow(
+			'default model is controlled'
+		);
 		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');
 		expect(native.modelRequests).toHaveLength(0);
 	});
@@ -295,7 +359,7 @@ describe('Native provider manager settings', () => {
 			{ providerID: 'existing', id: 'small' }
 		]);
 		expect(readConfiguration(current.configPath)).toEqual(current.configuration);
-		expect(native.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+		expect(native.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
 	});
 
 	it('removes only selected saved auth, preserving endpoint, default, and another account', async () => {
@@ -336,10 +400,19 @@ describe('Native provider manager settings', () => {
 			native
 		);
 		const saved = readConfiguration(current.configPath);
-		const settings = await removeProviderSetup(current.home, 'remove-me', { ...native, endpoint: true });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, policies: [{ action: 'provider.use', resource: 'remove-me', effect: 'deny' }] });
+		const settings = await removeProviderSetup(current.home, 'remove-me', {
+			...native,
+			endpoint: true
+		});
+		expect(readConfiguration(current.configPath)).toEqual({
+			...saved,
+			policies: [{ action: 'provider.use', resource: 'remove-me', effect: 'deny' }]
+		});
 		expect(settings.providers.find((provider) => provider.id === 'remove-me')).toMatchObject({
-			disabled: true, connected: false, models: [], endpoint: { editable: true }
+			disabled: true,
+			connected: false,
+			models: [],
+			endpoint: { editable: true }
 		});
 		expect(native.modelRequests).toHaveLength(0);
 	});
@@ -373,7 +446,10 @@ describe('Native provider manager settings', () => {
 		const saved = readConfiguration(current.configPath);
 		await removeProviderSetup(current.home, 'endpoint-only', { ...native, endpoint: true });
 		expect(readConfiguration(authPath)).toEqual({ 'endpoint-only': account });
-		expect(readConfiguration(current.configPath)).toEqual({ ...saved, policies: [{ action: 'provider.use', resource: 'endpoint-only', effect: 'deny' }] });
+		expect(readConfiguration(current.configPath)).toEqual({
+			...saved,
+			policies: [{ action: 'provider.use', resource: 'endpoint-only', effect: 'deny' }]
+		});
 	});
 
 	it('refuses an incompatible explicit default before writing or invoking a model', async () => {
@@ -420,9 +496,15 @@ describe('Native provider manager settings', () => {
 		const native = nativeFixture(current.home, current.configPath, {
 			model: 'existing/team/model'
 		});
-		await expect(
-			useProviderModel(current.home, 'native-catalog', 'text-model', native)
-		).rejects.toThrow(/saved.*could not be confirmed/i);
+		const result = await useProviderModel(current.home, 'native-catalog', 'text-model', {
+			...native,
+			timeoutMs: 1
+		});
+		expect(result.write).toMatchObject({
+			saved: true,
+			effective: 'unconfirmed'
+		});
+		expect(result.currentModel).toEqual({ provider: 'existing', model: 'team/model' });
 		expect(readFileSync(current.configPath, 'utf8')).not.toBe(original);
 		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');
 		expect(native.calls.every((call) => call.method === 'GET')).toBe(true);
@@ -436,38 +518,97 @@ describe('Native provider manager settings', () => {
 		const native = nativeFixture(current.home, current.configPath, {
 			providers: current.configuration.providers
 		});
-		await expect(
-			saveProviderEndpoint(
-				current.home,
-				{
-					provider: 'existing',
-					name: 'Changed',
-					url: 'http://192.0.2.22:9999/v1',
-					model: 'new-model'
-				},
-				native
-			)
-		).rejects.toThrow(/saved.*could not be confirmed/i);
+		const result = await saveProviderEndpoint(
+			current.home,
+			{
+				provider: 'existing',
+				name: 'Changed',
+				url: 'http://192.0.2.22:9999/v1',
+				model: 'new-model'
+			},
+			{ ...native, timeoutMs: 1 }
+		);
+		expect(result.write).toMatchObject({
+			saved: true,
+			effective: 'unconfirmed'
+		});
 		expect(readFileSync(current.configPath, 'utf8')).not.toBe(original);
 		expect(native.modelRequests).toHaveLength(0);
 	}, 15_000);
 
-	it.each(['top-level', 'legacy'] as const)('re-enables exactly the chosen endpoint and preserves other disabled IDs and auth in %s preferences', async (format) => {
+	it('retains a successful preference save when the agent becomes unreachable during read-back', async () => {
 		const current = fixture();
-		const policies = [{ action: 'provider.use', resource: 'existing', effect: 'deny' }, { action: 'provider.use', resource: 'another', effect: 'deny' }, { action: 'tool.use', resource: 'shell:forbidden', effect: 'deny' }];
-		writeFileSync(current.configPath, JSON.stringify({ ...current.configuration, ...(format === 'legacy' ? { experimental: { policies } } : { policies }) }));
-		const authPath = join(current.home, 'synthetic-native-credentials.json');
-		writeFileSync(authPath, JSON.stringify({ existing: { type: 'key', key: 'synthetic-preserved' } }));
 		const native = nativeFixture(current.home, current.configPath);
-		const settings = await saveProviderEndpoint(current.home, {
-			provider: 'existing', name: 'Existing operator provider', url: 'http://192.0.2.20:8080/v1', model: 'team/model'
-		}, native);
-		const saved = readConfiguration(current.configPath);
-		expect(format === 'legacy' ? (saved.experimental as { policies: unknown }).policies : saved.policies).toEqual([policies[1], policies[2], { action: 'provider.use', resource: 'existing', effect: 'allow' }]);
-		expect(settings.providers.find((provider) => provider.id === 'existing')?.disabled).toBe(false);
-		expect(readConfiguration(authPath)).toEqual({ existing: { type: 'key', key: 'synthetic-preserved' } });
+		const result = await useProviderModel(current.home, 'native-catalog', 'text-model', {
+			timeoutMs: 1,
+			fetch: (async (input, init) => {
+				if (
+					new URL(String(input)).pathname === '/api/config' &&
+					readConfiguration(current.configPath).model === 'native-catalog/text-model'
+				)
+					throw new Error('Synthetic connection lost');
+				return native.fetch(input, init);
+			}) as typeof fetch
+		});
+		expect(result.write).toMatchObject({ saved: true, effective: 'unconfirmed' });
+		expect(result.write?.detail).toContain('Synthetic connection lost');
+		expect(result.inventoryUnavailable).toBe(true);
+		expect(result.currentModel).toBeUndefined();
+		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');
 		expect(native.modelRequests).toHaveLength(0);
 	});
+
+	it.each(['top-level', 'legacy'] as const)(
+		're-enables exactly the chosen endpoint and preserves other disabled IDs and auth in %s preferences',
+		async (format) => {
+			const current = fixture();
+			const policies = [
+				{ action: 'provider.use', resource: 'existing', effect: 'deny' },
+				{ action: 'provider.use', resource: 'another', effect: 'deny' },
+				{ action: 'tool.use', resource: 'shell:forbidden', effect: 'deny' }
+			];
+			writeFileSync(
+				current.configPath,
+				JSON.stringify({
+					...current.configuration,
+					...(format === 'legacy' ? { experimental: { policies } } : { policies })
+				})
+			);
+			const authPath = join(current.home, 'synthetic-native-credentials.json');
+			writeFileSync(
+				authPath,
+				JSON.stringify({ existing: { type: 'key', key: 'synthetic-preserved' } })
+			);
+			const native = nativeFixture(current.home, current.configPath);
+			const settings = await saveProviderEndpoint(
+				current.home,
+				{
+					provider: 'existing',
+					name: 'Existing operator provider',
+					url: 'http://192.0.2.20:8080/v1',
+					model: 'team/model'
+				},
+				native
+			);
+			const saved = readConfiguration(current.configPath);
+			expect(
+				format === 'legacy'
+					? (saved.experimental as { policies: unknown }).policies
+					: saved.policies
+			).toEqual([
+				policies[1],
+				policies[2],
+				{ action: 'provider.use', resource: 'existing', effect: 'allow' }
+			]);
+			expect(settings.providers.find((provider) => provider.id === 'existing')?.disabled).toBe(
+				false
+			);
+			expect(readConfiguration(authPath)).toEqual({
+				existing: { type: 'key', key: 'synthetic-preserved' }
+			});
+			expect(native.modelRequests).toHaveLength(0);
+		}
+	);
 
 	it('discovers model IDs inside Assistant without putting a key in command args or making an inference request', async () => {
 		const current = fixture();

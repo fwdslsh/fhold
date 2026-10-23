@@ -4,6 +4,11 @@ export const csv = (value) =>
 		.map((item) => item.trim())
 		.filter(Boolean);
 
+// Observations deliberately distinguish an absent/unavailable inspection from
+// a known empty value. Renderers only unwrap confirmed observations.
+export const known = (observation) =>
+	observation?.state === 'known' ? observation.value : undefined;
+
 export function readinessResult(value) {
 	return value && typeof value === 'object' && typeof value.ok === 'boolean';
 }
@@ -39,8 +44,7 @@ export function serviceImageDetails(image) {
 	if (typeof image !== 'string' || !image.trim())
 		return { label: 'Image tag', value: 'Not reported' };
 	const [reference, digest] = image.trim().split('@');
-	if (/^sha256:[a-f0-9]+$/i.test(reference))
-		return { label: 'Image digest', value: reference };
+	if (/^sha256:[a-f0-9]+$/i.test(reference)) return { label: 'Image digest', value: reference };
 	const name = reference.slice(reference.lastIndexOf('/') + 1);
 	const separator = name.lastIndexOf(':');
 	if (separator !== -1) return { label: 'Image tag', value: name.slice(separator + 1) };

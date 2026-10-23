@@ -115,16 +115,62 @@ function settings() {
 	};
 }
 function snapshot(homeDir = '/disposable-provider-fixture') {
+	const config = defaultStackConfig();
 	return {
-		phase: 'ready',
-		homeDir,
-		configPath: `${homeDir}/state/stack.json`,
-		config: defaultStackConfig(),
-		services: [],
-		credentials: [],
-		portalMappings: { discord: { users: {} }, slack: { users: {} } },
-		portalSecrets: {},
-		pendingRestart: { required: false }
+		identity: {
+			ref: { kind: 'local-docker', homeDir },
+			name: 'provider-fixture',
+			location: homeDir
+		},
+		lifecycle: {
+			state: 'known' as const,
+			value: 'ready' as const,
+			observedAt: '2026-10-22T00:00:00.000Z'
+		},
+		deployment: {
+			state: 'known' as const,
+			value: { warnings: [] },
+			observedAt: '2026-10-22T00:00:00.000Z'
+		},
+		services: { state: 'known' as const, value: [], observedAt: '2026-10-22T00:00:00.000Z' },
+		operations: {
+			'agent.providers': {
+				support: 'supported' as const,
+				availability: { state: 'ready' as const }
+			}
+		},
+		pendingChanges: {
+			state: 'known' as const,
+			value: { pending: false },
+			observedAt: '2026-10-22T00:00:00.000Z'
+		},
+		agent: {
+			access: {
+				state: 'known' as const,
+				value: { endpoint: 'http://127.0.0.1' },
+				observedAt: '2026-10-22T00:00:00.000Z'
+			},
+			account: { state: 'not-inspected' as const, reason: 'fixture' },
+			models: { state: 'not-inspected' as const, reason: 'fixture' },
+			readiness: { state: 'not-inspected' as const, reason: 'fixture' }
+		},
+		apps: {
+			config: {
+				state: 'known' as const,
+				value: {
+					credentials: {},
+					portalMappings: {
+						discord: { default: '', users: {} },
+						slack: { default: '', users: {} }
+					},
+					portalSecrets: {}
+				},
+				observedAt: '2026-10-22T00:00:00.000Z'
+			},
+			status: { state: 'not-inspected' as const, reason: 'fixture' }
+		},
+		data: {},
+		docker: { homeDir, configPath: `${homeDir}/state/stack.json`, config }
 	};
 }
 function fire(id: string, event = 'click', value: unknown = {}) {

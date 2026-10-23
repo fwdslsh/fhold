@@ -20,6 +20,43 @@ afterEach(() => {
 });
 
 describe('install', () => {
+	it.each(['configuration', 'environment'] as const)(
+		'rejects invalid hostname names from %s before probing Docker with an explicit home',
+		async (source) => {
+			const root = mkdtempSync(join(tmpdir(), 'fhold-cli-install-hostname-'));
+			roots.push(root);
+			process.env.FH_HOME = join(root, 'home');
+			const calls = join(root, 'docker-calls');
+			const docker = join(root, 'docker');
+			writeFileSync(
+				docker,
+				`#!${process.execPath}\nimport { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(calls)}, 'called');\n`,
+				{ mode: 0o700 }
+			);
+			const previousDocker = process.env.FH_DOCKER_BIN;
+			const previousName = process.env.FH_PROJECT_NAME;
+			process.env.FH_DOCKER_BIN = docker;
+			try {
+				for (const name of ['my_agent', 'agent-', 'a'.repeat(64)]) {
+					process.env.FH_PROJECT_NAME = source === 'environment' ? name : 'valid-agent';
+					const configFile = join(root, 'stack.json');
+					const config = defaultStackConfig(process.env.FH_HOME);
+					config.deployment.projectName = name;
+					writeFileSync(configFile, JSON.stringify(config));
+					await expect(
+						bootstrapInstall({ start: true, ...(source === 'configuration' ? { configFile } : {}) })
+					).rejects.toThrow('Instance name must be');
+					expect(existsSync(process.env.FH_HOME)).toBe(false);
+					expect(existsSync(calls)).toBe(false);
+				}
+			} finally {
+				if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN;
+				else process.env.FH_DOCKER_BIN = previousDocker;
+				if (previousName === undefined) delete process.env.FH_PROJECT_NAME;
+				else process.env.FH_PROJECT_NAME = previousName;
+			}
+		}
+	);
 	it('preserves a custom configuration name as project intent and the derived hostname without Docker', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-named-install-'));
 		roots.push(root);

@@ -38,6 +38,10 @@ running processes, mocked tests and source scans are not live readiness.
   approval records. See `docs/managed-harness-configuration.md`.
 - No new ingress protocol, service, AI provider registry, scheduler or compatibility layer.
   The bounded CLI JSON machine envelope exists only over native SSH/stdin.
+- Compose host, agent, app and data ports in `hosting/provider.ts`. CLI/Admin use
+  normalized observations and named typed operations; feature views must not
+  branch on host names, fake a cloud StackConfig, acquire access on passive
+  inspection or turn temporary setup cancellation into deployment changes.
 - Host-specific deployment/qualification and external vendor installers are not
   product runtime features. Keep generic transports, runtime contracts, product
   tests and reusable image smokes here.

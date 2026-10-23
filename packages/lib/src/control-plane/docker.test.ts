@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installHome } from './install.js';
 import { localInstanceManagement } from '../management/instance.js';
-import type { ManagedSnapshot } from '../management/types.js';
+import { localDockerManagementHost } from './local-instance-host.js';
 import { FH_RUNTIME_VERSION } from './release.js';
 
 import {
@@ -20,20 +20,38 @@ const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
 
 it('retains actual image references from Compose JSON, without substituting configured tags', () => {
-	const assistant = { Service: 'assistant', State: 'running', Image: 'registry.test:5000/team/assistant:old-tag' };
-	const guardian = { Service: 'guardian', State: 'exited', Image: 'fwdslsh/fhold-guardian:new-tag' };
-	for (const output of [JSON.stringify([assistant, guardian]), [assistant, guardian].map(item => JSON.stringify(item)).join('\n')]) {
-		expect(parseComposePsRows(output).map(row => row.image)).toEqual([assistant.Image, guardian.Image]);
+	const assistant = {
+		Service: 'assistant',
+		State: 'running',
+		Image: 'registry.test:5000/team/assistant:old-tag'
+	};
+	const guardian = {
+		Service: 'guardian',
+		State: 'exited',
+		Image: 'fwdslsh/fhold-guardian:new-tag'
+	};
+	for (const output of [
+		JSON.stringify([assistant, guardian]),
+		[assistant, guardian].map((item) => JSON.stringify(item)).join('\n')
+	]) {
+		expect(parseComposePsRows(output).map((row) => row.image)).toEqual([
+			assistant.Image,
+			guardian.Image
+		]);
 	}
 	for (const Image of [undefined, null, { tag: 'not-a-reference' }])
-		expect(parseComposePsRows(JSON.stringify({ Service: 'assistant', Image }))[0]?.image).toBeUndefined();
+		expect(
+			parseComposePsRows(JSON.stringify({ Service: 'assistant', Image }))[0]?.image
+		).toBeUndefined();
 });
 
 it('fills only missing image references using a single restricted Docker inspection', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-image-status-'));
 	roots.push(root);
 	const binary = join(root, 'docker');
-	writeFileSync(binary, `#!${process.execPath}
+	writeFileSync(
+		binary,
+		`#!${process.execPath}
 import { writeFileSync } from 'node:fs';
 writeFileSync(${JSON.stringify(join(root, 'args.json'))}, JSON.stringify(process.argv.slice(2)));
 console.log(JSON.stringify({id:'abc123-full-id',image:'registry.test:5000/assistant:observed'}));
@@ -41,24 +59,35 @@ console.log('invalid metadata');
 console.log(JSON.stringify({id:'def456-full-id',image:'guardian@sha256:abcd'}));
 // Partial output still reports containers observed before another was removed.
 process.exit(1);
-`, { mode: 0o700 });
+`,
+		{ mode: 0o700 }
+	);
 	process.env.FH_DOCKER_BIN = binary;
-	const rows = parseComposePsRows(JSON.stringify([
-		{ Service: 'assistant', ID: 'abc123', State: 'running' },
-		{ Service: 'guardian', ID: 'def456', State: 'exited', Image: '' },
-		{ Service: 'discord', ID: 'already', Image: 'portal:reported-by-compose' },
-		{ Service: 'slack', ID: 'removed', State: 'exited' },
-		{ Service: 'custom', State: 'created' }
-	]));
+	const rows = parseComposePsRows(
+		JSON.stringify([
+			{ Service: 'assistant', ID: 'abc123', State: 'running' },
+			{ Service: 'guardian', ID: 'def456', State: 'exited', Image: '' },
+			{ Service: 'discord', ID: 'already', Image: 'portal:reported-by-compose' },
+			{ Service: 'slack', ID: 'removed', State: 'exited' },
+			{ Service: 'custom', State: 'created' }
+		])
+	);
 	const result = await completeContainerImages(rows);
-	expect(result.map(row => row.image)).toEqual([
-		'registry.test:5000/assistant:observed', 'guardian@sha256:abcd',
-		'portal:reported-by-compose', undefined, undefined
+	expect(result.map((row) => row.image)).toEqual([
+		'registry.test:5000/assistant:observed',
+		'guardian@sha256:abcd',
+		'portal:reported-by-compose',
+		undefined,
+		undefined
 	]);
 	expect(rows[0].image).toBeUndefined();
 	expect(JSON.parse(await Bun.file(join(root, 'args.json')).text())).toEqual([
-		'inspect', '--format', '{"id":{{json .Id}},"image":{{json .Config.Image}}}',
-		'abc123', 'def456', 'removed'
+		'inspect',
+		'--format',
+		'{"id":{{json .Id}},"image":{{json .Config.Image}}}',
+		'abc123',
+		'def456',
+		'removed'
 	]);
 	process.env.FH_DOCKER_BIN = join(root, 'missing-docker');
 	expect(await completeContainerImages(rows)).toEqual(rows);
@@ -73,7 +102,9 @@ it('carries inspected images and the bundled update target through the Admin sna
 	const homeDir = join(root, 'home');
 	await installHome({ homeDir, automaticPorts: false });
 	const binary = join(root, 'docker');
-	writeFileSync(binary, `#!${process.execPath}
+	writeFileSync(
+		binary,
+		`#!${process.execPath}
 const args=process.argv.slice(2);
 if(args[0]==='compose' && args.includes('ps')) console.log(JSON.stringify([
  {Service:'assistant',ID:'a123',State:'running',Health:'healthy'},
@@ -81,16 +112,23 @@ if(args[0]==='compose' && args.includes('ps')) console.log(JSON.stringify([
 ]));
 if(args[0]==='inspect') console.log(args[2].includes('.Config.Image')
  ? JSON.stringify({id:'a123-full',image:'assistant:docker-observed'}) : '[]');
-`, { mode: 0o700 });
+`,
+		{ mode: 0o700 }
+	);
 	process.env.FH_DOCKER_BIN = binary;
-	const management = localInstanceManagement(homeDir);
+	const management = localInstanceManagement(homeDir, { host: localDockerManagementHost(homeDir) });
 	try {
-		const snapshot = await management.call<ManagedSnapshot>('snapshot');
+		const snapshot = await management.call('snapshot');
 		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_VERSION);
-		expect(snapshot.services.map(service => service.image)).toEqual(['assistant:docker-observed', 'guardian:compose-observed']);
+		expect(snapshot.services.map((service) => service.image)).toEqual([
+			'assistant:docker-observed',
+			'guardian:compose-observed'
+		]);
 		expect(snapshot.config.deployment.images.assistant).toBe(FH_RUNTIME_VERSION);
-		expect(snapshot.services[0]).toMatchObject({state:'running',health:'healthy'});
-	} finally { await management.close(); }
+		expect(snapshot.services[0]).toMatchObject({ state: 'running', health: 'healthy' });
+	} finally {
+		await management.close();
+	}
 });
 
 afterEach(() => {

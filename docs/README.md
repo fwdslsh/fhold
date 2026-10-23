@@ -7,7 +7,9 @@
 - [Ephemeral Assistant runtime plan](technical/ephemeral-assistant-plan.md): host-independent scheduler/recovery controls, SQLite-native backups and external host responsibilities.
 - [Ephemeral implementation review](technical/ephemeral-assistant-implementation-review.md): current code ownership, reusable tests and remaining qualification gates.
 - [Hosted instance management](hosting.md): shared CLI/Admin connections, SSH Docker management and experimental ACA observation/Start/Stop requests.
-- [Hosting-provider architecture](technical/hosting-provider-architecture.md): implemented foundation and phased parity/qualification work.
+- [Hosting-provider architecture](technical/hosting-provider-architecture.md): composed host, agent, app and data services and the provider extension pattern.
+- [Hosting and agent management design](technical/hosting-agent-management-design.md): design decisions, operation contracts and migration scope, implemented on the feature branch pending release.
+- [Management verification](operations/hosting-agent-management-verification.md): checked behavior and explicit ACA transport qualification limits.
 - [MCP and external clients](remote-mcp.md), [Claude Desktop bridge](claude-desktop.md).
 - [Discord](portals/discord-setup.md) and [Slack](portals/slack-setup.md).
 - [Experimental native remote workers](native-remote-access.md).

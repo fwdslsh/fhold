@@ -6,8 +6,8 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { FH_RELEASE_VERSION } from '../control-plane/release.js';
 import { hostingProvider } from './provider.js';
-import { runHostingProcess, type HostingProcess } from './process.js';
-import { sshArgs } from './ssh-native.js';
+import { runHostingProcess, type HostingProcess } from '../control-plane/process.js';
+import { sshArgs } from '../control-plane/ssh-native.js';
 import type { HostingConnection, ConnectionCheck } from './types.js';
 export async function checkHostingConnection(
 	connection: HostingConnection,

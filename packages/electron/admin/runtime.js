@@ -8,22 +8,22 @@ import { checkInstallationReadiness, prepareInstallTarget } from './instances.js
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 import { instanceCapability, instancePresentation } from './instance-presentation.js';
 
-export function renderPhase(phase) {
-	const setup = phase === 'setup_incomplete' || state.awaitingSetupFinish;
-	const ready = phase === 'ready' || phase === 'remote';
+export function renderPhase(lifecycle) {
+	const setup = lifecycle === 'setup-incomplete' || state.awaitingSetupFinish;
+	const ready = lifecycle === 'ready' || lifecycle === 'externally-managed';
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
-	byId('install-section').hidden = phase !== 'not_installed';
+	byId('install-section').hidden = lifecycle !== 'not-installed';
 	byId('instance-import-section').hidden = true;
-	byId('app-shell').hidden = phase === 'not_installed';
+	byId('app-shell').hidden = lifecycle === 'not-installed';
 	for (const element of all('.setup-only')) element.hidden = !setup;
 	for (const element of all('.ready-only')) element.hidden = !ready || setup;
-	document.body.dataset.phase = setup ? 'setup_incomplete' : ready ? 'ready' : phase;
+	document.body.dataset.phase = setup ? 'setup_incomplete' : ready ? 'ready' : lifecycle;
 	const notifications = byId('notification-area');
 	const alertLocation = byId(ready && !setup ? 'sidebar-alerts' : 'setup-alerts');
 	if (notifications.parentElement !== alertLocation) alertLocation.append(notifications);
-	setSkipTarget(phase === 'not_installed' ? 'install-section' : 'main-content');
+	setSkipTarget(lifecycle === 'not-installed' ? 'install-section' : 'main-content');
 	if (setup) {
 		showView('provider');
 	} else if (ready) {
@@ -35,16 +35,20 @@ export function renderRuntimeControls(snapshot) {
 	const view = instancePresentation(snapshot);
 	const assistant = view.services.find((service) => service.name === 'assistant');
 	const running = isRunning(assistant);
-	const unavailable = !!snapshot.dockerError;
+	const observed = snapshot.services?.state === 'known';
 	const reasons = [];
-	for (const action of ['start', 'restart', 'stop', 'update']) {
-		const capability = instanceCapability(action, snapshot);
+	for (const [action, operationKey] of [
+		['start', 'host.start'],
+		['restart', 'host.restart'],
+		['stop', 'host.stop'],
+		['update', 'docker.update']
+	]) {
+		const capability = instanceCapability(operationKey, snapshot);
 		const button = byId(`${action}-stack`);
 		button.disabled =
 			state.operationInFlight ||
-			unavailable ||
 			!capability.supported ||
-			(view.managed &&
+			(observed &&
 				(action === 'start'
 					? running
 					: action === 'restart'
@@ -58,48 +62,36 @@ export function renderRuntimeControls(snapshot) {
 	}
 	setText('runtime-action-help', reasons.join(' '));
 	byId('runtime-action-help').hidden = reasons.length === 0;
-	renderRestartStatus(view.platform || snapshot);
-	if (view.managed) updateRecoveryFields();
+	renderRestartStatus(snapshot);
+	if (snapshot.data?.recovery?.state === 'known') updateRecoveryFields();
 }
 
 export function renderServices(snapshot) {
 	const view = instancePresentation(snapshot);
-	const reportedServices = view.platform?.containers?.length
-		? view.platform.containers.map((container) => ({
-				...container,
-				state: view.platform.platformState || 'Not reported',
-				health: 'Platform observation'
-			}))
-		: view.services;
-	const missingHostVersion = !snapshot.updateImageTag && snapshot.target?.kind === 'ssh-docker';
-	setText(
-		'update-image-tag',
-		snapshot.updateImageTag || (view.managed ? 'Not reported' : 'Managed externally')
-	);
+	const reportedServices = view.services;
+	const missingHostVersion =
+		!view.docker?.updateImageTag && snapshot.operations?.['docker.update']?.support === 'unknown';
+	setText('update-image-tag', view.docker?.updateImageTag || 'Not reported');
 	setText(
 		'runtime-version-help',
-		!view.managed
-			? `${instanceCapability('update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
-			: missingHostVersion
-				? 'This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.'
-				: snapshot.updateImageTag
+		missingHostVersion
+			? `${snapshot.operations?.['docker.update']?.reason ? `${snapshot.operations['docker.update'].reason} ` : ''}This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.`
+			: !instanceCapability('docker.update', snapshot).supported
+				? `${instanceCapability('docker.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
+				: view.docker?.updateImageTag
 					? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
 					: 'The managing tool did not report an update version. Update the fhold tools to restore version information. Your agent keeps running.'
 	);
 	byId('runtime-version-settings').hidden = !missingHostVersion;
-	if (view.managed) {
-		renderConnectionStatus(snapshot);
-		updateGuardianGuide();
-	}
-	setText('instance-client-guidance', view.platform?.guidance?.client || '');
-	byId('instance-client-guidance').hidden = !view.platform?.guidance?.client;
-	const unavailable = !!snapshot.dockerError;
+	renderConnectionStatus(snapshot);
+	updateGuardianGuide();
+	setText('instance-client-guidance', view.deployment.guidance?.client || '');
+	byId('instance-client-guidance').hidden = !view.deployment.guidance?.client;
+	const unavailable = snapshot.services?.state === 'unavailable';
 	const warnings = [
-		...(view.platform?.warnings || []),
+		...(view.deployment.warnings || []),
 		...view.services.flatMap((service) => service.warnings ?? [])
 	];
-	if (snapshot.connectionError)
-		warnings.push(`Browser connection unavailable. ${snapshot.connectionError}`);
 	setText(
 		'runtime-status-detail',
 		unavailable
@@ -113,10 +105,7 @@ export function renderServices(snapshot) {
 		const empty = document.createElement('div');
 		empty.className = 'empty-state';
 		empty.textContent =
-			snapshot.dockerError ||
-			(view.platform
-				? view.platform.platformState || 'No service status reported.'
-				: 'fhold is stopped.');
+			view.serviceReason || view.deployment.state || 'No service status reported.';
 		services.append(empty);
 	} else {
 		const order = { assistant: 0, guardian: 1, discord: 2, slack: 3 };
@@ -132,21 +121,34 @@ export function renderServices(snapshot) {
 			name.textContent = friendlyServiceName(service.name);
 			const image = document.createElement('small');
 			image.className = 'service-image';
+			const provenance = service.imageProvenance;
+			const configured = !service.image && !provenance?.observedReferences?.length;
+			const references = service.image
+				? [service.image]
+				: provenance?.observedReferences?.length
+					? provenance.observedReferences
+					: provenance?.configuredReferences ||
+						(provenance?.configuredReference ? [provenance.configuredReference] : []);
 			image.title =
-				service.image ||
+				(references.length
+					? `${configured ? 'Configured deployment image, not a running-replica observation: ' : ''}${references.join(', ')}`
+					: '') ||
 				(missingHostVersion
 					? 'Update the remote fhold CLI to report this container’s image reference.'
 					: 'This connection did not report an image reference.');
-			const details = serviceImageDetails(service.image);
+			const details = serviceImageDetails(references[0]);
 			const label = document.createElement('span');
-			label.className = 'visually-hidden';
-			label.textContent = `${details.label} `;
+			label.className = configured && references.length ? 'image-origin' : 'visually-hidden';
+			label.textContent = configured && references.length ? 'Configured · ' : `${details.label} `;
 			const tag = document.createElement('code');
-			tag.textContent = details.value;
+			tag.textContent =
+				references.length > 1
+					? references.map((reference) => serviceImageDetails(reference).value).join(', ')
+					: details.value;
 			image.append(label, tag);
 			identity.append(name);
 			const status = document.createElement('span');
-			const healthy = view.managed && isHealthy(service);
+			const healthy = isHealthy(service);
 			const degraded = healthy && service.warnings?.length > 0;
 			setBadge(
 				status,
@@ -167,8 +169,8 @@ export function renderServices(snapshot) {
 		byId('assistant-summary'),
 		unavailable
 			? 'Status unavailable'
-			: view.platform
-				? view.platform.platformState || 'Not reported'
+			: view.deployment.state
+				? view.deployment.state
 				: isHealthy(assistant)
 					? degraded
 						? 'Running · needs attention'
@@ -176,7 +178,7 @@ export function renderServices(snapshot) {
 					: assistant
 						? 'Needs attention'
 						: 'Stopped',
-		unavailable || view.platform
+		unavailable || view.deployment.state
 			? 'neutral'
 			: degraded
 				? 'warning'
@@ -185,7 +187,10 @@ export function renderServices(snapshot) {
 					: 'neutral'
 	);
 	renderRuntimeControls(snapshot);
-	const needsRecovery = snapshot.phase === 'setup_incomplete' && !isHealthy(assistant);
+	const needsRecovery =
+		snapshot.lifecycle?.state === 'known' &&
+		snapshot.lifecycle.value === 'setup-incomplete' &&
+		!isHealthy(assistant);
 	byId('setup-recovery').hidden = !needsRecovery;
 	byId('provider-connection').hidden = needsRecovery;
 	setText(
@@ -206,7 +211,7 @@ export function renderServices(snapshot) {
 	if (needsRecovery) {
 		setText(
 			'recovery-message',
-			snapshot.dockerError ||
+			view.serviceReason ||
 				'A port conflict or Docker problem may have interrupted the first start. Adjust the ports if needed, then retry safely.'
 		);
 	}
@@ -214,7 +219,7 @@ export function renderServices(snapshot) {
 
 export function bindRuntimeEvents() {
 	byId('update-stack').addEventListener('click', async () => {
-		if (state.operationInFlight || !instanceCapability('update').supported) return;
+		if (state.operationInFlight || !instanceCapability('docker.update').supported) return;
 		if (!(await state.api.confirmRestart('update'))) return;
 		const result = await operation(
 			'Updating instance',
@@ -249,8 +254,10 @@ export function bindRuntimeEvents() {
 				await prepareInstallTarget();
 				const snapshot = await state.api.snapshot();
 				state.currentSnapshot = snapshot;
-				state.currentConfig = snapshot.config;
-				const config = snapshot.config;
+				state.currentConfig = snapshot.docker?.config || null;
+				const config = snapshot.docker?.config;
+				if (!config)
+					throw new Error('The selected instance does not expose local installation settings.');
 				if (!automaticPorts) {
 					config.assistant.port = assistantPort;
 					config.gateway.port = gatewayPort;
@@ -293,13 +300,12 @@ export function bindRuntimeEvents() {
 			},
 			'Startup settings saved.'
 		);
-		if (saved) await requestStackAction('start');
+		if (saved) await requestStackAction('host.start');
 	});
 
 	all('[data-action]').forEach((button) => {
 		button.addEventListener('click', () => {
-			const action = button.dataset.action;
-			void requestStackAction(action);
+			void requestStackAction(button.dataset.action);
 		});
 	});
 }

@@ -40,7 +40,10 @@ and remote commands never override this computer's `FH_HOME`.
 
 The remote CLI executes the existing lifecycle, lock, recovery drain, Compose
 audit and pending-settings receipt paths. The wire envelope and advertised
-actions determine compatibility, not exact release-version equality. The machine
+actions determine compatibility, not exact release-version equality. An older
+RPC-only CLI can still provide host status and supported lifecycle operations;
+an unavailable session method disables only its named agent/app/data operation.
+The machine
 endpoint accepts one typed operation on stdin; it is not a network server or
 arbitrary remote command runner. SSH failures do not replay a mutation.
 
@@ -181,12 +184,51 @@ external responsibility; there is no rolling-update shortcut.
 
 Admin uses the same Overview, Agent settings, Apps and System pages for local,
 SSH and cloud instances. Unsupported features remain visible but disabled, with
-the reason next to their controls. For example, ACA's AI settings, app setup,
+the reason next to their controls. For example, native preference-file writes, app setup,
 import/export and checkpoint editing cannot be managed through this adapter yet;
 their disabled sections do not mean those features are disabled inside the agent.
 Use OpenCode or your deployment tools where indicated. System holds recent logs
 and deployment details for every connection. Status checks and browsing these
 pages do not contact or wake an idle agent.
+
+### Explicit native agent access
+
+Agent settings has a **Connect to agent** action. For HTTPS ingress, enter the
+existing native OpenCode password. This is separate from Azure sign-in and is
+kept only for the selected session, not in host connections, recents or backups.
+Connecting is explicit and can wake an idle replica. Closing Admin or switching
+instances discards the credential and pending native auth attempt, not the agent.
+
+Once connected, native AI-account inventory, API-key sign-in, supported browser
+OAuth and a real no-tool model test use the same agent operations as Docker
+hosts. A model test is an explicit provider request and can incur provider usage.
+HTTPS account writes and tests require one identifiable active running runtime;
+runtime replacement requires reconnecting rather than reusing an old OAuth code.
+
+The CLI supports this HTTP subset without putting secrets in command arguments:
+
+```bash
+fhold --connection cloud --name <app-name> provider list --password-file /private/opencode-password
+fhold --connection cloud --name <app-name> provider key <provider-id> \
+  --password-file /private/opencode-password --key-file /private/provider-key
+fhold --connection cloud --name <app-name> provider login <provider-id> \
+  --password-file /private/opencode-password --method <native-method-index>
+fhold --connection cloud --name <app-name> provider test <provider-id> \
+  --password-file /private/opencode-password --model <model-id>
+```
+
+`--password-file -` reads stdin; do not use stdin for both password and API key.
+Code-based OAuth requires an interactive terminal and keeps the original native
+attempt alive in that command. Providers with extra sign-in fields can use Admin
+or OpenCode. These commands close their session when finished. They do not
+provision an app or activate new deployment settings.
+
+Default-model/custom-endpoint preference edits still require a qualified owned
+file route; HTTPS is not a writable settings API. Guided Claude/Codex setup,
+Guardian/Portal configuration and archive/recovery management remain unavailable
+through ACA. Their existing runtime features still work when configured through
+deployment tools or the native agent interface. See the
+[transport investigation](operations/hosting-agent-management-verification.md).
 The [qualification record](operations/azure-management-verification.md) separates
 live read-only checks from adapter tests and unperformed cloud mutations.
 

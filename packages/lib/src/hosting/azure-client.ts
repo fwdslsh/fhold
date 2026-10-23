@@ -1,4 +1,4 @@
-import { runHostingProcess, type HostingProcess } from './process.js';
+import { runHostingProcess, type HostingProcess } from '../control-plane/process.js';
 import type { ConnectionSetup, HostingChoice } from './types.js';
 
 /** Native Azure authentication and per-command scope; never change the global account. */

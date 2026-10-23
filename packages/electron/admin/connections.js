@@ -1,7 +1,7 @@
 import { applyAppPermissions, copyAccessKey, updateAppPermissions } from './access.js';
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { offerRestart } from './restart.js';
-import { csv, endpoint, isHealthy, isRunning } from './model.js';
+import { csv, isHealthy, isRunning, known } from './model.js';
 import { state } from './state.js';
 import {
 	all,
@@ -15,7 +15,8 @@ import {
 } from './ui.js';
 
 export function secretConfigured(snapshot, portal, name) {
-	return snapshot.portalSecrets[portal]?.[name] === true;
+	const config = known(snapshot.apps?.config);
+	return config?.portalSecrets?.[portal]?.[name] === true;
 }
 
 export function renderPortalSecrets(snapshot) {
@@ -37,33 +38,42 @@ function portalTokensReady(snapshot, portal) {
 }
 
 export function renderConnectionStatus(snapshot) {
-	const unavailable = !!snapshot.dockerError;
-	const assistant = snapshot.services.find((service) => service.name === 'assistant');
+	const unavailable = snapshot.services?.state === 'unavailable';
+	const services = known(snapshot.services) || [];
+	const config = snapshot.docker?.config;
+	const connections = known(snapshot.apps?.connections);
+	const connectionError =
+		connections?.error ||
+		(snapshot.apps?.connections?.state === 'unavailable'
+			? snapshot.apps.connections.reason
+			: undefined);
+	const assistant = services.find((service) => service.name === 'assistant');
 	setBadge(
 		byId('opencode-connection-status'),
 		unavailable
 			? 'Status unavailable'
-			: snapshot.connectionError
+			: connectionError
 				? 'Connection unavailable'
 				: isHealthy(assistant)
 					? 'Available'
 					: isRunning(assistant)
 						? 'Needs attention'
 						: 'Stopped',
-		!unavailable && !snapshot.connectionError && isHealthy(assistant) ? 'success' : 'neutral'
+		!unavailable && !connectionError && isHealthy(assistant) ? 'success' : 'neutral'
 	);
 	setBadge(
 		byId('mcp-connection-status'),
-		snapshot.config.gateway.enabled ? 'Enabled' : 'Disabled',
+		config?.gateway.enabled ? 'Enabled' : 'Disabled',
 		'neutral'
 	);
 	for (const portal of ['discord', 'slack']) {
-		const enabled = snapshot.config.portals[portal].enabled;
-		const service = snapshot.services.find((entry) => entry.name === portal);
+		const enabled = config?.portals?.[portal]?.enabled === true;
+		const appStatus = known(snapshot.apps?.status)?.[portal];
+		const service = services.find((entry) => entry.name === portal);
 		const healthy = enabled && !unavailable && isHealthy(service);
 		setBadge(
 			byId(`${portal}-connection-status`),
-			enabled
+			enabled || appStatus?.configured
 				? unavailable
 					? 'Status unavailable'
 					: healthy
@@ -81,8 +91,20 @@ export function renderConnectionStatus(snapshot) {
 
 export function updateGuardianGuide() {
 	if (!state.currentSnapshot) return;
-	const saved = state.currentSnapshot.config.gateway.enabled;
-	const pending = state.currentSnapshot.pendingRestart?.required === true;
+	const config = state.currentSnapshot.docker?.config;
+	if (!config) {
+		setText(
+			'claude-guardian-help',
+			'This app configuration is not managed through the selected connection.'
+		);
+		setText(
+			'mcp-guardian-help',
+			'This app configuration is not managed through the selected connection.'
+		);
+		return;
+	}
+	const saved = config.gateway.enabled;
+	const pending = known(state.currentSnapshot.pendingChanges)?.pending;
 	const selected = byId('gateway').checked;
 	const guide =
 		selected !== saved
@@ -134,56 +156,133 @@ export function showPortalTokenForm(portal, field = `${portal}-bot-token`) {
 }
 
 export function renderConnectionLinks(snapshot) {
-	const details = snapshot.connectionDetails;
-	if (!details) return;
+	const details = known(snapshot.apps?.connections) || {};
+	const opencode = details.opencode;
+	const mcp = details.mcp;
+	const claude = details.claude;
 	const directLink = byId('direct-url');
-	directLink.textContent = details.opencode.url;
-	directLink.setAttribute('href', details.opencode.url || 'about:blank');
-	directLink.hidden = !details.opencode.url;
-	setText('opencode-connection-help', snapshot.connectionError || details.opencode.note || '');
-	setText('direct-username', details.opencode.username || 'user');
-	setText('claude-url', details.claude.url);
-	setText('mcp-url', details.mcp.url);
-	setText('claude-extension-help', details.claude.note);
+	directLink.textContent = opencode?.url || 'Not connected';
+	directLink.setAttribute('href', opencode?.url || 'about:blank');
+	directLink.hidden = !opencode?.url;
+	setText(
+		'opencode-connection-help',
+		details.error ||
+			opencode?.note ||
+			snapshot.apps?.connections?.reason ||
+			'Connect to inspect this native agent.'
+	);
+	setText(
+		'direct-username',
+		opencode?.username || known(snapshot.agent?.access)?.username || 'Not reported'
+	);
+	setText('claude-url', claude?.url || 'Not connected');
+	setText('mcp-url', mcp?.url || 'Not connected');
+	setText('claude-extension-help', claude?.note || 'Connect to inspect this client link.');
 	const extensionLink = byId('claude-extension-download');
-	extensionLink.setAttribute('href', details.claude.extension || 'about:blank');
-	extensionLink.hidden = !details.claude.extension;
+	extensionLink.setAttribute('href', claude?.extension || 'about:blank');
+	extensionLink.hidden = !claude?.extension;
 	for (const id of ['direct-url', 'claude-url', 'mcp-url', 'guardian-health-url-detail'])
 		for (const button of all(`[data-copy-field="${id}"]`))
-			button.disabled = !byId(id).textContent || state.operationInFlight;
+			button.disabled =
+				!byId(id).textContent ||
+				byId(id).textContent === 'Not connected' ||
+				state.operationInFlight;
 	updateGuardianGuide();
 }
 
 export function renderConnectionDetails(snapshot) {
 	renderConnectionLinks(snapshot);
+	const ready = (name) => {
+		const operation = snapshot.operations?.[name];
+		return operation?.support === 'supported' && operation.availability?.state === 'ready';
+	};
 	byId('direct-password').value = '';
 	byId('direct-password').type = 'password';
 	byId('show-direct-password').checked = false;
+	byId('native-agent-password').value = '';
+	// Only an explicitly connected native agent may be inspected. The field is
+	// intentionally cleared on every render and never enters drafts or recents.
+	byId('native-agent-connect').hidden =
+		(snapshot.agent?.access?.state === 'known' &&
+			!snapshot.operations?.['agent.connect']?.input?.requiresPassword) ||
+		!ready('agent.connect');
+	setText(
+		'connect-native-agent',
+		snapshot.agent?.access?.state === 'known' ? 'Reconnect to agent' : 'Connect to agent'
+	);
+	byId('native-agent-password-field').hidden =
+		snapshot.operations?.['agent.connect']?.input?.requiresPassword !== true;
+	byId('provider-agent-access').hidden =
+		snapshot.agent?.access?.state === 'known' || !ready('agent.connect');
+	for (const id of ['load-direct-password', 'copy-direct-password', 'show-direct-password'])
+		byId(id).disabled = state.operationInFlight || !ready('agent.assistantPassword');
+	for (const control of byId('opencode-network-form').querySelectorAll('input, button'))
+		control.disabled = state.operationInFlight || !ready('docker.saveConfig');
 	updateGuardianGuide();
 }
 
 export function renderNetworkDetails(snapshot) {
-	const assistantUrl = snapshot.connectionDetails
-		? snapshot.connectionDetails.opencode.url
-		: endpoint(snapshot.config.assistant.bindAddress, snapshot.config.assistant.port);
-	const healthUrl = snapshot.connectionDetails
-		? snapshot.connectionDetails.mcp.url
-			? new URL('/health', snapshot.connectionDetails.mcp.url).href
-			: ''
-		: endpoint(snapshot.config.gateway.bindAddress, snapshot.config.gateway.port, '/health');
+	const links = known(snapshot.apps?.connections);
+	const deployment = known(snapshot.deployment);
+	const assistantUrl = links?.opencode?.url || deployment?.clientUrl || '';
+	let healthUrl = '';
+	if (links?.mcp?.url) {
+		try {
+			const url = new URL(links.mcp.url);
+			url.pathname = url.pathname.endsWith('/mcp')
+				? `${url.pathname.slice(0, -4)}/health`
+				: url.pathname;
+			healthUrl = url.toString();
+		} catch {}
+	}
 	for (const id of ['assistant-url-detail', 'overview-opencode-link']) {
 		const link = byId(id);
 		if (id === 'assistant-url-detail') link.textContent = assistantUrl;
 		link.setAttribute('href', assistantUrl || 'about:blank');
 		link.hidden = !assistantUrl;
 	}
+	const connect = snapshot.operations?.['agent.connect'];
+	const canAcquire =
+		connect?.support === 'supported' &&
+		connect.availability?.state === 'ready' &&
+		!connect.input?.requiresPassword;
+	const open = byId('overview-opencode-link');
+	open.dataset.acquireAgent = String(!assistantUrl && canAcquire);
+	if (!assistantUrl && canAcquire) {
+		open.hidden = false;
+		open.setAttribute('href', '#');
+	}
 	setText('guardian-health-url-detail', healthUrl);
+	for (const button of all('[data-copy-field="guardian-health-url-detail"]'))
+		button.disabled = !healthUrl || state.operationInFlight;
 	setText(
 		'guardian-api-status',
-		snapshot.config.gateway.enabled
+		links?.mcp?.url
 			? 'MCP access is enabled in settings.'
 			: 'Enable MCP access above to use these endpoints.'
 	);
+}
+
+async function connectNativeAgent() {
+	const target = JSON.stringify(state.currentSnapshot?.identity?.ref);
+	const password = byId('native-agent-password').value;
+	try {
+		const connected = await operation(
+			'Connecting to agent',
+			() => state.api.connectAgent({ ...(password ? { password } : {}) }),
+			'Agent connected for this Admin session.'
+		);
+		if (JSON.stringify(state.currentSnapshot?.identity?.ref) !== target) return undefined;
+		if (connected) {
+			const { resetProviderState } = await import('./providers.js');
+			if (JSON.stringify(state.currentSnapshot?.identity?.ref) !== target) return undefined;
+			resetProviderState();
+			await import('./snapshot.js').then(({ refresh }) => refresh());
+		}
+		return JSON.stringify(state.currentSnapshot?.identity?.ref) === target ? connected : undefined;
+	} finally {
+		byId('native-agent-password').value = '';
+	}
 }
 
 export async function loadDirectPassword(copyOnly) {
@@ -209,6 +308,25 @@ export async function loadDirectPassword(copyOnly) {
 export function bindConnectionsEvents() {
 	for (const id of ['gateway', 'discord', 'slack'])
 		byId(id).addEventListener('change', updateConditionalConnections);
+
+	byId('connect-native-agent').addEventListener('click', () => void connectNativeAgent());
+	byId('provider-connect-agent').addEventListener('click', () => {
+		if (state.currentSnapshot?.operations?.['agent.connect']?.input?.requiresPassword) {
+			showConnectionApp('opencode');
+			byId('native-agent-password').focus();
+		} else void connectNativeAgent();
+	});
+	byId('overview-opencode-link').addEventListener('click', async (event) => {
+		if (event.currentTarget.dataset.acquireAgent !== 'true') return;
+		event.preventDefault();
+		const connected = await connectNativeAgent();
+		if (connected)
+			await operation(
+				'Opening OpenCode',
+				() => state.api.openExternal(connected.endpoint),
+				'OpenCode opened.'
+			);
+	});
 
 	for (const button of all('[data-enable-gateway]')) {
 		button.addEventListener('click', async () => {
@@ -337,7 +455,12 @@ export function bindConnectionsEvents() {
 			const client = button.dataset.copyClientKey;
 			const username = byId(`${client}-credential`).value;
 			const policy = byId(`${client}-permissions`).querySelector('input:checked')?.value;
-			if (!username || state.currentConfig?.credentials[username]?.policy !== policy) {
+			const configuration = state.currentSnapshot?.apps?.config;
+			if (
+				!username ||
+				configuration?.state !== 'known' ||
+				configuration.value.credentials[username]?.policy !== policy
+			) {
 				notice('Save permissions before connecting this app.', 'error');
 				byId(`save-${client}-permissions`).focus();
 				return;

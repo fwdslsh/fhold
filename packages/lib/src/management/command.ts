@@ -2,9 +2,27 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
-import { sshArgs } from '../hosting/ssh-native.js';
-import { hostingFailure } from '../hosting/process.js';
+import { sshArgs } from '../control-plane/ssh-native.js';
+import { hostingFailure } from '../control-plane/process.js';
 import type { HostingConnection } from '../hosting/types.js';
+import { SshInstanceManagement } from './ssh.js';
+
+export type SshCommandFiles = {
+	uploadFile(local: string): Promise<string>;
+	close(): Promise<void>;
+};
+
+/** Transport-only input-file staging for an ordinary native SSH CLI command. */
+export function createSshCommandFiles(
+	connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
+	homeDir: string
+): SshCommandFiles {
+	const transport = new SshInstanceManagement(connection, homeDir);
+	return {
+		uploadFile: (path) => transport.uploadFile(path),
+		close: () => transport.close()
+	};
+}
 
 const READY = 'FH_COMMAND_READY';
 const STARTED = 'FH_COMMAND_STARTED';

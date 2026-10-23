@@ -7,7 +7,9 @@ work. It uses three runtime images, not a hosted control-plane platform.
 trusted OpenCode client ───────────────────────────────> Assistant
 external MCP client ──> Guardian ──> policy profile ──> Assistant
 Discord/Slack ──> Portal ──> Guardian MCP ──────────────┘
-CLI / optional local Admin ──> shared library ──> Docker Compose
+CLI / optional local Admin ──> shared management services
+                               ├─ hosting adapter ──> Docker / SSH / ACA
+                               └─ agent/app adapters ──> native interfaces
 AKM + supercronic ──> restricted scheduled work ───────┘
 ```
 
@@ -32,6 +34,22 @@ Its Settings page manages host connections and the app's standard Electron
 AppImage updater. Stable is the default channel, and automatic checks/downloads
 run only while Admin is open. Applying an app update does not update containers,
 change an instance or install a remote CLI.
+
+Hosting and agent management have separate contracts. Hosting discovers and
+observes deployments and owns their lifecycle. Agent services own native AI
+accounts, model preferences and readiness; app services own Guardian/Portal
+configuration. Data operations retain separate portable-content, stopped-instance
+archive and same-instance recovery contracts. A selected session composes those
+operations without requiring every deployment to have a Docker home.
+
+The common status model reports supported operations and their current
+availability independently. Missing optional observations are not false/off
+configuration. Ordinary instance pages do not choose a different management mode
+based on the hosting platform. Read-only host inspection never connects to an idle
+agent; explicit agent access owns any HTTP requests or temporary transport resources.
+Closing that session releases its own resources without issuing another deployment
+action. See the [management design](hosting-agent-management-design.md) for contracts,
+ownership, extension patterns and the remaining ACA transport limits.
 
 `state/stack.json` owns fhold deployment intent, including product identity,
 project/image selection, Assistant settings, gateway, portal scope and named

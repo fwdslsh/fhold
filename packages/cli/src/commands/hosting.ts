@@ -2,19 +2,22 @@ import { defineCommand } from 'citty';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { once } from 'node:events';
-import type { ManagedSnapshot } from '@fhold/lib';
 import {
 	HostingPreferencesStore,
 	hostingConnectionSetup,
 	LOCAL_CONNECTION,
 	hostingProvider,
 	hostingMachineRequest,
-	openHostingInstance
+	openInstanceSession
 } from '@fhold/lib';
 import { checkHostingConnection, repairSshCli, connectionEndpoint } from '@fhold/lib';
 import { serveManagementSession } from '@fhold/lib';
-import { serveHostingCommand, runSshCommand, SshInstanceManagement } from '@fhold/lib';
+import {
+	serveHostingCommand,
+	runSshCommand,
+	createSshCommandFiles,
+	type SshCommandFiles
+} from '@fhold/lib';
 import { main } from '../main.js';
 import { SSH_RPC_COMMAND, sshArgs } from '@fhold/lib';
 import { runHostingProcess } from '@fhold/lib';
@@ -256,10 +259,12 @@ export async function runHostedCommand(
 ): Promise<void> {
 	const connection = store().connection(connectionId);
 	const action = argv[0] || 'status';
-	if (
-		connection.kind === 'ssh-docker' &&
-		!['status', 'logs', 'start', 'stop', 'restart'].includes(action)
-	) {
+	const composedAction =
+		['status', 'logs', 'start', 'stop', 'restart', 'console', 'backup', 'restore'].includes(
+			action
+		) ||
+		(action === 'connect' && argv[1] !== 'remote');
+	if (connection.kind === 'ssh-docker' && !composedAction) {
 		if (!instance) throw Error('Choose a remote instance with --name/-n.');
 		const listed =
 			action === 'install' ? await hostingProvider(connection).listInstances() : undefined;
@@ -269,113 +274,7 @@ export async function runHostedCommand(
 				? undefined
 				: await hostingProvider(connection).selectInstance(instance));
 		const name = ref?.kind === 'ssh-docker' ? ref.remoteHome : instance;
-		if (action === 'connect' && argv[1] !== 'remote' && ref?.kind === 'ssh-docker') {
-			const manager = new SshInstanceManagement(connection, ref.remoteHome);
-			try {
-				const snapshot = await manager.call<ManagedSnapshot>('snapshot');
-				const client = argv[1] || 'mcp';
-				if (!['opencode', 'mcp', 'claude'].includes(client))
-					throw Error('Client must be opencode, mcp, claude, or remote.');
-				const details = snapshot.connectionDetails?.[client as 'opencode' | 'mcp' | 'claude'];
-				if (!details?.url)
-					throw Error(
-						snapshot.connectionError ||
-							'Start this instance and enable the selected app before connecting.'
-					);
-				const output = {
-					...details,
-					note: 'Connected over SSH. Keep this command running while using the connection; Ctrl+C disconnects only this tunnel, not the agent.'
-				};
-				if (argv.includes('--show-password') && client === 'opencode')
-					output.password = (
-						await manager.call<{ password: string }>('assistantPassword')
-					).password;
-				if (argv.includes('--showKey') || argv.includes('--show-key')) {
-					const at = argv.indexOf('--credential');
-					const key = await manager.call<{ key: string }>(
-						'credentialKey',
-						at >= 0 ? argv[at + 1] : 'owner'
-					);
-					output.credentialKey = key.key;
-				}
-				if (argv.includes('--json')) console.log(JSON.stringify(output, null, 2));
-				else {
-					console.log(`${client}: ${output.url}`);
-					if (output.username) console.log(`Username: ${output.username}`);
-					if (output.password) console.log(`Password: ${output.password}`);
-					else if (client === 'opencode')
-						console.log('Add --show-password to reveal the OpenCode password.');
-					if (output.credentialKey) console.log(`Credential key: ${output.credentialKey}`);
-					console.log(output.note);
-				}
-				await once(process, 'SIGINT');
-			} finally {
-				await manager.close();
-			}
-			return;
-		}
-		if (action === 'backup' || action === 'restore') {
-			if (!ref || ref.kind !== 'ssh-docker')
-				throw Error('Choose the existing instance or an absolute remote home.');
-			const manager = new SshInstanceManagement(connection, ref.remoteHome);
-			const option = (flag: string) => {
-				const at = argv.indexOf(flag);
-				return at >= 0
-					? argv[at + 1]
-					: argv.find((item) => item.startsWith(`${flag}=`))?.slice(flag.length + 1);
-			};
-			const flag = (name: string) =>
-				argv.some(
-					(arg) => arg.replaceAll('-', '').toLowerCase() === name.replaceAll('-', '').toLowerCase()
-				);
-			try {
-				if (action === 'backup') {
-					const destination = option('--to');
-					if (!destination) throw Error('Choose a local export directory with --to.');
-					const result = await manager.call('backup', {
-						destination,
-						full: flag('--full'),
-						confirmed: flag('--confirm-stopped'),
-						includeProviderAuth: flag('--include-provider-auth'),
-						includeUserEnv: flag('--include-user-env'),
-						includePortalMaps: flag('--include-portal-maps'),
-						includeOAuth: flag('--include-oauth')
-					});
-					console.log(JSON.stringify(result, null, 2));
-				} else {
-					const sourceHome = option('--from');
-					if (!sourceHome) throw Error('Choose a local export directory with --from.');
-					const method = flag('--full') ? 'restoreInstance' : 'restoreData';
-					const value = {
-						sourceHome,
-						confirmed: flag('--confirm-stopped'),
-						includeProviderAuth: flag('--include-provider-auth'),
-						includeUserEnv: flag('--include-user-env'),
-						includePortalMaps: flag('--include-portal-maps'),
-						includeOAuth: flag('--include-oauth'),
-						acknowledgeUnrestored: flag('--acknowledge-unrestored')
-					};
-					const preview = await manager.call<{ digest: string }>(method, value);
-					console.log(
-						JSON.stringify(
-							flag('--apply')
-								? await manager.call(method, {
-										...value,
-										apply: true,
-										previewDigest: preview.digest
-									})
-								: preview,
-							null,
-							2
-						)
-					);
-				}
-			} finally {
-				await manager.close();
-			}
-			return;
-		}
-		let uploader: SshInstanceManagement | undefined;
+		let uploader: SshCommandFiles | undefined;
 		let stdinFile: string | undefined;
 		try {
 			const forwarded = [...argv];
@@ -417,7 +316,7 @@ export async function runHostedCommand(
 						})
 					) as { value: { instancesDirectory: string } };
 					const home = name.startsWith('/') ? name : `${hello.value.instancesDirectory}/${name}`;
-					uploader = new SshInstanceManagement(connection, home);
+					uploader = createSshCommandFiles(connection, home);
 				}
 				const remote = await uploader.uploadFile(localFile);
 				if (adopted) forwarded[index] = remote;
@@ -436,8 +335,12 @@ export async function runHostedCommand(
 			'Choose an instance with --name/-n. Use fhold hosting instances --connection <name> to discover it.'
 		);
 	const ref = await hostingProvider(connection).selectInstance(instance);
-	const session = openHostingInstance(connection, ref);
-	await runSessionCommand(session, argv);
+	const session = openInstanceSession(connection, ref);
+	try {
+		await runSessionCommand(session, argv);
+	} finally {
+		await session.close();
+	}
 	// Observation should not fail because optional recent-target persistence failed.
 	try {
 		store().remember(ref);

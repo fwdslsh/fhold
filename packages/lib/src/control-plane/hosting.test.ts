@@ -12,7 +12,7 @@ import {
 import { listLocalInstances } from '../hosting/local-docker.js';
 import { hostingMachineRequest } from '../hosting/machine.js';
 import { sshDockerProvider } from '../hosting/ssh-docker.js';
-import { SSH_RPC_COMMAND } from '../hosting/ssh-native.js';
+import { SSH_RPC_COMMAND } from './ssh-native.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import {
 	capabilities,
@@ -20,7 +20,7 @@ import {
 	type HostingConnection,
 	type InstanceRef
 } from '../hosting/types.js';
-import { hostingFailure, type HostingProcess } from '../hosting/process.js';
+import { hostingFailure, type HostingProcess } from './process.js';
 import { checkHostingConnection, repairSshCli } from '../hosting/maintenance.js';
 import { createHash } from 'node:crypto';
 
@@ -53,45 +53,74 @@ const acaRef: InstanceRef = { kind: 'azure-container-apps', connectionId: 'cloud
 
 test('native failures are actionable without leaking stderr or confusing connectivity with a missing CLI', () => {
 	expect(hostingFailure('ssh', 1, '', 'bash: fhold: command not found')).toContain('repair');
-	expect(hostingFailure('ssh', 1, '', 'Host key verification failed: secret')).toContain('host trust');
+	expect(hostingFailure('ssh', 1, '', 'Host key verification failed: secret')).toContain(
+		'host trust'
+	);
 	expect(hostingFailure('ssh', 1, '', 'Permission denied: secret')).toContain('sign-in');
-	expect(hostingFailure('ssh', 1, '', 'hostname not found: secret')).not.toContain('remote fhold CLI');
+	expect(hostingFailure('ssh', 1, '', 'hostname not found: secret')).not.toContain(
+		'remote fhold CLI'
+	);
 	expect(hostingFailure('az', 1, 'secret-token', 'secret-token')).not.toContain('secret-token');
 });
 
 test('connection edits keep recents for labels/roots, but clear them when retargeted; removal is metadata-only', () => {
-	const directory = root(); const store = new HostingPreferencesStore(join(directory, 'hosting.json'));
+	const directory = root();
+	const store = new HostingPreferencesStore(join(directory, 'hosting.json'));
 	store.saveConnection(ssh);
-	const ref: InstanceRef = {kind:'ssh-docker',connectionId:'lab',remoteHome:'/opt/stacks/agent'};
+	const ref: InstanceRef = {
+		kind: 'ssh-docker',
+		connectionId: 'lab',
+		remoteHome: '/opt/stacks/agent'
+	};
 	store.remember(ref);
-	store.updateConnection('lab', {...ssh, label:'New label', roots:[]});
+	store.updateConnection('lab', { ...ssh, label: 'New label', roots: [] });
 	expect(store.read().recent).toEqual([ref]);
-	store.updateConnection('lab', {...ssh, host:'other'});
+	store.updateConnection('lab', { ...ssh, host: 'other' });
 	expect(store.read().recent).toEqual([]);
-	expect(() => store.updateConnection('lab', {...ssh,id:'new-id'})).toThrow('identity');
-	store.removeConnection('lab'); expect(store.read().connections).toEqual([]);
+	expect(() => store.updateConnection('lab', { ...ssh, id: 'new-id' })).toThrow('identity');
+	store.removeConnection('lab');
+	expect(store.read().connections).toEqual([]);
 	expect(() => store.removeConnection('local')).toThrow('always available');
 });
 test('discovery finds managed Compose homes anywhere and stopped root/child/home layouts without Docker', async () => {
-	const directory = root(); const rootsHome = join(directory, 'stacks', 'agent', 'home'); const custom = join(directory, 'custom');
-	for (const [path,name] of [[rootsHome,'nested'],[custom,'custom']] as const) {
-		mkdirSync(join(path, 'system', 'stack'), {recursive:true});
+	const directory = root();
+	const rootsHome = join(directory, 'stacks', 'agent', 'home');
+	const custom = join(directory, 'custom');
+	for (const [path, name] of [
+		[rootsHome, 'nested'],
+		[custom, 'custom']
+	] as const) {
+		mkdirSync(join(path, 'system', 'stack'), { recursive: true });
 		writeFileSync(join(path, 'system', 'stack', 'stack.compose.yml'), 'services: {}');
-		const config = defaultStackConfig(path); config.deployment.projectName = name; writeStackConfig(path, config);
+		const config = defaultStackConfig(path);
+		config.deployment.projectName = name;
+		writeStackConfig(path, config);
 	}
-	const foreign = join(directory,'foreign'); mkdirSync(join(foreign,'system','stack'), {recursive:true});
-	const listed = await listLocalInstances([join(directory,'stacks')], async () => `${custom}/system/stack\n${foreign}/system/stack\n${custom}/system/stack`);
-	expect(listed.map(item => item.name).sort()).toEqual(['custom','nested']);
-	expect((await listLocalInstances([join(directory,'stacks')], async () => {throw Error('Docker stopped');})).map(item => item.name)).toEqual(['nested']);
-	expect(existsSync(join(foreign,'state'))).toBe(false);
+	const foreign = join(directory, 'foreign');
+	mkdirSync(join(foreign, 'system', 'stack'), { recursive: true });
+	const listed = await listLocalInstances(
+		[join(directory, 'stacks')],
+		async () => `${custom}/system/stack\n${foreign}/system/stack\n${custom}/system/stack`
+	);
+	expect(listed.map((item) => item.name).sort()).toEqual(['custom', 'nested']);
+	expect(
+		(
+			await listLocalInstances([join(directory, 'stacks')], async () => {
+				throw Error('Docker stopped');
+			})
+		).map((item) => item.name)
+	).toEqual(['nested']);
+	expect(existsSync(join(foreign, 'state'))).toBe(false);
 });
 test('connection check reports missing CLI with repair guidance without losing SSH success', async () => {
-	const result = await checkHostingConnection(ssh, async (_binary,args) => {
+	const result = await checkHostingConnection(ssh, async (_binary, args) => {
 		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
 		throw Error('Remote fhold missing; use Repair remote CLI.');
 	});
-	expect(result.ok).toBe(false); expect(result.repairable).toBe(true);
-	expect(result.checks[0]?.ok).toBe(true); expect(result.checks[1]?.detail).toContain('Repair');
+	expect(result.ok).toBe(false);
+	expect(result.repairable).toBe(true);
+	expect(result.checks[0]?.ok).toBe(true);
+	expect(result.checks[1]?.detail).toContain('Repair');
 });
 test('connection checks report unexpected remote output without disclosing it', async () => {
 	const result = await checkHostingConnection(ssh, async (_binary, args) =>
@@ -102,20 +131,43 @@ test('connection checks report unexpected remote output without disclosing it', 
 	expect(result.checks.at(-1)?.detail).not.toContain('private startup message');
 });
 test('remote repair streams a trusted artifact and checks it before atomic replacement', async () => {
-	const artifact = join(root(),'fhold-cli'); writeFileSync(artifact, 'synthetic-cli');
-	const calls: Array<{args:string[];file?:string}> = [];
-	const run: HostingProcess = async (_binary,args,options) => {calls.push({args,file:options?.inputFile}); return args.at(-1) === 'uname -sm' ? 'Linux x86_64' : '0.2.2610113-beta.9';};
-	await expect(repairSshCli(ssh,{confirmed:false,cliFile:artifact,run})).rejects.toThrow('Confirm'); expect(calls).toHaveLength(0);
-	expect(await repairSshCli(ssh,{confirmed:true,cliFile:artifact,run})).toContain('No containers');
+	const artifact = join(root(), 'fhold-cli');
+	writeFileSync(artifact, 'synthetic-cli');
+	const calls: Array<{ args: string[]; file?: string }> = [];
+	const run: HostingProcess = async (_binary, args, options) => {
+		calls.push({ args, file: options?.inputFile });
+		return args.at(-1) === 'uname -sm' ? 'Linux x86_64' : '0.2.2610113-beta.9';
+	};
+	await expect(repairSshCli(ssh, { confirmed: false, cliFile: artifact, run })).rejects.toThrow(
+		'Confirm'
+	);
+	expect(calls).toHaveLength(0);
+	expect(await repairSshCli(ssh, { confirmed: true, cliFile: artifact, run })).toContain(
+		'No containers'
+	);
 	expect(calls[1]?.file).toBe(artifact);
-	expect(calls[1]?.args.at(-1)).toContain(createHash('sha256').update('synthetic-cli').digest('hex'));
+	expect(calls[1]?.args.at(-1)).toContain(
+		createHash('sha256').update('synthetic-cli').digest('hex')
+	);
 	expect(calls[1]?.args.at(-1)).toContain('hosting --help');
 	expect(calls[1]?.args.at(-1)).not.toContain('/opt/stacks');
 });
 test('corrupt published downloads cannot replace the remote CLI', async () => {
 	let mutations = 0;
-	const download: typeof fetch = async (request) => String(request).endsWith('checksums-sha256.txt') ? new Response(`${'a'.repeat(64)}  fhold-cli-linux-x64\n`) : new Response('wrong-bytes');
-	await expect(repairSshCli(ssh,{confirmed:true,fetch:download,run:async (_binary,args) => {if(args.at(-1) !== 'uname -sm') mutations++; return 'Linux x86_64';}})).rejects.toThrow('checksum mismatch');
+	const download: typeof fetch = async (request) =>
+		String(request).endsWith('checksums-sha256.txt')
+			? new Response(`${'a'.repeat(64)}  fhold-cli-linux-x64\n`)
+			: new Response('wrong-bytes');
+	await expect(
+		repairSshCli(ssh, {
+			confirmed: true,
+			fetch: download,
+			run: async (_binary, args) => {
+				if (args.at(-1) !== 'uname -sm') mutations++;
+				return 'Linux x86_64';
+			}
+		})
+	).rejects.toThrow('checksum mismatch');
 	expect(mutations).toBe(0);
 });
 
@@ -189,7 +241,10 @@ test('machine interface negotiates actions, refuses arbitrary execution and pres
 	expect(hello).toMatchObject({
 		version: 1,
 		ok: true,
-		value: { actions: expect.arrayContaining(['list', 'inspect', 'logs', 'stop']) }
+		value: {
+			actions: expect.arrayContaining(['list', 'inspect', 'logs', 'stop']),
+			features: expect.arrayContaining(['credentialPolicy'])
+		}
 	});
 	for (const input of [
 		null,
@@ -202,6 +257,70 @@ test('machine interface negotiates actions, refuses arbitrary execution and pres
 });
 
 describe('native SSH transport', () => {
+	test('feeds the server credential-policy feature into SSH operation availability without status warm-up', async () => {
+		const response = await hostingMachineRequest({ version: 1, action: 'hello' });
+		if (!response.ok) throw new Error(response.error);
+		const run: HostingProcess = async (_binary, _args, options) => {
+			const request = JSON.parse(options?.input || '{}') as { action?: string };
+			if (request.action === 'hello')
+				return JSON.stringify({ version: 1, ok: true, value: response.value });
+			return JSON.stringify({
+				version: 1,
+				ok: true,
+				value: {
+					ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
+					name: 'agent',
+					location: '/agent',
+					services: [],
+					warnings: []
+				}
+			});
+		};
+		const bindings = sshDockerProvider(ssh, run).open({
+			kind: 'ssh-docker',
+			connectionId: 'lab',
+			remoteHome: '/agent'
+		}).applicationBindings!();
+		const policy = bindings.apps!.credentials.updatePolicy;
+		if (policy.support !== 'supported') throw new Error('fixture');
+		// Before discovery, an old/unknown host is not falsely disabled.
+		expect(policy.availability()).toEqual({ state: 'ready' });
+		await bindings.initialize!();
+		expect(policy.availability()).toEqual({ state: 'ready' });
+	});
+
+	test('an older SSH hello disables only its unadvertised credential-policy feature', async () => {
+		const run: HostingProcess = async (_binary, _args, options) => {
+			const request = JSON.parse(options?.input || '{}') as { action?: string };
+			return JSON.stringify({
+				version: 1,
+				ok: true,
+				value:
+					request.action === 'hello'
+						? { actions: ['inspect'], management: ['snapshot', 'providers', 'credential'] }
+						: {
+								ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
+								name: 'agent',
+								location: '/agent',
+								services: [],
+								warnings: []
+							}
+			});
+		};
+		const bindings = sshDockerProvider(ssh, run).open({
+			kind: 'ssh-docker',
+			connectionId: 'lab',
+			remoteHome: '/agent'
+		}).applicationBindings!();
+		await bindings.initialize!();
+		const policy = bindings.apps!.credentials.updatePolicy;
+		const providers = bindings.agent!.providers!;
+		if (policy.support !== 'supported' || providers.support !== 'supported')
+			throw new Error('fixture');
+		expect(policy.availability()).toMatchObject({ state: 'unavailable' });
+		expect(providers.availability()).toEqual({ state: 'ready' });
+	});
+
 	test('fixed remote command and JSON stdin preserve paths with shell metacharacters', async () => {
 		const remoteHome = "/opt/stacks/owner's agent; echo bad";
 		const requests: Array<{ args: string[]; input: unknown }> = [];
@@ -330,6 +449,12 @@ describe('ACA adapter uses external deployment ownership', () => {
 				properties: {
 					runningStatus: options.stopped ? 'Stopped' : 'Running',
 					provisioningState: 'Succeeded',
+					template: {
+						containers: [
+							{ name: 'worker', image: 'registry.example/assistant:beta' },
+							{ name: 'helper', image: 'registry.example/helper:1' }
+						]
+					},
 					configuration: { ingress: { external: true, fqdn: 'agent.example.com' } }
 				}
 			};
@@ -344,6 +469,11 @@ describe('ACA adapter uses external deployment ownership', () => {
 		expect(snapshot.platformState).toBe('Scaled to zero');
 		expect(snapshot.config).toBeUndefined();
 		expect(snapshot.clientUrl).toBe('https://agent.example.com');
+		expect(snapshot.services[0]?.image).toBeUndefined();
+		expect(snapshot.services[0]?.imageProvenance?.configuredReferences).toEqual([
+			'registry.example/assistant:beta',
+			'registry.example/helper:1'
+		]);
 		expect(snapshot.capabilities.restart.supported).toBe(true);
 		for (const args of calls) {
 			expect(args).toContain(subscription);

@@ -9,21 +9,15 @@ import type {
 	ProviderEndpointInput,
 	StackConfig
 } from '@fhold/lib';
-import type {
-	HostingConnection,
-	HostingSnapshot,
-	InstanceRef,
-	InstanceSummary,
-	ConnectionCheck
-} from '@fhold/lib';
+import type { HostingConnection, InstanceRef, InstanceSummary, ConnectionCheck } from '@fhold/lib';
 import type { HostingChoice, HostingLogOptions } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
-import type { ManagedSnapshot } from '@fhold/lib';
+import type { InstanceSnapshot } from '@fhold/lib';
 import type { AdminSettings } from './admin-settings.js';
 import type { AdminAppSnapshot } from './admin-updates.js';
 
-export type AdminSnapshot = ManagedSnapshot;
+export type AdminSnapshot = InstanceSnapshot;
 
 export type StackAction = 'start' | 'restart' | 'stop';
 export type InterruptingAction =
@@ -38,7 +32,6 @@ export type InterruptingAction =
 export type AdminInstance = { kind: 'local'; homeDir: string };
 export type AdminTarget = AdminInstance | { kind: 'hosted'; ref: InstanceRef };
 export type AdminWelcomeInstance = AdminTarget & { name?: string; available: boolean };
-export type AdminViewSnapshot = AdminSnapshot | { phase: 'remote'; hosting: HostingSnapshot };
 export type AdminWelcome = {
 	defaultInstance: AdminInstance & { name?: string; available: boolean };
 	instancesDirectory: string;
@@ -79,9 +72,7 @@ export type AdminApi = {
 	openInstance(target: AdminTarget): Promise<void>;
 	prepareNewInstance(target: AdminTarget & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
-	installationReadiness(
-		connectionId?: string
-	): Promise<NonNullable<AdminSnapshot['installationReadiness']>>;
+	installationReadiness(connectionId?: string): Promise<{ ok: boolean; message?: string }>;
 	codexRecall(value: {
 		action: 'review' | 'approve' | 'disable';
 		digest?: string;
@@ -93,14 +84,14 @@ export type AdminApi = {
 		trusted?: boolean;
 		sandbox?: CodexSandbox;
 		input?: string;
-		restartConfirmed?: boolean;
+		confirmed?: boolean;
 	}): Promise<RemoteProgress>;
-	snapshot(): Promise<AdminViewSnapshot>;
+	snapshot(): Promise<AdminSnapshot>;
 	selectedHome(): Promise<string>;
 	install(config: StackConfig, automaticPorts?: boolean): Promise<AdminSnapshot>;
 	saveConfig(value: { config: StackConfig; baseConfig: StackConfig }): Promise<AdminSnapshot>;
 	confirmRestart(action: InterruptingAction): Promise<boolean>;
-	action(action: StackAction, confirmed?: boolean): Promise<AdminViewSnapshot>;
+	action(action: StackAction, confirmed?: boolean): Promise<AdminSnapshot>;
 	logs(options?: HostingLogOptions): Promise<string>;
 	providers(): Promise<ProviderSettings>;
 	providerKey(value: { provider: string; key: string }): Promise<void>;
@@ -115,6 +106,7 @@ export type AdminApi = {
 	}): Promise<ProviderOAuthAuthorization>;
 	providerOAuthFinish(value: { provider: string; method: number; code?: string }): Promise<void>;
 	readiness(value?: { provider?: string; model?: string }): Promise<AssistantReadiness>;
+	connectAgent(value?: { password?: string }): Promise<{ endpoint: string; username?: string }>;
 	assistantPassword(): Promise<{ password: string }>;
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
@@ -122,9 +114,10 @@ export type AdminApi = {
 		purpose: 'backup' | 'restore' | 'instance' | 'new-instance' | 'recovery';
 	}): Promise<string | undefined>;
 	credential(value: {
-		action: 'create' | 'rotate' | 'remove';
+		action: 'create' | 'rotate' | 'remove' | 'policy';
 		username: string;
 		policy?: string;
+		previousPolicy?: string;
 	}): Promise<AdminSnapshot>;
 	credentialKey(username: string): Promise<{ username: string; key: string }>;
 	mapPortalUser(value: {
@@ -213,6 +206,7 @@ export const ADMIN_CHANNELS = {
 	providerOAuthStart: 'admin:provider-oauth-start',
 	providerOAuthFinish: 'admin:provider-oauth-finish',
 	readiness: 'admin:readiness',
+	connectAgent: 'admin:connect-agent',
 	assistantPassword: 'admin:assistant-password',
 	copyText: 'admin:copy-text',
 	openExternal: 'admin:open-external',

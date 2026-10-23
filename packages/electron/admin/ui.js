@@ -103,7 +103,7 @@ export async function operation(progress, action, success = `${progress} complet
 				return undefined;
 			}
 		}
-		if (result?.phase && (result?.config || result.phase === 'remote')) render(result);
+		if (result?.identity && result?.operations) render(result);
 		notice(success, 'success');
 		return result;
 	} catch (error) {
@@ -168,7 +168,11 @@ export function setSkipTarget(id) {
 
 export function showView(name, options = {}) {
 	if (!viewMeta[name]) return;
-	const ready = ['ready', 'remote'].includes(state.currentSnapshot?.phase);
+	const lifecycle =
+		state.currentSnapshot?.lifecycle?.state === 'known'
+			? state.currentSnapshot.lifecycle.value
+			: undefined;
+	const ready = lifecycle === 'ready' || lifecycle === 'externally-managed';
 	if (!ready && name !== 'provider') return;
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;
@@ -187,17 +191,11 @@ export function showView(name, options = {}) {
 	}
 	setText('mobile-navigation-label', `Navigation · ${meta.title}`);
 	if (window.matchMedia?.('(max-width: 700px)').matches) byId('mobile-navigation').open = false;
-	setText(
-		'view-kicker',
-		state.currentSnapshot?.phase === 'setup_incomplete' ? 'SETUP IN PROGRESS' : meta.kicker
-	);
-	setText(
-		'view-title',
-		state.currentSnapshot?.phase === 'setup_incomplete' ? 'Connect your AI' : meta.title
-	);
+	setText('view-kicker', lifecycle === 'setup-incomplete' ? 'SETUP IN PROGRESS' : meta.kicker);
+	setText('view-title', lifecycle === 'setup-incomplete' ? 'Connect your AI' : meta.title);
 	setText(
 		'view-description',
-		state.currentSnapshot?.phase === 'setup_incomplete'
+		lifecycle === 'setup-incomplete'
 			? 'Choose a provider and verify that your agent can respond.'
 			: meta.description
 	);

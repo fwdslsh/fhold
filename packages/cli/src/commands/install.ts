@@ -6,6 +6,7 @@ import {
 	createFholdState,
 	defaultStackConfig,
 	ensureDockerReady,
+	assertInstallInstanceName,
 	installHome,
 	parseStackConfig
 } from '@fhold/lib';
@@ -38,6 +39,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		: null;
 	if (supplied && !supplied.ok) throw new Error(supplied.error);
 	const name = supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined;
+	if (name !== undefined) assertInstallInstanceName(name);
 	const state = createFholdState(undefined, name);
 	if (classifyInstall(state.homeDir) !== 'not_installed') {
 		throw new Error('fhold is already installed. Use `fhold update` to refresh it.');

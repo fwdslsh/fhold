@@ -63,6 +63,12 @@ async function guidedFixture(failure = false) {
 const args=process.argv.slice(2);
 if(args[0] === 'image' && args[1] === 'inspect') {
  console.log('1');
+} else if(args[0] === 'ps') {
+ console.log('fixture-assistant');
+} else if(args[0] === 'inspect') {
+ console.log(JSON.stringify({'com.docker.compose.project.working_dir':${JSON.stringify(state.stackDir)}}));
+} else if(args.includes('ps')) {
+ console.log(JSON.stringify({Service:'assistant',State:'running',ID:'fixture-assistant'}));
 } else if(args.includes('config')) {
  const config=${JSON.stringify(resolved.config)};
  Object.assign(config.services.assistant.environment,{FH_CODEX_REMOTE:process.env.FH_CODEX_REMOTE,FH_CLAUDE_REMOTE:process.env.FH_CLAUDE_REMOTE,FH_CODEX_SANDBOX:process.env.FH_CODEX_SANDBOX});
@@ -126,7 +132,9 @@ describe('native remote commands', () => {
 				trusted: true,
 				sandbox
 			});
-			expect(acquireStackLock(state.dataDir)).toBeNull();
+			const duringSignIn = acquireStackLock(state.dataDir);
+			expect(duringSignIn).not.toBeNull();
+			releaseStackLock(duringSignIn);
 			expect(() => session.input('bad\ninput')).toThrow();
 			const promptDeadline = Date.now() + 2000;
 			while (session.snapshot().stage !== 'sign-in') {
@@ -176,7 +184,7 @@ describe('native remote commands', () => {
 		const config = readStackConfig(state.homeDir);
 		expect(config.ok && config.config.assistant.claudeRemote).toBe(false);
 	});
-	it('rolls startup back off if cancelled after native setup, during background pairing', async () => {
+	it('does not roll back successfully applied startup intent when pairing is cancelled', async () => {
 		const state = await guidedFixture();
 		const session = await beginRemoteEnable(state, 'claude', {
 			trusted: true,
@@ -190,9 +198,14 @@ describe('native remote commands', () => {
 			await Bun.sleep(5);
 		}
 		session.input('human-approved');
-		expect(await session.done).toMatchObject({ enabled: false, running: false, stage: 'failed' });
+		expect(await session.done).toMatchObject({
+			enabled: true,
+			running: false,
+			stage: 'failed',
+			error: 'Setup cancelled after startup settings were applied.'
+		});
 		const config = readStackConfig(state.homeDir);
-		expect(config.ok && config.config.assistant.claudeRemote).toBe(false);
+		expect(config.ok && config.config.assistant.claudeRemote).toBe(true);
 		const lock = acquireStackLock(state.dataDir);
 		expect(lock).not.toBeNull();
 		releaseStackLock(lock);

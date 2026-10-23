@@ -179,3 +179,31 @@ Playwright 1.64.1, Node 24.22.1 LTS, Go 1.27.3, Supercronic 0.2.51, Ubuntu 24.04
 Azure/MCP/Slack/Discord SDKs, TypeScript 7.0.2, Biome 2.6.2, overrides, all pinned
 Actions, Trivy 0.76.1, cosign 3.1.4 and the docs renderer 0.11.16/template 0.5.0
 are current on their selected channels.
+
+## Tooling-only 0.3.261004-beta review
+
+Rechecked official upstream metadata on **October 23, 2026 at 05:18 UTC** for
+all 33 workspace dependency/override names, selected channels, native AKM
+marketplace manifests and tag commit, all pinned Actions, Node/Go/Bun,
+Supercronic, Trivy, cosign and the documentation renderer/template. Bun 1.4.4's
+`bun update --recursive --no-cache --dry-run` checked 878 packages and found
+nothing to update. The root lock changes only tooling workspace version metadata.
+
+Electron's maintained `44-x-y` channel remains 44.9.3, electron-builder `v26`
+remains 26.18.0, and electron-updater remains 6.8.9. All other tooling pins remain
+current on their selected compatible channels. The existing OpenCode 2.1,
+Effect and Electron 45 compatibility holds remain documented above.
+
+The retained runtime is **0.3.261003-beta**. AKM CLI `next` 0.10.261012-beta and
+OpenCode plugin 0.10.261011-beta still agree on the exact required CLI. Both native
+marketplace manifests report 0.10.261011-beta at the same immutable
+`4f27fc82d02e4dd5901d725bc9fd23e762264c1a` commit. Claude Code 2.1.309, npm 12.2.1,
+Bun 1.4.4, Node 24.22.1 LTS and the selected base/compiler/tool versions remain
+current. Newly published Codex **0.164.0** is deferred to the next full runtime
+qualification; this tooling release retains the published image's **0.163.0**.
+No new advisory exception, runtime pin or dependency resolution is introduced.
+
+Management architecture tests are explicitly classified and executed as tooling
+checks. Unknown inputs, runtime sources and runtime dependency changes still
+select full qualification. The release advances CLI/Admin only, preserving the
+published runtime and extension defaults and leaving live instances unchanged.
