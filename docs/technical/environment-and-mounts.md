@@ -231,18 +231,21 @@ so its plugins can consume them during scheduled work even though the scheduler
 process has no aliases. A plugin needing per-session restrictions must enforce
 them itself. Same-UID processes and trusted native agents are not isolated from
 container credentials by environment filtering. Choose the workload's actual
-permissions accordingly. The operator-controlled managed Compose environment
-allowlist is unchanged; this setting targets externally provisioned containers,
-not a new Admin configuration surface or broad Compose passthrough.
+permissions accordingly. The managed Compose template keeps its existing defaults;
+operator overlays remain operator-owned. `fhold doctor` can report differences
+from the recommended environment without blocking lifecycle operations. This
+setting targets externally provisioned containers, not a new Admin surface.
 
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at
 `/recovery`. The destination must be outside the instance home and cannot be its
 parent; links are refused before saving. Off/Blob mode uses an empty private bind
-placeholder. Existing operator directories are not chmodded. These mounts and
-storage-only secret are audited; overlays cannot substitute them or lower the
-enabled recovery shutdown budget. No new service is introduced.
+placeholder. Existing operator directories are not chmodded. Optional `fhold
+doctor` diagnostics report changes to these mounts, the storage-only secret or
+the recommended recovery shutdown budget; they do not veto lifecycle operations.
+Operators own custom overlays and their effects. The native recovery engine still
+validates checkpoint identity, integrity and ownership. No new service is introduced.
 
 Standalone recovery optionally uses externally supplied
 `FH_RECOVERY_INCLUDE_FILE` for additional paths/SQLite and versioned mount policy.

@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
-import { composeConfigJson, composeProjectName, runComposeStreaming, runDocker } from './docker.js';
+import { composeConfigJson, runComposeStreaming, runDocker } from './docker.js';
 import type { FholdState } from './foundation.js';
 import { acquireStackLock, releaseStackLock, type StackLock } from './lock.js';
-import { auditCompose } from './secret-audit.js';
 import { ensureRuntime } from './state.js';
 import { readStackConfig } from './stack-config.js';
 import {
@@ -78,10 +77,6 @@ export async function activateComposeCommand(
 		const resolved = await composeConfigJson(composeOptions);
 		if (!resolved.ok) {
 			throw new Error(`Compose configuration failed: ${resolved.stderr || 'unknown error'}`);
-		}
-		const issues = auditCompose(resolved.config, state.homeDir, composeProjectName(composeOptions));
-		if (issues.length > 0) {
-			throw new Error(`Refusing Compose activation:\n${issues.join('\n')}`);
 		}
 		if (selectedArgs[0] === 'up') {
 			if (selectedArgs.includes('--build'))

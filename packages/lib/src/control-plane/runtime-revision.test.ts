@@ -16,6 +16,7 @@ import { activateComposeCommand, deactivateComposeCommand } from './activation.j
 import { buildComposeOptions } from './compose.js';
 import { composeConfigJson } from './docker.js';
 import { writeFileAtomic } from './foundation.js';
+import { auditCompose } from './secret-audit.js';
 
 const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
@@ -181,6 +182,42 @@ else if (args[0] === 'compose' && args.includes('up')) {
 	writeFileSync(akmPath, JSON.stringify(oldAkm));
 	await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait']);
 	expect(restartStatus(home).required).toBe(true);
+});
+
+test('restart accepts older Compose and operator customizations without a policy veto or managed-file upgrade', async () => {
+	const { root, home } = await fixture();
+	const state = createFholdState(home);
+	const compose = join(home, 'system/stack/stack.compose.yml');
+	const installed = readFileSync(compose, 'utf8').replace(/^.*FH_RECOVERY_AKM_INDEX_(?:CAPTURE|RESTORE):.*\n/gm, '');
+	writeFileSync(compose, installed);
+	// Exercise the normal merged Compose path, with no real container launched.
+	const overlay = join(home, 'config/stack/custom.compose.yml');
+	const custom = 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n';
+	writeFileSync(overlay, custom);
+	const before = readFileSync(join(home, 'state/stack.json'));
+	writeFileSync(join(home, 'workspace/note.txt'), 'preserve user work');
+	const resolved = await composeConfigJson(buildComposeOptions(state));
+	if (!resolved.ok) throw new Error(resolved.stderr);
+	expect(auditCompose(resolved.config, home)).toContain('service assistant has unsupported environment key OPERATOR_SETTING');
+	const binary = join(root, 'docker');
+	const calls = join(root, 'activation-args');
+	writeFileAtomic(binary, `#!${process.execPath}
+import { writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === 'image') console.log('1');
+else if (args[0] === 'compose' && args.includes('config')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});
+else if (args[0] === 'compose' && args.includes('up')) writeFileSync(${JSON.stringify(calls)}, JSON.stringify(args));
+else if (args[0] === 'ps') process.exit(0);
+else process.exit(1);
+`, 0o700);
+	process.env.FH_DOCKER_BIN = binary;
+	await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait']);
+	expect(JSON.parse(readFileSync(calls, 'utf8'))).toContain('--force-recreate');
+	expect(restartStatus(home).required).toBe(false);
+	expect(readFileSync(compose, 'utf8')).toBe(installed);
+	expect(readFileSync(overlay, 'utf8')).toBe(custom);
+	expect(readFileSync(join(home, 'state/stack.json'))).toEqual(before);
+	expect(readFileSync(join(home, 'workspace/note.txt'), 'utf8')).toBe('preserve user work');
 });
 
 test('fingerprints preserve old native pins, custom engines and malformed optional settings without writes', async () => {

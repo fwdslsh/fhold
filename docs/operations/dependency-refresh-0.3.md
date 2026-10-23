@@ -207,3 +207,24 @@ Management architecture tests are explicitly classified and executed as tooling
 checks. Unknown inputs, runtime sources and runtime dependency changes still
 select full qualification. The release advances CLI/Admin only, preserving the
 published runtime and extension defaults and leaving live instances unchanged.
+
+## Tooling-only 0.3.261005-beta restart fix
+
+Rechecked October 23, 2026 at **15:26 UTC** against official npm metadata for
+all 33 workspace dependency/override names and selected channels, every pinned
+Action, native marketplace manifests, Node/Go indexes, Bun, Supercronic, Trivy,
+cosign and docs renderer/template. Tooling packages remain current on their
+compatible channels. Docker login Action **4.7.0** supersedes 4.6.0 and is updated
+in the release workflow; its container-only jobs are not exercised by this tools
+publication. Other Actions and selected toolchain pins remain current. Bun's
+recursive no-cache update dry run checked 878 packages with nothing to update;
+only tooling workspace version metadata changes in the lockfile.
+
+AKM CLI `next` 0.10.261012-beta and all three plugins 0.10.261011-beta match the
+immutable marketplace commit `4f27fc82d02e4dd5901d725bc9fd23e762264c1a`. Retain
+runtime/extension cohort **0.3.261003-beta**. Codex 0.164.0 remains deferred to
+the next runtime release (image pin 0.163.0). OpenCode 2.1.4 now supersedes 2.1.3
+upstream; the existing history-import compatibility hold retains 2.0.32 with
+Effect 4.0.1. Electron 45 retains its separate major-version qualification hold;
+the selected maintained 44 line stays at 44.9.3. No runtime dependencies or
+container inputs change for this host-tool regression fix.

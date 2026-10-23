@@ -490,6 +490,7 @@ function isConfigured(value: unknown): boolean {
 	return object ? Object.keys(object).length > 0 : true;
 }
 
+/** Optional doctor diagnostics and release-default checks, never a lifecycle authorization gate. */
 export function auditCompose(
 	config: unknown,
 	homeDir: string,
@@ -671,13 +672,20 @@ export function auditCompose(
 		if (name === 'assistant') {
 			if (stackConfig.ok) {
 				const expectedRecovery = recoveryEnvironment(stackConfig.config.recovery);
-				// Older installed Compose files remain readable while recovery is off.
-				const hasRecovery = environment.FH_RECOVERY_URL !== undefined || stackConfig.config.recovery.enabled;
-				if (hasRecovery) {
-					for (const [key, expected] of Object.entries(expectedRecovery)) if (environment[key] !== expected) issues.push(`assistant ${key} must match recovery intent`);
-					for (const target of ['/recovery', '/run/fhold-recovery/include.json', '/run/fhold-recovery-state']) if (!Array.isArray(service.volumes) || !service.volumes.some((mount) => record(mount)?.target === target)) issues.push(`assistant recovery requires mount ${target}`);
-				}
+				// An omitted URL means recovery is off. Still reject an overlay that
+				// enables it unexpectedly, but do not gate restart on inactive settings.
+				if ((environment.FH_RECOVERY_URL ?? '') !== expectedRecovery.FH_RECOVERY_URL)
+					issues.push('assistant FH_RECOVERY_URL must match recovery intent');
 				if (stackConfig.config.recovery.enabled) {
+					for (const [key, expected] of Object.entries(expectedRecovery)) {
+						if (key === 'FH_RECOVERY_URL') continue;
+						// Older Compose files omit the experimental cache switches. Their
+						// native default is off; upgrading tools must not require new images.
+						const actual = key === 'FH_RECOVERY_AKM_INDEX_CAPTURE' || key === 'FH_RECOVERY_AKM_INDEX_RESTORE'
+							? environment[key] ?? '0' : environment[key];
+						if (actual !== expected) issues.push(`assistant ${key} must match recovery intent`);
+					}
+					for (const target of ['/recovery', '/run/fhold-recovery/include.json', '/run/fhold-recovery-state']) if (!Array.isArray(service.volumes) || !service.volumes.some((mount) => record(mount)?.target === target)) issues.push(`assistant recovery requires mount ${target}`);
 					const duration = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(String(service.stop_grace_period));
 					const seconds = duration ? Number(duration[1] || 0) * 3600 + Number(duration[2] || 0) * 60 + Number(duration[3] || 0) : 0;
 					if (seconds < recoveryStopGrace(stackConfig.config.recovery)) issues.push('Assistant termination grace must cover writer shutdown and both recovery phases.');

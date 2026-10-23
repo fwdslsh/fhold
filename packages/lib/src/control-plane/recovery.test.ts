@@ -69,6 +69,53 @@ describe('managed runtime recovery', () => {
 		expect(recoverySnapshot(home).settings.enabled).toBe(false);
 		expect(readFileSync(join(home, 'state/stack.json'))).toEqual(before);
 	});
+	it('accepts older installed Compose defaults with recovery off or on without weakening active recovery boundaries', async () => {
+		const { home, root } = await fixture();
+		const compose = join(home, 'system/stack/stack.compose.yml');
+		// Reproduce an installed pre-cache template, not a freshly refreshed home.
+		const installed = readFileSync(compose, 'utf8').replace(/^.*FH_RECOVERY_AKM_INDEX_(?:CAPTURE|RESTORE):.*\n/gm, '');
+		writeFileSync(compose, installed);
+		for (const enabled of [false, true]) {
+			const current = recoverySnapshot(home);
+			saveRecoverySettings(home, {
+				settings: { ...current.settings, enabled, destination: directoryRecoveryDestination(join(root, 'backups')) },
+				selection: current.selection,
+				baselineDigest: current.digest
+			});
+			const before = readFileSync(join(home, 'state/stack.json'));
+			const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
+			if (!resolved.ok) throw new Error(resolved.stderr);
+			const config = resolved.config as { services: { assistant: { environment: Record<string, string>; stop_grace_period: string } } };
+			const environment = config.services.assistant.environment;
+			expect(environment.FH_RECOVERY_AKM_INDEX_CAPTURE).toBeUndefined();
+			expect(environment.FH_RECOVERY_AKM_INDEX_RESTORE).toBeUndefined();
+			expect(auditCompose(config, home)).toEqual([]);
+			expect(readFileSync(compose, 'utf8')).toBe(installed);
+			expect(readFileSync(join(home, 'state/stack.json'))).toEqual(before);
+			const expectedUrl = environment.FH_RECOVERY_URL;
+			environment.FH_RECOVERY_URL = 'file:///unexpected-storage';
+			expect(auditCompose(config, home)).toContain('assistant FH_RECOVERY_URL must match recovery intent');
+			environment.FH_RECOVERY_URL = expectedUrl;
+			if (enabled) {
+				environment.FH_RECOVERY_AKM_INDEX_CAPTURE = '1';
+				expect(auditCompose(config, home)).toContain('assistant FH_RECOVERY_AKM_INDEX_CAPTURE must match recovery intent');
+				delete environment.FH_RECOVERY_AKM_INDEX_CAPTURE;
+				environment.FH_INSTANCE_ID = 'different-instance';
+				expect(auditCompose(config, home)).toContain('assistant FH_INSTANCE_ID must match recovery intent');
+				config.services.assistant.stop_grace_period = '10s';
+				expect(auditCompose(config, home)).toContain('Assistant termination grace must cover writer shutdown and both recovery phases.');
+			} else {
+				// No inactive recovery setting, including saved cache opt-ins, can
+				// turn an ordinary persistent instance restart into an upgrade gate.
+				for (const key of Object.keys(recoveryEnvironment(current.settings))) delete environment[key];
+				expect(auditCompose(config, home)).toEqual([]);
+				const intent = JSON.parse(before.toString());
+				intent.recovery.akmIndexCapture = true;
+				intent.recovery.akmIndexRestore = true;
+				expect(auditCompose(config, home, undefined, intent)).toEqual([]);
+			}
+		}
+	});
 	it('does not invent a pending restart while reading an earlier recovery-off installation', async () => {
 		const { home } = await fixture();
 		const compose = join(home, 'system/stack/stack.compose.yml');

@@ -30,7 +30,6 @@ import {
 	runDocker
 } from './docker.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
-import { auditCompose } from './secret-audit.js';
 import { assertManagedHarnessImage } from './activation.js';
 
 export type { RecoverySettings, RecoverySelection } from '../dto/recovery.js';
@@ -208,9 +207,6 @@ export async function runRecoveryOperation(
 		}
 		const resolved = await composeConfigJson(options);
 		if (!resolved.ok) throw new Error('Could not validate the recovery Compose configuration.');
-		const issues = auditCompose(resolved.config, homeDir);
-		if (issues.length)
-			throw new Error(`Recovery configuration failed validation:\n${issues.join('\n')}`);
 		await assertManagedHarnessImage(resolved.config);
 		const args =
 			action === 'init'

@@ -39,7 +39,10 @@ when names are ambiguous. Remote paths are never resolved against this computer,
 and remote commands never override this computer's `FH_HOME`.
 
 The remote CLI executes the existing lifecycle, lock, recovery drain, Compose
-audit and pending-settings receipt paths. The wire envelope and advertised
+parsing and pending-settings receipt paths. Compose policy recommendations are
+optional `fhold doctor` diagnostics, not lifecycle gates. An SSH host needs the
+updated CLI to receive this behavior; updating Admin does not replace remote tools.
+The wire envelope and advertised
 actions determine compatibility, not exact release-version equality. An older
 RPC-only CLI can still provide host status and supported lifecycle operations;
 an unavailable session method disables only its named agent/app/data operation.

@@ -22,7 +22,7 @@ import {
 
 import { defineAction } from '../lib/action.js';
 
-type Check = { name: string; ok: boolean; detail: string };
+type Check = { name: string; ok: boolean; detail: string; advisory?: boolean };
 
 function fileCheck(
 	name: string,
@@ -142,8 +142,9 @@ export async function diagnoseStack(
 		if (compose.ok) {
 			const issues = auditCompose(compose.config, state.homeDir);
 			checks.push({
-				name: 'compose security boundaries',
+				name: 'managed Compose recommendations',
 				ok: issues.length === 0,
+				advisory: true,
 				detail: issues.length === 0 ? 'valid' : issues.join('; ')
 			});
 		}
@@ -158,7 +159,7 @@ export async function diagnoseStack(
 			});
 		}
 	}
-	return { ok: checks.every((check) => check.ok), checks };
+	return { ok: checks.every((check) => check.ok || check.advisory), checks };
 }
 
 export default defineCommand({
@@ -177,7 +178,7 @@ export default defineCommand({
 			console.log(JSON.stringify(result, null, 2));
 		} else {
 			for (const check of result.checks) {
-				console.log(`${check.ok ? 'ok' : 'FAIL'}  ${check.name}: ${check.detail}`);
+				console.log(`${check.ok ? 'ok' : check.advisory ? 'WARN' : 'FAIL'}  ${check.name}: ${check.detail}`);
 			}
 		}
 		if (!result.ok) throw new Error('One or more checks failed.');

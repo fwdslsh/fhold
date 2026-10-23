@@ -6,9 +6,8 @@ import { acquireStackLock, releaseStackLock } from './lock.js';
 import { applyHomeSeed, MANAGED_FILES, preflightHomeSeed, readSeedFile } from './seed.js';
 import { readStackConfig, stackConfigEnv } from './stack-config.js';
 import { ensureRuntime, requireInstall } from './state.js';
-import { buildComposeArgs, composeConfigJson, composeProjectName, ensureDockerReady, runComposeStreaming, runDocker } from './docker.js';
+import { buildComposeArgs, composeConfigJson, ensureDockerReady, runComposeStreaming, runDocker } from './docker.js';
 import { buildComposeOptions } from './compose.js';
-import { auditCompose } from './secret-audit.js';
 import { activateComposeCommand, assertManagedHarnessImage } from './activation.js';
 import { FH_RELEASE_VERSION, FH_RUNTIME_VERSION } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
@@ -63,8 +62,6 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 		// Compose config is a local CLI operation and does not contact the daemon.
 		const resolved = await composeConfigJson(candidate);
 		if (!resolved.ok) throw new Error(`Candidate Compose configuration failed: ${resolved.stderr}`);
-		const issues = auditCompose(resolved.config, state.homeDir, composeProjectName(candidate), candidateConfig);
-		if (issues.length) throw new Error(`Refusing candidate Compose configuration:\n${issues.join('\n')}`);
 		if (options.start) {
 			const docker = await ensureDockerReady();
 			if (!docker.ok) throw new Error(docker.message);

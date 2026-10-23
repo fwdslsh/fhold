@@ -232,7 +232,7 @@ describe('release workflows', () => {
 			'actions/upload-pages-artifact@v5.0.0',
 			'aquasecurity/trivy-action@v0.36.0',
 			'docker/build-push-action@v7.4.0',
-			'docker/login-action@v4.6.0',
+			'docker/login-action@v4.7.0',
 			'docker/setup-buildx-action@v4.4.1',
 			'docker/setup-qemu-action@v4.4.0',
 			'oven-sh/setup-bun@v2.2.0',
