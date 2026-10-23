@@ -2,13 +2,14 @@ import { applyRestore, planRestore } from '../control-plane/restore.js';
 import { classifyInstall, markInstalled } from '../control-plane/state.js';
 import { configureGuardianModeratorModel } from '../control-plane/opencode.js';
 import { mutateStack } from '../control-plane/operations.js';
-import type { AssistantReadiness } from './agent-access.js';
+import type { AssistantReadiness } from '../control-plane/native-agent.js';
 import { createBackup } from '../control-plane/backup.js';
 import { installHome } from '../control-plane/install.js';
 import {
 	createCredential,
 	rotateCredential,
 	removeCredential,
+	setCredentialPolicy,
 	mapPortalUser,
 	saveStackIntent
 } from '../control-plane/operations.js';
@@ -17,7 +18,11 @@ import {
 	readPortalCredentialMap,
 	type PortalName
 } from '../control-plane/portal-credential-store.js';
-import { readStackConfig, type StackConfig } from '../control-plane/stack-config.js';
+import {
+	readStackConfig,
+	type GuardianPolicy,
+	type StackConfig
+} from '../control-plane/stack-config.js';
 import {
 	exportInstance,
 	planInstanceRestore,
@@ -226,6 +231,12 @@ function current(homeDir: string): StackConfig {
 export const createAdminCredential = createCredential;
 export const rotateAdminCredential = rotateCredential;
 export const removeAdminCredential = removeCredential;
+export function updateAdminCredentialPolicy(
+	homeDir: string,
+	value: { username: string; policy: GuardianPolicy; previousPolicy: GuardianPolicy }
+): void {
+	setCredentialPolicy(homeDir, value.username, value.policy, value.previousPolicy);
+}
 export const mapAdminPortalUser = mapPortalUser;
 
 export function adminPortalMappings(homeDir: string) {

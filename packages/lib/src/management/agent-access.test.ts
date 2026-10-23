@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createHttpsNativeAgentService } from './agent-access.js';
+import { createHttpsNativeAgentService } from '../control-plane/native-agent.js';
 
 describe('HTTPS native agent access', () => {
 	it('uses only the selected HTTPS origin, keeps password private, and rejects redirects', async () => {
@@ -41,8 +41,7 @@ describe('HTTPS native agent access', () => {
 				throw new Error('No request after close');
 			}) as typeof fetch
 		});
-		const result = await service.testReadiness({ signal: controller.signal });
-		expect(result.ok).toBe(false);
+		await expect(service.testReadiness({ signal: controller.signal })).rejects.toThrow('aborted');
 		expect(requests).toBe(0);
 	});
 

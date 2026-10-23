@@ -18,7 +18,13 @@ import {
 } from '../admin/connections.js';
 import { bindConfigurationEvents } from '../admin/configuration.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
-import { endpoint, isHealthy, promptVisible, serviceImageDetails } from '../admin/model.js';
+import {
+	endpoint,
+	isHealthy,
+	known as observationValue,
+	promptVisible,
+	serviceImageDetails
+} from '../admin/model.js';
 import {
 	bindRecoveryEvents,
 	recoveryInput,
@@ -54,6 +60,7 @@ import {
 	instancePresentation,
 	renderInstanceCapabilities,
 	renderInstanceDetails,
+	renderPlatformAccess,
 	selectedLogOptions
 } from '../admin/instance-presentation.js';
 import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
@@ -298,7 +305,12 @@ function normalizedSnapshot({
 			'data.backup': supported(),
 			'data.restoreData': supported(),
 			'data.restoreInstance': supported(),
-			'data.recovery': supported(),
+			'data.recovery.status': supported(),
+			'data.recovery.inspect': supported(),
+			'data.recovery.initialize': supported(),
+			'data.recovery.restore': supported(),
+			'data.recovery.save': supported(),
+			'data.recovery.setCredential': supported(),
 			...(docker
 				? {
 						'docker.install': supported(),
@@ -409,7 +421,7 @@ describe('Admin static security boundary', () => {
 				'host.restart': unsupported(),
 				'agent.providers': unsupported(),
 				'data.restoreData': unsupported(),
-				'data.recovery': unsupported()
+				'data.recovery.save': unsupported()
 			}
 		});
 		expect(instancePresentation(snapshot).location).toBe('/resource');
@@ -445,6 +457,20 @@ describe('Admin static security boundary', () => {
 				ref: { kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' }
 			})
 		);
+	});
+	it('uses the observed native username and only unwraps known observations', () => {
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'ssh-docker', connectionId: 'remote', remoteHome: '/agent' },
+			lifecycle: 'externally-managed'
+		});
+		renderPlatformAccess({
+			...snapshot,
+			agent: { ...snapshot.agent, access: known({ username: 'sam@example.test' }) }
+		});
+		expect(control('direct-username').textContent).toBe('sam@example.test');
+		expect(html).toContain('id="direct-username">Not reported</code>');
+		expect(observationValue(known('known value'))).toBe('known value');
+		expect(observationValue({ state: 'unavailable', reason: 'Offline' })).toBeUndefined();
 	});
 	it('acquires a passwordless native route on one explicit Overview click', async () => {
 		const snapshot = normalizedSnapshot({
@@ -542,7 +568,8 @@ describe('Admin static security boundary', () => {
 		expect(control('provider-fields').disabled).toBe(false);
 		expect(control('transfer-fields').disabled).toBe(false);
 		expect(control('provider-fields-unavailable').hidden).toBe(true);
-		expect(instanceCapability('update', snapshot).supported).toBe(true);
+		expect(instanceCapability('docker.update', snapshot).supported).toBe(true);
+		expect(instanceCapability('update', snapshot).supported).toBe(false);
 		renderInstanceCapabilities(
 			normalizedSnapshot({
 				lifecycle: 'externally-managed',
@@ -2310,6 +2337,24 @@ describe('Admin runtime recovery controls', () => {
 		updateRecoveryFields();
 		expect(control('initialize-recovery').disabled).toBe(false);
 	});
+	it('uses exact recovery operation keys instead of a parent capability alias', () => {
+		const snapshot = fixture(false);
+		snapshot.docker.config.recovery.enabled = true;
+		snapshot.data.recovery.value.settings.enabled = true;
+		snapshot.operations = {
+			...snapshot.operations,
+			'data.recovery.initialize': unsupported('This instance cannot initialize recovery.'),
+			'data.recovery.setCredential': unsupported('This instance uses an identity instead.')
+		};
+		renderRecovery(snapshot);
+		expect(control('save-recovery-settings').disabled).toBe(false);
+		expect(control('check-recovery-status').disabled).toBe(false);
+		expect(control('inspect-recovery').disabled).toBe(false);
+		expect(control('initialize-recovery').disabled).toBe(true);
+		expect(control('restore-runtime-recovery').disabled).toBe(false);
+		expect(control('save-recovery-credential').disabled).toBe(true);
+		expect(html).toContain('data-instance-feature="data.recovery.save"');
+	});
 	it('recomputes offline controls after a completed lifecycle operation rather than restoring stale disabled flags', async () => {
 		const snapshot = fixture();
 		snapshot.docker.config.recovery.enabled = true;
@@ -2492,7 +2537,7 @@ describe('Admin renderer behavior', () => {
 			calls.push(args);
 			return { ok: true };
 		};
-		await requestStackAction('restart');
+		await requestStackAction('host.restart');
 		expect(calls.at(-1)).toEqual(['restart', true]);
 		renderRestartStatus({
 			...normalizedSnapshot({ config: defaultStackConfig(), services: [] }),

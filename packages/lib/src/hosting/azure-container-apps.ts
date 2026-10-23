@@ -6,6 +6,7 @@ import {
 	type HostingTerminal
 } from './process.js';
 import { azureClient } from './azure-client.js';
+import { httpsAgentBindings } from '../management/https-agent-session.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -341,11 +342,6 @@ export function azureContainerAppsProvider(
 					},
 					name: app.name,
 					location: app.id,
-					actionEffects: {
-						start: 'request-platform-state',
-						stop: 'request-platform-state',
-						restart: 'restart-runtime'
-					},
 					capabilities: {
 						...capabilities(['start', 'stop']),
 						start: lifecycle,
@@ -402,7 +398,15 @@ export function azureContainerAppsProvider(
 			}
 			return {
 				ref,
+				actionEffects: {
+					start: 'request-platform-state',
+					stop: 'request-platform-state',
+					restart: 'restart-runtime'
+				},
 				inspect,
+				applicationBindings() {
+					return httpsAgentBindings({ inspectHost: inspect });
+				},
 				async logs(options = {}) {
 					const args = [
 						'containerapp',

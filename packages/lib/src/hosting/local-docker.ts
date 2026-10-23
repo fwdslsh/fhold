@@ -20,6 +20,8 @@ import {
 import { runDocker } from '../control-plane/docker.js';
 import { activateComposeCommand, deactivateComposeCommand } from '../control-plane/activation.js';
 import { assistantEndpoint } from '../control-plane/opencode.js';
+import { localInstanceManagement } from '../management/instance.js';
+import { rpcManagementBindings } from '../management/instance-session.js';
 import type { HostingProcess } from './process.js';
 import {
 	capabilities,
@@ -172,8 +174,24 @@ export const localDockerProvider: HostingProvider = {
 		if (ref.kind !== 'local-docker') throw new Error('Select a local Docker instance.');
 		return {
 			ref,
+			actionEffects: {
+				start: 'reconcile-deployment',
+				stop: 'reconcile-deployment',
+				restart: 'reconcile-deployment'
+			},
 			inspect: () => inspectLocalInstance(ref.homeDir),
 			logs: (options) => localInstanceLogs(ref.homeDir, options),
+			applicationBindings(options) {
+				const management = localInstanceManagement(ref.homeDir, {
+					...options,
+					host: {
+						inspect: () => inspectLocalInstance(ref.homeDir),
+						operate: (action) => operateLocalInstance(ref.homeDir, action),
+						logs: (logOptions) => localInstanceLogs(ref.homeDir, logOptions)
+					}
+				});
+				return rpcManagementBindings(management, { credentialPolicy: true });
+			},
 			async operate(action, confirmed, options) {
 				if (options?.revision !== undefined)
 					throw new Error('This instance has no deployment revision selector.');

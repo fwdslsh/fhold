@@ -128,8 +128,9 @@ owner as a convenience. There is no requirement for a universal filesystem API.
 
 ## Contracts
 
-The following are design sketches, not currently exported APIs. Keep public
-contracts in `management/`; keep wire envelopes internal to transports.
+The following examples explain the design; canonical exported shapes live in
+the leaf `contracts/` modules and `management/contracts.ts`. Keep shared DTOs
+independent of implementations and wire envelopes internal to transports.
 
 ### Identity and session composition
 
@@ -363,18 +364,20 @@ if release classification confirms no runtime dependency/source changes.
 | 5. Remaining runtime operations | First run the bounded ACA execution feasibility experiment. Then, only if warranted, extract existing worker/recovery commands and add narrow generic preference operations to the image. | Shipped-image verification of I/O, account/consent lifetime, runtime replacement, secrets, effective settings and persistence after replacement. This stage needs a full runtime release. |
 | 6. Retire bridges and document extension | Remove old dispatch/snapshot compatibility code once in-tree callers move; keep only necessary advertised remote protocol compatibility. Update hosting guide/core principles and provider conformance fixtures. | New adapter can satisfy contracts without modifying ordinary Admin screens, agent services or existing provider behavior. |
 
-Stage 1 has an explicit dependency direction: `hosting/local-docker.ts` exports
-host operations and stops importing `localInstanceManagement`; management services
-receive host ports and stop importing `hosting/local-docker.ts`. The composition
-root imports and connects both, and neither imports the composition root. Shared
-contracts import no concrete adapters. This removes the cycle rather than moving
-it to another barrel file.
+Stage 1 has an explicit dependency direction: adapters contribute bound host and
+application ports, and management services do not import concrete host adapters.
+The provider registry selects an adapter; generic composition consumes its
+contribution without another vendor switch. Shared DTOs declare their shapes
+without deriving them from implementation return types, and lower control-plane
+functions do not import management. Import-graph checks
+enforce those edges rather than banning individual symbol names.
 
-No mass directory rearrangement is required. Likely focused additions are
-`management/contracts.ts`, `management/instance-session.ts`,
-`management/agent-models.ts` and `management/agent-access.ts`; split app/data/native
-modules as their operations move. Names are illustrative, not a mandate to create
-empty layers. Existing filesystem and SSH transfer utilities stay where useful.
+Focused additions are the leaf `contracts/` DTOs, `management/contracts.ts` and
+`management/instance-session.ts`. Native HTTP implementation belongs in
+`control-plane/native-agent.ts`; native preference editing belongs with
+`control-plane/provider-files.ts`. Existing filesystem and SSH transfer utilities
+remain where useful. There is no separate public string-RPC application facade;
+the published compatibility envelope stays at the transport boundary.
 
 ## Parity target and deliberate differences
 

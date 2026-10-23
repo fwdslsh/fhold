@@ -1,5 +1,6 @@
 import { parseInstanceRef } from './preferences.js';
 import { SshInstanceManagement } from '../management/ssh.js';
+import { rpcManagementBindings } from '../management/instance-session.js';
 import { runHostingProcess, type HostingProcess } from './process.js';
 import { checkSshConnection } from './ssh-check.js';
 import {
@@ -124,6 +125,8 @@ export function sshDockerProvider(
 		open(ref) {
 			if (ref.kind !== 'ssh-docker' || ref.connectionId !== connection.id)
 				throw new Error('Choose an instance on this SSH connection.');
+			let manager: SshInstanceManagement | undefined;
+			let managementMethods: ReadonlySet<string> | undefined;
 			async function inspect(): Promise<HostingSnapshot> {
 				const value = await request({
 					action: 'inspect',
@@ -134,7 +137,6 @@ export function sshDockerProvider(
 				if (!Array.isArray(snapshot.services) || !Array.isArray(snapshot.warnings))
 					throw new Error('The remote CLI returned an invalid status snapshot.');
 				let managed = false;
-				let managementMethods: string[] = [];
 				const warnings = [...snapshot.warnings];
 				try {
 					const hello = (await request({ action: 'hello' })) as
@@ -143,8 +145,9 @@ export function sshDockerProvider(
 					managed =
 						hello?.management?.includes('saveConfig') === true &&
 						hello.management.includes('backup');
-					managementMethods =
-						hello?.management?.filter((method) => typeof method === 'string') ?? [];
+					managementMethods = new Set(
+						hello?.management?.filter((method) => typeof method === 'string') ?? []
+					);
 				} catch {
 					warnings.push(
 						'Status was read, but advanced management support could not be checked. Check this host connection before changing settings.'
@@ -157,7 +160,6 @@ export function sshDockerProvider(
 					ref,
 					services: snapshot.services,
 					warnings,
-					managementMethods,
 					...(typeof snapshot.serviceError === 'string'
 						? { serviceError: snapshot.serviceError }
 						: {}),
@@ -172,6 +174,11 @@ export function sshDockerProvider(
 			}
 			return {
 				ref,
+				actionEffects: {
+					start: 'reconcile-deployment',
+					stop: 'reconcile-deployment',
+					restart: 'reconcile-deployment'
+				},
 				inspect,
 				async logs(options = {}) {
 					if (Object.entries(options).some(([key, value]) => key !== 'tail' && value !== undefined))
@@ -181,6 +188,15 @@ export function sshDockerProvider(
 					return String(
 						await request({ action: 'logs', homeDir: ref.remoteHome, tail: options.tail })
 					);
+				},
+				applicationBindings(options) {
+					manager ??= new SshInstanceManagement(connection, ref.remoteHome, options);
+					return rpcManagementBindings(manager, {
+						supports: (method) => managementMethods?.has(method) === true,
+						passiveSnapshot: () => manager!.inspectPassive(),
+						acquireSnapshot: () => manager!.acquireForward(),
+						credentialPolicy: managementMethods?.has('credentialPolicy') === true
+					});
 				},
 				async operate(action, confirmed, options) {
 					if (options?.revision !== undefined)

@@ -1,8 +1,10 @@
 import { chooseDirectory } from './backup.js';
 import { offerRestart } from './restart.js';
 import { render } from './snapshot.js';
+import { known } from './model.js';
 import { state } from './state.js';
 import { byId, message, notice, operation, setBusy, setFormClean } from './ui.js';
+import { instanceCapability } from './instance-presentation.js';
 
 const lists = {
 	paths: 'paths',
@@ -19,6 +21,8 @@ const lines = (suffix) =>
 		.filter(Boolean);
 
 export function updateRecoveryFields() {
+	const recoveryOperation = (name) =>
+		instanceCapability(`data.recovery.${name}`, state.currentSnapshot).supported;
 	const enabled = byId(id('enabled')).checked;
 	const blob = byId(id('storage')).value === 'blob';
 	const identity = byId(id('auth')).value === 'managed-identity';
@@ -30,18 +34,26 @@ export function updateRecoveryFields() {
 	byId(id('client-id-field')).hidden = !identity;
 	byId(id('credential-form')).hidden = !enabled || !blob || identity;
 	const saved = state.currentSnapshot?.docker?.config?.recovery?.enabled;
-	const running = (
-		state.currentSnapshot?.services?.state === 'known' ? state.currentSnapshot.services.value : []
-	).some((service) => !['exited', 'dead'].includes(service.state));
-	byId('initialize-recovery').disabled = !saved || running || state.operationInFlight;
-	byId('restore-runtime-recovery').disabled = !saved || running || state.operationInFlight;
-	byId('inspect-recovery').disabled = !saved || state.operationInFlight;
-	byId('check-recovery-status').disabled = !saved || state.operationInFlight;
+	const running = (known(state.currentSnapshot?.services) || []).some(
+		(service) => !['exited', 'dead'].includes(service.state)
+	);
+	const editable = Boolean(known(state.currentSnapshot?.data?.recovery)?.digest);
+	byId('save-recovery-settings').disabled =
+		!editable || state.operationInFlight || !recoveryOperation('save');
+	byId('save-recovery-credential').disabled =
+		state.operationInFlight || !recoveryOperation('setCredential');
+	byId('initialize-recovery').disabled =
+		!saved || running || state.operationInFlight || !recoveryOperation('initialize');
+	byId('restore-runtime-recovery').disabled =
+		!saved || running || state.operationInFlight || !recoveryOperation('restore');
+	byId('inspect-recovery').disabled =
+		!saved || state.operationInFlight || !recoveryOperation('inspect');
+	byId('check-recovery-status').disabled =
+		!saved || state.operationInFlight || !recoveryOperation('status');
 }
 
 export function renderRecovery(snapshot) {
-	const recovery =
-		snapshot.data?.recovery?.state === 'known' ? snapshot.data.recovery.value : undefined;
+	const recovery = known(snapshot.data?.recovery);
 	const settings = recovery?.settings || snapshot.docker?.config?.recovery;
 	if (!settings) return;
 	const editable = Boolean(recovery?.digest);
@@ -69,7 +81,6 @@ export function renderRecovery(snapshot) {
 		? 'A private connection string is saved. Its value is not shown.'
 		: 'No connection string saved. Add one below, or select a deployment identity.';
 	byId(id('policy-path')).textContent = recovery?.policyPath || 'config/recovery/include.json';
-	byId('save-recovery-settings').disabled = !editable;
 	renderRecoveryStatus({
 		state: editable ? (settings.enabled ? 'configured' : 'disabled') : 'not-ready',
 		failure: editable
@@ -83,10 +94,7 @@ export function renderRecovery(snapshot) {
 }
 
 export function recoveryInput() {
-	const previous =
-		state.currentSnapshot.data?.recovery?.state === 'known'
-			? state.currentSnapshot.data.recovery.value
-			: undefined;
+	const previous = known(state.currentSnapshot.data?.recovery);
 	if (!previous?.digest || !previous?.settings)
 		throw new Error('Checkpoint settings are not available through this connection.');
 	const settings = { ...previous.settings, enabled: byId(id('enabled')).checked };
@@ -168,10 +176,10 @@ export function bindRecoveryEvents() {
 	);
 	byId(id('form')).addEventListener('submit', async (event) => {
 		event.preventDefault();
+		if (!instanceCapability('data.recovery.save').supported) return;
 		const previous =
-			state.currentSnapshot.data?.recovery?.state === 'known'
-				? state.currentSnapshot.data.recovery.value.settings
-				: state.currentSnapshot.docker?.config?.recovery;
+			known(state.currentSnapshot.data?.recovery)?.settings ||
+			state.currentSnapshot.docker?.config?.recovery;
 		if (!previous) throw new Error('Recovery settings are not available for this instance.');
 		const saved = await operation(
 			'Saving checkpoint settings',
@@ -184,10 +192,7 @@ export function bindRecoveryEvents() {
 			'Checkpoint settings saved. Existing checkpoints and containers were not changed.'
 		);
 		if (saved) {
-			const next =
-				saved.data?.recovery?.state === 'known'
-					? saved.data.recovery.value.settings
-					: saved.docker?.config?.recovery;
+			const next = known(saved.data?.recovery)?.settings || saved.docker?.config?.recovery;
 			if (!next) {
 				updateRecoveryFields();
 				return;
@@ -209,6 +214,7 @@ export function bindRecoveryEvents() {
 	});
 	byId(id('credential-form')).addEventListener('submit', async (event) => {
 		event.preventDefault();
+		if (!instanceCapability('data.recovery.setCredential').supported) return;
 		const secret = byId(id('connection-string'));
 		const connectionString = secret.value;
 		secret.value = '';
@@ -220,14 +226,14 @@ export function bindRecoveryEvents() {
 		if (saved) await offerRestart(saved);
 		updateRecoveryFields();
 	});
-	for (const [control, action] of [
-		['check-recovery-status', 'status'],
-		['inspect-recovery', 'inspect'],
-		['initialize-recovery', 'init'],
-		['restore-runtime-recovery', 'restore']
+	for (const [control, operationKey, action] of [
+		['check-recovery-status', 'data.recovery.status', 'status'],
+		['inspect-recovery', 'data.recovery.inspect', 'inspect'],
+		['initialize-recovery', 'data.recovery.initialize', 'init'],
+		['restore-runtime-recovery', 'data.recovery.restore', 'restore']
 	]) {
 		byId(control).addEventListener('click', async () => {
-			if (state.operationInFlight) return;
+			if (state.operationInFlight || !instanceCapability(operationKey).supported) return;
 			let confirmed = false;
 			if (action === 'init' || action === 'restore') {
 				setBusy(true);

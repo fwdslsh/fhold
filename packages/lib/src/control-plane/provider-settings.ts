@@ -13,8 +13,7 @@ import {
 	type ProviderSummary,
 	type NativeAgentRequestOptions
 } from './opencode.js';
-import { readNativePreferences } from './provider-files.js';
-import type { NativeSettingsWriteResult } from '../management/agent-models.js';
+import { readNativePreferences, type NativeSettingsWriteResult } from './provider-files.js';
 
 export type ProviderSettings = {
 	providers: ProviderSummary[];
@@ -64,6 +63,13 @@ function invalidCharacters(value: string, spaces = false): boolean {
 			character.charCodeAt(0) === 127 ||
 			'{}'.includes(character)
 	);
+}
+function safeFailureReason(error: unknown): string {
+	const message = error instanceof Error ? error.message : 'The agent returned an unknown error.';
+	return message
+		.replace(/(authorization|api[_ -]?key|token|password)\s*[:=]\s*\S+/gi, '$1: [redacted]')
+		.replace(/(https?:\/\/)[^\s/@]+@/gi, '$1[redacted]@')
+		.slice(0, 500);
 }
 function endpointUrl(value: string): string {
 	if (value.length > 4_096 || invalidCharacters(value, true))
@@ -253,8 +259,10 @@ async function applyConfigChange(
 	do {
 		try {
 			if (matches(await readAssistantConfig(home, options)))
-				return { saved: true, effective: 'verified', activation: 'none' };
-		} catch {
+				return { saved: true, effective: 'verified' };
+		} catch (error) {
+			options.signal?.throwIfAborted();
+			void error;
 			/* the native watcher may still be applying this edit */
 		}
 		await new Promise((resolve) => setTimeout(resolve, 100));
@@ -262,7 +270,6 @@ async function applyConfigChange(
 	return {
 		saved: true,
 		effective: 'unconfirmed',
-		activation: 'none',
 		detail:
 			'Preferences were saved, but their effective settings could not be confirmed. Check the agent and higher-priority managed configuration before testing or using this model.'
 	};
@@ -275,12 +282,12 @@ async function settingsAfterWrite(
 ): Promise<ProviderSettings> {
 	try {
 		return { ...(await listProviderSettings(home, options)), write };
-	} catch {
+	} catch (error) {
+		options.signal?.throwIfAborted();
 		return {
 			providers: [],
 			inventoryUnavailable: true,
-			configurationIssue:
-				'Preferences were saved. The current AI account inventory could not be read; refresh it when the agent is reachable.',
+			configurationIssue: `Preferences were saved, but the current AI account inventory could not be read: ${safeFailureReason(error)}`,
 			write
 		};
 	}
@@ -358,9 +365,9 @@ export async function saveProviderEndpoint(
 				try {
 					await setProviderApiKey(home, provider, input.key, options);
 					write.credential = 'saved';
-				} catch {
-					write.detail =
-						'The endpoint preferences were saved, but its sign-in could not be confirmed. Refresh the service and check its sign-in before retrying.';
+				} catch (error) {
+					options.signal?.throwIfAborted();
+					write.detail = `The endpoint preferences were saved, but its sign-in could not be confirmed: ${safeFailureReason(error)}`;
 				}
 			} else {
 				write.detail =

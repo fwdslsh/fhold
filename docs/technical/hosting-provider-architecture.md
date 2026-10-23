@@ -26,18 +26,20 @@ CLI / Admin main + preload
 
 The composition root is
 [`hosting/provider.ts`](../../packages/lib/src/hosting/provider.ts).
-It binds independent host functions and application services for the selected
-connection and target. The common contract lives in
+It selects the adapter and composes its bound host/application contributions;
+opening an instance does not add another vendor switch or concrete-class check.
+Shared DTOs live in `packages/lib/src/contracts/`, below the adapters and use cases.
+The session contract lives in
 [`management/contracts.ts`](../../packages/lib/src/management/contracts.ts);
 [`management/instance-session.ts`](../../packages/lib/src/management/instance-session.ts)
 assembles observations and named operations. Feature views use those contracts,
 not a provider-name branch or optional full-management mode.
 
-Concrete host adapters do not construct the local management service. Management
-services do not import the concrete host adapters. Interfaces carry the needed
-operations into the service; the composition root imports both sides. This
-removes the former circular dependency between the local Docker adapter and
-instance management.
+Each adapter contributes application bindings through the same session interface.
+Services receive a bound host port, not an unused home argument or concrete host
+adapter. The native HTTP client and preference editor live in `control-plane/`;
+that lower layer does not import management implementations. Dependency-graph
+tests enforce the layer direction and reject cross-layer runtime cycles.
 
 ## Responsibility boundaries
 
@@ -66,7 +68,8 @@ A temporarily offline agent is not an unsupported platform. An unread account
 inventory is not an empty account list. Optional failures do not erase healthy
 deployment observations or become new startup gates.
 
-The same registered operation slots describe support and current availability.
+The actual operation tree generates the serialized description catalog; it is
+not a second hand-written feature list. The same operation slots describe support and current availability.
 CLI and Admin invoke named, typed operations and render specific unavailable
 reasons. Unsupported controls retain their position in the common Overview,
 Agent settings, Apps and System pages.
@@ -76,7 +79,9 @@ does not contact OpenCode ingress, acquire a native setup process or wake an
 idle replica. Explicit agent access owns requests, native auth attempts and
 temporary transports. Switching targets discards late results and browser events.
 A submitted mutation stays bound to its original target; a lost response does
-not authorize replay.
+not authorize replay. Switching instances is blocked during unfinished guided
+native setup until the user finishes or cancels it. Lifecycle effects are static
+adapter metadata and do not depend on whether status was inspected first.
 
 Keep deployment acceptance/completion, agent readiness and recovery durability
 separate. A platform's accepted Stop request does not establish a released
@@ -91,7 +96,7 @@ Docker configuration just to change a credential's permissions.
 
 ## Native agent access
 
-[`management/agent-access.ts`](../../packages/lib/src/management/agent-access.ts)
+[`control-plane/native-agent.ts`](../../packages/lib/src/control-plane/native-agent.ts)
 contains the native OpenCode HTTP client. It takes a selected endpoint and a
 private authorization source; it does not derive a Docker home. Existing
 host-backed functions resolve native credentials on the owning local/SSH host.
@@ -99,8 +104,8 @@ Explicit HTTPS connections use a private session credential and do not copy it
 into recents or instance metadata.
 
 OpenCode's general preference changes are still native watched JSONC edits.
-[`management/agent-models.ts`](../../packages/lib/src/management/agent-models.ts)
-defines the owned preference-document boundary; host code preserves comments,
+[`control-plane/provider-files.ts`](../../packages/lib/src/control-plane/provider-files.ts)
+owns the preference-document editor; host code preserves comments,
 unrelated keys and managed-policy precedence. Results distinguish saved from
 effective state without an automatic container restart or destructive rollback.
 
@@ -113,8 +118,12 @@ invalidates the pending startup change.
 
 The fixed SSH machine endpoint advertises its wire version and operation names.
 The persistent session preserves OAuth attempts and native prompt processes
-across calls. Request/result types are shared; unknown JSON is validated at the
-boundary. Keep supported old wire shapes explicitly compatible instead of
+across calls. Request/result types and boundary parsers are shared; unknown IPC
+and SSH JSON is parsed into typed inputs before entering use cases. A mapped
+handler table checks the wire implementations' input/result types. Passive
+snapshot calls do not acquire forwarding resources; explicit connection does.
+Confirmation travels only in the normalized request context and is translated
+to published wire fields inside the adapter. Keep supported old wire shapes explicitly compatible instead of
 requiring identical desktop, remote CLI and image releases.
 
 ACA hosting uses the native workstation Azure CLI. The reachable OpenCode HTTP
@@ -142,3 +151,9 @@ the domain use case against its narrow ports, bind the qualified implementations
 and expose the same action to CLI/Admin. Add tests for target binding, partial
 failure, cancellation and native state preservation. Extend existing engines
 and native interfaces rather than adding another registry or runtime service.
+
+Recovery status, inspection, initialization, restore, settings save and credential
+save are separate typed operations. The compatibility wire still carries its
+published action payload; shared consumers do not infer a result union from that
+action. App-policy updates run as one named domain mutation under the existing
+stack lock, not a client-side read/modify/write of the full deployment document.

@@ -28,9 +28,7 @@ export function hostOperations(session: InstanceSession): {
 	): Operation<HostingActionOptions | void, LifecycleOutcome> {
 		return {
 			support: 'supported',
-			get effect() {
-				return latest?.actionEffects?.[action] ?? 'reconcile-deployment';
-			},
+			effect: session.actionEffects[action],
 			availability() {
 				// No optional diagnostic/preflight is required before invoking a
 				// supported action. invoke always resolves current target eligibility.
@@ -70,9 +68,12 @@ export function hostOperations(session: InstanceSession): {
 			stop: lifecycle('stop'),
 			restart: lifecycle('restart'),
 			logs: supportedOperation((input) => session.logs(input)),
-			console: session.console
-				? supportedOperation((input) => session.console!(input))
-				: unsupportedOperation('An interactive console is not available for this instance.')
+			console: (() => {
+				const console = session.console;
+				return console
+					? supportedOperation((input) => console(input))
+					: unsupportedOperation('An interactive console is not available for this instance.');
+			})()
 		}
 	};
 }

@@ -1,7 +1,7 @@
 import { applyAppPermissions, copyAccessKey, updateAppPermissions } from './access.js';
 import { saveConfigAndOfferRestart } from './configuration.js';
 import { offerRestart } from './restart.js';
-import { csv, isHealthy, isRunning } from './model.js';
+import { csv, isHealthy, isRunning, known } from './model.js';
 import { state } from './state.js';
 import {
 	all,
@@ -15,7 +15,7 @@ import {
 } from './ui.js';
 
 export function secretConfigured(snapshot, portal, name) {
-	const config = snapshot.apps?.config?.state === 'known' ? snapshot.apps.config.value : undefined;
+	const config = known(snapshot.apps?.config);
 	return config?.portalSecrets?.[portal]?.[name] === true;
 }
 
@@ -39,14 +39,14 @@ function portalTokensReady(snapshot, portal) {
 
 export function renderConnectionStatus(snapshot) {
 	const unavailable = snapshot.services?.state === 'unavailable';
-	const services = snapshot.services?.state === 'known' ? snapshot.services.value : [];
+	const services = known(snapshot.services) || [];
 	const config = snapshot.docker?.config;
+	const connections = known(snapshot.apps?.connections);
 	const connectionError =
-		snapshot.apps?.connections?.state === 'known'
-			? snapshot.apps.connections.value.error
-			: snapshot.apps?.connections?.state === 'unavailable'
-				? snapshot.apps.connections.reason
-				: undefined;
+		connections?.error ||
+		(snapshot.apps?.connections?.state === 'unavailable'
+			? snapshot.apps.connections.reason
+			: undefined);
 	const assistant = services.find((service) => service.name === 'assistant');
 	setBadge(
 		byId('opencode-connection-status'),
@@ -68,8 +68,7 @@ export function renderConnectionStatus(snapshot) {
 	);
 	for (const portal of ['discord', 'slack']) {
 		const enabled = config?.portals?.[portal]?.enabled === true;
-		const appStatus =
-			snapshot.apps?.status?.state === 'known' ? snapshot.apps.status.value?.[portal] : undefined;
+		const appStatus = known(snapshot.apps?.status)?.[portal];
 		const service = services.find((entry) => entry.name === portal);
 		const healthy = enabled && !unavailable && isHealthy(service);
 		setBadge(
@@ -105,9 +104,7 @@ export function updateGuardianGuide() {
 		return;
 	}
 	const saved = config.gateway.enabled;
-	const pending =
-		state.currentSnapshot.pendingChanges?.state === 'known' &&
-		state.currentSnapshot.pendingChanges.value.pending;
+	const pending = known(state.currentSnapshot.pendingChanges)?.pending;
 	const selected = byId('gateway').checked;
 	const guide =
 		selected !== saved
@@ -159,8 +156,7 @@ export function showPortalTokenForm(portal, field = `${portal}-bot-token`) {
 }
 
 export function renderConnectionLinks(snapshot) {
-	const details =
-		snapshot.apps?.connections?.state === 'known' ? snapshot.apps.connections.value : {};
+	const details = known(snapshot.apps?.connections) || {};
 	const opencode = details.opencode;
 	const mcp = details.mcp;
 	const claude = details.claude;
@@ -177,7 +173,7 @@ export function renderConnectionLinks(snapshot) {
 	);
 	setText(
 		'direct-username',
-		opencode?.username || snapshot.agent?.access?.value?.username || 'user'
+		opencode?.username || known(snapshot.agent?.access)?.username || 'Not reported'
 	);
 	setText('claude-url', claude?.url || 'Not connected');
 	setText('mcp-url', mcp?.url || 'Not connected');
@@ -226,9 +222,8 @@ export function renderConnectionDetails(snapshot) {
 }
 
 export function renderNetworkDetails(snapshot) {
-	const links =
-		snapshot.apps?.connections?.state === 'known' ? snapshot.apps.connections.value : undefined;
-	const deployment = snapshot.deployment?.state === 'known' ? snapshot.deployment.value : undefined;
+	const links = known(snapshot.apps?.connections);
+	const deployment = known(snapshot.deployment);
 	const assistantUrl = links?.opencode?.url || deployment?.clientUrl || '';
 	let healthUrl = '';
 	if (links?.mcp?.url) {

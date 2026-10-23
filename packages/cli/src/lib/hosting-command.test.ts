@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { supportedOperation, type ComposedInstanceSession } from '@fhold/lib';
+import { supportedOperation, unsupportedOperation, type ComposedInstanceSession } from '@fhold/lib';
 import { runSessionCommand } from './hosting-command.js';
 
 function fixture() {
@@ -35,7 +35,15 @@ function fixture() {
 	const session: ComposedInstanceSession = {
 		ref,
 		host,
-		agent: {} as never,
+		agent: {
+			connect: supportedOperation(
+				async () => {
+					throw Error('Public link should not acquire native access');
+				},
+				undefined,
+				{ requiresPassword: true }
+			)
+		} as never,
 		apps: {} as never,
 		data: {} as never,
 		close: async () => {},
@@ -55,7 +63,11 @@ function fixture() {
 			operations: {},
 			pendingChanges: { state: 'not-inspected', reason: 'none' },
 			agent: {} as never,
-			apps: {} as never,
+			apps: {
+				config: { state: 'not-inspected', reason: 'not used' },
+				status: { state: 'not-inspected', reason: 'not used' },
+				connections: { state: 'not-inspected', reason: 'not used' }
+			},
 			data: {}
 		})
 	};
@@ -103,6 +115,6 @@ test('unknown and irrelevant arguments never cause lifecycle mutations or silent
 	])
 		await expect(f.run(argv)).rejects.toThrow();
 	expect(f.calls).toEqual([]);
-	f.session.host.console = undefined as never;
+	f.session.host.console = unsupportedOperation('This provider does not expose a console.');
 	await expect(f.run(['console'])).rejects.toThrow('does not expose');
 });

@@ -1,4 +1,4 @@
-import type { HostingSnapshot, InstanceRef } from '../hosting/types.js';
+import type { HostingSnapshot } from '../hosting/types.js';
 import type { InstanceManagement, ManagedSnapshot, ManagementMethod } from './types.js';
 import {
 	operationDescription,
@@ -6,6 +6,7 @@ import {
 	unsupportedOperation,
 	type AgentObservations,
 	type AgentOperations,
+	type ApplicationObservations,
 	type AppConnections,
 	type AppObservations,
 	type AppOperations,
@@ -13,13 +14,14 @@ import {
 	type DataObservations,
 	type DataOperations,
 	type DeploymentObservation,
-	type HostOperations,
 	type InstanceLifecycle,
+	type InstanceSessionBindings,
 	type InstanceSnapshot,
 	type Observation,
 	type Operation,
 	type RequestContext
 } from './contracts.js';
+export type { ApplicationObservations, InstanceSessionBindings } from './contracts.js';
 
 const NOT_INSPECTED_AGENT: AgentObservations = {
 	access: { state: 'not-inspected', reason: 'Connect to inspect native agent access.' },
@@ -34,29 +36,71 @@ const NOT_INSPECTED_DATA: DataObservations = {
 	}
 };
 
-export type InstanceSessionBindings = {
-	ref: InstanceRef;
-	host: HostOperations;
-	inspectHost(): Promise<HostingSnapshot>;
-	agent?: Partial<AgentOperations>;
-	apps?: AppOperations;
-	data?: DataOperations;
-	inspectAgent?: () => Promise<Partial<AgentObservations>>;
-	inspectApps?: () => Promise<AppObservations>;
-	inspectData?: () => Promise<DataObservations>;
-	/** One cache-only application observation read for passive inspection. */
-	inspectManagement?: () => Promise<{
-		agent: Partial<AgentObservations>;
-		apps: AppObservations;
-		data: DataObservations;
-		lifecycle: Observation<InstanceLifecycle>;
-		docker?: import('./contracts.js').DockerInstanceSubview;
-	}>;
-	inspectLifecycle?: () => Promise<Observation<InstanceLifecycle>>;
-	inspectDocker?: () => Promise<import('./contracts.js').DockerInstanceSubview | undefined>;
-	docker?: import('./contracts.js').DockerOperations;
-	close?: () => Promise<void>;
+const NOT_INSPECTED_APPS: AppObservations = {
+	config: {
+		state: 'not-inspected',
+		reason: 'App configuration is not configured for this instance.'
+	},
+	connections: {
+		state: 'not-inspected',
+		reason: 'Connect to inspect reachable client links.'
+	},
+	status: {
+		state: 'not-inspected',
+		reason: 'App status is not configured for this instance.'
+	}
 };
+
+function unavailableAgent(): Partial<AgentObservations> {
+	return {
+		access: { state: 'unavailable', reason: 'Native agent access could not be inspected.' },
+		account: { state: 'unavailable', reason: 'Native account state could not be inspected.' },
+		models: { state: 'unavailable', reason: 'Native models could not be inspected.' },
+		readiness: { state: 'unavailable', reason: 'Native readiness could not be inspected.' }
+	};
+}
+function unavailableApps(): AppObservations {
+	return {
+		config: { state: 'unavailable', reason: 'App configuration could not be inspected.' },
+		connections: {
+			state: 'unavailable',
+			reason: 'Client connection links could not be inspected.'
+		},
+		status: { state: 'unavailable', reason: 'App status could not be inspected.' }
+	};
+}
+function unavailableData(): DataObservations {
+	return {
+		recovery: { state: 'unavailable', reason: 'Recovery configuration could not be inspected.' }
+	};
+}
+function unavailableLifecycle(): Observation<InstanceLifecycle> {
+	return { state: 'unavailable', reason: 'Installation state could not be inspected.' };
+}
+
+function isOperation(value: unknown): value is Operation<unknown, unknown> {
+	return (
+		value !== null &&
+		typeof value === 'object' &&
+		'support' in value &&
+		typeof value.support === 'string'
+	);
+}
+
+/** Derive the renderer catalog from the operation tree so slots cannot drift. */
+export function describeOperations(
+	tree: Record<string, unknown>,
+	prefix = ''
+): Record<string, import('./contracts.js').OperationDescription> {
+	const descriptions: Record<string, import('./contracts.js').OperationDescription> = {};
+	for (const [name, value] of Object.entries(tree)) {
+		const key = prefix ? `${prefix}.${name}` : name;
+		if (isOperation(value)) descriptions[key] = operationDescription(value);
+		else if (value !== null && typeof value === 'object')
+			Object.assign(descriptions, describeOperations(value as Record<string, unknown>, key));
+	}
+	return descriptions;
+}
 
 function hostDeployment(snapshot: HostingSnapshot): DeploymentObservation {
 	return {
@@ -125,7 +169,16 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 		restoreInstance: unsupportedOperation(
 			'Whole-instance restore is not configured for this instance.'
 		),
-		recovery: unsupportedOperation('Recovery management is not configured for this instance.')
+		recovery: {
+			status: unsupportedOperation('Recovery management is not configured for this instance.'),
+			inspect: unsupportedOperation('Recovery management is not configured for this instance.'),
+			initialize: unsupportedOperation('Recovery management is not configured for this instance.'),
+			restore: unsupportedOperation('Recovery management is not configured for this instance.'),
+			save: unsupportedOperation('Recovery management is not configured for this instance.'),
+			setCredential: unsupportedOperation(
+				'Recovery management is not configured for this instance.'
+			)
+		}
 	};
 	return {
 		ref: bindings.ref,
@@ -137,95 +190,29 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 		async inspect(): Promise<InstanceSnapshot> {
 			const observedAt = new Date().toISOString();
 			const host = await bindings.inspectHost();
-			const managed = bindings.inspectManagement
-				? await Promise.allSettled([bindings.inspectManagement()])
-				: undefined;
-			const cached = managed?.[0]?.status === 'fulfilled' ? managed[0].value : undefined;
-			// A management adapter can expose one deliberately passive snapshot. If
-			// that single read fails, do not turn the failure into several retries:
-			// SSH inspection must never acquire a browser forward merely to fill
-			// independent UI panes.
-			const managementFailure = managed?.[0]?.status === 'rejected' ? managed[0].reason : undefined;
-			const unavailable = () => Promise.reject(managementFailure);
-			const [agentResult, appsResult, dataResult, lifecycleResult, dockerResult] =
-				await Promise.allSettled([
-					cached
-						? Promise.resolve(cached.agent)
-						: managementFailure !== undefined
-							? unavailable()
-							: (bindings.inspectAgent?.() ?? Promise.resolve({})),
-					cached
-						? Promise.resolve(cached.apps)
-						: managementFailure !== undefined
-							? unavailable()
-							: (bindings.inspectApps?.() ??
-								Promise.resolve<AppObservations>({
-									config: {
-										state: 'not-inspected',
-										reason: 'App configuration is not configured for this instance.'
-									},
-									connections: {
-										state: 'not-inspected',
-										reason: 'Connect to inspect reachable client links.'
-									},
-									status: {
-										state: 'not-inspected',
-										reason: 'App status is not configured for this instance.'
-									}
-								})),
-					cached
-						? Promise.resolve(cached.data)
-						: managementFailure !== undefined
-							? unavailable()
-							: (bindings.inspectData?.() ?? Promise.resolve(NOT_INSPECTED_DATA)),
-					cached
-						? Promise.resolve(cached.lifecycle)
-						: managementFailure !== undefined
-							? unavailable()
-							: (bindings.inspectLifecycle?.() ??
-								Promise.resolve<Observation<InstanceLifecycle>>({
-									state: 'known',
-									value: 'externally-managed',
-									observedAt
-								})),
-					cached
-						? Promise.resolve(cached.docker)
-						: managementFailure !== undefined
-							? unavailable()
-							: (bindings.inspectDocker?.() ?? Promise.resolve(undefined))
-				]);
-			const inspectedAgent = agentResult.status === 'fulfilled' ? agentResult.value : {};
-			const inspectedApps =
-				appsResult.status === 'fulfilled'
-					? appsResult.value
-					: {
-							config: {
-								state: 'unavailable' as const,
-								reason: 'App configuration could not be inspected.'
-							},
-							connections: {
-								state: 'unavailable' as const,
-								reason: 'Client connection links could not be inspected.'
-							},
-							status: {
-								state: 'unavailable' as const,
-								reason: 'App status could not be inspected.'
-							}
-						};
-			const inspectedData =
-				dataResult.status === 'fulfilled'
-					? dataResult.value
-					: {
-							recovery: {
-								state: 'unavailable' as const,
-								reason: 'Recovery configuration could not be inspected.'
-							}
-						};
-			const lifecycle =
-				lifecycleResult.status === 'fulfilled'
-					? lifecycleResult.value
-					: { state: 'unavailable' as const, reason: 'Installation state could not be inspected.' };
-			const docker = dockerResult.status === 'fulfilled' ? dockerResult.value : undefined;
+			let application: Partial<ApplicationObservations> = {};
+			let applicationFailure: unknown;
+			try {
+				application = (await bindings.inspectApplication?.()) ?? {};
+			} catch (error) {
+				applicationFailure = error;
+			}
+			const unavailable = applicationFailure !== undefined;
+			const inspectedAgent = unavailable ? unavailableAgent() : (application.agent ?? {});
+			const inspectedApps = unavailable
+				? unavailableApps()
+				: (application.apps ?? NOT_INSPECTED_APPS);
+			const inspectedData = unavailable
+				? unavailableData()
+				: (application.data ?? NOT_INSPECTED_DATA);
+			const lifecycle = unavailable
+				? unavailableLifecycle()
+				: (application.lifecycle ?? {
+						state: 'known' as const,
+						value: 'externally-managed' as const,
+						observedAt
+					});
+			const docker = unavailable ? undefined : application.docker;
 			return {
 				identity: { ref: host.ref, name: host.name, location: host.location },
 				lifecycle,
@@ -233,47 +220,13 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 				services: host.serviceError
 					? { state: 'unavailable', reason: host.serviceError }
 					: { state: 'known', value: host.services, observedAt },
-				operations: {
-					'host.inspect': operationDescription(bindings.host.inspect),
-					'host.start': operationDescription(bindings.host.start),
-					'host.stop': operationDescription(bindings.host.stop),
-					'host.restart': operationDescription(bindings.host.restart),
-					'host.logs': operationDescription(bindings.host.logs),
-					'host.console': operationDescription(bindings.host.console),
-					'agent.connect': operationDescription(agent.connect),
-					'agent.providers': operationDescription(agent.providers),
-					'agent.setKey': operationDescription(agent.setKey),
-					'agent.saveEndpoint': operationDescription(agent.saveEndpoint),
-					'agent.discoverModels': operationDescription(agent.discoverModels),
-					'agent.selectModel': operationDescription(agent.selectModel),
-					'agent.removeProvider': operationDescription(agent.removeProvider),
-					'agent.oauthStart': operationDescription(agent.oauthStart),
-					'agent.oauthFinish': operationDescription(agent.oauthFinish),
-					'agent.readiness': operationDescription(agent.readiness),
-					'agent.assistantPassword': operationDescription(agent.assistantPassword),
-					'agent.remote': operationDescription(agent.remote),
-					'agent.codexRecall': operationDescription(agent.codexRecall),
-					'agent.modelInventory': operationDescription(agent.modelInventory),
-					'apps.credentials.create': operationDescription(apps.credentials.create),
-					'apps.credentials.updatePolicy': operationDescription(apps.credentials.updatePolicy),
-					'apps.credentials.rotate': operationDescription(apps.credentials.rotate),
-					'apps.credentials.remove': operationDescription(apps.credentials.remove),
-					'apps.credentials.revealKey': operationDescription(apps.credentials.revealKey),
-					'apps.portal.mapUser': operationDescription(apps.portal.mapUser),
-					'apps.portal.saveToken': operationDescription(apps.portal.saveToken),
-					'data.backup': operationDescription(data.backup),
-					'data.restoreData': operationDescription(data.restoreData),
-					'data.restoreInstance': operationDescription(data.restoreInstance),
-					'data.recovery': operationDescription(data.recovery),
-					...(bindings.docker
-						? {
-								'docker.install': operationDescription(bindings.docker.install),
-								'docker.saveConfig': operationDescription(bindings.docker.saveConfig),
-								'docker.update': operationDescription(bindings.docker.update),
-								'docker.directory': operationDescription(bindings.docker.directory)
-							}
-						: {})
-				},
+				operations: describeOperations({
+					host: bindings.host,
+					agent,
+					apps,
+					data,
+					...(bindings.docker ? { docker: bindings.docker } : {})
+				}),
 				pendingChanges: optionalObservation(
 					host.pendingRestart
 						? {
@@ -286,43 +239,46 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 				agent: { ...NOT_INSPECTED_AGENT, ...inspectedAgent },
 				apps: inspectedApps,
 				data: inspectedData,
-				...(docker
-					? { docker }
-					: host.config && host.ref.kind === 'local-docker'
-						? {
-								docker: {
-									homeDir: host.ref.homeDir,
-									configPath: `${host.ref.homeDir}/state/stack.json`,
-									config: host.config,
-									...(host.pendingRestart ? { pendingRestart: host.pendingRestart } : {})
-								}
-							}
-						: {})
+				...(docker ? { docker } : {})
 			};
 		},
+		busy: () => bindings.busy?.() === true,
 		close: async () => bindings.close?.()
 	};
 }
 
 /**
- * Compatibility adapter for the installed local/SSH command surface. It is
+ * Compatibility adapter for the installed local/SSH RPC command surface. It is
  * deliberately private to composition: UI and CLI consumers use named slots,
  * while the retained JSON-line protocol keeps its published method names.
  */
-export function legacyManagementBindings(
+export function rpcManagementBindings(
 	manager: InstanceManagement,
 	options: {
 		supports?: (method: ManagementMethod) => boolean;
 		passiveSnapshot?: () => Promise<ManagedSnapshot>;
+		acquireSnapshot?: () => Promise<ManagedSnapshot>;
+		credentialPolicy?: boolean;
 	} = {}
 ): Pick<
 	InstanceSessionBindings,
-	'agent' | 'apps' | 'data' | 'docker' | 'inspectManagement' | 'close'
+	'agent' | 'apps' | 'data' | 'docker' | 'inspectApplication' | 'busy' | 'close'
 > {
 	const { supports } = options;
 	let acquired: AppConnections | undefined;
-	let sourceFingerprint: string | undefined;
-	let observedFingerprint: string | undefined;
+	// An acquired route belongs to the source addresses from which it was
+	// created. If a later passive observation changes them, drop the route.
+	let acquiredSource: string | undefined;
+	function sourceFingerprint(value: ManagedSnapshot): string {
+		return JSON.stringify(
+			(['opencode', 'mcp', 'claude'] as const).map((name) => {
+				const details = value.connectionDetails?.[name];
+				return details
+					? [name, details.url, details.username, details.credential, details.extension]
+					: [name];
+			})
+		);
+	}
 	function publicConnections(value: ManagedSnapshot): AppConnections {
 		const result: AppConnections = {};
 		for (const name of ['opencode', 'mcp', 'claude'] as const) {
@@ -373,15 +329,20 @@ export function legacyManagementBindings(
 		connect: operation('snapshot', async () => {
 			// This is the explicit route-acquisition action. SSH may now create a
 			// loopback forward; passive inspection intentionally never does.
-			const value = await manager.call('snapshot');
+			const source = await snapshot();
+			const value = await (options.acquireSnapshot?.() ?? Promise.resolve(source));
 			const details = value.connectionDetails?.opencode;
 			if (!details?.url)
 				throw new Error(
 					value.connectionError || 'Start this instance before connecting to OpenCode.'
 				);
 			acquired = publicConnections(value);
-			sourceFingerprint = observedFingerprint;
-			return { endpoint: details.url, ...(details.username ? { username: details.username } : {}) };
+			acquiredSource = sourceFingerprint(source);
+			return {
+				endpoint: details.url,
+				...(details.username ? { username: details.username } : {}),
+				...(options.acquireSnapshot ? { sessionBound: true as const } : {})
+			};
 		}),
 		providers: operation('providers', async () => manager.call('providers')),
 		setKey: operation('providerKey', async (input) => manager.call('providerKey', input)),
@@ -405,8 +366,20 @@ export function legacyManagementBindings(
 		assistantPassword: operation('assistantPassword', async () =>
 			manager.call('assistantPassword')
 		),
-		remote: operation('remote', async (input) => manager.call('remote', input)),
-		codexRecall: operation('codexRecall', async (input) => manager.call('codexRecall', input)),
+		remote: operation('remote', async (input, context) => {
+			if (input.action === 'enable' && !context.confirmed)
+				throw new Error('Confirm the possible container restarts before remote setup.');
+			return manager.call('remote', {
+				...input,
+				...(input.action === 'enable' ? { restartConfirmed: true } : {})
+			});
+		}),
+		codexRecall: operation('codexRecall', async (input, context) =>
+			manager.call('codexRecall', {
+				...input,
+				...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
+			})
+		),
 		modelInventory: operation('providers', async () => {
 			const value = await manager.call('providers');
 			return value.providers;
@@ -416,16 +389,13 @@ export function legacyManagementBindings(
 		agent,
 		apps: {
 			credentials: {
-				updatePolicy: operation('saveConfig', async (input) => {
-					const value = await snapshot();
-					const credential = value.config.credentials[input.username];
-					if (!credential || credential.policy !== input.previousPolicy)
-						throw new Error('These permissions changed. Refresh this app before saving again.');
-					if (credential.policy === input.policy) return;
-					const config = structuredClone(value.config);
-					config.credentials[input.username].policy = input.policy;
-					await manager.call('saveConfig', { config, baseConfig: value.config });
-				}),
+				updatePolicy: options.credentialPolicy
+					? operation('credential', async (input) => {
+							await manager.call('credential', { action: 'policy', ...input });
+						})
+					: unsupportedOperation(
+							'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.'
+						),
 				create: operation('credential', async (input) => {
 					await manager.call('credential', { action: 'create', ...input });
 				}),
@@ -449,19 +419,61 @@ export function legacyManagementBindings(
 			}
 		},
 		data: {
-			backup: operation('backup', async (input) => manager.call('backup', input)),
-			restoreData: operation('restoreData', async (input) => manager.call('restoreData', input)),
-			restoreInstance: operation('restoreInstance', async (input) =>
-				manager.call('restoreInstance', input)
+			backup: operation('backup', async (input, context) =>
+				manager.call('backup', {
+					...input,
+					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
+				})
 			),
-			recovery: operation('recovery', async (input) => {
-				const result = await manager.call('recovery', input);
-				// Retain the old wire reply for older clients, but do not leak its
-				// Docker snapshot as a second shared application snapshot shape.
-				return input.action === 'save' || input.action === 'credential'
-					? { state: 'saved' }
-					: result;
-			})
+			restoreData: operation('restoreData', async (input, context) =>
+				manager.call('restoreData', {
+					...input,
+					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
+				})
+			),
+			restoreInstance: operation('restoreInstance', async (input, context) =>
+				manager.call('restoreInstance', {
+					...input,
+					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
+				})
+			),
+			recovery: {
+				status: operation('recovery', async () => {
+					const result = await manager.call('recovery', { action: 'status' });
+					if (!result || typeof result !== 'object' || Array.isArray(result))
+						throw new Error(
+							'Remote recovery status was invalid. Refresh the instance before retrying.'
+						);
+					return result;
+				}),
+				inspect: operation('recovery', async () => {
+					const result = await manager.call('recovery', { action: 'inspect' });
+					if (typeof result !== 'string')
+						throw new Error('Remote recovery inspection returned an invalid result.');
+					return result;
+				}),
+				initialize: operation('recovery', async (_input, context) => {
+					if (!context.confirmed)
+						throw new Error('Confirm recovery initialization before continuing.');
+					const result = await manager.call('recovery', { action: 'init', confirmed: true });
+					if (typeof result !== 'string')
+						throw new Error('Remote recovery initialization returned an invalid result.');
+					return result;
+				}),
+				restore: operation('recovery', async (_input, context) => {
+					if (!context.confirmed) throw new Error('Confirm recovery restore before continuing.');
+					const result = await manager.call('recovery', { action: 'restore', confirmed: true });
+					if (typeof result !== 'string')
+						throw new Error('Remote recovery restore returned an invalid result.');
+					return result;
+				}),
+				save: operation('recovery', async (input) => {
+					await manager.call('recovery', { action: 'save', ...input });
+				}),
+				setCredential: operation('recovery', async (input) => {
+					await manager.call('recovery', { action: 'credential', ...input });
+				})
+			}
 		},
 		docker: {
 			install: operation('install', async ({ config, automaticPorts }) => {
@@ -476,13 +488,13 @@ export function legacyManagementBindings(
 			}),
 			directory: operation('directory', async ({ path }) => manager.call('directory', path))
 		},
-		inspectManagement: async () => {
+		inspectApplication: async () => {
 			const value = await snapshot();
-			observedFingerprint = JSON.stringify(value.connectionDetails);
-			if (sourceFingerprint !== undefined && sourceFingerprint !== observedFingerprint)
-				acquired = undefined;
+			// Describe whether the acquired route still matches; a query never
+			// disposes or changes connection resources owned by connect/close.
+			const currentRoute = acquiredSource === sourceFingerprint(value) ? acquired : undefined;
 			const connections =
-				acquired ?? (options.passiveSnapshot ? undefined : publicConnections(value));
+				currentRoute ?? (options.passiveSnapshot ? undefined : publicConnections(value));
 			const observedAt = new Date().toISOString();
 			const lifecycle: InstanceLifecycle =
 				value.phase === 'not_installed'
@@ -492,10 +504,13 @@ export function legacyManagementBindings(
 						: 'ready';
 			return {
 				agent: {
-					access: acquired?.opencode?.url
+					access: currentRoute?.opencode?.url
 						? {
 								state: 'known',
-								value: { endpoint: acquired.opencode.url, username: acquired.opencode.username },
+								value: {
+									endpoint: currentRoute.opencode.url,
+									username: currentRoute.opencode.username
+								},
 								observedAt
 							}
 						: { state: 'not-inspected', reason: 'Connect to acquire a native agent route.' }
@@ -549,8 +564,10 @@ export function legacyManagementBindings(
 				}
 			};
 		},
+		busy: () => manager.busy(),
 		close: () => {
 			acquired = undefined;
+			acquiredSource = undefined;
 			return manager.close();
 		}
 	};

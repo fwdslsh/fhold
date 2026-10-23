@@ -257,40 +257,44 @@ export class SshInstanceManagement implements InstanceManagement {
 				);
 			return { ...result, sourceHome: source };
 		}
-		const result = await this.request(method, value, ...extra);
-		if (method === 'snapshot') {
-			const snapshot = result as ManagedSnapshot;
-			if (snapshot.connectionDetails) {
-				this.tunnel ??= new SshTunnel(this.connection);
-				try {
-					const apps = (['opencode', 'mcp'] as const).filter(
-						(app) => snapshot.connectionDetails![app].url
-					);
-					if (!apps.length) {
-						await this.tunnel.close();
-						return result;
-					}
-					const targets = apps.map((app) => {
-						const url = new URL(snapshot.connectionDetails![app].url);
-						return { bind: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port || 80) };
-					});
-					const ports = await this.tunnel.ensure(targets);
-					for (const [index, app] of apps.entries())
-						snapshot.connectionDetails[app].url =
-							`http://127.0.0.1:${ports[index]}${app === 'mcp' ? '/mcp' : ''}`;
-					snapshot.connectionDetails.claude.url = snapshot.connectionDetails.mcp.url;
-					snapshot.connectionDetails.opencode.note = `Connected through ${this.connection.label}. Keep Admin open while using this browser connection.`;
-				} catch (error) {
-					snapshot.connectionError =
-						error instanceof Error ? error.message : 'Browser forwarding is unavailable.';
-					for (const details of Object.values(snapshot.connectionDetails)) {
-						details.url = '';
-						details.note = `SSH management remains available. ${snapshot.connectionError}`;
-					}
+		return this.request(method, value, ...extra);
+	}
+	/**
+	 * Acquire a browser route deliberately. Status reads remain transport-only:
+	 * creating a forward is observable local resource ownership, not inspection.
+	 */
+	async acquireForward(): Promise<ManagedSnapshot> {
+		const snapshot = await this.rpc('snapshot');
+		if (snapshot.connectionDetails) {
+			this.tunnel ??= new SshTunnel(this.connection);
+			try {
+				const apps = (['opencode', 'mcp'] as const).filter(
+					(app) => snapshot.connectionDetails![app].url
+				);
+				if (!apps.length) {
+					await this.tunnel.close();
+					return snapshot;
+				}
+				const targets = apps.map((app) => {
+					const url = new URL(snapshot.connectionDetails![app].url);
+					return { bind: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port || 80) };
+				});
+				const ports = await this.tunnel.ensure(targets);
+				for (const [index, app] of apps.entries())
+					snapshot.connectionDetails[app].url =
+						`http://127.0.0.1:${ports[index]}${app === 'mcp' ? '/mcp' : ''}`;
+				snapshot.connectionDetails.claude.url = snapshot.connectionDetails.mcp.url;
+				snapshot.connectionDetails.opencode.note = `Connected through ${this.connection.label}. Keep Admin open while using this browser connection.`;
+			} catch (error) {
+				snapshot.connectionError =
+					error instanceof Error ? error.message : 'Browser forwarding is unavailable.';
+				for (const details of Object.values(snapshot.connectionDetails)) {
+					details.url = '';
+					details.note = `SSH management remains available. ${snapshot.connectionError}`;
 				}
 			}
 		}
-		return result;
+		return snapshot;
 	}
 	/**
 	 * Passive status for composed snapshots. Unlike `call('snapshot')`, this

@@ -37,8 +37,13 @@ export function renderRuntimeControls(snapshot) {
 	const running = isRunning(assistant);
 	const observed = snapshot.services?.state === 'known';
 	const reasons = [];
-	for (const action of ['start', 'restart', 'stop', 'update']) {
-		const capability = instanceCapability(action, snapshot);
+	for (const [action, operationKey] of [
+		['start', 'host.start'],
+		['restart', 'host.restart'],
+		['stop', 'host.stop'],
+		['update', 'docker.update']
+	]) {
+		const capability = instanceCapability(operationKey, snapshot);
 		const button = byId(`${action}-stack`);
 		button.disabled =
 			state.operationInFlight ||
@@ -71,8 +76,8 @@ export function renderServices(snapshot) {
 		'runtime-version-help',
 		missingHostVersion
 			? `${snapshot.operations?.['docker.update']?.reason ? `${snapshot.operations['docker.update'].reason} ` : ''}This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.`
-			: !instanceCapability('update', snapshot).supported
-				? `${instanceCapability('update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
+			: !instanceCapability('docker.update', snapshot).supported
+				? `${instanceCapability('docker.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
 				: view.docker?.updateImageTag
 					? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
 					: 'The managing tool did not report an update version. Update the fhold tools to restore version information. Your agent keeps running.'
@@ -214,7 +219,7 @@ export function renderServices(snapshot) {
 
 export function bindRuntimeEvents() {
 	byId('update-stack').addEventListener('click', async () => {
-		if (state.operationInFlight || !instanceCapability('update').supported) return;
+		if (state.operationInFlight || !instanceCapability('docker.update').supported) return;
 		if (!(await state.api.confirmRestart('update'))) return;
 		const result = await operation(
 			'Updating instance',
@@ -295,13 +300,12 @@ export function bindRuntimeEvents() {
 			},
 			'Startup settings saved.'
 		);
-		if (saved) await requestStackAction('start');
+		if (saved) await requestStackAction('host.start');
 	});
 
 	all('[data-action]').forEach((button) => {
 		button.addEventListener('click', () => {
-			const action = button.dataset.action;
-			void requestStackAction(action);
+			void requestStackAction(button.dataset.action);
 		});
 	});
 }

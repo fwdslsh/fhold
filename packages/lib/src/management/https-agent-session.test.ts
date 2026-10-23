@@ -93,7 +93,9 @@ function fixture() {
 describe('explicit HTTPS agent session', () => {
 	it('passive observations never acquire a route or wake the workload', async () => {
 		const current = fixture();
-		expect((await current.bindings.inspectAgent!()).access?.state).toBe('not-inspected');
+		expect((await current.bindings.inspectApplication!()).agent?.access?.state).toBe(
+			'not-inspected'
+		);
 		expect(current.inspections).toBe(0);
 		expect(current.requests).toHaveLength(0);
 		const operation = current.bindings.agent!.providers!;
@@ -106,7 +108,7 @@ describe('explicit HTTPS agent session', () => {
 		await invoke(current.bindings.agent!.connect, { password: 'synthetic-private-password' });
 		const result = await invoke(current.bindings.agent!.providers, undefined);
 		expect(result.currentModel).toEqual({ provider: 'example', model: 'tool-model' });
-		const observations = await current.bindings.inspectAgent!();
+		const observations = (await current.bindings.inspectApplication!()).agent!;
 		expect(observations.account?.state === 'known' && observations.account.value.signedIn).toBe(
 			true
 		);
@@ -130,11 +132,13 @@ describe('explicit HTTPS agent session', () => {
 			})
 		).rejects.toThrow('runtime changed');
 		expect(current.completions).toBe(0);
-		expect((await current.bindings.inspectAgent!()).access).toMatchObject({ state: 'unavailable' });
+		expect((await current.bindings.inspectApplication!()).agent?.access).toMatchObject({
+			state: 'unavailable'
+		});
 		const providers = current.bindings.agent!.providers!;
 		expect(providers.support === 'supported' && providers.availability().state).toBe('unavailable');
 		await invoke(current.bindings.agent!.connect, { password: 'synthetic-private-password' });
-		expect((await current.bindings.inspectAgent!()).access?.state).toBe('known');
+		expect((await current.bindings.inspectApplication!()).agent?.access?.state).toBe('known');
 		await current.bindings.close!();
 	});
 

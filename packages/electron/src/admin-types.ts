@@ -84,7 +84,7 @@ export type AdminApi = {
 		trusted?: boolean;
 		sandbox?: CodexSandbox;
 		input?: string;
-		restartConfirmed?: boolean;
+		confirmed?: boolean;
 	}): Promise<RemoteProgress>;
 	snapshot(): Promise<AdminSnapshot>;
 	selectedHome(): Promise<string>;

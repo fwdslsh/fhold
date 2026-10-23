@@ -377,9 +377,9 @@
               <div class="section-heading">
                 <div><h2 id="runtime-heading">Services</h2></div>
                 <div class="button-row compact">
-                  <button id="start-stack" data-action="start" class="secondary" type="button">Start</button>
-                  <button id="restart-stack" data-action="restart" class="text-button" type="button">Restart</button>
-                  <button id="stop-stack" data-action="stop" class="text-button danger" type="button">Stop</button>
+                  <button id="start-stack" data-action="host.start" class="secondary" type="button">Start</button>
+                  <button id="restart-stack" data-action="host.restart" class="text-button" type="button">Restart</button>
+                  <button id="stop-stack" data-action="host.stop" class="text-button danger" type="button">Stop</button>
                 </div>
               </div>
               <p id="runtime-action-help" class="help-text" hidden></p>
@@ -562,7 +562,7 @@
                 <p id="opencode-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="opencode-fields" class="capability-fields" data-instance-feature="agent.connect" aria-describedby="opencode-fields-unavailable" aria-label="OpenCode sign-in and network settings">
                 <dl class="connection-values">
-                  <div><dt>Username</dt><dd><code id="direct-username">user</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
+                  <div><dt>Username</dt><dd><code id="direct-username">Not reported</code><button class="text-button" type="button" data-copy-field="direct-username">Copy</button></dd></div>
                 </dl>
                 <label class="field" for="direct-password"><span>Password</span><input id="direct-password" type="password" readonly autocomplete="off" placeholder="Load when needed" /></label>
                 <div class="button-row compact"><button id="load-direct-password" class="secondary" type="button">Load password</button><button id="copy-direct-password" class="secondary" type="button">Copy password</button><label class="check-row compact"><input id="show-direct-password" type="checkbox" /> Show password</label></div>
@@ -887,7 +887,7 @@
             <details id="runtime-recovery" class="panel panel-disclosure">
               <summary><span>Ephemeral container support <small>Automatic checkpoints · same-instance continuity</small></span></summary>
               <p id="recovery-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="recovery-fields" class="capability-fields" data-instance-feature="data.recovery" aria-describedby="recovery-fields-unavailable" aria-label="Ephemeral container settings">
+              <fieldset id="recovery-fields" class="capability-fields" data-instance-feature="data.recovery.save" aria-describedby="recovery-fields-unavailable" aria-label="Ephemeral container settings">
               <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup, including after ordinary image upgrades. Optional for ordinary local installs.</p>
               <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
               <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Ephemeral container support is off.</strong><span>Local data remains in this instance’s home.</span></div>
@@ -932,7 +932,7 @@
               </form>
               <form id="runtime-recovery-credential-form" class="form-stack" hidden>
                 <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. Portable content omits it; an entire-instance export includes it.</span></label>
-                <button class="secondary" type="submit">Save private storage credential</button>
+                <button id="save-recovery-credential" class="secondary" type="submit">Save private storage credential</button>
               </form>
               <div class="button-row">
                 <button id="check-recovery-status" class="secondary" type="button">Check checkpoint status</button>

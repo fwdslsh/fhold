@@ -5,9 +5,11 @@ import {
 } from '../hosting/local-docker.js';
 import type { LocalManagementHostPort } from './contracts.js';
 
-/** CLI session composition for the Docker host that owns the selected home. */
-export const localDockerManagementHost: LocalManagementHostPort = {
-	inspect: inspectLocalInstance,
-	operate: operateLocalInstance,
-	logs: localInstanceLogs
-};
+/** A management port is bound to one selected Docker home; callers cannot retarget it. */
+export function localDockerManagementHost(homeDir: string): LocalManagementHostPort {
+	return {
+		inspect: () => inspectLocalInstance(homeDir),
+		operate: (action) => operateLocalInstance(homeDir, action),
+		logs: (options) => localInstanceLogs(homeDir, options)
+	};
+}

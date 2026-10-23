@@ -1,12 +1,33 @@
 import { createFholdState } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { ensureRuntime, requireInstall } from './state.js';
-import { createCredentialId, isCredentialUsername, isGuardianPolicy, readStackConfig, writeStackConfig, type GuardianPolicy, type StackConfig } from './stack-config.js';
-import { generateCredentialKey, normalizeCredentialKey, readCredentialKey, removeCredentialKey, writeCredentialKey } from './credential-store.js';
+import {
+	createCredentialId,
+	isCredentialUsername,
+	isGuardianPolicy,
+	readStackConfig,
+	writeStackConfig,
+	type GuardianPolicy,
+	type StackConfig
+} from './stack-config.js';
+import {
+	generateCredentialKey,
+	normalizeCredentialKey,
+	readCredentialKey,
+	removeCredentialKey,
+	writeCredentialKey
+} from './credential-store.js';
 import { oauthCredentialUsages } from './oauth-store.js';
 import { readOAuthIdentityMap, writeOAuthIdentityMap } from './oauth-store.js';
 import { normalizePortalSecret, writePortalSecret } from './portal-settings.js';
-import { isPortalName, isPortalUserId, portalCredentialUsages, readPortalCredentialMap, syncPortalCredentialBundles, writePortalCredentialMap } from './portal-credential-store.js';
+import {
+	isPortalName,
+	isPortalUserId,
+	portalCredentialUsages,
+	readPortalCredentialMap,
+	syncPortalCredentialBundles,
+	writePortalCredentialMap
+} from './portal-credential-store.js';
 import { assertSafePortablePath } from './provider-files.js';
 import { rememberRuntimeBeforeChange } from './runtime-revision.js';
 
@@ -21,7 +42,9 @@ export function mutateStack<T>(homeDir: string, action: (config: StackConfig) =>
 		if (!result.ok) throw new Error(result.error);
 		rememberRuntimeBeforeChange(state.homeDir);
 		return action(result.config);
-	} finally { releaseStackLock(lock); }
+	} finally {
+		releaseStackLock(lock);
+	}
 }
 
 function username(value: unknown): string {
@@ -34,15 +57,20 @@ function policy(value: unknown): GuardianPolicy {
 }
 function uniqueKey(homeDir: string, config: StackConfig, key: string, except?: string): void {
 	for (const name of Object.keys(config.credentials)) {
-		if (name !== except && readCredentialKey(homeDir, name) === key) throw new Error(`Credential key is already assigned to ${name}.`);
+		if (name !== except && readCredentialKey(homeDir, name) === key)
+			throw new Error(`Credential key is already assigned to ${name}.`);
 	}
 }
-export function createCredential(homeDir: string, value: { username: unknown; policy: unknown; key?: string }) {
+export function createCredential(
+	homeDir: string,
+	value: { username: unknown; policy: unknown; key?: string }
+) {
 	const name = username(value.username);
 	const selectedPolicy = policy(value.policy);
 	const key = value.key === undefined ? generateCredentialKey() : normalizeCredentialKey(value.key);
 	return mutateStack(homeDir, (config) => {
-		if (Object.hasOwn(config.credentials, name)) throw new Error(`Credential already exists: ${name}`);
+		if (Object.hasOwn(config.credentials, name))
+			throw new Error(`Credential already exists: ${name}`);
 		if (Object.keys(config.credentials).length >= 128) throw new Error('Credential limit reached.');
 		uniqueKey(homeDir, config, key);
 		const keyFile = writeCredentialKey(homeDir, name, key);
@@ -54,7 +82,8 @@ export function createCredential(homeDir: string, value: { username: unknown; po
 }
 export function rotateCredential(homeDir: string, value: unknown, suppliedKey?: string): string {
 	const name = username(value);
-	const key = suppliedKey === undefined ? generateCredentialKey() : normalizeCredentialKey(suppliedKey);
+	const key =
+		suppliedKey === undefined ? generateCredentialKey() : normalizeCredentialKey(suppliedKey);
 	return mutateStack(homeDir, (config) => {
 		if (!Object.hasOwn(config.credentials, name)) throw new Error(`Unknown credential: ${name}`);
 		uniqueKey(homeDir, config, key, name);
@@ -63,12 +92,22 @@ export function rotateCredential(homeDir: string, value: unknown, suppliedKey?: 
 		return keyFile;
 	});
 }
-export function setCredentialPolicy(homeDir: string, value: unknown, selectedPolicy: unknown): void {
+export function setCredentialPolicy(
+	homeDir: string,
+	value: unknown,
+	selectedPolicy: unknown,
+	expectedPolicy?: unknown
+): void {
 	const name = username(value);
 	const selected = policy(selectedPolicy);
+	const expected = expectedPolicy === undefined ? undefined : policy(expectedPolicy);
 	mutateStack(homeDir, (config) => {
-		const credential = Object.hasOwn(config.credentials, name) ? config.credentials[name] : undefined;
+		const credential = Object.hasOwn(config.credentials, name)
+			? config.credentials[name]
+			: undefined;
 		if (!credential) throw new Error(`Unknown credential: ${name}`);
+		if (expected !== undefined && credential.policy !== expected)
+			throw new Error('These permissions changed. Refresh this app before saving again.');
 		credential.policy = selected;
 		writeStackConfig(homeDir, config);
 		syncPortalCredentialBundles(homeDir, config);
@@ -78,16 +117,23 @@ export function removeCredential(homeDir: string, value: unknown): void {
 	const name = username(value);
 	mutateStack(homeDir, (config) => {
 		if (!Object.hasOwn(config.credentials, name)) throw new Error(`Unknown credential: ${name}`);
-		const usages = [...portalCredentialUsages(homeDir, config, name), ...oauthCredentialUsages(homeDir, name)];
+		const usages = [
+			...portalCredentialUsages(homeDir, config, name),
+			...oauthCredentialUsages(homeDir, name)
+		];
 		if (usages.length) throw new Error(`Credential is assigned to ${usages.join(', ')}.`);
-		if (Object.keys(config.credentials).length === 1) throw new Error('Cannot remove the final credential.');
+		if (Object.keys(config.credentials).length === 1)
+			throw new Error('Cannot remove the final credential.');
 		delete config.credentials[name];
 		writeStackConfig(homeDir, config);
 		removeCredentialKey(homeDir, name);
 		syncPortalCredentialBundles(homeDir, config);
 	});
 }
-export function mapPortalUser(homeDir: string, value: { portal: unknown; userId: unknown; username?: unknown }): void {
+export function mapPortalUser(
+	homeDir: string,
+	value: { portal: unknown; userId: unknown; username?: unknown }
+): void {
 	if (!isPortalName(value.portal)) throw new Error('Portal must be discord or slack.');
 	const portal = value.portal;
 	if (!isPortalUserId(portal, value.userId)) throw new Error(`Invalid ${portal} user ID.`);
@@ -104,48 +150,86 @@ export function mapPortalUser(homeDir: string, value: { portal: unknown; userId:
 		syncPortalCredentialBundles(homeDir, config);
 	});
 }
-export function saveStackIntent(homeDir: string, config: StackConfig, baseline: StackConfig): StackConfig {
+export function saveStackIntent(
+	homeDir: string,
+	config: StackConfig,
+	baseline: StackConfig
+): StackConfig {
 	return mutateStack(homeDir, (current) => {
-		if (!baseline || JSON.stringify(current) !== JSON.stringify(baseline)) throw new Error('Settings changed since refresh. Refresh and review before saving.');
+		if (!baseline || JSON.stringify(current) !== JSON.stringify(baseline))
+			throw new Error('Settings changed since refresh. Refresh and review before saving.');
 		const saved = writeStackConfig(homeDir, config);
 		ensureRuntime(createFholdState(homeDir));
 		return saved;
 	});
 }
 
-export function mapOAuthIdentity(homeDir: string, value: { issuer: string; subject: string; username?: unknown }): void {
+export function mapOAuthIdentity(
+	homeDir: string,
+	value: { issuer: string; subject: string; username?: unknown }
+): void {
 	mutateStack(homeDir, (config) => {
 		const mapping = readOAuthIdentityMap(homeDir);
-		const index = mapping.identities.findIndex((identity) => identity.issuer === value.issuer && identity.subject === value.subject);
+		const index = mapping.identities.findIndex(
+			(identity) => identity.issuer === value.issuer && identity.subject === value.subject
+		);
 		if (value.username === undefined) {
 			if (index < 0) throw new Error('OAuth identity has no mapping.');
 			mapping.identities.splice(index, 1);
 		} else {
 			const name = username(value.username);
 			if (!Object.hasOwn(config.credentials, name)) throw new Error(`Unknown credential: ${name}`);
-			if (index >= 0) mapping.identities[index] = { issuer: value.issuer, subject: value.subject, username: name };
-			else mapping.identities.push({ issuer: value.issuer, subject: value.subject, username: name });
+			if (index >= 0)
+				mapping.identities[index] = {
+					issuer: value.issuer,
+					subject: value.subject,
+					username: name
+				};
+			else
+				mapping.identities.push({ issuer: value.issuer, subject: value.subject, username: name });
 		}
 		writeOAuthIdentityMap(homeDir, mapping);
 	});
 }
 
-export function savePortalTokens(homeDir: string, value: { portal: unknown; botToken?: string; appToken?: string }): string[] {
+export function savePortalTokens(
+	homeDir: string,
+	value: { portal: unknown; botToken?: string; appToken?: string }
+): string[] {
 	if (!isPortalName(value.portal)) throw new Error('Portal must be discord or slack.');
 	const portal = value.portal;
-	if (portal === 'discord' && value.appToken !== undefined) throw new Error('App token is valid only for Slack');
+	if (portal === 'discord' && value.appToken !== undefined)
+		throw new Error('App token is valid only for Slack');
 	const botToken = value.botToken === undefined ? undefined : normalizePortalSecret(value.botToken);
 	const appToken = value.appToken === undefined ? undefined : normalizePortalSecret(value.appToken);
-	if (botToken === undefined && appToken === undefined) throw new Error('At least one portal token is required');
+	if (botToken === undefined && appToken === undefined)
+		throw new Error('At least one portal token is required');
 	return mutateStack(homeDir, () => {
 		const paths: string[] = [];
 		// Validate every destination before the first secret write, including all
 		// parent components and dangling symlink leaves.
-		for (const name of [botToken !== undefined ? (portal === 'discord' ? 'discord_bot_token' : 'slack_bot_token') : undefined, appToken !== undefined ? 'slack_app_token' : undefined]) {
-			if (name) assertSafePortablePath(createFholdState(homeDir).homeDir, `state/secrets/${name}`, true);
+		for (const name of [
+			botToken !== undefined
+				? portal === 'discord'
+					? 'discord_bot_token'
+					: 'slack_bot_token'
+				: undefined,
+			appToken !== undefined ? 'slack_app_token' : undefined
+		]) {
+			if (name)
+				assertSafePortablePath(createFholdState(homeDir).homeDir, `state/secrets/${name}`, true);
 		}
-		if (botToken !== undefined) paths.push(writePortalSecret(homeDir, portal, portal === 'discord' ? 'discord_bot_token' : 'slack_bot_token', botToken));
-		if (appToken !== undefined) paths.push(writePortalSecret(homeDir, portal, 'slack_app_token', appToken));
+		if (botToken !== undefined)
+			paths.push(
+				writePortalSecret(
+					homeDir,
+					portal,
+					portal === 'discord' ? 'discord_bot_token' : 'slack_bot_token',
+					botToken
+				)
+			);
+		if (appToken !== undefined)
+			paths.push(writePortalSecret(homeDir, portal, 'slack_app_token', appToken));
 		return paths;
 	});
 }

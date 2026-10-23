@@ -2,11 +2,8 @@
 // snapshot describes what is known and which named operation owns an action;
 // renderer code never infers support from a provider kind or a local config.
 import { state } from './state.js';
+import { known } from './model.js';
 import { all, byId, setBadge, setOptions, setText } from './ui.js';
-
-function known(observation) {
-	return observation?.state === 'known' ? observation.value : undefined;
-}
 
 function observationReason(observation, fallback) {
 	return observation?.reason || fallback;
@@ -25,15 +22,9 @@ export function instancePresentation(snapshot) {
 	};
 }
 
-function operationName(name) {
-	if (name.includes('.')) return name;
-	if (name === 'update') return 'docker.update';
-	return `host.${name}`;
-}
-
-export function instanceCapability(name, snapshot = state.currentSnapshot) {
+export function instanceCapability(operationKey, snapshot = state.currentSnapshot) {
 	if (!snapshot) return { supported: false, reason: 'Open an instance first.' };
-	const operation = snapshot.operations?.[operationName(name)];
+	const operation = snapshot.operations?.[operationKey];
 	if (!operation)
 		return { supported: false, reason: 'This operation is not available for this instance.' };
 	if (operation.support !== 'supported') return { supported: false, reason: operation.reason };
@@ -129,6 +120,7 @@ export function selectedLogOptions() {
 
 export function renderPlatformAccess(snapshot) {
 	const deployment = instancePresentation(snapshot).deployment;
+	const access = known(snapshot.agent?.access);
 	for (const id of ['overview-opencode-link', 'direct-url', 'assistant-url-detail']) {
 		const link = byId(id);
 		link.hidden = !deployment.clientUrl;
@@ -139,7 +131,7 @@ export function renderPlatformAccess(snapshot) {
 		'opencode-connection-help',
 		deployment.guidance?.client || 'Connect explicitly before managing native agent settings.'
 	);
-	setText('direct-username', 'opencode');
+	setText('direct-username', access?.username || 'Not reported');
 	for (const id of [
 		'mcp-connection-status',
 		'discord-connection-status',

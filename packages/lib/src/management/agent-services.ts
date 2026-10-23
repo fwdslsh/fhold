@@ -14,8 +14,11 @@ import {
 } from '../control-plane/provider-settings.js';
 import { connectionDetails } from '../control-plane/connection.js';
 import type { FholdState } from '../control-plane/foundation.js';
+import type { AgentOperations } from './contracts.js';
 
-type OAuthInput = { provider: string; method: number; inputs?: Record<string, string> };
+type AgentInput<Name extends keyof AgentOperations> = Parameters<
+	Extract<AgentOperations[Name], { support: 'supported' }>['invoke']
+>[0];
 
 /**
  * Local provider/account use cases. It owns only temporary browser-auth and
@@ -47,30 +50,6 @@ export class LocalAgentServices {
 	private requireOpen() {
 		if (this.closed) throw new Error('This agent session is closed. Open the instance again.');
 	}
-	private oauthInput(value: unknown): OAuthInput {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid provider sign-in request.');
-		const input = value as { provider?: unknown; method?: unknown; inputs?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.method !== 'number')
-			throw new Error('Provider and sign-in method are required.');
-		if (
-			input.inputs !== undefined &&
-			(!input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs))
-		)
-			throw new Error('Invalid provider sign-in fields.');
-		if (
-			input.inputs &&
-			Object.values(input.inputs as Record<string, unknown>).some(
-				(item) => typeof item !== 'string'
-			)
-		)
-			throw new Error('Invalid provider sign-in fields.');
-		return {
-			provider: input.provider,
-			method: input.method,
-			...(input.inputs ? { inputs: input.inputs as Record<string, string> } : {})
-		};
-	}
 	private async completeReadiness(
 		readiness: Extract<AssistantReadiness, { ok: true }>
 	): Promise<string | undefined> {
@@ -84,64 +63,20 @@ export class LocalAgentServices {
 	providers() {
 		return listProviderSettings(this.state().homeDir, { signal: this.lifetime.signal });
 	}
-	async setKey(value: unknown): Promise<void> {
-		if (!value || typeof value !== 'object') throw new Error('Invalid provider settings');
-		const input = value as { provider?: unknown; key?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.key !== 'string')
-			throw new Error('Provider and key are required.');
+	async setKey(input: AgentInput<'setKey'>): Promise<void> {
 		this.verifiedModel = undefined;
 		await setProviderApiKey(this.state().homeDir, input.provider, input.key, {
 			signal: this.lifetime.signal
 		});
 	}
-	endpoint(value: unknown) {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid AI service settings.');
-		const input = value as {
-			provider?: unknown;
-			name?: unknown;
-			url?: unknown;
-			model?: unknown;
-			key?: unknown;
-		};
-		if (
-			typeof input.provider !== 'string' ||
-			typeof input.name !== 'string' ||
-			typeof input.url !== 'string' ||
-			typeof input.model !== 'string' ||
-			(input.key !== undefined && typeof input.key !== 'string')
-		)
-			throw new Error('Service, URL and model are required.');
+	endpoint(input: AgentInput<'saveEndpoint'>) {
 		this.verifiedModel = undefined;
-		return saveProviderEndpoint(
-			this.state().homeDir,
-			{
-				provider: input.provider,
-				name: input.name,
-				url: input.url,
-				model: input.model,
-				...(typeof input.key === 'string' ? { key: input.key } : {})
-			},
-			{ signal: this.lifetime.signal }
-		);
+		return saveProviderEndpoint(this.state().homeDir, input, { signal: this.lifetime.signal });
 	}
-	models(value: unknown) {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid server settings.');
-		const input = value as { url?: unknown; key?: unknown };
-		if (typeof input.url !== 'string' || (input.key !== undefined && typeof input.key !== 'string'))
-			throw new Error('Server URL is required.');
-		return discoverProviderModels(this.state().homeDir, {
-			url: input.url,
-			...(typeof input.key === 'string' ? { key: input.key } : {})
-		});
+	models(input: AgentInput<'discoverModels'>) {
+		return discoverProviderModels(this.state().homeDir, input);
 	}
-	async use(value: unknown) {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid model selection.');
-		const input = value as { provider?: unknown; model?: unknown };
-		if (typeof input.provider !== 'string' || typeof input.model !== 'string')
-			throw new Error('Service and model are required.');
+	async use(input: AgentInput<'selectModel'>) {
 		const current = this.state();
 		if (
 			!this.verifiedModel ||
@@ -163,23 +98,14 @@ export class LocalAgentServices {
 		}
 		return settings;
 	}
-	remove(value: unknown) {
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Invalid saved setup.');
-		const input = value as { provider?: unknown; endpoint?: unknown };
-		if (
-			typeof input.provider !== 'string' ||
-			(input.endpoint !== undefined && typeof input.endpoint !== 'boolean')
-		)
-			throw new Error('Service is required.');
+	remove(input: AgentInput<'removeProvider'>) {
 		this.verifiedModel = undefined;
 		return removeProviderSetup(this.state().homeDir, input.provider, {
 			endpoint: input.endpoint === true,
 			signal: this.lifetime.signal
 		});
 	}
-	async oauthStart(value: unknown) {
-		const input = this.oauthInput(value);
+	async oauthStart(input: AgentInput<'oauthStart'>) {
 		const current = this.state();
 		const authorization = await beginProviderOAuth(
 			current.homeDir,
@@ -198,11 +124,7 @@ export class LocalAgentServices {
 		this.openUrl?.(authorization.url);
 		return authorization;
 	}
-	async oauthFinish(value: unknown): Promise<void> {
-		const input = this.oauthInput(value);
-		const rawCode = (value as { code?: unknown }).code;
-		if (rawCode !== undefined && typeof rawCode !== 'string')
-			throw new Error('Invalid provider authorization code.');
+	async oauthFinish(input: AgentInput<'oauthFinish'>): Promise<void> {
 		const current = this.state();
 		if (
 			!this.pendingOAuth ||
@@ -215,30 +137,22 @@ export class LocalAgentServices {
 		// An exchange is single-use, including an uncertain network response.
 		this.pendingOAuth = undefined;
 		this.verifiedModel = undefined;
-		await completeProviderOAuth(current.homeDir, input.provider, attemptID, rawCode, {
+		await completeProviderOAuth(current.homeDir, input.provider, attemptID, input.code, {
 			signal: this.lifetime.signal
 		});
 		this.requireOpen();
 	}
-	readiness(value: unknown) {
-		if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value)))
-			throw new Error('Invalid provider readiness request.');
-		const rawProvider = (value as { provider?: unknown } | undefined)?.provider;
-		const rawModel = (value as { model?: unknown } | undefined)?.model;
-		if (rawProvider !== undefined && typeof rawProvider !== 'string')
-			throw new Error('Invalid readiness provider.');
-		if (rawModel !== undefined && (typeof rawModel !== 'string' || !rawProvider))
-			throw new Error('Choose a service for this model test.');
+	readiness(input: AgentInput<'readiness'> = {}) {
 		const current = this.state();
 		return testAssistantReadiness(current.homeDir, {
 			signal: this.lifetime.signal,
-			...(rawProvider ? { provider: rawProvider } : {}),
-			...(typeof rawModel === 'string' ? { model: rawModel } : {})
+			provider: input.provider,
+			model: input.model
 		}).then(async (readiness) => {
 			this.requireOpen();
 			this.verifiedModel = readiness.ok ? { homeDir: current.homeDir, readiness } : undefined;
 			const settings =
-				readiness.ok && rawProvider
+				readiness.ok && input.provider
 					? await listProviderSettings(current.homeDir, { signal: this.lifetime.signal }).catch(
 							() => undefined
 						)
@@ -246,7 +160,7 @@ export class LocalAgentServices {
 			this.requireOpen();
 			if (
 				readiness.ok &&
-				(!rawProvider ||
+				(!input.provider ||
 					(settings?.currentModel?.provider === readiness.provider &&
 						settings?.currentModel?.model === readiness.model))
 			) {

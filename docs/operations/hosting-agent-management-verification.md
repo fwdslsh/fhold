@@ -72,8 +72,10 @@ usable without launching an unsupported persistent session.
 The October 22 implementation uses typed composed host, agent, app and data
 operations in CLI/Admin, one normalized snapshot and per-operation availability.
 Standalone app permission editing no longer passes a Docker configuration through
-the UI. Its concrete command adapter preserves the existing snapshot/saveConfig
-wire contract and unrelated host intent. Public client links are whitelisted
+the UI. A named policy operation checks the previous policy under the existing
+stack lock and preserves unrelated host intent. Older remote CLIs without that
+operation report it as unsupported rather than overwriting the full configuration.
+Public client links are whitelisted
 separately from explicitly acquired agent access. Configured ACA image references
 remain labelled configuration, not running-replica image observations.
 
@@ -82,7 +84,7 @@ Final local checks on the source-frozen implementation:
 | Check | Result |
 | --- | --- |
 | `bun run check` | All six workspace typechecks passed. |
-| `FH_SOCKET_TESTS=1 bun run test` | 1,009 passed, zero failed; five opt-in image-backed tests skipped. |
+| `FH_SOCKET_TESTS=1 bun run test` | 1,026 passed, zero failed; five opt-in image-backed tests skipped. |
 | Admin real-Chromium provider workflow | Passed, 298 assertions against the synthetic native API. No vendor account or billed inference. |
 | `bun run lint` | Passed its configured gate; repository style warnings remain. This is not a warning-free lint claim. |
 | CLI compile and Admin bundle | Both passed. |
@@ -109,6 +111,39 @@ No dependency pins, runtime/image sources, backup formats or live deployments
 changed. The skipped image tests and real ACA signal/storage/scale qualification
 are not claimed by this tooling refactor. Dependency freshness and artifact/image
 qualification remain the separately documented merge/release gates.
+
+## PR review follow-up
+
+The 29 substantive inline review comments were addressed in a separate follow-up.
+Adapters now contribute their own application bindings; the common composer has
+one passive aggregate observation port and generates descriptions from its actual
+operation tree. Native HTTP/preference implementations sit below management, and
+shared agent, hosting and recovery DTOs have leaf ownership. Runtime import-graph
+checks cover the library, enforce control-plane dependency direction and detect
+executable cycles; they do not pretend erased type imports execute at runtime.
+
+CLI connect and archive workflows use the composed session, including availability,
+target-bound disposal and an explicitly held SSH-forward lease. String-method RPC
+and its action-shaped recovery payload remain private compatibility details, not
+a second public management API. Recovery checkpoint inspection still invokes the
+existing engine; it was not replaced with saved-settings inspection.
+
+Confirmation has one normalized request-context channel. Typed boundary parsers
+and a mapped handler table cover Admin IPC and native stdin. Native use cases
+accept those contract inputs instead of repeating unknown-shape validation.
+HTTPS connection state is explicit; cancellation propagates and genuine optional
+failures retain actionable redacted causes. Guided sign-in still prevents an
+instance switch until finished or explicitly cancelled.
+Boundary regressions also cover replacing only one saved Portal token, empty
+native prompt answers, strict remote enum values and preserving the selected
+system/console log source.
+
+A restricted execution sandbox produced a false SSH child-pipe EOF during test
+execution. The original, unchanged SSH test passed ten consecutive unrestricted
+runs; the engineer's combined transport/session/recovery qualification then passed
+36 tests with 175 assertions. The compiled CLI also handled separated persistent
+session requests. No product or test-fixture workaround was added. These local
+checks do not claim live SSH authentication or ACA qualification.
 
 ## Qualification boundaries
 

@@ -6,6 +6,7 @@ import { localInstanceManagement } from './instance.js';
 import { localDockerManagementHost } from './local-host-port.js';
 import { MANAGEMENT_METHODS, type InstanceManagement } from './types.js';
 import type { ManagementRequest, ManagementResponse } from './ssh.js';
+import { parseManagementArgs } from './wire-input.js';
 
 /** Native CLI session scope preserves OAuth, model verification and native prompt processes. */
 export async function serveManagementSession(
@@ -37,22 +38,14 @@ export async function serveManagementSession(
 				if (!instance) {
 					instance = localInstanceManagement(request.homeDir, {
 						setupName: request.setupName,
-						host: localDockerManagementHost,
+						host: localDockerManagementHost(request.homeDir),
 						openUrl: (url) => write({ event: 'open-url', url })
 					});
 					instances.set(request.homeDir, instance);
 				}
-				const value = await withDockerMachineOutput(() =>
-					// Unknown JSON is dispatched only here; the selected named handler
-					// validates its request before entering its domain operation.
-					(
-						instance!.call as (
-							method: typeof request.method,
-							value?: unknown,
-							...extra: unknown[]
-						) => Promise<unknown>
-					)(request.method, request.value, ...(request.extra ?? []))
-				);
+				const args = parseManagementArgs(request.method, request.value, request.extra);
+				const selected = instance;
+				const value = await withDockerMachineOutput(() => selected.call(request.method, ...args));
 				write({ id, ok: true, value });
 			} catch (error) {
 				write({

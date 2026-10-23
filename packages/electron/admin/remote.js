@@ -329,7 +329,7 @@ export function bindRemoteEvents() {
 							action: 'enable',
 							tool,
 							trusted: true,
-							restartConfirmed: true,
+							confirmed: true,
 							...(tool === 'codex' ? { sandbox: byId('remote-sandbox').value } : {})
 						}
 			);

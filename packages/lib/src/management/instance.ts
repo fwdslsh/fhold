@@ -40,6 +40,7 @@ import {
 	mapAdminPortalUser,
 	removeAdminCredential,
 	rotateAdminCredential,
+	updateAdminCredentialPolicy,
 	saveAdminConfig,
 	confirmedAdminAction,
 	completeInstanceSetup
@@ -52,6 +53,7 @@ import type {
 	ManagementRequestArgs,
 	ManagementRequestMap
 } from './types.js';
+import { MANAGEMENT_METHODS } from './types.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -63,6 +65,7 @@ import { withAssistantEndpoint } from '../control-plane/opencode.js';
 import type { LocalManagementHostPort } from './contracts.js';
 import { LocalAgentServices } from './agent-services.js';
 import { readCredentialKey } from '../control-plane/credential-store.js';
+import { parseOperationInput, parseRequestContext } from './operation-input.js';
 
 /** The same target-bound domain operations run locally or in the owning SSH host CLI. */
 export function localInstanceManagement(
@@ -73,7 +76,16 @@ export function localInstanceManagement(
 	const lifetime = new AbortController();
 	let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
 	let remoteStarting = false;
-	const handlers = new Map<string, (value?: unknown, ...extra: unknown[]) => unknown>();
+	type LegacyHandlerTable = {
+		[M in ManagementMethod]: (
+			...args: ManagementRequestArgs<M>
+		) => ManagementRequestMap[M]['result'] | Promise<ManagementRequestMap[M]['result']>;
+	};
+	type RegisteredHandler<M extends ManagementMethod> = (
+		event: undefined,
+		...args: ManagementRequestArgs<M>
+	) => ManagementRequestMap[M]['result'] | Promise<ManagementRequestMap[M]['result']>;
+	const handlers: Partial<LegacyHandlerTable> = {};
 	const managedState = () => createFholdState(homeDir);
 	const agent = new LocalAgentServices(
 		() => state(),
@@ -81,11 +93,11 @@ export function localInstanceManagement(
 		(readiness) => completeInstanceSetup(homeDir, readiness)
 	);
 	const transfers = new Set<string>();
-	function handleAdmin(
-		channel: string,
-		handler: (_event: undefined, value?: unknown, ...extra: never[]) => unknown
-	) {
-		handlers.set(channel, (value, ...extra) => handler(undefined, value, ...(extra as never[])));
+	function handleAdmin<M extends ManagementMethod>(channel: M, handler: RegisteredHandler<M>) {
+		// The mapped registration checks each method's resolved result. This is
+		// the sole correlated-generic assignment at the JSON-line dispatch edge.
+		handlers[channel] = ((...args: ManagementRequestArgs<M>) =>
+			handler(undefined, ...args)) as LegacyHandlerTable[M];
 	}
 	function state() {
 		const value = managedState();
@@ -130,7 +142,7 @@ export function localInstanceManagement(
 		const current = state();
 		const config = readStackConfig(current.homeDir);
 		if (!config.ok) throw new Error(config.error);
-		const hosting = await options.host.inspect(current.homeDir);
+		const hosting = await options.host.inspect();
 		const details = connectionSnapshot(current.homeDir);
 		let connectionError: string | undefined;
 		try {
@@ -174,8 +186,7 @@ export function localInstanceManagement(
 	}
 
 	async function runAdminAction(action: StackAction): Promise<ManagedSnapshot> {
-		const current = state();
-		await options.host.operate(current.homeDir, action);
+		await options.host.operate(action);
 		return adminSnapshot();
 	}
 
@@ -294,8 +305,7 @@ export function localInstanceManagement(
 		return runAdminAction(confirmedAdminAction(input));
 	});
 	handleAdmin('logs', async (_event) => {
-		const current = state();
-		return (await options.host.logs(current.homeDir, { tail: 250 })).slice(-200_000);
+		return (await options.host.logs({ tail: 250 })).slice(-200_000);
 	});
 	handleAdmin('providers', () => agent.providers());
 	handleAdmin('providerKey', (_event, value) => agent.setKey(value));
@@ -309,12 +319,30 @@ export function localInstanceManagement(
 	handleAdmin('assistantPassword', () => agent.password());
 	handleAdmin('credential', async (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid credential operation');
-		const input = value as { action?: unknown; username?: unknown; policy?: unknown };
+		const input = value as {
+			action?: unknown;
+			username?: unknown;
+			policy?: unknown;
+			previousPolicy?: unknown;
+		};
 		const current = state();
 		if (input.action === 'create') {
 			createAdminCredential(current.homeDir, {
 				username: input.username,
 				policy: input.policy
+			});
+		} else if (input.action === 'policy') {
+			if (
+				typeof input.username !== 'string' ||
+				typeof input.policy !== 'string' ||
+				typeof input.previousPolicy !== 'string'
+			)
+				throw new Error('Invalid credential policy update.');
+			updateAdminCredentialPolicy(current.homeDir, {
+				username: input.username,
+				policy: input.policy as import('../control-plane/stack-config.js').GuardianPolicy,
+				previousPolicy:
+					input.previousPolicy as import('../control-plane/stack-config.js').GuardianPolicy
 			});
 		} else if (input.action === 'rotate') rotateAdminCredential(current.homeDir, input.username);
 		else if (input.action === 'remove') removeAdminCredential(current.homeDir, input.username);
@@ -333,7 +361,7 @@ export function localInstanceManagement(
 	handleAdmin('mapPortalUser', async (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid portal mapping');
 		const current = state();
-		mapAdminPortalUser(current.homeDir, value as never);
+		mapAdminPortalUser(current.homeDir, parseOperationInput('apps.portal.mapUser', value));
 		return adminSnapshot();
 	});
 	handleAdmin('portalToken', async (_event, value: unknown) => {
@@ -351,7 +379,10 @@ export function localInstanceManagement(
 	handleAdmin('backup', (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid backup request');
 		const current = state();
-		return backupFromAdmin(current.homeDir, value as never);
+		return backupFromAdmin(current.homeDir, {
+			...parseOperationInput('data.backup', value),
+			...parseRequestContext(value)
+		});
 	});
 	handleAdmin('recovery', async (_event, value: unknown) => {
 		if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -380,12 +411,18 @@ export function localInstanceManagement(
 	handleAdmin('restoreData', (_event, value: unknown) => {
 		if (!value || typeof value !== 'object') throw new Error('Invalid restore request');
 		const current = state();
-		return restoreFromAdmin(current.homeDir, value as never);
+		return restoreFromAdmin(current.homeDir, {
+			...parseOperationInput('data.restoreData', value),
+			...parseRequestContext(value)
+		});
 	});
 	handleAdmin('restoreInstance', (_event, value: unknown) => {
 		if (!value || typeof value !== 'object' || Array.isArray(value))
 			throw new Error('Invalid full-instance import request.');
-		return instanceRestoreFromAdmin(managedState().homeDir, value as never);
+		return instanceRestoreFromAdmin(managedState().homeDir, {
+			...parseOperationInput('data.restoreInstance', value),
+			...parseRequestContext(value)
+		});
 	});
 	handleAdmin('update', async (_event, value: unknown) => {
 		const input = value as { confirmed?: unknown; pull?: unknown } | undefined;
@@ -438,28 +475,28 @@ export function localInstanceManagement(
 			else await unpackTransfer(archive, join(value, 'unpacked'));
 			return method === 'transferPack' ? archive : join(value, 'unpacked', 'payload');
 		});
+	if (!MANAGEMENT_METHODS.every((method) => handlers[method]))
+		throw new Error('Internal management handler registration is incomplete.');
 	return {
 		async call<M extends ManagementMethod>(
 			method: M,
 			...args: ManagementRequestArgs<M>
 		): Promise<ManagementRequestMap[M]['result']> {
 			if (closed) throw new Error('This instance session is closed. Open it again.');
-			const [value, ...extra] = args;
-			const handler = handlers.get(method);
+			const handler = handlers[method] as LegacyHandlerTable[M] | undefined;
 			if (!handler) throw Error('Unsupported instance operation.');
 			if (method.startsWith('provider') || method === 'readiness') {
 				const current = state();
-				const endpoint = (
-					await publishedConnections(current.homeDir, await options.host.inspect(current.homeDir))
-				).assistant;
+				const endpoint = (await publishedConnections(current.homeDir, await options.host.inspect()))
+					.assistant;
 				if (!endpoint) throw Error('Start this instance before managing its AI services.');
 				return await withAssistantEndpoint(
 					current.homeDir,
 					endpoint,
-					async () => (await handler(value, ...extra)) as ManagementRequestMap[M]['result']
+					async () => await handler(...args)
 				);
 			}
-			return (await handler(value, ...extra)) as ManagementRequestMap[M]['result'];
+			return await handler(...args);
 		},
 		busy: () => remoteStarting || !!activeRemote?.session.snapshot().running,
 		async close() {

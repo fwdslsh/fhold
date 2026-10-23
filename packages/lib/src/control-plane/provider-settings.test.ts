@@ -502,8 +502,7 @@ describe('Native provider manager settings', () => {
 		});
 		expect(result.write).toMatchObject({
 			saved: true,
-			effective: 'unconfirmed',
-			activation: 'none'
+			effective: 'unconfirmed'
 		});
 		expect(result.currentModel).toEqual({ provider: 'existing', model: 'team/model' });
 		expect(readFileSync(current.configPath, 'utf8')).not.toBe(original);
@@ -531,8 +530,7 @@ describe('Native provider manager settings', () => {
 		);
 		expect(result.write).toMatchObject({
 			saved: true,
-			effective: 'unconfirmed',
-			activation: 'none'
+			effective: 'unconfirmed'
 		});
 		expect(readFileSync(current.configPath, 'utf8')).not.toBe(original);
 		expect(native.modelRequests).toHaveLength(0);

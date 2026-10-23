@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { composeInstanceSession, legacyManagementBindings } from './instance-session.js';
+import { composeInstanceSession, rpcManagementBindings } from './instance-session.js';
 import type { InstanceManagement, ManagedSnapshot } from './types.js';
 import { defaultStackConfig } from '../control-plane/stack-config.js';
 import { supportedOperation, unsupportedOperation } from './contracts.js';
@@ -29,6 +29,24 @@ const hosting: HostingSnapshot = {
 	services: [],
 	warnings: []
 };
+
+test('checkpoint inspection stays an engine operation rather than a saved-settings query', async () => {
+	const calls: unknown[] = [];
+	const manager: InstanceManagement = {
+		call: (async (method: string, value: unknown) => {
+			calls.push([method, value]);
+			return 'Accepted checkpoint: synthetic-generation';
+		}) as InstanceManagement['call'],
+		busy: () => false,
+		close: async () => {}
+	};
+	const inspect = rpcManagementBindings(manager).data?.recovery.inspect;
+	if (inspect?.support !== 'supported') throw new Error('Expected recovery inspection.');
+	await expect(inspect.invoke(undefined, {})).resolves.toBe(
+		'Accepted checkpoint: synthetic-generation'
+	);
+	expect(calls).toEqual([['recovery', { action: 'inspect' }]]);
+});
 
 test('a new local folder reaches the shared install view without requiring an installed host', async () => {
 	const homeDir = join(mkdtempSync(join(tmpdir(), 'fhold-session-install-')), 'new-agent');
@@ -66,7 +84,7 @@ test('normalized inspection preserves host facts when an optional app observatio
 			logs: supportedOperation(async () => ''),
 			console: unsupportedOperation('No console.')
 		},
-		inspectApps: async () => {
+		inspectApplication: async () => {
 			throw new Error('optional metadata unavailable');
 		}
 	});
@@ -79,7 +97,7 @@ test('normalized inspection preserves host facts when an optional app observatio
 		reason: 'External deployment ownership.'
 	});
 	expect(snapshot.docker).toBeUndefined();
-	expect(snapshot.lifecycle).toMatchObject({ state: 'known', value: 'externally-managed' });
+	expect(snapshot.lifecycle).toMatchObject({ state: 'unavailable' });
 });
 
 test('failed service inspection is unavailable, not a known empty service inventory', async () => {
@@ -165,10 +183,14 @@ test('published addresses are not acquired access and SSH links retain only an e
 		busy: () => false,
 		close: async () => {}
 	};
-	const bindings = legacyManagementBindings(manager, {
-		passiveSnapshot: async () => managed(origin)
+	const bindings = rpcManagementBindings(manager, {
+		passiveSnapshot: async () => managed(origin),
+		acquireSnapshot: async () => {
+			calls++;
+			return managed('http://127.0.0.1:54321');
+		}
 	});
-	const inspect = bindings.inspectManagement!;
+	const inspect = bindings.inspectApplication!;
 	expect((await inspect()).agent.access).toMatchObject({ state: 'not-inspected' });
 	expect((await inspect()).apps.connections).toMatchObject({ state: 'not-inspected' });
 	expect(calls).toBe(0);
@@ -205,24 +227,9 @@ test('a failed passive management snapshot is not retried by individual panes', 
 			logs: supportedOperation(async () => ''),
 			console: unsupportedOperation('No console.')
 		},
-		inspectManagement: async () => {
+		inspectApplication: async () => {
 			snapshots += 1;
 			throw new Error('remote snapshot unavailable');
-		},
-		inspectAgent: async () => {
-			snapshots += 1;
-			return {};
-		},
-		inspectLifecycle: async () => {
-			snapshots += 1;
-			return { state: 'known', value: 'ready', observedAt: 'synthetic' };
-		},
-		inspectApps: async () => {
-			snapshots += 1;
-			return {
-				config: { state: 'not-inspected', reason: 'not needed' },
-				status: { state: 'not-inspected', reason: 'not needed' }
-			};
 		}
 	});
 	const snapshot = await session.inspect();
@@ -236,34 +243,63 @@ test('an app-policy operation preserves unrelated host intent behind the retaine
 	const writes: unknown[] = [];
 	const manager: InstanceManagement = {
 		call: async (method, value) => {
-			if (method === 'snapshot') return { config } as never;
-			if (method !== 'saveConfig') throw new Error('Unexpected fixture operation.');
+			if (method !== 'credential') throw new Error('Unexpected fixture operation.');
 			writes.push(value);
 			return undefined as never;
 		},
 		busy: () => false,
 		close: async () => {}
 	};
-	const operation = legacyManagementBindings(manager).apps!.credentials.updatePolicy;
+	const operation = rpcManagementBindings(manager, { credentialPolicy: true }).apps!.credentials
+		.updatePolicy;
 	if (operation.support !== 'supported') throw new Error('fixture');
-	const original = structuredClone(config);
 	await operation.invoke(
 		{ username: 'owner', policy: 'read', previousPolicy: config.credentials.owner.policy },
 		{}
 	);
 	expect(writes).toHaveLength(1);
 	expect(writes[0]).toEqual({
-		config: {
-			...original,
-			credentials: {
-				...original.credentials,
-				owner: { ...original.credentials.owner, policy: 'read' }
-			}
-		},
-		baseConfig: original
+		action: 'policy',
+		username: 'owner',
+		policy: 'read',
+		previousPolicy: config.credentials.owner.policy
 	});
-	await expect(
-		operation.invoke({ username: 'owner', policy: 'chat', previousPolicy: 'read' }, {})
-	).rejects.toThrow('permissions changed');
-	expect(writes).toHaveLength(1);
+});
+
+test('the retained RPC boundary translates canonical confirmation only for legacy wire calls', async () => {
+	const calls: Array<[string, unknown]> = [];
+	const manager: InstanceManagement = {
+		call: async (method, value) => {
+			calls.push([method, value]);
+			return {} as never;
+		},
+		busy: () => false,
+		close: async () => {}
+	};
+	const bindings = rpcManagementBindings(manager);
+	const { backup, restoreInstance } = bindings.data!;
+	const { remote, codexRecall } = bindings.agent!;
+	for (const operation of [backup, restoreInstance, remote, codexRecall])
+		if (operation.support !== 'supported') throw new Error('fixture');
+	await backup.invoke({ destination: '/operator/export', full: true }, { confirmed: true });
+	await restoreInstance.invoke(
+		{ sourceHome: '/operator/export', apply: true, previewDigest: 'reviewed-preview' },
+		{ confirmed: true }
+	);
+	await remote.invoke({ action: 'enable', tool: 'codex', trusted: true }, { confirmed: true });
+	await codexRecall.invoke({ action: 'approve', digest: 'reviewed-hooks' }, { confirmed: true });
+	expect(calls).toEqual([
+		['backup', { destination: '/operator/export', full: true, confirmed: true }],
+		[
+			'restoreInstance',
+			{
+				sourceHome: '/operator/export',
+				apply: true,
+				previewDigest: 'reviewed-preview',
+				confirmed: true
+			}
+		],
+		['remote', { action: 'enable', tool: 'codex', trusted: true, restartConfirmed: true }],
+		['codexRecall', { action: 'approve', digest: 'reviewed-hooks', confirmed: true }]
+	]);
 });

@@ -534,14 +534,16 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 		assert(
 			await window.webContents.executeJavaScript(`(async () => {
 			const snapshot = await window.fholdAdmin.snapshot();
+			const homeDir = snapshot.docker?.homeDir;
+			if (!homeDir) throw new Error('The selected local fixture has no managed home.');
 			const picker = document.querySelector('#instance-picker');
-			return picker.tagName === 'SELECT' && picker.value === snapshot.homeDir &&
-				picker.selectedOptions[0].textContent === snapshot.config.deployment.projectName &&
+			return picker.tagName === 'SELECT' && picker.value === homeDir &&
+				picker.selectedOptions[0].textContent === snapshot.identity.name &&
 				picker.options[picker.options.length-1].textContent === 'Open another instance…' &&
 				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 44 &&
 				!document.querySelector('.sidebar-footer') && !document.querySelector('#refresh') &&
 				!document.querySelector('#selected-instance-path') &&
-				document.querySelector('#overview-home').textContent === snapshot.homeDir &&
+				document.querySelector('#overview-home').textContent === homeDir &&
 				document.querySelector('#assistant-summary').textContent === 'Running normally';
 		})()`),
 			'Sidebar did not expose a simple named picker with identity/runtime details on Overview.'
@@ -556,8 +558,13 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 		await window.webContents.executeJavaScript(`(async () => {
 			const {render} = await import('./snapshot.js');
 			const snapshot = await window.fholdAdmin.snapshot();
-			render({...snapshot, homeDir:'/home/person/fhold/instances/' + 'long-folder-'.repeat(14),
-				config:{...snapshot.config,deployment:{...snapshot.config.deployment,projectName:'personal-agent-' + 'a'.repeat(48)}}});
+			if (!snapshot.docker || snapshot.identity.ref.kind !== 'local-docker')
+				throw new Error('The selected fixture is not a local managed instance.');
+			const homeDir = '/home/person/fhold/instances/' + 'long-folder-'.repeat(14);
+			const name = 'personal-agent-' + 'a'.repeat(48);
+			render({...snapshot,
+				identity:{...snapshot.identity,name,location:homeDir,ref:{...snapshot.identity.ref,homeDir}},
+				docker:{...snapshot.docker,homeDir,config:{...snapshot.docker.config,deployment:{...snapshot.docker.config.deployment,projectName:name}}}});
 		})()`);
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
@@ -2725,12 +2732,14 @@ async function run(): Promise<Record<string, unknown>> {
 		await assertRenderedFloor(window, 'runtime recovery at minimum size and 200% zoom');
 		const narrowRecoveryFields = await window.webContents.executeJavaScript(`(async () => {
 			const {state} = await import('./state.js');
+			const config = state.currentSnapshot.docker?.config;
+			if (!config) throw new Error('The selected fixture has no managed recovery configuration.');
 			return {
 			interval: document.querySelector('#runtime-recovery-interval').value,
 			maxUnsaved: document.querySelector('#runtime-recovery-max-unsaved').value,
 			focus: document.activeElement?.id,
-			savedInterval: state.currentSnapshot.config.recovery.intervalSeconds,
-			savedMaxUnsaved: state.currentSnapshot.config.recovery.maxUnsavedSeconds,
+			savedInterval: config.recovery.intervalSeconds,
+			savedMaxUnsaved: config.recovery.maxUnsavedSeconds,
 			dirty: [...state.dirtyForms]
 			};
 		})()`);

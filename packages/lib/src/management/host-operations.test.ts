@@ -14,11 +14,15 @@ function fixture() {
 		capabilities: capabilities(
 			supported ? ['start', 'stop', 'restart'] : [],
 			'Inspect-only deployment.'
-		),
-		actionEffects: { restart: 'restart-runtime' }
+		)
 	});
 	const native: InstanceSession = {
 		ref: snapshot().ref,
+		actionEffects: {
+			start: 'request-platform-state',
+			stop: 'request-platform-state',
+			restart: 'restart-runtime'
+		},
 		inspect: async () => snapshot(),
 		logs: async () => '',
 		operate: async (action, confirmed, options) => {

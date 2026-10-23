@@ -1,6 +1,9 @@
 import type { HostingSnapshot } from '../hosting/types.js';
 import type { ProviderSettings } from '../control-plane/provider-settings.js';
-import { createHttpsNativeAgentService, type NativeAgentService } from './agent-access.js';
+import {
+	createHttpsNativeAgentService,
+	type NativeAgentService
+} from '../control-plane/native-agent.js';
 import type { InstanceSessionBindings } from './instance-session.js';
 import {
 	supportedOperation,
@@ -15,16 +18,24 @@ type Options = {
 	inspectHost(): Promise<HostingSnapshot>;
 	fetch?: typeof fetch;
 };
+type OAuthAttempt = { provider: string; method: number; id: string; runtime: string };
+type ConnectionState =
+	| { state: 'idle' }
+	| { state: 'closed' }
+	| { state: 'connecting'; route: AbortController }
+	| {
+			state: 'connected';
+			service: NativeAgentService;
+			route: AbortController;
+			runtime: string;
+			attempt?: OAuthAttempt;
+	  };
 
 /** Native HTTP capabilities over an explicitly acquired, private session route. */
 export function httpsAgentBindings(
 	options: Options
-): Pick<InstanceSessionBindings, 'agent' | 'inspectAgent' | 'close'> {
-	let service: NativeAgentService | undefined;
-	let route: AbortController | undefined;
-	let selectedRuntime: string | undefined;
-	let closed = false;
-	let attempt: { provider: string; method: number; id: string; runtime: string } | undefined;
+): Pick<InstanceSessionBindings, 'agent' | 'inspectApplication' | 'close'> {
+	let connection: ConnectionState = { state: 'idle' };
 	let access: AgentObservations['access'] = {
 		state: 'not-inspected',
 		reason: 'Connect to the agent with its native OpenCode password.'
@@ -41,15 +52,35 @@ export function httpsAgentBindings(
 		state: 'not-inspected',
 		reason: 'Run an explicit model test.'
 	};
+	function clearConnection(reason: string): void {
+		if (connection.state === 'connected' || connection.state === 'connecting')
+			connection.route.abort();
+		connection = { state: 'idle' };
+		access = { state: 'unavailable', reason };
+		account = {
+			state: 'not-inspected',
+			reason: 'Reconnect to inspect the current native accounts.'
+		};
+		models = { state: 'not-inspected', reason: 'Reconnect to inspect the current model.' };
+		readiness = {
+			state: 'not-inspected',
+			reason: 'Run a requested test against the current runtime.'
+		};
+	}
+	function isClosed(): boolean {
+		return connection.state === 'closed';
+	}
 
 	function known<T>(value: T): Observation<T> {
 		return { state: 'known', value, observedAt: new Date().toISOString() };
 	}
-	function current(context: RequestContext): NativeAgentService {
+	function assertCurrent(
+		context: RequestContext
+	): Extract<ConnectionState, { state: 'connected' }> {
 		context.signal?.throwIfAborted();
-		if (closed || !service)
+		if (connection.state !== 'connected')
 			throw new Error('Connect to this agent before managing its AI accounts.');
-		return service;
+		return connection;
 	}
 	function runtime(snapshot: HostingSnapshot, writing: boolean): string {
 		const revisions = snapshot.revisions?.filter((item) => item.active) ?? [];
@@ -62,45 +93,28 @@ export function httpsAgentBindings(
 		return revisions[0].name;
 	}
 	async function bound(context: RequestContext, writing = true): Promise<NativeAgentService> {
-		const selected = current(context);
+		const selected = assertCurrent(context);
 		const observed = await options.inspectHost();
 		context.signal?.throwIfAborted();
-		if (closed || service !== selected)
-			throw new Error('This agent connection was closed or replaced.');
+		if (connection !== selected) throw new Error('This agent connection was closed or replaced.');
 		let observedRuntime: string;
 		try {
 			observedRuntime = runtime(observed, false);
 		} catch {
 			observedRuntime = '';
 		}
-		if (observedRuntime !== selectedRuntime) {
-			route?.abort();
-			service = undefined;
-			selectedRuntime = undefined;
-			attempt = undefined;
-			access = {
-				state: 'unavailable',
-				reason: 'The agent runtime changed. Reconnect to its current runtime.'
-			};
-			account = {
-				state: 'not-inspected',
-				reason: 'Reconnect to inspect the current native accounts.'
-			};
-			models = { state: 'not-inspected', reason: 'Reconnect to inspect the current model.' };
-			readiness = {
-				state: 'not-inspected',
-				reason: 'Run a requested test against the current runtime.'
-			};
+		if (observedRuntime !== selected.runtime) {
+			clearConnection('The agent runtime changed. Reconnect to its current runtime.');
 			throw new Error(
 				'This agent runtime changed during the connection. Reconnect before continuing native setup.'
 			);
 		}
 		if (writing) runtime(observed, true);
-		return selected;
+		return selected.service;
 	}
 	function connected<I, O>(run: (input: I, context: RequestContext) => Promise<O>) {
 		return supportedOperation(run, () =>
-			service && !closed
+			connection.state === 'connected'
 				? { state: 'ready' }
 				: {
 						state: 'unavailable',
@@ -114,7 +128,8 @@ export function httpsAgentBindings(
 			selected.listProviders({ signal: context.signal }),
 			selected.readConfig({ signal: context.signal })
 		]);
-		if (closed || service !== selected) throw new Error('The agent connection was closed.');
+		if (connection.state !== 'connected' || connection.service !== selected)
+			throw new Error('The agent connection was closed.');
 		const model =
 			typeof config.model === 'object' && config.model !== null
 				? (config.model as Record<string, unknown>)
@@ -139,10 +154,12 @@ export function httpsAgentBindings(
 	const agent: Partial<AgentOperations> = {
 		connect: supportedOperation(
 			async (input, context) => {
-				if (closed) throw new Error('This instance session is closed. Open the instance again.');
+				if (isClosed())
+					throw new Error('This instance session is closed. Open the instance again.');
 				context.signal?.throwIfAborted();
 				const snapshot = await options.inspectHost();
-				if (closed) throw new Error('This instance session is closed. Open the instance again.');
+				if (isClosed())
+					throw new Error('This instance session is closed. Open the instance again.');
 				context.signal?.throwIfAborted();
 				const selected = runtime(snapshot, false);
 				if (!snapshot.clientUrl)
@@ -151,15 +168,15 @@ export function httpsAgentBindings(
 					throw new Error(
 						'Enter this agent’s native OpenCode password. Azure sign-in is a separate credential.'
 					);
-				route?.abort();
-				service = undefined;
-				attempt = undefined;
+				if (connection.state === 'connected' || connection.state === 'connecting')
+					connection.route.abort();
+				connection = { state: 'idle' };
 				access = { state: 'not-inspected', reason: 'Connecting to the selected native agent.' };
 				account = { state: 'not-inspected', reason: 'Refresh saved AI accounts after connecting.' };
 				models = { state: 'not-inspected', reason: 'Refresh the active model after connecting.' };
 				readiness = { state: 'not-inspected', reason: 'Run an explicit model test.' };
-				route = new AbortController();
-				const pendingRoute = route;
+				const pendingRoute = new AbortController();
+				connection = { state: 'connecting', route: pendingRoute };
 				const pending = createHttpsNativeAgentService({
 					endpoint: snapshot.clientUrl,
 					password: input.password,
@@ -170,8 +187,8 @@ export function httpsAgentBindings(
 					await pending.waitForReady({ timeoutMs: 10_000, signal: context.signal });
 				} catch (error) {
 					pendingRoute.abort();
-					if (route === pendingRoute) {
-						route = undefined;
+					if (connection.state === 'connecting' && connection.route === pendingRoute) {
+						connection = { state: 'idle' };
 						access = {
 							state: 'unavailable',
 							reason:
@@ -180,10 +197,14 @@ export function httpsAgentBindings(
 					}
 					throw error;
 				}
-				if (closed || route !== pendingRoute)
+				if (connection.state !== 'connecting' || connection.route !== pendingRoute)
 					throw new Error('This agent connection was closed or replaced.');
-				service = pending;
-				selectedRuntime = selected;
+				connection = {
+					state: 'connected',
+					service: pending,
+					route: pendingRoute,
+					runtime: selected
+				};
 				access = known({ endpoint: snapshot.clientUrl, username: 'opencode' });
 				return { endpoint: snapshot.clientUrl, username: 'opencode' };
 			},
@@ -207,36 +228,41 @@ export function httpsAgentBindings(
 			const result = await selected.beginProviderOAuth(input.provider, input.method, input.inputs, {
 				signal: context.signal
 			});
-			if (closed || service !== selected)
+			if (connection.state !== 'connected' || connection.service !== selected)
 				throw new Error('The agent connection closed during sign-in.');
-			attempt = {
+			connection.attempt = {
 				provider: input.provider,
 				method: input.method,
 				id: result.attemptID,
-				runtime: selectedRuntime!
+				runtime: connection.runtime
 			};
 			return result;
 		}),
 		oauthFinish: connected(async (input, context) => {
 			const selected = await bound(context);
-			const pending = attempt;
+			const current = assertCurrent(context);
+			const pending = current.attempt;
 			if (
 				!pending ||
 				pending.provider !== input.provider ||
 				pending.method !== input.method ||
-				pending.runtime !== selectedRuntime
+				pending.runtime !== current.runtime
 			)
 				throw new Error('Start sign-in for this account in the current agent connection first.');
 			// Completion may consume the native code even if its response is lost.
-			attempt = undefined;
+			current.attempt = undefined;
 			await selected.completeProviderOAuth(pending.provider, pending.id, input.code, {
 				signal: context.signal
 			});
 		}),
 		readiness: connected(async (input, context) => {
 			const selected = await bound(context);
-			const result = await selected.testReadiness({ ...input, signal: context.signal });
-			if (closed || service !== selected)
+			const result = await selected.testReadiness({
+				provider: input.provider,
+				model: input.model,
+				signal: context.signal
+			});
+			if (connection.state !== 'connected' || connection.service !== selected)
 				throw new Error('The agent connection closed during the test.');
 			readiness = known({ ready: result.ok, ...(!result.ok ? { detail: result.error } : {}) });
 			return result;
@@ -255,14 +281,10 @@ export function httpsAgentBindings(
 	};
 	return {
 		agent,
-		inspectAgent: async () => ({ access, account, models, readiness }),
+		inspectApplication: async () => ({ agent: { access, account, models, readiness } }),
 		async close() {
-			closed = true;
-			route?.abort();
-			service = undefined;
-			attempt = undefined;
-			selectedRuntime = undefined;
-			access = { state: 'unavailable', reason: 'The native agent connection is closed.' };
+			clearConnection('The native agent connection is closed.');
+			connection = { state: 'closed' };
 		}
 	};
 }

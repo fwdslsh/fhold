@@ -5,14 +5,7 @@ import { azureContainerAppsProvider } from './azure-container-apps.js';
 import { azureClient } from './azure-client.js';
 import type { HostingProcess } from './process.js';
 import type { HostingConnection, HostingProvider, InstanceRef, InstanceSession } from './types.js';
-import {
-	composeInstanceSession,
-	legacyManagementBindings,
-	type ComposedInstanceSession
-} from '../management/index.js';
-import { localInstanceManagement } from '../management/instance.js';
-import { SshInstanceManagement } from '../management/ssh.js';
-import { httpsAgentBindings } from '../management/https-agent-session.js';
+import { composeInstanceSession, type ComposedInstanceSession } from '../management/index.js';
 import { hostOperations } from '../management/host-operations.js';
 
 /** The composition root: clients depend on provider capabilities, not vendor branches. */
@@ -41,9 +34,8 @@ export function openHostingInstance(
 }
 
 /**
- * The application composition root. Host adapters remain responsible for
- * lifecycle and inspection; local/SSH command compatibility is adapted here
- * into named agent/app/data operations instead of leaking its RPC to callers.
+ * The application composition root. The selected host contributes its own
+ * bindings, so this common path never branches on a hosting-provider kind.
  */
 export function openInstanceSession(
 	connection: HostingConnection,
@@ -51,45 +43,11 @@ export function openInstanceSession(
 	options?: { setupName?: string; openUrl?: (url: string) => void }
 ): ComposedInstanceSession {
 	const hostSession = openHostingInstance(connection, value);
-	const { host, inspectHost, latest } = hostOperations(hostSession);
-	const ref = hostSession.ref;
-	const management =
-		ref.kind === 'local-docker'
-			? localInstanceManagement(ref.homeDir, {
-					...options,
-					host: {
-						inspect: async () => hostSession.inspect(),
-						operate: async (_homeDir, action) => {
-							await hostSession.operate(action, true);
-						},
-						logs: async (_homeDir, logOptions) => hostSession.logs(logOptions)
-					}
-				})
-			: ref.kind === 'ssh-docker'
-				? new SshInstanceManagement(
-						connection as Extract<HostingConnection, { kind: 'ssh-docker' }>,
-						ref.remoteHome,
-						options
-					)
-				: undefined;
-	const application =
-		ref.kind === 'azure-container-apps'
-			? httpsAgentBindings({ inspectHost: () => hostSession.inspect() })
-			: management
-				? legacyManagementBindings(
-						management,
-						management instanceof SshInstanceManagement
-							? {
-									supports: (method) => latest()?.managementMethods?.includes(method) === true,
-									passiveSnapshot: () => management.inspectPassive()
-								}
-							: {}
-					)
-				: {};
+	const { host, inspectHost } = hostOperations(hostSession);
 	return composeInstanceSession({
 		ref: hostSession.ref,
 		host,
 		inspectHost,
-		...application
+		...hostSession.applicationBindings?.(options)
 	});
 }

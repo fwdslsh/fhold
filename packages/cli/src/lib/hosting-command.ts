@@ -1,13 +1,8 @@
 import { parseArgs, type ParseArgsOptionsConfig } from 'node:util';
-import type { ComposedInstanceSession, HostingLogOptions, Operation } from '@fhold/lib';
+import { invokeOperation, type ComposedInstanceSession, type HostingLogOptions } from '@fhold/lib';
 import { runSessionProviderCommand } from './session-provider-command.js';
-
-async function invoke<I, O>(operation: Operation<I, O>, input: I, confirmed = false): Promise<O> {
-	if (operation.support !== 'supported') throw new Error(operation.reason);
-	const availability = operation.availability();
-	if (availability.state !== 'ready') throw new Error(availability.reason);
-	return operation.invoke(input, { confirmed });
-}
+import { runSessionDataCommand } from './session-data-command.js';
+import { runSessionConnectCommand } from './session-connect-command.js';
 
 /** Shared remote verbs. The adapter, not the CLI, supplies their implementation. */
 export async function runSessionCommand(
@@ -17,6 +12,9 @@ export async function runSessionCommand(
 ): Promise<void> {
 	const action = argv[0] || 'status';
 	if (action === 'provider') return runSessionProviderCommand(session, argv.slice(1), write);
+	if (action === 'backup' || action === 'restore')
+		return runSessionDataCommand(session, argv, write);
+	if (action === 'connect') return runSessionConnectCommand(session, argv.slice(1), write);
 	const options: ParseArgsOptionsConfig =
 		action === 'logs' || action === 'console'
 			? {
@@ -28,13 +26,10 @@ export async function runSessionCommand(
 				}
 			: action === 'status'
 				? {}
-				: action === 'connect'
-					? { json: { type: 'boolean' as const } }
-					: { confirm: { type: 'boolean' as const }, revision: { type: 'string' as const } };
+				: { confirm: { type: 'boolean' as const }, revision: { type: 'string' as const } };
 	const parsed = parseArgs({ args: argv.slice(1), options, allowPositionals: true, strict: true });
 	const values = parsed.values;
-	if (action !== 'connect' && parsed.positionals.length)
-		throw new Error(`Unexpected argument for ${action}.`);
+	if (parsed.positionals.length) throw new Error(`Unexpected argument for ${action}.`);
 	if (action === 'status') write(JSON.stringify(await session.inspect(), null, 2));
 	else if (action === 'logs' || action === 'console') {
 		const value: HostingLogOptions = {};
@@ -45,11 +40,7 @@ export async function runSessionCommand(
 				throw new Error(
 					'Console accepts revision, replica and container selection, not log options.'
 				);
-			if (!session.host.console)
-				throw new Error(
-					'This provider does not expose an interactive console. Use its native host terminal.'
-				);
-			await invoke(session.host.console, value);
+			await invokeOperation(session.host.console, value);
 		} else {
 			if (values.tail !== undefined) {
 				if (typeof values.tail !== 'string' || !/^\d+$/.test(values.tail))
@@ -61,28 +52,8 @@ export async function runSessionCommand(
 					throw new Error('Choose system or console logs.');
 				value.type = values.type as 'system' | 'console';
 			}
-			write(await invoke(session.host.logs, value));
+			write(await invokeOperation(session.host.logs, value));
 		}
-	} else if (action === 'connect') {
-		if (
-			parsed.positionals.length > 1 ||
-			(parsed.positionals[0] && parsed.positionals[0] !== 'opencode')
-		)
-			throw new Error(
-				'This provider exposes the native OpenCode connection. Use connect opencode.'
-			);
-		const snapshot = await session.inspect();
-		const deployment =
-			snapshot.deployment.state === 'known' ? snapshot.deployment.value : undefined;
-		if (!deployment?.clientUrl)
-			throw new Error(
-				'No reachable OpenCode ingress is configured. Check this app in the hosting provider.'
-			);
-		const result = {
-			url: deployment.clientUrl,
-			note: 'Opening this address may wake the agent. Use its existing native authentication.'
-		};
-		write(values.json ? JSON.stringify(result, null, 2) : `${result.url}\n${result.note}`);
 	} else if (['start', 'stop', 'restart'].includes(action)) {
 		if (!values.confirm)
 			throw new Error(
@@ -96,8 +67,10 @@ export async function runSessionCommand(
 			typeof values.revision === 'string' ? { revision: values.revision } : undefined;
 		const result =
 			action === 'restart'
-				? await invoke(session.host.restart, actionOptions, true)
-				: await invoke(session.host[action as 'start' | 'stop'], undefined, true);
+				? await invokeOperation(session.host.restart, actionOptions, { confirmed: true })
+				: await invokeOperation(session.host[action as 'start' | 'stop'], undefined, {
+						confirmed: true
+					});
 		write(JSON.stringify(result, null, 2));
 	} else
 		throw new Error(

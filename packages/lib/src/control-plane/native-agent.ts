@@ -5,103 +5,30 @@
  * connection, or deployment lifecycle behavior. A host adapter acquires it
  * only for an explicit connect/auth/readiness action and drops it on close.
  */
+import type {
+	AssistantReadiness,
+	HttpsNativeAgentServiceOptions,
+	NativeAgentAccess,
+	NativeAgentRequestOptions,
+	NativeAgentService,
+	ProviderAuthMethod,
+	ProviderAuthPrompt,
+	ProviderSummary
+} from '../contracts/agent.js';
+export type {
+	AssistantReadiness,
+	HttpsNativeAgentServiceOptions,
+	NativeAgentAccess,
+	NativeAgentRequestOptions,
+	NativeAgentService,
+	ProviderAuthMethod,
+	ProviderAuthPrompt,
+	ProviderOAuthAuthorization,
+	ProviderSummary
+} from '../contracts/agent.js';
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 16 * 1024 * 1024;
 const READY_TOKEN = 'FH_READY';
-
-export type NativeAgentAccess = {
-	endpoint: string;
-	authorization: () => string | Promise<string>;
-};
-
-export type NativeAgentRequestOptions = {
-	fetch?: typeof fetch;
-	timeoutMs?: number;
-	maxResponseBytes?: number;
-	/** Ends work owned by the selected access route when that session closes. */
-	signal?: AbortSignal;
-};
-
-export type ProviderAuthPrompt =
-	| {
-			type: 'text';
-			key: string;
-			message: string;
-			placeholder?: string;
-			when?: { key: string; op: 'eq' | 'neq'; value: string };
-	  }
-	| {
-			type: 'select';
-			key: string;
-			message: string;
-			options: Array<{ label: string; value: string; hint?: string }>;
-			when?: { key: string; op: 'eq' | 'neq'; value: string };
-	  };
-export type ProviderAuthMethod = {
-	index: number;
-	type: 'oauth' | 'api';
-	label: string;
-	prompts?: ProviderAuthPrompt[];
-};
-export type ProviderOAuthAuthorization = {
-	attemptID: string;
-	url: string;
-	method: 'auto' | 'code';
-	instructions: string;
-};
-export type ProviderSummary = {
-	id: string;
-	name: string;
-	source: string;
-	modelCount: number;
-	models?: Array<{ id: string; name: string }>;
-	configured?: boolean;
-	disabled?: boolean;
-	endpoint?: { url: string; name: string; models: string[]; editable: boolean };
-	defaultModel?: string;
-	connected: boolean;
-	authenticated: boolean;
-	authMethods: ProviderAuthMethod[];
-};
-export type AssistantReadiness =
-	| { ok: true; response: string; provider?: string; model?: string; warning?: string }
-	| { ok: false; error: string };
-
-export type NativeAgentService = {
-	listProviders(options?: NativeAgentRequestOptions): Promise<ProviderSummary[]>;
-	setProviderApiKey(
-		provider: string,
-		key: string,
-		options?: NativeAgentRequestOptions
-	): Promise<void>;
-	readConfig(options?: NativeAgentRequestOptions): Promise<Record<string, unknown>>;
-	beginProviderOAuth(
-		provider: string,
-		method: number,
-		inputs?: Record<string, string>,
-		options?: NativeAgentRequestOptions
-	): Promise<ProviderOAuthAuthorization>;
-	completeProviderOAuth(
-		provider: string,
-		attemptID: string,
-		code?: string,
-		options?: NativeAgentRequestOptions
-	): Promise<void>;
-	removeProviderAuth(provider: string, options?: NativeAgentRequestOptions): Promise<void>;
-	waitForReady(options?: NativeAgentRequestOptions & { intervalMs?: number }): Promise<void>;
-	testReadiness(
-		options?: NativeAgentRequestOptions & { provider?: string; model?: string }
-	): Promise<AssistantReadiness>;
-};
-
-export type HttpsNativeAgentServiceOptions = {
-	endpoint: string;
-	/** Session-scoped native OpenCode password. It is never persisted or logged. */
-	password: string;
-	fetch?: typeof fetch;
-	timeoutMs?: number;
-	signal?: AbortSignal;
-};
 
 function record(value: unknown): Record<string, unknown> | undefined {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -359,6 +286,90 @@ export function createNativeAgentService(
 		}
 		return [...summaries.values()].sort((a, b) => a.name.localeCompare(b.name));
 	}
+	function throwIfSessionAborted(options: NativeAgentRequestOptions = {}): void {
+		options.signal?.throwIfAborted();
+		defaults.signal?.throwIfAborted();
+	}
+	async function waitForReady(
+		options: NativeAgentRequestOptions & { intervalMs?: number } = {}
+	): Promise<void> {
+		const deadline = Date.now() + (options.timeoutMs ?? defaults.timeoutMs ?? 60_000);
+		let error = 'Assistant is not reachable';
+		do {
+			throwIfSessionAborted(options);
+			try {
+				await request('/info', {}, { ...options, timeoutMs: 2_000 });
+				return;
+			} catch (failure) {
+				throwIfSessionAborted(options);
+				error = failure instanceof Error ? failure.message : String(failure);
+			}
+			throwIfSessionAborted(options);
+			await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 500));
+		} while (Date.now() < deadline);
+		throw new Error(`Assistant did not become ready: ${error}`);
+	}
+	async function testReadiness(
+		options: NativeAgentRequestOptions & { provider?: string; model?: string } = {}
+	): Promise<AssistantReadiness> {
+		try {
+			await waitForReady({
+				...options,
+				timeoutMs: Math.min(options.timeoutMs ?? 10_000, 10_000),
+				intervalMs: 100
+			});
+			if (options.model && !options.provider)
+				throw new Error('A readiness model requires a provider.');
+			let provider = options.provider ? providerId(options.provider) : '';
+			let model: string | undefined;
+			const deadline =
+				Date.now() + Math.min(5_000, options.timeoutMs ?? defaults.timeoutMs ?? 5_000);
+			do {
+				throwIfSessionAborted(options);
+				const providers = await listProviders(options);
+				if (!options.provider)
+					provider = String(
+						record(record(await request('/model/default', {}, options))?.data)?.providerID ?? ''
+					);
+				const summary = providers.find((item) => item.id === provider);
+				const selected =
+					options.model ??
+					summary?.models?.find((entry) => entry.id === summary.defaultModel)?.id ??
+					summary?.models?.[0]?.id;
+				if (selected && summary?.models?.some((item) => item.id === selected)) {
+					model = selected;
+					break;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			} while (Date.now() < deadline);
+			if (!model)
+				throw new Error(
+					'The selected provider has no available model that supports text conversations and agent tools.'
+				);
+			const value = record(
+				record(
+					await request(
+						'/experimental/generate',
+						{
+							method: 'POST',
+							body: JSON.stringify({
+								prompt: `Reply with exactly ${READY_TOKEN}.`,
+								model: { providerID: provider, id: model }
+							})
+						},
+						{ ...options, timeoutMs: options.timeoutMs ?? 120_000 }
+					)
+				)?.data
+			);
+			const response = typeof value?.text === 'string' ? value.text.trim() : '';
+			return response.includes(READY_TOKEN)
+				? { ok: true, response, provider, model }
+				: { ok: false, error: 'The provider responded, but the readiness token was missing' };
+		} catch (error) {
+			throwIfSessionAborted(options);
+			return { ok: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
 	return {
 		listProviders,
 		async setProviderApiKey(provider, key, options = {}) {
@@ -451,80 +462,8 @@ export function createNativeAgentService(
 						options
 					);
 		},
-		async waitForReady(options = {}) {
-			const deadline = Date.now() + (options.timeoutMs ?? defaults.timeoutMs ?? 60_000);
-			let error = 'Assistant is not reachable';
-			do {
-				(options.signal ?? defaults.signal)?.throwIfAborted();
-				try {
-					await request('/info', {}, { ...options, timeoutMs: 2_000 });
-					return;
-				} catch (failure) {
-					error = failure instanceof Error ? failure.message : String(failure);
-				}
-				(options.signal ?? defaults.signal)?.throwIfAborted();
-				await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 500));
-			} while (Date.now() < deadline);
-			throw new Error(`Assistant did not become ready: ${error}`);
-		},
-		async testReadiness(options = {}) {
-			try {
-				await this.waitForReady({
-					...options,
-					timeoutMs: Math.min(options.timeoutMs ?? 10_000, 10_000),
-					intervalMs: 100
-				});
-				if (options.model && !options.provider)
-					throw new Error('A readiness model requires a provider.');
-				let provider = options.provider ? providerId(options.provider) : '';
-				let model: string | undefined;
-				const deadline =
-					Date.now() + Math.min(5_000, options.timeoutMs ?? defaults.timeoutMs ?? 5_000);
-				do {
-					(options.signal ?? defaults.signal)?.throwIfAborted();
-					const providers = await listProviders(options);
-					if (!options.provider)
-						provider = String(
-							record(record(await request('/model/default', {}, options))?.data)?.providerID ?? ''
-						);
-					const summary = providers.find((item) => item.id === provider);
-					const selected =
-						options.model ??
-						summary?.models?.find((entry) => entry.id === summary.defaultModel)?.id ??
-						summary?.models?.[0]?.id;
-					if (selected && summary?.models?.some((item) => item.id === selected)) {
-						model = selected;
-						break;
-					}
-					await new Promise((resolve) => setTimeout(resolve, 100));
-				} while (Date.now() < deadline);
-				if (!model)
-					throw new Error(
-						'The selected provider has no available model that supports text conversations and agent tools.'
-					);
-				const value = record(
-					record(
-						await request(
-							'/experimental/generate',
-							{
-								method: 'POST',
-								body: JSON.stringify({
-									prompt: `Reply with exactly ${READY_TOKEN}.`,
-									model: { providerID: provider, id: model }
-								})
-							},
-							{ ...options, timeoutMs: options.timeoutMs ?? 120_000 }
-						)
-					)?.data
-				);
-				const response = typeof value?.text === 'string' ? value.text.trim() : '';
-				return response.includes(READY_TOKEN)
-					? { ok: true, response, provider, model }
-					: { ok: false, error: 'The provider responded, but the readiness token was missing' };
-			} catch (error) {
-				return { ok: false, error: error instanceof Error ? error.message : String(error) };
-			}
-		}
+		waitForReady,
+		testReadiness
 	};
 }
 

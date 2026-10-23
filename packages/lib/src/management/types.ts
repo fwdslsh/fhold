@@ -15,18 +15,31 @@ import type {
 	ProviderEndpointInput,
 	ProviderSettings
 } from '../control-plane/provider-settings.js';
-import type { AssistantReadiness, ProviderOAuthAuthorization } from './agent-access.js';
+import type {
+	AssistantReadiness,
+	ProviderOAuthAuthorization
+} from '../control-plane/native-agent.js';
 import type {
 	BackupRequest,
 	CodexRecallRequest,
 	DirectoryListing,
 	PortalTokenRequest,
 	PortalUserMappingRequest,
-	RecoveryRequest,
+	RecoveryCredentialRequest,
+	RecoverySaveRequest,
 	RemoteSetupResult,
 	RemoteSetupRequest,
 	RestoreRequest
 } from './contracts.js';
+type LegacyBackupRequest = BackupRequest & { confirmed?: boolean };
+type LegacyRestoreRequest = RestoreRequest & { confirmed?: boolean };
+type LegacyCodexRecallRequest = CodexRecallRequest & { confirmed?: boolean };
+type LegacyRemoteSetupRequest = RemoteSetupRequest & { restartConfirmed?: boolean };
+type LegacyRecoveryRequest =
+	| { action: 'status' }
+	| { action: 'inspect' | 'init' | 'restore'; confirmed?: boolean }
+	| ({ action: 'save' } & RecoverySaveRequest)
+	| ({ action: 'credential' } & RecoveryCredentialRequest);
 export type { DirectoryListing } from './contracts.js';
 export type ManagedSnapshot = {
 	target?: Extract<InstanceRef, { kind: 'ssh-docker' }>;
@@ -104,8 +117,8 @@ export type ManagementMethod = (typeof MANAGEMENT_METHODS)[number];
  */
 export type ManagementRequestMap = {
 	directory: { input: string | undefined; result: DirectoryListing; extra: [] };
-	codexRecall: { input: CodexRecallRequest; result: CodexRecallReview; extra: [] };
-	remote: { input: RemoteSetupRequest; result: RemoteSetupResult; extra: [] };
+	codexRecall: { input: LegacyCodexRecallRequest; result: CodexRecallReview; extra: [] };
+	remote: { input: LegacyRemoteSetupRequest; result: RemoteSetupResult; extra: [] };
 	snapshot: { input: undefined; result: ManagedSnapshot; extra: [] };
 	install: { input: StackConfig; result: ManagedSnapshot; extra: [automaticPorts?: boolean] };
 	saveConfig: {
@@ -148,6 +161,7 @@ export type ManagementRequestMap = {
 	credential: {
 		input:
 			| { action: 'create'; username: string; policy: string }
+			| { action: 'policy'; username: string; policy: string; previousPolicy: string }
 			| { action: 'rotate' | 'remove'; username: string };
 		result: ManagedSnapshot;
 		extra: [];
@@ -155,16 +169,20 @@ export type ManagementRequestMap = {
 	credentialKey: { input: string; result: { username: string; key: string }; extra: [] };
 	mapPortalUser: { input: PortalUserMappingRequest; result: ManagedSnapshot; extra: [] };
 	portalToken: { input: PortalTokenRequest; result: ManagedSnapshot; extra: [] };
-	backup: { input: BackupRequest; result: BackupManifest | InstanceBackupManifest; extra: [] };
+	backup: {
+		input: LegacyBackupRequest;
+		result: BackupManifest | InstanceBackupManifest;
+		extra: [];
+	};
 	recovery: {
-		input: RecoveryRequest;
+		input: LegacyRecoveryRequest;
 		result:
 			| Awaited<ReturnType<typeof recoveryStatus>>
 			| Awaited<ReturnType<typeof runRecoveryOperation>>;
 		extra: [];
 	};
-	restoreData: { input: RestoreRequest; result: RestorePlan; extra: [] };
-	restoreInstance: { input: RestoreRequest; result: InstanceRestorePlan; extra: [] };
+	restoreData: { input: LegacyRestoreRequest; result: RestorePlan; extra: [] };
+	restoreInstance: { input: LegacyRestoreRequest; result: InstanceRestorePlan; extra: [] };
 	update: { input: { confirmed: boolean; pull?: boolean }; result: ManagedSnapshot; extra: [] };
 	transferCreate: { input: undefined; result: string; extra: [] };
 	transferRelease: { input: string; result: void; extra: [] };

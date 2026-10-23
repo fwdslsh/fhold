@@ -1,14 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
-import type { ComposedInstanceSession, Operation } from '@fhold/lib';
-
-async function invoke<I, O>(operation: Operation<I, O>, input: I): Promise<O> {
-	if (operation.support !== 'supported') throw new Error(operation.reason);
-	const available = operation.availability();
-	if (available.state !== 'ready') throw new Error(available.reason);
-	return operation.invoke(input, {});
-}
+import { invokeOperation as invoke, type ComposedInstanceSession } from '@fhold/lib';
 function privateInput(path: string): string {
 	const value = readFileSync(path === '-' ? 0 : path, 'utf8').replace(/[\r\n]+$/, '');
 	if (!value || /[\r\n]/.test(value))

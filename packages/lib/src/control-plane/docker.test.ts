@@ -116,7 +116,7 @@ if(args[0]==='inspect') console.log(args[2].includes('.Config.Image')
 		{ mode: 0o700 }
 	);
 	process.env.FH_DOCKER_BIN = binary;
-	const management = localInstanceManagement(homeDir, { host: localDockerManagementHost });
+	const management = localInstanceManagement(homeDir, { host: localDockerManagementHost(homeDir) });
 	try {
 		const snapshot = await management.call('snapshot');
 		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_VERSION);

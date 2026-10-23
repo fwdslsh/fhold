@@ -8,8 +8,10 @@ import {
 	connectionEndpoint,
 	checkHostingConnection,
 	repairSshCli,
-	type ComposedInstanceSession,
-	type Operation
+	invokeOperation as invoke,
+	parseOperationInput as parseInput,
+	parseRequestContext as confirmationContext,
+	type ComposedInstanceSession
 } from '@fhold/lib';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
@@ -77,12 +79,6 @@ async function discardSession() {
 	await old?.api.close();
 }
 
-async function invoke<I, O>(operation: Operation<I, O>, input: I, confirmed = false): Promise<O> {
-	if (operation.support !== 'supported') throw new Error(operation.reason);
-	const availability = operation.availability();
-	if (availability.state !== 'ready') throw new Error(availability.reason);
-	return operation.invoke(input, { confirmed });
-}
 function selectedConnection(id: string) {
 	const target = instances.welcome().selectedInstance;
 	return target?.kind === 'hosted' && target.ref.connectionId === id;
@@ -108,6 +104,8 @@ function handleAdmin(
 
 function requireSwitchable(): void {
 	instances.assertIdle();
+	if (activeSession?.api.busy())
+		throw new Error('Finish or cancel native remote setup before switching instances.');
 }
 
 if (!process.env.FH_SKELETON_DIR && !process.env.FH_REPO_ROOT) {
@@ -128,8 +126,8 @@ export async function adminSnapshot(): Promise<AdminSnapshot> {
 	return session().inspect();
 }
 export async function runAdminAction(action: StackAction): Promise<AdminSnapshot> {
-	if (action === 'restart') await invoke(session().host.restart, undefined, true);
-	else await invoke(session().host[action], undefined, true);
+	if (action === 'restart') await invoke(session().host.restart, undefined, { confirmed: true });
+	else await invoke(session().host[action], undefined, { confirmed: true });
 	return adminSnapshot();
 }
 
@@ -239,126 +237,156 @@ export function registerAdminIpc(): void {
 		runAdminAction(confirmedAdminAction(value))
 	);
 	handleAdmin(ADMIN_CHANNELS.logs, (_event, value) =>
-		invoke(session().host.logs, { tail: 250, ...(value as object) } as never)
+		invoke(session().host.logs, { tail: 250, ...parseInput('host.logs', value ?? {}) })
 	);
 	handleAdmin(ADMIN_CHANNELS.directory, (_event, value) => {
 		const operation = session().docker?.directory;
 		if (!operation) throw new Error('This instance does not expose an instance directory.');
-		return invoke(operation, value as never);
+		return invoke(operation, parseInput('docker.directory', value ?? {}));
 	});
 	handleAdmin(ADMIN_CHANNELS.providers, () => invoke(session().agent.providers, undefined));
 	handleAdmin(ADMIN_CHANNELS.providerKey, (_event, value) =>
-		invoke(session().agent.setKey, value as never)
+		invoke(session().agent.setKey, parseInput('agent.setKey', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerEndpoint, (_event, value) =>
-		invoke(session().agent.saveEndpoint, value as never)
+		invoke(session().agent.saveEndpoint, parseInput('agent.saveEndpoint', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerModels, (_event, value) =>
-		invoke(session().agent.discoverModels, value as never)
+		invoke(session().agent.discoverModels, parseInput('agent.discoverModels', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerUse, (_event, value) =>
-		invoke(session().agent.selectModel, value as never)
+		invoke(session().agent.selectModel, parseInput('agent.selectModel', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerRemove, (_event, value) =>
-		invoke(session().agent.removeProvider, value as never)
+		invoke(session().agent.removeProvider, parseInput('agent.removeProvider', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerOAuthStart, (_event, value) =>
-		invoke(session().agent.oauthStart, value as never)
+		invoke(session().agent.oauthStart, parseInput('agent.oauthStart', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.providerOAuthFinish, (_event, value) =>
-		invoke(session().agent.oauthFinish, value as never)
+		invoke(session().agent.oauthFinish, parseInput('agent.oauthFinish', value))
 	);
 	handleAdmin(ADMIN_CHANNELS.readiness, (_event, value) =>
-		invoke(session().agent.readiness, (value ?? {}) as never)
+		invoke(session().agent.readiness, parseInput('agent.readiness', value ?? {}))
 	);
 	handleAdmin(ADMIN_CHANNELS.connectAgent, (_event, value) =>
-		invoke(session().agent.connect, (value ?? {}) as never)
+		invoke(session().agent.connect, parseInput('agent.connect', value ?? {}))
 	);
 	handleAdmin(ADMIN_CHANNELS.assistantPassword, () =>
 		invoke(session().agent.assistantPassword, undefined)
 	);
 	handleAdmin(ADMIN_CHANNELS.remote, (_event, value) =>
-		invoke(session().agent.remote, value as never)
+		invoke(session().agent.remote, parseInput('agent.remote', value), confirmationContext(value))
 	);
 	handleAdmin(ADMIN_CHANNELS.codexRecall, (_event, value) =>
-		invoke(session().agent.codexRecall, value as never)
+		invoke(
+			session().agent.codexRecall,
+			parseInput('agent.codexRecall', value),
+			confirmationContext(value)
+		)
 	);
 	handleAdmin(ADMIN_CHANNELS.credential, async (_event, value) => {
 		const active = session();
-		const input = value as {
-			action?: string;
-			username?: string;
-			policy?: string;
-			previousPolicy?: string;
-		};
-		if (!input.username) throw new Error('Choose a credential name.');
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Choose a credential action.');
+		const input = value as Record<string, unknown>;
 		if (input.action === 'create')
-			await invoke(active.apps.credentials.create, {
-				username: input.username,
-				policy: input.policy
-			} as never);
+			await invoke(active.apps.credentials.create, parseInput('apps.credentials.create', value));
 		else if (input.action === 'rotate')
-			await invoke(active.apps.credentials.rotate, { username: input.username });
+			await invoke(active.apps.credentials.rotate, parseInput('apps.credentials.rotate', value));
 		else if (input.action === 'remove')
-			await invoke(active.apps.credentials.remove, { username: input.username });
+			await invoke(active.apps.credentials.remove, parseInput('apps.credentials.remove', value));
 		else if (input.action === 'policy')
-			await invoke(active.apps.credentials.updatePolicy, {
-				username: input.username,
-				policy: input.policy,
-				previousPolicy: input.previousPolicy
-			} as never);
+			await invoke(
+				active.apps.credentials.updatePolicy,
+				parseInput('apps.credentials.updatePolicy', value)
+			);
 		else throw new Error('Choose a credential action.');
 		return active.inspect();
 	});
 	handleAdmin(ADMIN_CHANNELS.credentialKey, (_event, value) =>
-		invoke(session().apps.credentials.revealKey, { username: String(value) })
+		invoke(
+			session().apps.credentials.revealKey,
+			parseInput('apps.credentials.revealKey', { username: value })
+		)
 	);
 	handleAdmin(ADMIN_CHANNELS.mapPortalUser, async (_event, value) => {
 		const active = session();
-		await invoke(active.apps.portal.mapUser, value as never);
+		await invoke(active.apps.portal.mapUser, parseInput('apps.portal.mapUser', value));
 		return active.inspect();
 	});
 	handleAdmin(ADMIN_CHANNELS.portalToken, async (_event, value) => {
 		const active = session();
-		await invoke(active.apps.portal.saveToken, value as never);
+		await invoke(active.apps.portal.saveToken, parseInput('apps.portal.saveToken', value));
 		return active.inspect();
 	});
 	handleAdmin(ADMIN_CHANNELS.backup, (_event, value) =>
-		invoke(session().data.backup, value as never)
+		invoke(session().data.backup, parseInput('data.backup', value), confirmationContext(value))
 	);
 	handleAdmin(ADMIN_CHANNELS.restoreData, (_event, value) =>
-		invoke(session().data.restoreData, value as never)
+		invoke(
+			session().data.restoreData,
+			parseInput('data.restoreData', value),
+			confirmationContext(value)
+		)
 	);
 	handleAdmin(ADMIN_CHANNELS.restoreInstance, (_event, value) =>
-		invoke(session().data.restoreInstance, value as never)
+		invoke(
+			session().data.restoreInstance,
+			parseInput('data.restoreInstance', value),
+			confirmationContext(value)
+		)
 	);
 	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value) => {
-		// Bind the selected session before awaiting the mutation. Settings writes
-		// return their legacy domain result internally; Admin always receives the
-		// normalized snapshot it renders.
 		const active = session();
-		const input = value as { action?: string };
-		const result = await invoke(active.data.recovery, input as never);
-		return input.action === 'save' || input.action === 'credential' ? active.inspect() : result;
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new Error('Choose a recovery action.');
+		const action = (value as Record<string, unknown>).action;
+		const context = confirmationContext(value);
+		switch (action) {
+			case 'status':
+				return invoke(active.data.recovery.status, undefined);
+			case 'inspect':
+				return invoke(active.data.recovery.inspect, undefined, context);
+			case 'init':
+				return invoke(active.data.recovery.initialize, undefined, context);
+			case 'restore':
+				return invoke(active.data.recovery.restore, undefined, context);
+			case 'save':
+				await invoke(active.data.recovery.save, parseInput('data.recovery.save', value));
+				return active.inspect();
+			case 'credential':
+				await invoke(
+					active.data.recovery.setCredential,
+					parseInput('data.recovery.setCredential', value)
+				);
+				return active.inspect();
+			default:
+				throw new Error('Choose a recovery action.');
+		}
 	});
 	handleAdmin(ADMIN_CHANNELS.update, (_event, value) => {
 		const operation = session().docker?.update;
 		if (!operation) throw new Error('This instance does not support image updates.');
-		return invoke(operation, value as never, true).then(() => adminSnapshot());
+		return invoke(operation, parseInput('docker.update', value ?? {}), { confirmed: true }).then(
+			() => adminSnapshot()
+		);
 	});
 	ipcMain.handle(ADMIN_CHANNELS.install, (event, config: unknown, automaticPorts: unknown) => {
 		requireAdminSender(event);
 		return instances.run(async () => {
 			const operation = session().docker?.install;
 			if (!operation) throw new Error('This instance does not support local installation.');
-			await invoke(operation, { config, automaticPorts: automaticPorts !== false } as never, true);
+			await invoke(operation, parseInput('docker.install', { config, automaticPorts }), {
+				confirmed: true
+			});
 			return adminSnapshot();
 		});
 	});
 	handleAdmin(ADMIN_CHANNELS.saveConfig, async (_event, value) => {
 		const operation = session().docker?.saveConfig;
 		if (!operation) throw new Error('This instance does not expose deployment configuration.');
-		await invoke(operation, value as never, true);
+		await invoke(operation, parseInput('docker.saveConfig', value), { confirmed: true });
 		return adminSnapshot();
 	});
 	app.on('before-quit', (event) => {
@@ -520,9 +548,10 @@ export function registerAdminIpc(): void {
 	});
 
 	handleAdmin(ADMIN_CHANNELS.confirmRestart, async (event, action: unknown) => {
-		const snapshot = await adminSnapshot();
 		const operation =
-			typeof action === 'string' ? snapshot.operations[`host.${action}`] : undefined;
+			action === 'start' || action === 'stop' || action === 'restart'
+				? session().host[action]
+				: undefined;
 		const effect = operation?.support === 'supported' ? operation.effect : undefined;
 		const options = {
 			...interruptionPrompt(action, effect),
@@ -531,8 +560,10 @@ export function registerAdminIpc(): void {
 			cancelId: 0,
 			noLink: true
 		};
-		if (action === 'instance-export' || action === 'instance-import')
+		if (action === 'instance-export' || action === 'instance-import') {
+			const snapshot = await adminSnapshot();
 			options.detail += `\n\nSelected instance folder: ${snapshot.docker?.homeDir || 'Not managed through this connection'}`;
+		}
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		const result = owner
 			? await dialog.showMessageBox(owner, options)

@@ -9,14 +9,14 @@ import {
 	type ProviderAuthPrompt,
 	type ProviderOAuthAuthorization,
 	type ProviderSummary
-} from '../management/agent-access.js';
-import {
-	saveNativePreferences,
-	type NativeSettingsWriteResult
-} from '../management/agent-models.js';
+} from './native-agent.js';
 import { readStackConfig } from './stack-config.js';
 import { stateSecretFile, writeFileAtomic } from './foundation.js';
-import { readNativePreferences } from './provider-files.js';
+import {
+	readNativePreferences,
+	saveNativePreferences,
+	type NativeSettingsWriteResult
+} from './provider-files.js';
 
 const FRESH_GUARDIAN_MODEL = '"model": "opencode/big-pickle"';
 

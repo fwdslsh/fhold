@@ -206,7 +206,15 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				'data.backup': { support: 'supported', availability: { state: 'ready' } },
 				'data.restoreData': { support: 'supported', availability: { state: 'ready' } },
 				'data.restoreInstance': { support: 'supported', availability: { state: 'ready' } },
-				'data.recovery': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.status': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.inspect': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.initialize': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.restore': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.save': { support: 'supported', availability: { state: 'ready' } },
+				'data.recovery.setCredential': {
+					support: 'supported',
+					availability: { state: 'ready' }
+				},
 				'docker.update': { support: 'supported', availability: { state: 'ready' } }
 			},
 			pendingChanges: known({ pending: false }),

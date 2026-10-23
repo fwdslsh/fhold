@@ -8,6 +8,7 @@ import {
 	updatePortalTokenFields
 } from './connections.js';
 import { loadProviders, renderReadiness, resetProviderState } from './providers.js';
+import { known } from './model.js';
 import { renderPhase, renderServices } from './runtime.js';
 import { renderInstallationReadiness, renderInstancePicker } from './instances.js';
 import { renderRemoteStatus } from './remote.js';
@@ -29,7 +30,6 @@ import {
 } from './ui.js';
 
 let statusReadInFlight = false;
-const known = (observation) => (observation?.state === 'known' ? observation.value : undefined);
 const lifecycle = (snapshot) => known(snapshot?.lifecycle) || 'externally-managed';
 const instanceKey = (snapshot) => JSON.stringify(snapshot?.identity?.ref || null);
 

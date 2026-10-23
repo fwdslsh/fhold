@@ -10,10 +10,19 @@ import type { RestorePlan } from '../control-plane/restore.js';
 import type { CodexRecallReview } from '../control-plane/codex-recall.js';
 import type { RemoteProgress } from '../control-plane/remote.js';
 import type {
-	recoverySnapshot,
-	recoveryStatus,
-	runRecoveryOperation
-} from '../control-plane/recovery.js';
+	RecoveryCredentialRequest,
+	RecoveryOperationResult,
+	RecoverySaveRequest,
+	RecoverySnapshot,
+	RecoveryStatus
+} from '../contracts/recovery.js';
+export type {
+	RecoveryCredentialRequest,
+	RecoveryOperationResult,
+	RecoverySaveRequest,
+	RecoverySnapshot,
+	RecoveryStatus
+} from '../contracts/recovery.js';
 import type {
 	ProviderEndpointInput,
 	ProviderSettings
@@ -22,7 +31,7 @@ import type {
 	AssistantReadiness,
 	ProviderOAuthAuthorization,
 	ProviderSummary
-} from './agent-access.js';
+} from '../contracts/agent.js';
 import type {
 	HostingAction,
 	HostingActionOptions,
@@ -30,8 +39,10 @@ import type {
 	HostingLogOptions,
 	HostingResult,
 	HostingSnapshot,
-	InstanceRef
-} from '../hosting/types.js';
+	InstanceRef,
+	DirectoryListing
+} from '../contracts/hosting.js';
+export type { DirectoryListing } from '../contracts/hosting.js';
 
 /** A fact observed without treating an unavailable optional source as absence. */
 export type Observation<T> =
@@ -144,7 +155,7 @@ export type AppConnections = {
 };
 export type DataObservations = {
 	/** Saved recovery intent, never connection-string material. */
-	recovery: Observation<ReturnType<typeof recoverySnapshot>>;
+	recovery: Observation<RecoverySnapshot>;
 };
 
 /**
@@ -184,7 +195,11 @@ export type LifecycleOutcome =
 
 /** Stage-one slots are intentionally narrow; later services fill them one at a time. */
 export type AgentOperations = {
-	connect: Operation<{ password?: string }, { endpoint: string; username?: string }>;
+	/** `sessionBound` means the returned endpoint depends on this open session. */
+	connect: Operation<
+		{ password?: string },
+		{ endpoint: string; username?: string; sessionBound?: true }
+	>;
 	providers: Operation<void, ProviderSettings>;
 	setKey: Operation<{ provider: string; key: string }, void>;
 	saveEndpoint: Operation<ProviderEndpointInput, ProviderSettings>;
@@ -211,13 +226,12 @@ export type RemoteSetupRequest = {
 	tool: 'claude' | 'codex';
 	trusted?: boolean;
 	sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
-	restartConfirmed?: boolean;
 	input?: string;
 };
 export type RemoteSetupResult = RemoteProgress;
 export type CodexRecallRequest =
 	| { action: 'review' }
-	| { action: 'approve' | 'disable'; digest: string; confirmed?: boolean };
+	| { action: 'approve' | 'disable'; digest: string };
 export type CodexRecallResult = CodexRecallReview;
 
 export type CredentialCreateRequest = { username: string; policy: GuardianPolicy };
@@ -254,7 +268,6 @@ export type AppOperations = {
 export type BackupRequest = {
 	destination: string;
 	full?: boolean;
-	confirmed?: boolean;
 	includeProviderAuth?: boolean;
 	includeUserEnv?: boolean;
 	includePortalMaps?: boolean;
@@ -264,26 +277,24 @@ export type RestoreRequest = {
 	sourceHome: string;
 	apply?: boolean;
 	previewDigest?: string;
-	confirmed?: boolean;
 	acknowledgeUnrestored?: boolean;
 	includeProviderAuth?: boolean;
 	includeUserEnv?: boolean;
 	includePortalMaps?: boolean;
 	includeOAuth?: boolean;
 };
-export type RecoveryRequest =
-	| { action: 'status' }
-	| { action: 'inspect' | 'init' | 'restore'; confirmed?: boolean }
-	| { action: 'save'; baselineDigest: string; settings: unknown; selection: unknown }
-	| { action: 'credential'; connectionString: string };
 export type DataOperations = {
 	backup: Operation<BackupRequest, BackupManifest | InstanceBackupManifest>;
 	restoreData: Operation<RestoreRequest, RestorePlan>;
 	restoreInstance: Operation<RestoreRequest, InstanceRestorePlan>;
-	recovery: Operation<
-		RecoveryRequest,
-		Awaited<ReturnType<typeof recoveryStatus>> | Awaited<ReturnType<typeof runRecoveryOperation>>
-	>;
+	recovery: {
+		status: Operation<void, RecoveryStatus>;
+		inspect: Operation<void, RecoveryOperationResult>;
+		initialize: Operation<void, RecoveryOperationResult>;
+		restore: Operation<void, RecoveryOperationResult>;
+		save: Operation<RecoverySaveRequest, void>;
+		setCredential: Operation<RecoveryCredentialRequest, void>;
+	};
 };
 
 export type DockerOperations = {
@@ -295,15 +306,9 @@ export type DockerOperations = {
 
 /** Host-owned Docker functions supplied by a composition/transport boundary. */
 export type LocalManagementHostPort = {
-	inspect(homeDir: string): Promise<HostingSnapshot>;
-	operate(homeDir: string, action: HostingAction): Promise<void>;
-	logs(homeDir: string, options?: HostingLogOptions): Promise<string>;
-};
-
-export type DirectoryListing = {
-	path: string;
-	parent: string;
-	directories: Array<{ name: string; path: string }>;
+	inspect(): Promise<HostingSnapshot>;
+	operate(action: HostingAction): Promise<void>;
+	logs(options?: HostingLogOptions): Promise<string>;
 };
 
 export type InstanceOperations = {
@@ -314,14 +319,34 @@ export type InstanceOperations = {
 	docker?: DockerOperations;
 };
 
-export interface ComposedInstanceSession {
+/** One passive, target-bound read of optional application state. */
+export type ApplicationObservations = {
+	agent: Partial<AgentObservations>;
+	apps: AppObservations;
+	data: DataObservations;
+	lifecycle: Observation<InstanceLifecycle>;
+	docker?: DockerInstanceSubview;
+};
+
+/** Stable composition port contributed by the selected hosting adapter. */
+export type InstanceSessionBindings = {
+	ref: InstanceRef;
+	host: HostOperations;
+	inspectHost(): Promise<HostingSnapshot>;
+	agent?: Partial<AgentOperations>;
+	apps?: AppOperations;
+	data?: DataOperations;
+	inspectApplication?: () => Promise<Partial<ApplicationObservations>>;
+	docker?: DockerOperations;
+	busy?: () => boolean;
+	close?: () => Promise<void>;
+};
+
+export interface ComposedInstanceSession extends InstanceOperations {
 	readonly ref: InstanceRef;
-	readonly host: HostOperations;
-	readonly agent: AgentOperations;
-	readonly apps: AppOperations;
-	readonly data: DataOperations;
-	readonly docker?: DockerOperations;
 	inspect(): Promise<InstanceSnapshot>;
+	/** True only while a selected session owns an interactive native setup flow. */
+	busy(): boolean;
 	/** Releases only forwarding, temporary auth, and transfer resources. */
 	close(): Promise<void>;
 }
@@ -339,6 +364,18 @@ export function operationDescription<Input, Output>(
 	};
 }
 
+/** Invoke a named operation consistently at every CLI, IPC and UI boundary. */
+export async function invokeOperation<Input, Output>(
+	operation: Operation<Input, Output>,
+	input: Input,
+	context: RequestContext = {}
+): Promise<Output> {
+	if (operation.support !== 'supported') throw new Error(operation.reason);
+	const availability = operation.availability();
+	if (availability.state !== 'ready') throw new Error(availability.reason);
+	return operation.invoke(input, context);
+}
+
 export function unsupportedOperation<Input, Output>(reason: string): Operation<Input, Output> {
 	return { support: 'unsupported', reason };
 }
@@ -353,10 +390,4 @@ export function supportedOperation<Input, Output>(
 	input?: { requiresPassword?: boolean }
 ): Operation<Input, Output> {
 	return { support: 'supported', availability, invoke, ...(input ? { input } : {}) };
-}
-
-export function hostActionName(
-	action: HostingAction
-): keyof Pick<HostOperations, 'start' | 'stop' | 'restart'> {
-	return action;
 }
