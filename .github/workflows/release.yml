@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - id: version
         name: Validate the stamped release
         env:
@@ -197,7 +197,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun run --cwd packages/cli ${{ matrix.script }}
       - name: Smoke the fresh native CLI artifact
@@ -236,7 +236,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun run --cwd packages/electron ${{ matrix.script }}
       - name: Smoke the fresh native Admin package
@@ -260,7 +260,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun run --cwd packages/claude-desktop pack
       - uses: actions/upload-artifact@v7.0.2
@@ -283,7 +283,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - uses: actions/download-artifact@v8.0.2
         with:
           pattern: fhold-*

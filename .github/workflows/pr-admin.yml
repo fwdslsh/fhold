@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - name: Build the PR's Admin
         run: bun run --cwd packages/electron build:linux-x64 --config.extraMetadata.fholdPreview=true

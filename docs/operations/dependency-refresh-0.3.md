@@ -129,3 +129,53 @@ and unchanged YAML/argparse rehoisting. Runtime source/resolution changes still
 require full publication; unknown formats and unexplained changed records retain
 full gates. Regression tests cover shared upgrades, wrong hoists, workspaces,
 scoped packages, optional/peer edges, cycles and changed integrity.
+
+## Runtime dependency refresh after 0.3.261002-beta
+
+Rechecked official npm metadata, the native marketplace tags, Docker Hub base
+image tags, GitHub Action/tool releases and Node/Go/Bun/Supercronic indexes on
+**October 22–23, 2026**. This branch updates container pins and the single root
+lockfile; it does not stamp or publish a release or change any installed instance.
+
+| Component | Previous | Selected |
+| --- | --- | --- |
+| AKM CLI | 0.10.261010-beta | 0.10.261012-beta (`next`) |
+| AKM OpenCode 2 plugin (Assistant and fhold plugin) | 0.10.261009-beta | 0.10.261011-beta (`next`) |
+| AKM Claude/Codex marketplace | `c8d8d965…` (0.10.261009-beta) | `4f27fc82…` (`v0.10.261011-beta`) |
+| Claude Code | 2.1.306 | 2.1.309 (`latest`) |
+| npm (Assistant Node stage) | 12.2.0 | 12.2.1 |
+| Bun, base images, workflows, `bun-types` | 1.4.3 | 1.4.4 |
+
+The [AKM 0.10.261011/261012 CLI changes](https://github.com/itlackey/akm/blob/v0.10.261012-beta/CHANGELOG.md)
+improve distill lesson quality, fix process-group signal handling and extraction
+re-proposals, and rename date frontmatter keys (`observed_at` becomes `observed`;
+old names are still read and stashes are not rewritten). fhold does not reference
+those keys. The native lock/state paths used by the recovery catalog are unchanged
+from 0.10.261009-beta. The selected plugin requires exactly AKM CLI
+0.10.261012-beta. Its marketplace tag resolves to commit
+`4f27fc82d02e4dd5901d725bc9fd23e762264c1a`, archive SHA-256
+`c762ca0b4545b364c47b39f518f505c366bc72d9091c1b59215b7a3e9197c123`
+(reproduced with `git archive` plus `gzip -n`, and confirmed against the previous
+pin's known checksum). Compared with the previous baked commit it changes only
+version metadata. Both native manifests report 0.10.261011-beta; hook code and
+extraction paths are unchanged.
+
+npm 12.2.1 bundles `brace-expansion` 5.0.12 and `undici` 6.29.0, fixing the three
+approved runtime findings. The Trivy exception file is removed (see
+[reviewed runtime advisories](release.md#reviewed-runtime-advisories)).
+`bun update --recursive --no-cache` also refreshes `body-parser` 2.4.0,
+`on-finished` 2.4.2 and `@electron-internal/extract-zip` 1.0.6, and dedupes
+`@effect/platform-node`'s shared package onto 4.0.1, matching its Effect 4.0.1 peer.
+The raw audit now reports only the reviewed node-forge advisory; the reviewed
+sprintf-js exception is unchanged.
+
+Holds retained: OpenCode stays on **2.0.32** (2.1.3 is `latest`) pending the
+documented 2.1 history-import continuation metadata review, with Effect at the
+SDK's exact **4.0.1** (4.0.6 available). Electron stays on maintained 44.9.3
+(45.0.0 needs its own major qualification). electron-builder stays on `v26` 26.18.0.
+AKM's plugin still declares nested OpenCode 2.0.26 / Effect rc.112 peers, so native
+recall in all three harnesses remains a required image gate. Codex 0.163.0,
+Playwright 1.64.1, Node 24.22.1 LTS, Go 1.27.3, Supercronic 0.2.51, Ubuntu 24.04,
+Azure/MCP/Slack/Discord SDKs, TypeScript 7.0.2, Biome 2.6.2, overrides, all pinned
+Actions, Trivy 0.76.1, cosign 3.1.4 and the docs renderer 0.11.16/template 0.5.0
+are current on their selected channels.
