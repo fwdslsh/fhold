@@ -6,12 +6,12 @@
 		"@azure/storage-blob": "12.34.0",
 		"@azure/identity": "4.14.0",
 		"@openai/codex": "0.163.0",
-		"@anthropic-ai/claude-code": "2.1.306",
-		"akm-opencode-v2": "0.10.261009-beta",
+		"@anthropic-ai/claude-code": "2.1.309",
+		"akm-opencode-v2": "0.10.261011-beta",
 		"@opencode/cli": "2.0.32",
 		"@opencode/client": "2.0.32",
 		"@opencode/plugin": "2.0.32",
-		"akm-cli": "0.10.261010-beta",
+		"akm-cli": "0.10.261012-beta",
 		"playwright": "1.64.1"
 	},
 	"overrides": {

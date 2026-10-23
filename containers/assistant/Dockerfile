@@ -1,5 +1,5 @@
 FROM node:24.22.1-bookworm-slim AS node-runtime
-ARG NPM_VERSION=12.2.0
+ARG NPM_VERSION=12.2.1
 # Use npm's supported self-upgrade at build time, without altering its bundle.
 # This upgrade fixes several bundled advisories; remaining findings still block CI.
 RUN npm install --global "npm@${NPM_VERSION}" \
@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
 
-FROM oven/bun:1.4.3 AS tools
+FROM oven/bun:1.4.4 AS tools
 ARG TARGETARCH
 WORKDIR /repo
 COPY package.json bun.lock ./
@@ -63,17 +63,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:1c8afd88ee41aefacfbfd84dd7d23e591b49b6408355108652a0da2e774a25d3 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/c8d8d965f5afe86637f649cfb821674d0ac1cabf /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:c762ca0b4545b364c47b39f518f505c366bc72d9091c1b59215b7a3e9197c123 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/4f27fc82d02e4dd5901d725bc9fd23e762264c1a /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-c8d8d965f5afe86637f649cfb821674d0ac1cabf/claude \
+    && plugin_root=akm-plugins-4f27fc82d02e4dd5901d725bc9fd23e762264c1a/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-c8d8d965f5afe86637f649cfb821674d0ac1cabf/.agents/plugins/marketplace.json \
-      akm-plugins-c8d8d965f5afe86637f649cfb821674d0ac1cabf/.claude-plugin/marketplace.json \
-      akm-plugins-c8d8d965f5afe86637f649cfb821674d0ac1cabf/LICENSE
+      akm-plugins-4f27fc82d02e4dd5901d725bc9fd23e762264c1a/.agents/plugins/marketplace.json \
+      akm-plugins-4f27fc82d02e4dd5901d725bc9fd23e762264c1a/.claude-plugin/marketplace.json \
+      akm-plugins-4f27fc82d02e4dd5901d725bc9fd23e762264c1a/LICENSE
 COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
 RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node

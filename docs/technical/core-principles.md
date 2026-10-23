@@ -436,7 +436,7 @@ and preview digest, refuses conflicts/path escapes, preserves source/target and
 requires explicit sensitive-data opt-in. Per-file atomic writes are not
 transaction-wide rollback. Private plans/receipts make partial failure honest.
 Native history recovery uses offline non-root workers, WAL-inclusive consistent
-snapshots, explicit workspace mappings, stripped old authority, collision checks,
+snapshots, explicit workspace mappings, collision checks,
 existing-target preservation and private retry journals outside knowledge.
 Unfinished tool calls block by default. Explicit reviewed archival may convert
 them to native terminal interrupted errors without replaying them; raw exports

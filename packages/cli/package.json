@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.3.261002-beta",
+  "version": "0.3.261003-beta",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,7 @@
   "devDependencies": {
     "@fhold/lib": "workspace:*",
     "@types/node": "^26.6.5",
-    "bun-types": "^1.4.3",
+    "bun-types": "^1.4.4",
     "citty": "^0.2.2",
     "tar": "^7.5.22",
     "typescript": "^7.0.2"

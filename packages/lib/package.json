@@ -1,6 +1,6 @@
 {
   "name": "@fhold/lib",
-  "version": "0.3.261002-beta",
+  "version": "0.3.261003-beta",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,7 @@
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
-    "bun-types": "^1.4.3",
+    "bun-types": "^1.4.4",
     "typescript": "^7.0.2"
   }
 }

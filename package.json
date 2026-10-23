@@ -1,9 +1,9 @@
 {
   "name": "fhold",
-  "version": "0.3.261002-beta",
+  "version": "0.3.261003-beta",
   "private": true,
   "license": "MIT",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "trustedDependencies": [
     "@anthropic-ai/claude-code",
     "@opencode/cli",

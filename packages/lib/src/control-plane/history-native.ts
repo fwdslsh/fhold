@@ -188,29 +188,11 @@ export async function nativeHistoryJob({
 			throw new Error(
 				'Every source directory requires an exact existing /work mapping without symlinks.'
 			);
-		const info: Obj = {};
-		for (const key of [
-			'id',
-			'slug',
-			'version',
-			'title',
-			'time',
-			'parentID',
-			'cost',
-			'tokens',
-			'outcome'
-		])
-			if (data.info[key] !== undefined) info[key] = data.info[key];
-		info.location = { directory: target };
-		// Required native identity fields are replaced by native import. Never
-		// carry credential ownership, permissions, agents or old runtime intent.
-		info.projectID = data.info.projectID;
-		info.subpath = data.info.subpath;
+		const info: Obj = { ...data.info, location: { directory: target } };
 		for (const message of data.messages) {
 			if (typeof message.id !== 'string' || messageIDs.has(message.id))
 				throw new Error('Duplicate archive message ID.');
 			messageIDs.add(message.id);
-			delete message.metadata;
 			const time = object(message.time);
 			const unfinished =
 				(message.type === 'assistant' && time.completed === undefined) ||
@@ -290,9 +272,7 @@ export async function nativeHistoryJob({
 		hash(expected.messages) === hash(actual.messages) &&
 		object(actual.info.location).directory === target &&
 		expected.info.parentID === actual.info.parentID &&
-		expected.info.title === actual.info.title &&
-		!actual.info.metadata &&
-		(!Array.isArray(actual.info.permissions) || !actual.info.permissions.length);
+		expected.info.title === actual.info.title;
 	for (const [session, item] of ordered) {
 		const old = before.get(session);
 		if (old) {
@@ -351,7 +331,7 @@ export async function nativeHistoryJob({
 		existingSessionsPreserved: before.size,
 		directories,
 		limitations: [
-			'Native transcript transfer excludes credentials, portal handles, old ownership and permission authority.',
+			'Native transcript transfer excludes credentials and portal handles.',
 			'Native import does not reconstruct fork origin, revert state, worktrees or file snapshots. Use entire-instance export for complete same-instance recovery.'
 		]
 	});

@@ -570,8 +570,8 @@ separately. Recovery is not complete merely because portable files copied.
 `fhold history --help` exposes offline native export/import. Select an explicit
 trusted source image and runtime path, keep source/target stopped, map workspaces
 and preserve private archives outside knowledge. Recovery uses consistent
-WAL-inclusive snapshots, native preflight, collision checks, content verification,
-stripped old authority and retry journals while preserving existing target sessions.
+WAL-inclusive snapshots, native preflight, collision checks, content verification
+and retry journals while preserving existing target sessions.
 
 V2 transfer preserves transcripts, IDs, timestamps and parent/child relationships
 through native APIs. Upstream import does not recreate fork-origin/revert state,
