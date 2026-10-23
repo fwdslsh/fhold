@@ -32,6 +32,16 @@ async function fixture() {
 	return { root, home };
 }
 
+test('update preserves operator Compose customizations instead of treating recommendations as a veto', async () => {
+	const { home } = await fixture();
+	const overlay = join(home, 'config/stack/custom.compose.yml');
+	const custom = 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n';
+	writeFileSync(overlay, custom);
+	const result = await updateHome({ homeDir: home, start: false });
+	expect(result.activated).toBe(false);
+	expect(readFileSync(overlay, 'utf8')).toBe(custom);
+});
+
 test('upgrades seed missing native policies, preserve operator edits and never rewrite account settings', async () => {
 	const { home } = await fixture();
 	const policies = {

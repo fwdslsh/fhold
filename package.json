@@ -1,6 +1,6 @@
 {
   "name": "fhold",
-  "version": "0.3.261004-beta",
+  "version": "0.3.261005-beta",
   "private": true,
   "license": "MIT",
   "packageManager": "bun@1.4.4",

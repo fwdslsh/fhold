@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.261005-beta — remove the Compose policy veto
+
+Tooling-only Linux Admin and CLI release. Start, restart, update and offline
+recovery no longer run the opinionated Compose policy audit as a mandatory gate.
+Operators control their own Docker configurations. Shipped defaults and release
+tests stay unchanged; `fhold doctor` reports deviations as advisory warnings,
+without making an otherwise healthy diagnostic result fail.
+
+Fix the diagnostic's handling of older Compose files: absent default-off AKM
+cache flags are valid, and inactive recovery settings are not compared. Regression
+tests cover older installed templates, operator overlays, restart/update and
+advisory doctor results. No local configuration workaround or container upgrade
+is required. SSH management needs the updated CLI on the Docker host as well.
+
+Native Compose errors, instance targeting, lifecycle locks, image compatibility,
+and native recovery identity/integrity/ownership protections remain. Assistant,
+Guardian, Portal and the Claude Desktop extension stay at `0.3.261003-beta`;
+existing instances are not upgraded by installing the tools. Refresh the compatible
+Docker login Action to 4.7.0; container publication remains outside this release.
+
 ## 0.3.261004-beta — unified hosting and agent management
 
 Tooling-only Linux Admin and CLI release (#55). Assistant, Guardian, Portal and

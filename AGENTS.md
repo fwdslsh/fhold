@@ -106,6 +106,11 @@ Do not log credential values or include them in artifacts, commits or test repor
 Assistant receives neither Docker socket nor ingress credentials. Keep non-root
 containers, no extra capabilities, safe argument-array subprocesses and the
 Guardian authentication/moderation/ownership/path containment protections.
+These are shipped defaults and release-test expectations, not a policy imposed
+on an operator's Docker host. Compose policy comparisons belong in optional
+`fhold doctor` diagnostics, never start/restart/update or offline-recovery gates.
+Keep native Compose parsing, instance targeting, lifecycle locks and actual
+restore integrity/ownership checks; do not reintroduce a policy bypass flag.
 
 ## Development and verification
 

@@ -346,6 +346,16 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 
 ## Security
 
+The following container configuration rules describe shipped defaults and
+release-test expectations. A user controlling the Docker host owns their Compose
+customizations; host tooling is not a security boundary against that user.
+`fhold doctor` may report differences as advisory warnings, but the policy audit
+does not authorize or veto start, restart, update or offline recovery. Native
+Compose parsing, instance targeting, lifecycle locks, image compatibility and
+the recovery engine's identity/integrity/ownership checks remain operational
+requirements. No bypass flag or automatic rewrite of operator overrides is needed.
+Guardian's own authentication and request protections remain unchanged.
+
 - No service runs as root or receives additional Linux capabilities.
 - Assistant never receives Docker, host-admin, Guardian or portal authority.
 - Native Assistant API is authenticated and loopback-published unless explicit

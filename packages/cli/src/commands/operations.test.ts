@@ -19,6 +19,7 @@ import {
 	createFholdState,
 	createBackup,
 	defaultStackConfig,
+	markInstalled,
 	writeStackConfig,
 	restartStatus,
 	releaseStackLock
@@ -60,6 +61,24 @@ function fixture(): string {
 }
 
 describe('operational command wiring', () => {
+	it('reports customized Compose as advisory without failing an otherwise healthy doctor result', async () => {
+		const root = fixture();
+		const home = await install(root);
+		markInstalled(home);
+		writeFileSync(join(home, 'knowledge/secrets/auth.json'), '{"fixture":{"type":"api","key":"synthetic-test-key"}}');
+		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n');
+		const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
+		if (!resolved.ok) throw new Error(resolved.stderr);
+		const binary = join(root, 'docker');
+		writeFileSync(binary, `#!${process.execPath}\nconst args = process.argv.slice(2);\nif (args.includes('config')) console.log(${JSON.stringify(JSON.stringify(resolved.config))});\n`, { mode: 0o700 });
+		process.env.FH_DOCKER_BIN = binary;
+		const diagnosis = await diagnoseStack();
+		expect(diagnosis.ok).toBe(true);
+		expect(diagnosis.checks.filter((check) => !check.ok)).toEqual([{
+			name: 'managed Compose recommendations', ok: false, advisory: true,
+			detail: 'service assistant has unsupported environment key OPERATOR_SETTING'
+		}]);
+	});
 	it('enables Guardian and updates managed files without a running Docker daemon', async () => {
 		const root = fixture();
 		const home = await install(root);
