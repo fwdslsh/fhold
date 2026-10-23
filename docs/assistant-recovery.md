@@ -15,7 +15,7 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 | Move reviewed content into a fresh installation | CLI/Admin portable backup and restore | Knowledge, workspace and allowlisted settings; sensitive content is opt-in and tasks need review. |
 | Preserve or relocate an entire stopped instance | CLI/Admin full-instance export/import (`--full`) | Entire home, including native history, sign-ins, keys, active tasks and same-instance identity; external sources need separate protection. |
 | Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
-| Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history with explicit authority handling, not an entire runtime. |
+| Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history, not an entire runtime. |
 
 Keep these contracts/formats separate. Portable imports deliberately do not
 replay runtime credentials or checkpoint authority; recovery must preserve that
