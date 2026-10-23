@@ -35,6 +35,12 @@ describe('hosting and agent management boundaries', () => {
 				expect(relative(dependency), relative(file)).not.toMatch(/^(?:hosting|management)\//);
 	});
 
+	it('keeps management runtime code independent from hosting adapters', () => {
+		for (const file of files.filter((path) => relative(path).startsWith('management/')))
+			for (const dependency of graph.get(file) ?? [])
+				expect(relative(dependency), relative(file)).not.toMatch(/^hosting\//);
+	});
+
 	it('has no executable dependency cycles across the library implementation graph', () => {
 		const active = new Set<string>();
 		const complete = new Set<string>();

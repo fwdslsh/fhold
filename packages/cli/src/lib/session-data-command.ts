@@ -56,7 +56,6 @@ export async function runSessionDataCommand(
 		includePortalMaps: values['include-portal-maps'] === true,
 		includeOAuth: values['include-oauth'] === true
 	};
-	await session.inspect();
 	if (action === 'backup') {
 		if (typeof values.to !== 'string' || !values.to)
 			throw new Error('Choose a local export directory with --to.');

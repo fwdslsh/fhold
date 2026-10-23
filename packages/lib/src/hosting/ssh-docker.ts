@@ -1,7 +1,7 @@
 import { parseInstanceRef } from './preferences.js';
 import { SshInstanceManagement } from '../management/ssh.js';
 import { rpcManagementBindings } from '../management/instance-session.js';
-import { runHostingProcess, type HostingProcess } from './process.js';
+import { runHostingProcess, type HostingProcess } from '../control-plane/process.js';
 import { checkSshConnection } from './ssh-check.js';
 import {
 	HOSTING_WIRE_VERSION,
@@ -9,7 +9,7 @@ import {
 	sshArgs,
 	type MachineRequest,
 	type MachineResponse
-} from './ssh-native.js';
+} from '../control-plane/ssh-native.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -127,6 +127,42 @@ export function sshDockerProvider(
 				throw new Error('Choose an instance on this SSH connection.');
 			let manager: SshInstanceManagement | undefined;
 			let managementMethods: ReadonlySet<string> | undefined;
+			let managementFeatures: ReadonlySet<string> | undefined;
+			let capabilityRequest: Promise<void> | undefined;
+			async function discoverManagement(): Promise<void> {
+				if (!capabilityRequest)
+					capabilityRequest = (async () => {
+						const hello = (await request({ action: 'hello' })) as
+							| { management?: unknown; features?: unknown }
+							| undefined;
+						managementMethods = new Set(
+							Array.isArray(hello?.management)
+								? hello.management.filter((method): method is string => typeof method === 'string')
+								: []
+						);
+						managementFeatures = new Set(
+							Array.isArray(hello?.features)
+								? hello.features.filter((feature): feature is string => typeof feature === 'string')
+								: []
+						);
+					})();
+				try {
+					await capabilityRequest;
+				} catch (error) {
+					// Allow a later explicit operation to retry discovery after a transient
+					// transport failure. Unknown remains usable until then.
+					capabilityRequest = undefined;
+					throw error;
+				}
+			}
+			async function initializeManagement(): Promise<void> {
+				try {
+					await discoverManagement();
+				} catch {
+					// Feature discovery is optional. Keep the wire method usable and let
+					// its real RPC report an error rather than making hello a preflight.
+				}
+			}
 			async function inspect(): Promise<HostingSnapshot> {
 				const value = await request({
 					action: 'inspect',
@@ -139,15 +175,9 @@ export function sshDockerProvider(
 				let managed = false;
 				const warnings = [...snapshot.warnings];
 				try {
-					const hello = (await request({ action: 'hello' })) as
-						| { management?: string[] }
-						| undefined;
+					await discoverManagement();
 					managed =
-						hello?.management?.includes('saveConfig') === true &&
-						hello.management.includes('backup');
-					managementMethods = new Set(
-						hello?.management?.filter((method) => typeof method === 'string') ?? []
-					);
+						managementMethods?.has('saveConfig') === true && managementMethods.has('backup');
 				} catch {
 					warnings.push(
 						'Status was read, but advanced management support could not be checked. Check this host connection before changing settings.'
@@ -192,10 +222,15 @@ export function sshDockerProvider(
 				applicationBindings(options) {
 					manager ??= new SshInstanceManagement(connection, ref.remoteHome, options);
 					return rpcManagementBindings(manager, {
-						supports: (method) => managementMethods?.has(method) === true,
+						initialize: initializeManagement,
+						supports: (method) =>
+							managementMethods === undefined ? undefined : managementMethods.has(method),
 						passiveSnapshot: () => manager!.inspectPassive(),
 						acquireSnapshot: () => manager!.acquireForward(),
-						credentialPolicy: managementMethods?.has('credentialPolicy') === true
+						credentialPolicy: () =>
+							managementFeatures === undefined
+								? undefined
+								: managementFeatures.has('credentialPolicy')
 					});
 				},
 				async operate(action, confirmed, options) {

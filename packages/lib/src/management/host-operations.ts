@@ -16,12 +16,9 @@ import {
 export function hostOperations(session: InstanceSession): {
 	host: HostOperations;
 	inspectHost(): Promise<HostingSnapshot>;
-	latest(): HostingSnapshot | undefined;
 } {
-	let latest: HostingSnapshot | undefined;
 	async function inspectHost() {
-		latest = await session.inspect();
-		return latest;
+		return session.inspect();
 	}
 	function lifecycle(
 		action: HostingAction
@@ -29,18 +26,9 @@ export function hostOperations(session: InstanceSession): {
 		return {
 			support: 'supported',
 			effect: session.actionEffects[action],
-			availability() {
-				// No optional diagnostic/preflight is required before invoking a
-				// supported action. invoke always resolves current target eligibility.
-				if (!latest) return { state: 'ready' };
-				const capability = latest?.capabilities[action];
-				return capability?.supported
-					? { state: 'ready' }
-					: {
-							state: 'unavailable',
-							reason: capability?.reason ?? 'Inspect the selected deployment before changing it.'
-						};
-			},
+			// A snapshot's capability is presentation data. Never let a stale
+			// snapshot prevent invoke() from re-reading the authoritative target.
+			availability: () => ({ state: 'ready' }),
 			async invoke(input, context) {
 				context.signal?.throwIfAborted();
 				if (!context.confirmed)
@@ -52,7 +40,6 @@ export function hostOperations(session: InstanceSession): {
 						observed.capabilities[action].reason ?? 'This lifecycle operation is unavailable.'
 					);
 				const result = await session.operate(action, true, input || undefined);
-				latest = result.snapshot;
 				return result.pending
 					? { state: 'accepted', scope: 'request-accepted' }
 					: { state: 'completed', scope: 'deployment-reconciled', result };
@@ -61,7 +48,6 @@ export function hostOperations(session: InstanceSession): {
 	}
 	return {
 		inspectHost,
-		latest: () => latest,
 		host: {
 			inspect: supportedOperation(inspectHost),
 			start: lifecycle('start'),

@@ -1,4 +1,4 @@
-/** Neutral recovery DTOs: no filesystem authority or connection-string material. */
+/** Recovery DTOs, independent of the settings/checkpoint implementations. */
 export type RecoverySettings = {
 	enabled: boolean;
 	destination: string;

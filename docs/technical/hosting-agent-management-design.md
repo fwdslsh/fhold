@@ -129,7 +129,7 @@ owner as a convenience. There is no requirement for a universal filesystem API.
 ## Contracts
 
 The following examples explain the design; canonical exported shapes live in
-the leaf `contracts/` modules and `management/contracts.ts`. Keep shared DTOs
+the leaf `dto/` modules and `management/contracts.ts`. Keep shared DTOs
 independent of implementations and wire envelopes internal to transports.
 
 ### Identity and session composition
@@ -372,7 +372,7 @@ without deriving them from implementation return types, and lower control-plane
 functions do not import management. Import-graph checks
 enforce those edges rather than banning individual symbol names.
 
-Focused additions are the leaf `contracts/` DTOs, `management/contracts.ts` and
+Focused additions are the leaf `dto/` DTOs, `management/contracts.ts` and
 `management/instance-session.ts`. Native HTTP implementation belongs in
 `control-plane/native-agent.ts`; native preference editing belongs with
 `control-plane/provider-files.ts`. Existing filesystem and SSH transfer utilities

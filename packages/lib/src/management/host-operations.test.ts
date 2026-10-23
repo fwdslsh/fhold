@@ -35,6 +35,9 @@ function fixture() {
 		calls,
 		disable: () => {
 			supported = false;
+		},
+		enable: () => {
+			supported = true;
 		}
 	};
 }
@@ -48,16 +51,13 @@ test('a direct lifecycle command needs no prior optional diagnostic and preserve
 	]);
 	expect(f.host.restart.effect).toBe('restart-runtime');
 });
-test('display eligibility follows inspection and a mutation rechecks changed target authority', async () => {
+test('a stale inspected denial never blocks a later authoritative lifecycle invocation', async () => {
 	const f = fixture();
+	f.disable();
 	await f.inspectHost();
 	if (f.host.stop.support !== 'supported') throw new Error('fixture');
 	expect(f.host.stop.availability()).toEqual({ state: 'ready' });
-	f.disable();
-	await expect(f.host.stop.invoke(undefined, { confirmed: true })).rejects.toThrow('Inspect-only');
-	expect(f.calls).toEqual([]);
-	expect(f.host.stop.availability()).toMatchObject({
-		state: 'unavailable',
-		reason: 'Inspect-only deployment.'
-	});
+	f.enable();
+	await f.host.stop.invoke(undefined, { confirmed: true });
+	expect(f.calls).toEqual([{ action: 'stop', confirmed: true, options: undefined }]);
 });

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installHome } from './install.js';
 import { localInstanceManagement } from '../management/instance.js';
-import { localDockerManagementHost } from '../management/local-host-port.js';
+import { localDockerManagementHost } from './local-instance-host.js';
 import { FH_RUNTIME_VERSION } from './release.js';
 
 import {

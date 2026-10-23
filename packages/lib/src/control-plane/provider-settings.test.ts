@@ -551,6 +551,7 @@ describe('Native provider manager settings', () => {
 			}) as typeof fetch
 		});
 		expect(result.write).toMatchObject({ saved: true, effective: 'unconfirmed' });
+		expect(result.write?.detail).toContain('Synthetic connection lost');
 		expect(result.inventoryUnavailable).toBe(true);
 		expect(result.currentModel).toBeUndefined();
 		expect(readConfiguration(current.configPath).model).toBe('native-catalog/text-model');

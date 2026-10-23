@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
 import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { localInstanceManagement } from './instance.js';
-import { localDockerManagementHost } from './local-host-port.js';
+import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
 import { MANAGEMENT_METHODS, type InstanceManagement } from './types.js';
 import type { ManagementRequest, ManagementResponse } from './ssh.js';
 import { parseManagementArgs } from './wire-input.js';

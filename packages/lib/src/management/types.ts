@@ -22,6 +22,9 @@ import type {
 import type {
 	BackupRequest,
 	CodexRecallRequest,
+	CredentialCreateRequest,
+	CredentialMutationRequest,
+	CredentialPolicyRequest,
 	DirectoryListing,
 	PortalTokenRequest,
 	PortalUserMappingRequest,
@@ -160,9 +163,9 @@ export type ManagementRequestMap = {
 	assistantPassword: { input: undefined; result: { password: string }; extra: [] };
 	credential: {
 		input:
-			| { action: 'create'; username: string; policy: string }
-			| { action: 'policy'; username: string; policy: string; previousPolicy: string }
-			| { action: 'rotate' | 'remove'; username: string };
+			| ({ action: 'create' } & CredentialCreateRequest)
+			| ({ action: 'policy' } & CredentialPolicyRequest)
+			| ({ action: 'rotate' | 'remove' } & CredentialMutationRequest);
 		result: ManagedSnapshot;
 		extra: [];
 	};

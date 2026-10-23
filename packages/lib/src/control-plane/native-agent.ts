@@ -7,25 +7,63 @@
  */
 import type {
 	AssistantReadiness,
-	HttpsNativeAgentServiceOptions,
-	NativeAgentAccess,
-	NativeAgentRequestOptions,
-	NativeAgentService,
+	ProviderOAuthAuthorization,
 	ProviderAuthMethod,
 	ProviderAuthPrompt,
 	ProviderSummary
-} from '../contracts/agent.js';
+} from '../dto/agent.js';
 export type {
 	AssistantReadiness,
-	HttpsNativeAgentServiceOptions,
-	NativeAgentAccess,
-	NativeAgentRequestOptions,
-	NativeAgentService,
 	ProviderAuthMethod,
 	ProviderAuthPrompt,
 	ProviderOAuthAuthorization,
 	ProviderSummary
-} from '../contracts/agent.js';
+} from '../dto/agent.js';
+
+export type NativeAgentAccess = {
+	endpoint: string;
+	authorization: () => string | Promise<string>;
+};
+export type NativeAgentRequestOptions = {
+	fetch?: typeof fetch;
+	timeoutMs?: number;
+	maxResponseBytes?: number;
+	signal?: AbortSignal;
+};
+export type NativeAgentService = {
+	listProviders(options?: NativeAgentRequestOptions): Promise<ProviderSummary[]>;
+	setProviderApiKey(
+		provider: string,
+		key: string,
+		options?: NativeAgentRequestOptions
+	): Promise<void>;
+	readConfig(options?: NativeAgentRequestOptions): Promise<Record<string, unknown>>;
+	beginProviderOAuth(
+		provider: string,
+		method: number,
+		inputs?: Record<string, string>,
+		options?: NativeAgentRequestOptions
+	): Promise<ProviderOAuthAuthorization>;
+	completeProviderOAuth(
+		provider: string,
+		attemptID: string,
+		code?: string,
+		options?: NativeAgentRequestOptions
+	): Promise<void>;
+	removeProviderAuth(provider: string, options?: NativeAgentRequestOptions): Promise<void>;
+	waitForReady(options?: NativeAgentRequestOptions & { intervalMs?: number }): Promise<void>;
+	testReadiness(
+		options?: NativeAgentRequestOptions & { provider?: string; model?: string }
+	): Promise<AssistantReadiness>;
+};
+export type HttpsNativeAgentServiceOptions = {
+	endpoint: string;
+	password: string;
+	fetch?: typeof fetch;
+	timeoutMs?: number;
+	signal?: AbortSignal;
+};
+
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 16 * 1024 * 1024;
 const READY_TOKEN = 'FH_READY';

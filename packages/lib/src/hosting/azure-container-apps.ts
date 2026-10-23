@@ -4,7 +4,7 @@ import {
 	runHostingTerminal,
 	type HostingProcess,
 	type HostingTerminal
-} from './process.js';
+} from '../control-plane/process.js';
 import { azureClient } from './azure-client.js';
 import { httpsAgentBindings } from '../management/https-agent-session.js';
 import {

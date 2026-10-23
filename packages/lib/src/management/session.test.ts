@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { serveManagementSession } from './session.js';
 import { localInstanceManagement } from './instance.js';
-import { localDockerManagementHost } from './local-host-port.js';
+import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
 import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
 import { installHome } from '../control-plane/install.js';
 
@@ -156,7 +156,8 @@ test('malformed native input is rejected at wire ingress before a use case can i
 	let output = '';
 	await serveManagementSession(
 		Readable.from([
-			`${JSON.stringify({ id: 1, homeDir: home, method: 'providerKey', value: { provider: 'example', key: 123 } })}\n`
+			`${JSON.stringify({ id: 1, homeDir: home, method: 'providerKey', value: { provider: 'example', key: 123 } })}\n`,
+			`${JSON.stringify({ id: 2, homeDir: home, method: 'credential', value: { action: 'policy', username: 'owner', policy: 'typo', previousPolicy: 'chat' } })}\n`
 		]),
 		new Writable({
 			write(chunk, _encoding, done) {
@@ -165,10 +166,19 @@ test('malformed native input is rejected at wire ingress before a use case can i
 			}
 		})
 	);
-	expect(JSON.parse(output)).toMatchObject({
+	const results = output
+		.trim()
+		.split('\n')
+		.map((line) => JSON.parse(line));
+	expect(results[0]).toMatchObject({
 		id: 1,
 		ok: false,
 		error: expect.stringContaining('Provider key')
+	});
+	expect(results[1]).toMatchObject({
+		id: 2,
+		ok: false,
+		error: expect.stringContaining('Policy')
 	});
 	expect(existsSync(home)).toBe(false);
 });

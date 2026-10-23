@@ -19,6 +19,22 @@ test('native wire inputs use the same typed parsers as Admin and cannot supply t
 
 test('published confirmation fields are retained only in their legacy wire envelope', () => {
 	expect(
+		parseManagementArgs('credential', {
+			action: 'policy',
+			username: 'owner',
+			policy: 'read',
+			previousPolicy: 'chat'
+		})
+	).toEqual([{ action: 'policy', username: 'owner', policy: 'read', previousPolicy: 'chat' }]);
+	expect(() =>
+		parseManagementArgs('credential', {
+			action: 'policy',
+			username: 'owner',
+			policy: 'not-a-policy',
+			previousPolicy: 'chat'
+		})
+	).toThrow('Policy');
+	expect(
 		parseManagementArgs('backup', { destination: '/export', full: true, confirmed: true })
 	).toEqual([{ destination: '/export', full: true, confirmed: true }]);
 	expect(

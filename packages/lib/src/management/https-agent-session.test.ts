@@ -100,6 +100,8 @@ describe('explicit HTTPS agent session', () => {
 		expect(current.requests).toHaveLength(0);
 		const operation = current.bindings.agent!.providers!;
 		expect(operation.support === 'supported' && operation.availability().state).toBe('unavailable');
+		const connect = current.bindings.agent!.connect!;
+		expect(connect.support === 'supported' && connect.input?.acquireClients).toEqual(['opencode']);
 		await current.bindings.close!();
 	});
 

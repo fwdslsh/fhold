@@ -1,5 +1,5 @@
-import { sshArgs, SSH_RPC_COMMAND, HOSTING_WIRE_VERSION } from './ssh-native.js';
-import type { HostingProcess } from './process.js';
+import { sshArgs, SSH_RPC_COMMAND, HOSTING_WIRE_VERSION } from '../control-plane/ssh-native.js';
+import type { HostingProcess } from '../control-plane/process.js';
 import type { HostingConnection, ConnectionCheck, InstanceSummary } from './types.js';
 
 /** Diagnostics belong to this adapter, not a growing vendor switch in CLI/Admin. */

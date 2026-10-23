@@ -15,14 +15,14 @@ import type {
 	RecoverySaveRequest,
 	RecoverySnapshot,
 	RecoveryStatus
-} from '../contracts/recovery.js';
+} from '../dto/recovery.js';
 export type {
 	RecoveryCredentialRequest,
 	RecoveryOperationResult,
 	RecoverySaveRequest,
 	RecoverySnapshot,
 	RecoveryStatus
-} from '../contracts/recovery.js';
+} from '../dto/recovery.js';
 import type {
 	ProviderEndpointInput,
 	ProviderSettings
@@ -31,7 +31,7 @@ import type {
 	AssistantReadiness,
 	ProviderOAuthAuthorization,
 	ProviderSummary
-} from '../contracts/agent.js';
+} from '../dto/agent.js';
 import type {
 	HostingAction,
 	HostingActionOptions,
@@ -41,8 +41,8 @@ import type {
 	HostingSnapshot,
 	InstanceRef,
 	DirectoryListing
-} from '../contracts/hosting.js';
-export type { DirectoryListing } from '../contracts/hosting.js';
+} from '../dto/hosting.js';
+export type { DirectoryListing } from '../dto/hosting.js';
 
 /** A fact observed without treating an unavailable optional source as absence. */
 export type Observation<T> =
@@ -65,12 +65,19 @@ export type RequestContext = {
 	confirmed?: boolean;
 };
 
+export type AppClient = 'opencode' | 'mcp' | 'claude';
+export type OperationInputMetadata = {
+	requiresPassword?: boolean;
+	/** Client routes this explicit connection operation can acquire. */
+	acquireClients?: readonly AppClient[];
+};
+
 export type Operation<Input, Output> =
 	| { support: 'unsupported'; reason: string }
 	| { support: 'unknown'; reason: string }
 	| {
 			support: 'supported';
-			input?: { requiresPassword?: boolean };
+			input?: OperationInputMetadata;
 			readonly effect?: HostingActionEffect;
 			availability(): Availability;
 			invoke(input: Input, context: RequestContext): Promise<Output>;
@@ -81,7 +88,7 @@ export type OperationDescription =
 	| {
 			support: 'supported';
 			availability: Availability;
-			input?: { requiresPassword?: boolean };
+			input?: OperationInputMetadata;
 			effect?: HostingActionEffect;
 	  };
 
@@ -336,6 +343,8 @@ export type InstanceSessionBindings = {
 	agent?: Partial<AgentOperations>;
 	apps?: AppOperations;
 	data?: DataOperations;
+	/** Adapter-owned optional capability discovery; never a consumer warm-up requirement. */
+	initialize?: () => Promise<void>;
 	inspectApplication?: () => Promise<Partial<ApplicationObservations>>;
 	docker?: DockerOperations;
 	busy?: () => boolean;
@@ -387,7 +396,7 @@ export function unknownOperation<Input, Output>(reason: string): Operation<Input
 export function supportedOperation<Input, Output>(
 	invoke: (input: Input, context: RequestContext) => Promise<Output>,
 	availability: () => Availability = () => ({ state: 'ready' }),
-	input?: { requiresPassword?: boolean }
+	input?: OperationInputMetadata
 ): Operation<Input, Output> {
 	return { support: 'supported', availability, invoke, ...(input ? { input } : {}) };
 }

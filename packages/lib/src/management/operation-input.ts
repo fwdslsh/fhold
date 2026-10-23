@@ -4,7 +4,6 @@ import { normalizeSelection } from '../../../../containers/assistant/recovery/se
 import type {
 	AgentOperations,
 	AppOperations,
-	RemoteSetupRequest,
 	RequestContext,
 	DataOperations,
 	DockerOperations,
@@ -74,6 +73,14 @@ export type LegacyRecoveryOperation =
 			input: OperationInputMap['data.recovery.setCredential'];
 			context: RequestContext;
 	  };
+export type LegacyCredentialOperation =
+	| { name: 'apps.credentials.create'; input: OperationInputMap['apps.credentials.create'] }
+	| {
+			name: 'apps.credentials.updatePolicy';
+			input: OperationInputMap['apps.credentials.updatePolicy'];
+	  }
+	| { name: 'apps.credentials.rotate'; input: OperationInputMap['apps.credentials.rotate'] }
+	| { name: 'apps.credentials.remove'; input: OperationInputMap['apps.credentials.remove'] };
 
 function record(value: unknown, error: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(error);
@@ -156,287 +163,400 @@ export function parseLegacyRecoveryOperation(value: unknown): LegacyRecoveryOper
 	}
 }
 
+type OperationInputParser<N extends OperationInputName> = (value: unknown) => OperationInputMap[N];
+type OperationInputParsers = { [N in OperationInputName]: OperationInputParser<N> };
+
+function input(value: unknown, name: OperationInputName): Record<string, unknown> | undefined {
+	return value === undefined ? undefined : record(value, `Invalid ${name} request.`);
+}
+function target(value: Record<string, unknown>) {
+	const revision = optionalText(value.revision, 'Invalid revision.', 256);
+	const replica = optionalText(value.replica, 'Invalid replica.', 256);
+	const container = optionalText(value.container, 'Invalid container.', 256);
+	return {
+		...(revision === undefined ? {} : { revision }),
+		...(replica === undefined ? {} : { replica }),
+		...(container === undefined ? {} : { container })
+	};
+}
+function providerAuth(source: Record<string, unknown> | undefined) {
+	const method = source?.method;
+	if (typeof method !== 'number' || !Number.isSafeInteger(method) || method < 0 || method > 1_024)
+		throw new Error('Invalid provider authentication method.');
+	const inputs = optionalStringMap(source?.inputs, 'Invalid provider sign-in fields.');
+	return {
+		provider: text(source?.provider, 'Provider is required.', 128),
+		method,
+		...(inputs === undefined ? {} : { inputs })
+	};
+}
+function portal(source: Record<string, unknown> | undefined): 'discord' | 'slack' {
+	const result = source?.portal;
+	if (result !== 'discord' && result !== 'slack')
+		throw new Error('Portal must be discord or slack.');
+	return result;
+}
+
+/** Complete, compiler-checked parser table for every public normalized operation. */
+const parsers: OperationInputParsers = {
+	'host.logs': (value) => {
+		if (value === undefined) return undefined;
+		const source = input(value, 'host.logs')!;
+		const type = source.type;
+		if (type !== undefined && type !== 'system' && type !== 'console')
+			throw new Error('Log type must be system or console.');
+		const tail = source.tail;
+		if (
+			tail !== undefined &&
+			(typeof tail !== 'number' || !Number.isSafeInteger(tail) || tail < 0 || tail > 10_000)
+		)
+			throw new Error('Log tail must be a whole number from 0 to 10000.');
+		return {
+			...(type === undefined ? {} : { type }),
+			...(tail === undefined ? {} : { tail }),
+			...target(source)
+		};
+	},
+	'host.restart': (value) => {
+		if (value === undefined) return undefined;
+		const revision = optionalText(input(value, 'host.restart')!.revision, 'Invalid revision.', 256);
+		return revision === undefined ? {} : { revision };
+	},
+	'host.console': (value) =>
+		value === undefined ? undefined : target(input(value, 'host.console')!),
+	'agent.connect': (value) => {
+		if (value === undefined) return {};
+		const password = optionalText(
+			input(value, 'agent.connect')!.password,
+			'Invalid native agent password.'
+		);
+		return password === undefined ? {} : { password };
+	},
+	'agent.setKey': (value) => {
+		const source = input(value, 'agent.setKey');
+		return {
+			provider: text(source?.provider, 'Provider is required.', 128),
+			key: text(source?.key, 'Provider key is required.')
+		};
+	},
+	'agent.saveEndpoint': (value) => {
+		const source = input(value, 'agent.saveEndpoint');
+		const key = optionalKey(source?.key, 'Invalid provider key.');
+		return {
+			provider: text(source?.provider, 'Provider is required.', 128),
+			name: text(source?.name, 'Service name is required.', 128),
+			url: text(source?.url, 'Service URL is required.', 4_096),
+			model: text(source?.model, 'Model is required.', 512),
+			...(key === undefined ? {} : { key })
+		};
+	},
+	'agent.discoverModels': (value) => {
+		const source = input(value, 'agent.discoverModels');
+		const key = optionalKey(source?.key, 'Invalid provider key.');
+		return {
+			url: text(source?.url, 'Server URL is required.', 4_096),
+			...(key === undefined ? {} : { key })
+		};
+	},
+	'agent.selectModel': (value) => {
+		const source = input(value, 'agent.selectModel');
+		return {
+			provider: text(source?.provider, 'Provider is required.', 128),
+			model: text(source?.model, 'Model is required.', 512)
+		};
+	},
+	'agent.removeProvider': (value) => {
+		const source = input(value, 'agent.removeProvider');
+		const endpoint = optionalBoolean(source?.endpoint, 'Endpoint selection must be true or false.');
+		return {
+			provider: text(source?.provider, 'Provider is required.', 128),
+			...(endpoint === undefined ? {} : { endpoint })
+		};
+	},
+	'agent.oauthStart': (value) => providerAuth(input(value, 'agent.oauthStart')),
+	'agent.oauthFinish': (value) => {
+		const source = input(value, 'agent.oauthFinish');
+		const code = optionalText(source?.code, 'Invalid provider authorization code.', 10_000);
+		return { ...providerAuth(source), ...(code === undefined ? {} : { code }) };
+	},
+	'agent.readiness': (value) => {
+		if (value === undefined) return {};
+		const source = input(value, 'agent.readiness')!;
+		const provider = optionalText(source.provider, 'Invalid readiness provider.', 128);
+		const model = optionalText(source.model, 'Invalid readiness model.', 512);
+		if (model && !provider) throw new Error('Choose a service for this model test.');
+		return {
+			...(provider === undefined ? {} : { provider }),
+			...(model === undefined ? {} : { model })
+		};
+	},
+	'agent.remote': (value) => {
+		const source = input(value, 'agent.remote');
+		const action = source?.action;
+		const tool = source?.tool;
+		if (
+			action !== 'connection' &&
+			action !== 'enable' &&
+			action !== 'disable' &&
+			action !== 'input' &&
+			action !== 'cancel' &&
+			action !== 'progress'
+		)
+			throw new Error('Invalid native remote request.');
+		if (tool !== 'claude' && tool !== 'codex') throw new Error('Invalid native remote request.');
+		const trusted = optionalBoolean(source?.trusted, 'Remote trust must be true or false.');
+		if (source?.restartConfirmed !== undefined)
+			optionalBoolean(
+				source.restartConfirmed,
+				'Remote restart confirmation must be true or false.'
+			);
+		const sandbox = source?.sandbox;
+		if (
+			sandbox !== undefined &&
+			sandbox !== 'read-only' &&
+			sandbox !== 'workspace-write' &&
+			sandbox !== 'danger-full-access'
+		)
+			throw new Error('Invalid Codex sandbox mode.');
+		const answer = source?.input;
+		if (
+			answer !== undefined &&
+			(typeof answer !== 'string' || answer.length > 16_384 || answer.includes('\0'))
+		)
+			throw new Error('A native prompt answer must be text.');
+		return {
+			action,
+			tool,
+			...(trusted === undefined ? {} : { trusted }),
+			...(sandbox === undefined ? {} : { sandbox }),
+			...(answer === undefined ? {} : { input: answer })
+		};
+	},
+	'agent.codexRecall': (value) => {
+		const source = input(value, 'agent.codexRecall');
+		if (source?.action === 'review') return { action: 'review' };
+		if (source?.action !== 'approve' && source?.action !== 'disable')
+			throw new Error('Invalid recall request.');
+		return {
+			action: source.action,
+			digest: text(source.digest, 'Review the current hooks first.', 128)
+		};
+	},
+	'apps.credentials.create': (value) => {
+		const source = input(value, 'apps.credentials.create');
+		return {
+			username: text(source?.username, 'Credential name is required.', 128),
+			policy: policy(source?.policy)
+		};
+	},
+	'apps.credentials.updatePolicy': (value) => {
+		const source = input(value, 'apps.credentials.updatePolicy');
+		return {
+			username: text(source?.username, 'Credential name is required.', 128),
+			policy: policy(source?.policy),
+			previousPolicy: policy(source?.previousPolicy)
+		};
+	},
+	'apps.credentials.rotate': (value) => ({
+		username: text(
+			typeof value === 'string' ? value : input(value, 'apps.credentials.rotate')?.username,
+			'Credential name is required.',
+			128
+		)
+	}),
+	'apps.credentials.remove': (value) => ({
+		username: text(
+			typeof value === 'string' ? value : input(value, 'apps.credentials.remove')?.username,
+			'Credential name is required.',
+			128
+		)
+	}),
+	'apps.credentials.revealKey': (value) => ({
+		username: text(
+			typeof value === 'string' ? value : input(value, 'apps.credentials.revealKey')?.username,
+			'Credential name is required.',
+			128
+		)
+	}),
+	'apps.portal.mapUser': (value) => {
+		const source = input(value, 'apps.portal.mapUser');
+		const username = optionalText(source?.username, 'Invalid credential name.', 128);
+		return {
+			portal: portal(source),
+			userId: text(source?.userId, 'Portal user ID is required.', 128),
+			...(username === undefined ? {} : { username })
+		};
+	},
+	'apps.portal.saveToken': (value) => {
+		const source = input(value, 'apps.portal.saveToken');
+		const botToken = optionalKey(source?.botToken, 'Invalid portal token.');
+		const appToken = optionalKey(source?.appToken, 'Invalid portal token.');
+		return {
+			portal: portal(source),
+			...(botToken === undefined ? {} : { botToken }),
+			...(appToken === undefined ? {} : { appToken })
+		};
+	},
+	'data.backup': (value) => {
+		const source = input(value, 'data.backup');
+		const full = optionalBoolean(source?.full, 'Invalid full.');
+		const includeProviderAuth = optionalBoolean(
+			source?.includeProviderAuth,
+			'Invalid includeProviderAuth.'
+		);
+		const includeUserEnv = optionalBoolean(source?.includeUserEnv, 'Invalid includeUserEnv.');
+		const includePortalMaps = optionalBoolean(
+			source?.includePortalMaps,
+			'Invalid includePortalMaps.'
+		);
+		const includeOAuth = optionalBoolean(source?.includeOAuth, 'Invalid includeOAuth.');
+		return {
+			destination: text(source?.destination, 'A destination is required.', 4_096),
+			...(full === undefined ? {} : { full }),
+			...(includeProviderAuth === undefined ? {} : { includeProviderAuth }),
+			...(includeUserEnv === undefined ? {} : { includeUserEnv }),
+			...(includePortalMaps === undefined ? {} : { includePortalMaps }),
+			...(includeOAuth === undefined ? {} : { includeOAuth })
+		};
+	},
+	'data.restoreData': (value) => {
+		const source = input(value, 'data.restoreData');
+		const apply = optionalBoolean(source?.apply, 'Invalid apply.');
+		const acknowledgeUnrestored = optionalBoolean(
+			source?.acknowledgeUnrestored,
+			'Invalid acknowledgeUnrestored.'
+		);
+		const includeProviderAuth = optionalBoolean(
+			source?.includeProviderAuth,
+			'Invalid includeProviderAuth.'
+		);
+		const includeUserEnv = optionalBoolean(source?.includeUserEnv, 'Invalid includeUserEnv.');
+		const includePortalMaps = optionalBoolean(
+			source?.includePortalMaps,
+			'Invalid includePortalMaps.'
+		);
+		const includeOAuth = optionalBoolean(source?.includeOAuth, 'Invalid includeOAuth.');
+		const previewDigest = optionalText(source?.previewDigest, 'Invalid restore preview.', 128);
+		return {
+			sourceHome: text(source?.sourceHome, 'A sourceHome is required.', 4_096),
+			...(apply === undefined ? {} : { apply }),
+			...(acknowledgeUnrestored === undefined ? {} : { acknowledgeUnrestored }),
+			...(includeProviderAuth === undefined ? {} : { includeProviderAuth }),
+			...(includeUserEnv === undefined ? {} : { includeUserEnv }),
+			...(includePortalMaps === undefined ? {} : { includePortalMaps }),
+			...(includeOAuth === undefined ? {} : { includeOAuth }),
+			...(previewDigest === undefined ? {} : { previewDigest })
+		};
+	},
+	'data.restoreInstance': (value) => {
+		const source = input(value, 'data.restoreInstance');
+		const apply = optionalBoolean(source?.apply, 'Invalid apply.');
+		const previewDigest = optionalText(source?.previewDigest, 'Invalid restore preview.', 128);
+		return {
+			sourceHome: text(source?.sourceHome, 'A sourceHome is required.', 4_096),
+			...(apply === undefined ? {} : { apply }),
+			...(previewDigest === undefined ? {} : { previewDigest })
+		};
+	},
+	'data.recovery.status': (value) => {
+		if (value !== undefined) throw new Error('Invalid data.recovery.status request.');
+		return undefined;
+	},
+	'data.recovery.inspect': (value) => {
+		if (value !== undefined) throw new Error('Invalid data.recovery.inspect request.');
+		return undefined;
+	},
+	'data.recovery.initialize': (value) => {
+		if (value !== undefined) throw new Error('Invalid data.recovery.initialize request.');
+		return undefined;
+	},
+	'data.recovery.restore': (value) => {
+		if (value !== undefined) throw new Error('Invalid data.recovery.restore request.');
+		return undefined;
+	},
+	'data.recovery.save': (value) => {
+		const source = input(value, 'data.recovery.save');
+		return {
+			baselineDigest: text(source?.baselineDigest, 'Refresh recovery settings before saving.', 128),
+			settings: parseRecoverySettings(source?.settings, 'recovery'),
+			selection: normalizeSelection(source?.selection)
+		};
+	},
+	'data.recovery.setCredential': (value) => ({
+		connectionString: text(
+			input(value, 'data.recovery.setCredential')?.connectionString,
+			'Invalid recovery credential.'
+		)
+	}),
+	'docker.install': (value) => {
+		const source = input(value, 'docker.install');
+		const parsed = parseStackConfig(source?.config);
+		if (!parsed.ok) throw new Error(parsed.error);
+		const automaticPorts = optionalBoolean(
+			source?.automaticPorts,
+			'Invalid connection port selection.'
+		);
+		return { config: parsed.config, ...(automaticPorts === undefined ? {} : { automaticPorts }) };
+	},
+	'docker.saveConfig': (value) => {
+		const source = input(value, 'docker.saveConfig');
+		const config = parseStackConfig(source?.config);
+		if (!config.ok) throw new Error(config.error);
+		const baseConfig = parseStackConfig(source?.baseConfig);
+		if (!baseConfig.ok)
+			throw new Error('Refresh settings before saving; a valid baseline is required.');
+		return { config: config.config, baseConfig: baseConfig.config };
+	},
+	'docker.update': (value) => {
+		const pull = optionalBoolean(
+			input(value, 'docker.update')?.pull,
+			'Update pull selection must be true or false.'
+		);
+		return pull === undefined ? {} : { pull };
+	},
+	'docker.directory': (value) => {
+		if (value === undefined) return {};
+		const path = optionalText(
+			input(value, 'docker.directory')!.path,
+			'Invalid directory path.',
+			4_096
+		);
+		return path === undefined ? {} : { path };
+	}
+};
+
 export function parseOperationInput<N extends OperationInputName>(
 	name: N,
 	value: unknown
 ): OperationInputMap[N] {
-	const input = value === undefined ? undefined : record(value, `Invalid ${name} request.`);
-	switch (name) {
-		case 'host.logs': {
-			if (!input) return undefined as OperationInputMap[N];
-			const type = input.type;
-			if (type !== undefined && type !== 'system' && type !== 'console')
-				throw new Error('Log type must be system or console.');
-			const tail = input.tail;
-			if (
-				tail !== undefined &&
-				(typeof tail !== 'number' || !Number.isSafeInteger(tail) || tail < 0 || tail > 10_000)
-			)
-				throw new Error('Log tail must be a whole number from 0 to 10000.');
+	return parsers[name](value);
+}
+
+/** Shared retained wire/Admin credential action envelope parser. */
+export function parseLegacyCredentialOperation(value: unknown): LegacyCredentialOperation {
+	const source = record(value, 'Choose a credential action.');
+	switch (source.action) {
+		case 'create':
 			return {
-				...(type === undefined ? {} : { type }),
-				...(tail === undefined ? {} : { tail }),
-				...(optionalText(input.revision, 'Invalid revision.', 256)
-					? { revision: optionalText(input.revision, 'Invalid revision.', 256) }
-					: {}),
-				...(optionalText(input.replica, 'Invalid replica.', 256)
-					? { replica: optionalText(input.replica, 'Invalid replica.', 256) }
-					: {}),
-				...(optionalText(input.container, 'Invalid container.', 256)
-					? { container: optionalText(input.container, 'Invalid container.', 256) }
-					: {})
-			} as OperationInputMap[N];
-		}
-		case 'host.restart':
-		case 'host.console': {
-			if (!input) return undefined as OperationInputMap[N];
-			const revision = optionalText(input.revision, 'Invalid revision.', 256);
-			const replica = optionalText(input.replica, 'Invalid replica.', 256);
-			const container = optionalText(input.container, 'Invalid container.', 256);
-			return {
-				...(revision ? { revision } : {}),
-				...(replica ? { replica } : {}),
-				...(container ? { container } : {})
-			} as OperationInputMap[N];
-		}
-		case 'agent.connect': {
-			if (!input) return {} as OperationInputMap[N];
-			const password = optionalText(input.password, 'Invalid native agent password.');
-			return (password === undefined ? {} : { password }) as OperationInputMap[N];
-		}
-		case 'agent.setKey':
-			return {
-				provider: text(input?.provider, 'Provider is required.', 128),
-				key: text(input?.key, 'Provider key is required.')
-			} as OperationInputMap[N];
-		case 'agent.saveEndpoint': {
-			return {
-				provider: text(input?.provider, 'Provider is required.', 128),
-				name: text(input?.name, 'Service name is required.', 128),
-				url: text(input?.url, 'Service URL is required.', 4_096),
-				model: text(input?.model, 'Model is required.', 512),
-				...(optionalKey(input?.key, 'Invalid provider key.') === undefined
-					? {}
-					: { key: optionalKey(input?.key, 'Invalid provider key.') })
-			} as OperationInputMap[N];
-		}
-		case 'agent.discoverModels': {
-			const key = optionalKey(input?.key, 'Invalid provider key.');
-			return {
-				url: text(input?.url, 'Server URL is required.', 4_096),
-				...(key === undefined ? {} : { key })
-			} as OperationInputMap[N];
-		}
-		case 'agent.selectModel':
-			return {
-				provider: text(input?.provider, 'Provider is required.', 128),
-				model: text(input?.model, 'Model is required.', 512)
-			} as OperationInputMap[N];
-		case 'agent.removeProvider': {
-			const endpoint = optionalBoolean(
-				input?.endpoint,
-				'Endpoint selection must be true or false.'
-			);
-			return {
-				provider: text(input?.provider, 'Provider is required.', 128),
-				...(endpoint === undefined ? {} : { endpoint })
-			} as OperationInputMap[N];
-		}
-		case 'agent.oauthStart':
-		case 'agent.oauthFinish': {
-			const method = input?.method;
-			if (
-				typeof method !== 'number' ||
-				!Number.isSafeInteger(method) ||
-				method < 0 ||
-				method > 1_024
-			)
-				throw new Error('Invalid provider authentication method.');
-			const inputs = optionalStringMap(input?.inputs, 'Invalid provider sign-in fields.');
-			const base = {
-				provider: text(input?.provider, 'Provider is required.', 128),
-				method,
-				...(inputs ? { inputs } : {})
+				name: 'apps.credentials.create',
+				input: parseOperationInput('apps.credentials.create', source)
 			};
-			if (name === 'agent.oauthStart') return base as OperationInputMap[N];
-			const code = optionalText(input?.code, 'Invalid provider authorization code.', 10_000);
-			return { ...base, ...(code === undefined ? {} : { code }) } as OperationInputMap[N];
-		}
-		case 'agent.readiness': {
-			if (!input) return {} as OperationInputMap[N];
-			const provider = optionalText(input.provider, 'Invalid readiness provider.', 128);
-			const model = optionalText(input.model, 'Invalid readiness model.', 512);
-			if (model && !provider) throw new Error('Choose a service for this model test.');
+		case 'policy':
 			return {
-				...(provider ? { provider } : {}),
-				...(model ? { model } : {})
-			} as OperationInputMap[N];
-		}
-		case 'agent.remote': {
-			const action = input?.action;
-			const tool = input?.tool;
-			if (
-				typeof action !== 'string' ||
-				typeof tool !== 'string' ||
-				!['connection', 'enable', 'disable', 'input', 'cancel', 'progress'].includes(action) ||
-				!['claude', 'codex'].includes(tool)
-			)
-				throw new Error('Invalid native remote request.');
-			const trusted = optionalBoolean(input?.trusted, 'Remote trust must be true or false.');
-			// `confirmed` lives in RequestContext. Keep validating the published
-			// legacy wire property, but do not leak it into a domain request.
-			if (input?.restartConfirmed !== undefined)
-				optionalBoolean(
-					input.restartConfirmed,
-					'Remote restart confirmation must be true or false.'
-				);
-			const sandbox = input?.sandbox;
-			if (
-				sandbox !== undefined &&
-				(typeof sandbox !== 'string' ||
-					!['read-only', 'workspace-write', 'danger-full-access'].includes(sandbox))
-			)
-				throw new Error('Invalid Codex sandbox mode.');
-			// An empty line is a legitimate native CLI answer (press Enter).
-			const answer = input?.input;
-			if (
-				answer !== undefined &&
-				(typeof answer !== 'string' || answer.length > 16_384 || answer.includes('\0'))
-			)
-				throw new Error('A native prompt answer must be text.');
+				name: 'apps.credentials.updatePolicy',
+				input: parseOperationInput('apps.credentials.updatePolicy', source)
+			};
+		case 'rotate':
 			return {
-				action: action as RemoteSetupRequest['action'],
-				tool: tool as RemoteSetupRequest['tool'],
-				...(trusted === undefined ? {} : { trusted }),
-				...(sandbox === undefined ? {} : { sandbox: sandbox as RemoteSetupRequest['sandbox'] }),
-				...(answer === undefined ? {} : { input: answer })
-			} as OperationInputMap[N];
-		}
-		case 'agent.codexRecall': {
-			if (input?.action === 'review') return { action: 'review' } as OperationInputMap[N];
-			if (input?.action !== 'approve' && input?.action !== 'disable')
-				throw new Error('Invalid recall request.');
-			const digest = text(input.digest, 'Review the current hooks first.', 128);
-			return { action: input.action, digest } as OperationInputMap[N];
-		}
-		case 'apps.credentials.create':
+				name: 'apps.credentials.rotate',
+				input: parseOperationInput('apps.credentials.rotate', source)
+			};
+		case 'remove':
 			return {
-				username: text(input?.username, 'Credential name is required.', 128),
-				policy: policy(input?.policy)
-			} as OperationInputMap[N];
-		case 'apps.credentials.updatePolicy':
-			return {
-				username: text(input?.username, 'Credential name is required.', 128),
-				policy: policy(input?.policy),
-				previousPolicy: policy(input?.previousPolicy)
-			} as OperationInputMap[N];
-		case 'apps.credentials.rotate':
-		case 'apps.credentials.remove':
-		case 'apps.credentials.revealKey':
-			return {
-				username: text(
-					typeof value === 'string' ? value : input?.username,
-					'Credential name is required.',
-					128
-				)
-			} as OperationInputMap[N];
-		case 'apps.portal.mapUser': {
-			const portal = input?.portal;
-			if (portal !== 'discord' && portal !== 'slack')
-				throw new Error('Portal must be discord or slack.');
-			const username = optionalText(input?.username, 'Invalid credential name.', 128);
-			return {
-				portal,
-				userId: text(input?.userId, 'Portal user ID is required.', 128),
-				...(username === undefined ? {} : { username })
-			} as OperationInputMap[N];
-		}
-		case 'apps.portal.saveToken': {
-			const portal = input?.portal;
-			if (portal !== 'discord' && portal !== 'slack')
-				throw new Error('Portal must be discord or slack.');
-			// Blank token fields leave existing private tokens unchanged.
-			const botToken = optionalKey(input?.botToken, 'Invalid portal token.');
-			const appToken = optionalKey(input?.appToken, 'Invalid portal token.');
-			return {
-				portal,
-				...(botToken === undefined ? {} : { botToken }),
-				...(appToken === undefined ? {} : { appToken })
-			} as OperationInputMap[N];
-		}
-		case 'data.backup':
-		case 'data.restoreData':
-		case 'data.restoreInstance': {
-			const source = name === 'data.backup' ? 'destination' : 'sourceHome';
-			const base = { [source]: text(input?.[source], `A ${source} is required.`, 4_096) };
-			for (const field of [
-				'full',
-				'apply',
-				'acknowledgeUnrestored',
-				'includeProviderAuth',
-				'includeUserEnv',
-				'includePortalMaps',
-				'includeOAuth'
-			] as const) {
-				const selected = optionalBoolean(input?.[field], `Invalid ${field}.`);
-				if (selected !== undefined) Object.assign(base, { [field]: selected });
-			}
-			const previewDigest = optionalText(input?.previewDigest, 'Invalid restore preview.', 128);
-			return {
-				...base,
-				...(previewDigest === undefined ? {} : { previewDigest })
-			} as OperationInputMap[N];
-		}
-		case 'data.recovery.status':
-		case 'data.recovery.inspect':
-		case 'data.recovery.initialize':
-		case 'data.recovery.restore':
-			if (value !== undefined) throw new Error(`Invalid ${name} request.`);
-			return undefined as OperationInputMap[N];
-		case 'data.recovery.save':
-			return {
-				baselineDigest: text(
-					input?.baselineDigest,
-					'Refresh recovery settings before saving.',
-					128
-				),
-				// The saved document includes an instance ID, so the parser only needs
-				// a neutral fallback project name for complete validation.
-				settings: parseRecoverySettings(input?.settings, 'recovery'),
-				selection: normalizeSelection(input?.selection)
-			} as OperationInputMap[N];
-		case 'data.recovery.setCredential':
-			return {
-				connectionString: text(input?.connectionString, 'Invalid recovery credential.')
-			} as OperationInputMap[N];
-		case 'docker.install': {
-			const parsed = parseStackConfig(input?.config);
-			if (!parsed.ok) throw new Error(parsed.error);
-			const automaticPorts = optionalBoolean(
-				input?.automaticPorts,
-				'Invalid connection port selection.'
-			);
-			return {
-				config: parsed.config,
-				...(automaticPorts === undefined ? {} : { automaticPorts })
-			} as OperationInputMap[N];
-		}
-		case 'docker.saveConfig': {
-			const config = parseStackConfig(input?.config);
-			if (!config.ok) throw new Error(config.error);
-			const baseConfig = parseStackConfig(input?.baseConfig);
-			if (!baseConfig.ok)
-				throw new Error('Refresh settings before saving; a valid baseline is required.');
-			return { config: config.config, baseConfig: baseConfig.config } as OperationInputMap[N];
-		}
-		case 'docker.update': {
-			const pull = optionalBoolean(input?.pull, 'Update pull selection must be true or false.');
-			return (pull === undefined ? {} : { pull }) as OperationInputMap[N];
-		}
-		case 'docker.directory': {
-			if (!input) return {} as OperationInputMap[N];
-			const path = optionalText(input.path, 'Invalid directory path.', 4_096);
-			return (path === undefined ? {} : { path }) as OperationInputMap[N];
-		}
+				name: 'apps.credentials.remove',
+				input: parseOperationInput('apps.credentials.remove', source)
+			};
+		default:
+			throw new Error('Choose a credential action.');
 	}
 }

@@ -48,7 +48,7 @@ export async function runSessionConnectCommand(
 		throw new Error('Client must be opencode, mcp or claude.');
 	let snapshot = await session.inspect();
 	const existing = links(snapshot);
-	const chosen = positionals[0] ?? (existing?.mcp ? 'mcp' : 'opencode');
+	const chosen = positionals[0] ?? 'mcp';
 	const client = chosen === 'mcp' || chosen === 'claude' ? chosen : 'opencode';
 	const publicLink = existing?.[client];
 	const deployment = snapshot.deployment.state === 'known' ? snapshot.deployment.value : undefined;
@@ -58,6 +58,20 @@ export async function runSessionConnectCommand(
 	// A public URL is useful without signing into its native management API.
 	// Printing it must not wake an idle instance or acquire private credentials.
 	if (!publicUrl) {
+		const connect = session.agent.connect;
+		if (
+			connect.support === 'supported' &&
+			connect.input?.acquireClients &&
+			!connect.input.acquireClients.includes(client)
+		) {
+			const available = connect.input.acquireClients.join(', ');
+			const alternative = connect.input.acquireClients[0];
+			throw new Error(
+				alternative
+					? `This instance exposes only the ${available} connection. Use connect ${alternative}.`
+					: `This instance cannot acquire a ${client} connection.`
+			);
+		}
 		const acquired = await invokeOperation(session.agent.connect, {});
 		acquiredAccess = acquired;
 		sessionBound = acquired.sessionBound === true;

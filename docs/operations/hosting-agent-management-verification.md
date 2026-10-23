@@ -84,7 +84,7 @@ Final local checks on the source-frozen implementation:
 | Check | Result |
 | --- | --- |
 | `bun run check` | All six workspace typechecks passed. |
-| `FH_SOCKET_TESTS=1 bun run test` | 1,026 passed, zero failed; five opt-in image-backed tests skipped. |
+| `FH_SOCKET_TESTS=1 bun run test` | 1,034 passed, zero failed; five opt-in image-backed tests skipped. |
 | Admin real-Chromium provider workflow | Passed, 298 assertions against the synthetic native API. No vendor account or billed inference. |
 | `bun run lint` | Passed its configured gate; repository style warnings remain. This is not a warning-free lint claim. |
 | CLI compile and Admin bundle | Both passed. |
@@ -107,7 +107,7 @@ old top-level configuration shape. It now reads the normalized optional Docker
 subview, with an architecture regression guard. Both reviewers approved that
 follow-up, and the actual rebuilt AppImage passed the startup smoke locally.
 
-No dependency pins, runtime/image sources, backup formats or live deployments
+No dependency pins, Assistant/container sources, backup formats or live deployments
 changed. The skipped image tests and real ACA signal/storage/scale qualification
 are not claimed by this tooling refactor. Dependency freshness and artifact/image
 qualification remain the separately documented merge/release gates.
@@ -144,6 +144,33 @@ runs; the engineer's combined transport/session/recovery qualification then pass
 36 tests with 175 assertions. The compiled CLI also handled separated persistent
 session requests. No product or test-fixture workaround was added. These local
 checks do not claim live SSH authentication or ACA qualification.
+
+### Second review pass
+
+The next 11 review threads added coverage for the actual server's additive
+`credentialPolicy` advertisement and the SSH adapter consuming it. Policy updates
+and other RPC-backed commands negotiate capabilities on first invocation, without
+a preliminary status read. Old hosts without the policy feature retain unrelated
+operations. A transient capability-query failure does not become a new preflight
+roadblock; the authoritative RPC still reports its own outcome.
+
+Lifecycle invocation no longer consults a hidden last-snapshot cache. The current
+snapshot explicitly supplies disabled-state descriptions for Admin, while a direct
+command rechecks current target authority. A stale denied observation cannot block
+a now-valid command before that check. CLI connect retains its fixed MCP default
+and rejects an unsupported client route before asking for native credentials.
+
+Both normalized input parsers and native handlers are complete mapped tables;
+their individual inputs/results and missing entries are compiler-checked. Shared
+credential/recovery envelope parsers serve Admin and native stdin. Typed use cases
+do not parse those DTOs again. Regression cases cover OAuth, stopped full exports,
+strict policy values, console selectors and blank native/form inputs.
+
+Shared DTOs live in `dto/`, session ports in `management/contracts.ts`, and HTTP
+mechanics beside their native client. The shared process/SSH and local Docker-host
+primitives live below hosting and management in `control-plane/`. Obsolete internal
+path facades were removed; published CLI wire compatibility remains covered.
+The architecture graph also forbids management runtime imports of hosting adapters.
 
 ## Qualification boundaries
 

@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { defaultRecoverySettings } from '../control-plane/recovery-config.js';
-import { parseOperationInput, parseRequestContext } from './operation-input.js';
+import {
+	parseLegacyCredentialOperation,
+	parseLegacyRecoveryOperation,
+	parseOperationInput,
+	parseRequestContext
+} from './operation-input.js';
 
 test('operation ingress returns typed recovery documents and separates confirmation', () => {
 	const input = parseOperationInput('data.recovery.save', {
@@ -61,4 +66,53 @@ test('hosting log input preserves the selected system or console source', () => 
 			parseOperationInput('host.logs', { type, revision: 'revision-1', container: 'assistant' })
 		).toEqual({ type, revision: 'revision-1', container: 'assistant' });
 	expect(() => parseOperationInput('host.logs', { type: ['console'] })).toThrow('Log type');
+});
+
+test('restart input excludes console-only selectors', () => {
+	expect(
+		parseOperationInput('host.restart', {
+			revision: 'revision-1',
+			replica: 'replica-1',
+			container: 'assistant'
+		})
+	).toEqual({ revision: 'revision-1' });
+});
+
+test('shared legacy envelopes validate once before Admin or SSH dispatch', () => {
+	expect(
+		parseLegacyCredentialOperation({
+			action: 'policy',
+			username: 'owner',
+			policy: 'read',
+			previousPolicy: 'chat'
+		})
+	).toEqual({
+		name: 'apps.credentials.updatePolicy',
+		input: { username: 'owner', policy: 'read', previousPolicy: 'chat' }
+	});
+	expect(() =>
+		parseLegacyCredentialOperation({
+			action: 'policy',
+			username: 'owner',
+			policy: 'typo',
+			previousPolicy: 'chat'
+		})
+	).toThrow('Policy');
+	expect(
+		parseLegacyRecoveryOperation({
+			action: 'credential',
+			connectionString: 'UseDevelopmentStorage=true'
+		})
+	).toMatchObject({
+		name: 'data.recovery.setCredential',
+		input: { connectionString: 'UseDevelopmentStorage=true' }
+	});
+	expect(() =>
+		parseLegacyRecoveryOperation({
+			action: 'save',
+			baselineDigest: 'bad',
+			settings: { enabled: 'yes' },
+			selection: {}
+		})
+	).toThrow();
 });

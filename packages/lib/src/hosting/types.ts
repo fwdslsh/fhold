@@ -9,7 +9,7 @@ import type {
 	HostingSnapshot,
 	InstanceRef,
 	InstanceSummary
-} from '../contracts/hosting.js';
+} from '../dto/hosting.js';
 export {
 	capabilities,
 	type DirectoryListing,
@@ -22,7 +22,7 @@ export {
 	type HostingSnapshot,
 	type InstanceRef,
 	type InstanceSummary
-} from '../contracts/hosting.js';
+} from '../dto/hosting.js';
 
 export type HostingConnection =
 	| { kind: 'local-docker'; id: 'local'; label: string }

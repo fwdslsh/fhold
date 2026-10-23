@@ -256,14 +256,15 @@ async function applyConfigChange(
 	// Native watchers apply the file asynchronously. Read back normalization;
 	// no reload API or process restart is involved.
 	const deadline = Date.now() + Math.min(5_000, options.timeoutMs ?? 5_000);
+	let lastFailure: string | undefined;
 	do {
 		try {
-			if (matches(await readAssistantConfig(home, options)))
-				return { saved: true, effective: 'verified' };
+			const effective = await readAssistantConfig(home, options);
+			lastFailure = undefined;
+			if (matches(effective)) return { saved: true, effective: 'verified' };
 		} catch (error) {
 			options.signal?.throwIfAborted();
-			void error;
-			/* the native watcher may still be applying this edit */
+			lastFailure = safeFailureReason(error);
 		}
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	} while (Date.now() < deadline);
@@ -271,7 +272,8 @@ async function applyConfigChange(
 		saved: true,
 		effective: 'unconfirmed',
 		detail:
-			'Preferences were saved, but their effective settings could not be confirmed. Check the agent and higher-priority managed configuration before testing or using this model.'
+			'Preferences were saved, but their effective settings could not be confirmed. Check the agent and higher-priority managed configuration before testing or using this model.' +
+			(lastFailure ? ` Native API: ${lastFailure}` : '')
 	};
 }
 

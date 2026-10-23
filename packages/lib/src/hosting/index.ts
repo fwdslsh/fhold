@@ -24,7 +24,7 @@ export {
 	sshArgs,
 	type MachineRequest,
 	type MachineResponse
-} from './ssh-native.js';
-export { runHostingProcess } from './process.js';
+} from '../control-plane/ssh-native.js';
+export { runHostingProcess } from '../control-plane/process.js';
 export { hostingMachineRequest } from './machine.js';
 export { checkHostingConnection, repairSshCli } from './maintenance.js';

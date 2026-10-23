@@ -102,6 +102,30 @@ export function describeOperations(
 	return descriptions;
 }
 
+/** Snapshot capability is shown to clients but never used as an invocation preflight. */
+function describeSnapshotOperations(
+	tree: Record<string, unknown>,
+	host: HostingSnapshot
+): Record<string, import('./contracts.js').OperationDescription> {
+	const descriptions = describeOperations(tree);
+	for (const action of ['start', 'stop', 'restart'] as const) {
+		const key = `host.${action}`;
+		const description = descriptions[key];
+		if (!description || description.support !== 'supported') continue;
+		const capability = host.capabilities[action];
+		descriptions[key] = {
+			...description,
+			availability: capability.supported
+				? { state: 'ready' }
+				: {
+						state: 'unavailable',
+						reason: capability.reason ?? 'This lifecycle operation is unavailable for this target.'
+					}
+		};
+	}
+	return descriptions;
+}
+
 function hostDeployment(snapshot: HostingSnapshot): DeploymentObservation {
 	return {
 		...(snapshot.platformState ? { state: snapshot.platformState } : {}),
@@ -193,6 +217,12 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 			let application: Partial<ApplicationObservations> = {};
 			let applicationFailure: unknown;
 			try {
+				await bindings.initialize?.();
+			} catch {
+				// Capability discovery is advisory; do not turn a readable target
+				// into an unavailable application snapshot for an old remote CLI.
+			}
+			try {
 				application = (await bindings.inspectApplication?.()) ?? {};
 			} catch (error) {
 				applicationFailure = error;
@@ -220,13 +250,16 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 				services: host.serviceError
 					? { state: 'unavailable', reason: host.serviceError }
 					: { state: 'known', value: host.services, observedAt },
-				operations: describeOperations({
-					host: bindings.host,
-					agent,
-					apps,
-					data,
-					...(bindings.docker ? { docker: bindings.docker } : {})
-				}),
+				operations: describeSnapshotOperations(
+					{
+						host: bindings.host,
+						agent,
+						apps,
+						data,
+						...(bindings.docker ? { docker: bindings.docker } : {})
+					},
+					host
+				),
 				pendingChanges: optionalObservation(
 					host.pendingRestart
 						? {
@@ -255,14 +288,15 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 export function rpcManagementBindings(
 	manager: InstanceManagement,
 	options: {
-		supports?: (method: ManagementMethod) => boolean;
+		initialize?: () => Promise<void>;
+		supports?: (method: ManagementMethod) => boolean | undefined;
 		passiveSnapshot?: () => Promise<ManagedSnapshot>;
 		acquireSnapshot?: () => Promise<ManagedSnapshot>;
-		credentialPolicy?: boolean;
+		credentialPolicy?: () => boolean | undefined;
 	} = {}
 ): Pick<
 	InstanceSessionBindings,
-	'agent' | 'apps' | 'data' | 'docker' | 'inspectApplication' | 'busy' | 'close'
+	'agent' | 'apps' | 'data' | 'docker' | 'initialize' | 'inspectApplication' | 'busy' | 'close'
 > {
 	const { supports } = options;
 	let acquired: AppConnections | undefined;
@@ -295,55 +329,75 @@ export function rpcManagementBindings(
 		if (value.connectionError) result.error = value.connectionError;
 		return result;
 	}
+	async function initialize(): Promise<void> {
+		await options.initialize?.();
+	}
 	function requireMethod(method: ManagementMethod) {
-		if (supports && !supports(method))
+		if (supports?.(method) === false)
 			throw new Error(
 				`The remote CLI does not advertise ${method}. Other supported host operations remain available; update its CLI to enable this operation.`
 			);
 	}
 	function operation<I, O>(
 		method: ManagementMethod,
-		run: (input: I, context: RequestContext) => Promise<O>
+		run: (input: I, context: RequestContext) => Promise<O>,
+		extraSupported?: () => boolean | undefined,
+		extraReason?: string,
+		input?: import('./contracts.js').OperationInputMetadata
 	): Operation<I, O> {
 		return supportedOperation(
 			async (input, context) => {
+				await initialize();
 				requireMethod(method);
+				if (extraSupported?.() === false)
+					throw new Error(extraReason ?? 'This operation is not available on the selected host.');
 				context.signal?.throwIfAborted();
 				return run(input, context);
 			},
 			() =>
-				!supports || supports(method)
+				supports?.(method) !== false && extraSupported?.() !== false
 					? { state: 'ready' }
 					: {
 							state: 'unavailable',
-							reason: `The remote CLI does not advertise ${method}. Update its CLI to enable this operation.`
-						}
+							reason:
+								supports?.(method) === false
+									? `The remote CLI does not advertise ${method}. Update its CLI to enable this operation.`
+									: (extraReason ?? 'This operation is not available on the selected host.')
+						},
+			input
 		);
 	}
 	async function snapshot(): Promise<ManagedSnapshot> {
+		await initialize();
 		requireMethod('snapshot');
 		if (options.passiveSnapshot) return options.passiveSnapshot();
 		return manager.call('snapshot');
 	}
 	const agent: AgentOperations = {
-		connect: operation('snapshot', async () => {
-			// This is the explicit route-acquisition action. SSH may now create a
-			// loopback forward; passive inspection intentionally never does.
-			const source = await snapshot();
-			const value = await (options.acquireSnapshot?.() ?? Promise.resolve(source));
-			const details = value.connectionDetails?.opencode;
-			if (!details?.url)
-				throw new Error(
-					value.connectionError || 'Start this instance before connecting to OpenCode.'
-				);
-			acquired = publicConnections(value);
-			acquiredSource = sourceFingerprint(source);
-			return {
-				endpoint: details.url,
-				...(details.username ? { username: details.username } : {}),
-				...(options.acquireSnapshot ? { sessionBound: true as const } : {})
-			};
-		}),
+		connect: operation(
+			'snapshot',
+			async () => {
+				// This is the explicit route-acquisition action. SSH may now create a
+				// loopback forward; passive inspection intentionally never does.
+				const source = await snapshot();
+				const value = await (options.acquireSnapshot?.() ?? Promise.resolve(source));
+				const details = value.connectionDetails?.opencode;
+				if (!details?.url)
+					throw new Error(
+						value.connectionError || 'Start this instance before connecting to OpenCode.'
+					);
+				acquired = publicConnections(value);
+				acquiredSource = sourceFingerprint(source);
+				return {
+					endpoint: details.url,
+					...(details.username ? { username: details.username } : {}),
+					...(options.acquireSnapshot ? { sessionBound: true as const } : {})
+				};
+			},
+			undefined,
+			undefined,
+			options.acquireSnapshot ? { acquireClients: ['opencode', 'mcp', 'claude'] } : undefined
+		),
 		providers: operation('providers', async () => manager.call('providers')),
 		setKey: operation('providerKey', async (input) => manager.call('providerKey', input)),
 		saveEndpoint: operation('providerEndpoint', async (input) =>
@@ -386,13 +440,19 @@ export function rpcManagementBindings(
 		})
 	};
 	return {
+		initialize,
 		agent,
 		apps: {
 			credentials: {
 				updatePolicy: options.credentialPolicy
-					? operation('credential', async (input) => {
-							await manager.call('credential', { action: 'policy', ...input });
-						})
+					? operation(
+							'credential',
+							async (input) => {
+								await manager.call('credential', { action: 'policy', ...input });
+							},
+							options.credentialPolicy,
+							'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.'
+						)
 					: unsupportedOperation(
 							'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.'
 						),

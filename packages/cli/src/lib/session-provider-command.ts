@@ -57,8 +57,7 @@ export async function runSessionProviderCommand(
 		throw new Error('Password and API key cannot both consume stdin. Use a private file for one.');
 	if (method !== undefined && !/^\d+$/.test(method))
 		throw new Error('Choose the numeric sign-in method index from provider list.');
-	const snapshot = await session.inspect();
-	const connect = snapshot.operations['agent.connect'];
+	const connect = session.agent.connect;
 	if (connect?.support === 'supported' && connect.input?.requiresPassword && !passwordFile)
 		throw new Error(
 			'This connection needs the native OpenCode password. Use --password-file <private-file|->. It is used only in this session, not saved in host connections.'

@@ -1,7 +1,7 @@
 import type { RestartStatus } from '../control-plane/runtime-revision.js';
 import type { StackConfig } from '../control-plane/stack-config.js';
 
-/** Provider-neutral host facts shared by hosting adapters and composed sessions. */
+/** Provider-neutral host DTOs and pure value constructors, shared across layers. */
 export type InstanceRef =
 	| { kind: 'local-docker'; connectionId: 'local'; homeDir: string }
 	| { kind: 'ssh-docker'; connectionId: string; remoteHome: string }
@@ -63,6 +63,7 @@ export type DirectoryListing = {
 	directories: Array<{ name: string; path: string }>;
 };
 
+/** Pure host-capability value construction; no provider or runtime dependency. */
 export function capabilities(
 	supported: ReadonlyArray<keyof HostingCapabilities>,
 	reason = 'This operation is not available for this instance.'

@@ -2,8 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
-import { sshArgs } from '../hosting/ssh-native.js';
-import { hostingFailure } from '../hosting/process.js';
+import { sshArgs } from '../control-plane/ssh-native.js';
+import { hostingFailure } from '../control-plane/process.js';
 import type { HostingConnection } from '../hosting/types.js';
 import { SshInstanceManagement } from './ssh.js';
 

@@ -1,5 +1,6 @@
 import { parseStackConfig } from '../control-plane/stack-config.js';
 import {
+	parseLegacyCredentialOperation,
 	parseLegacyRecoveryOperation,
 	parseOperationInput,
 	parseRequestContext
@@ -66,20 +67,16 @@ const parsers: WireParsers = {
 		parseOperationInput('apps.credentials.revealKey', { username: value }).username
 	],
 	credential: (value) => {
-		const input = object(value);
-		switch (input.action) {
-			case 'create':
-				return [{ action: 'create', ...parseOperationInput('apps.credentials.create', input) }];
-			case 'policy':
-				return [
-					{ action: 'policy', ...parseOperationInput('apps.credentials.updatePolicy', input) }
-				];
-			case 'rotate':
-				return [{ action: 'rotate', ...parseOperationInput('apps.credentials.rotate', input) }];
-			case 'remove':
-				return [{ action: 'remove', ...parseOperationInput('apps.credentials.remove', input) }];
-			default:
-				throw new Error('Choose a credential action.');
+		const parsed = parseLegacyCredentialOperation(value);
+		switch (parsed.name) {
+			case 'apps.credentials.create':
+				return [{ action: 'create', ...parsed.input }];
+			case 'apps.credentials.updatePolicy':
+				return [{ action: 'policy', ...parsed.input }];
+			case 'apps.credentials.rotate':
+				return [{ action: 'rotate', ...parsed.input }];
+			case 'apps.credentials.remove':
+				return [{ action: 'remove', ...parsed.input }];
 		}
 	},
 	mapPortalUser: (value) => [parseOperationInput('apps.portal.mapUser', value)],

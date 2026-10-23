@@ -102,6 +102,9 @@ function fixture() {
 }
 test('native account commands require explicit access and never print private inputs', async () => {
 	const f = fixture();
+	f.session.inspect = async () => {
+		throw new Error('A caller must not need a status warm-up.');
+	};
 	await expect(f.run(['list'])).rejects.toThrow('--password-file');
 	expect(f.calls).toEqual([]);
 	await f.run(['key', 'example', '--password-file', f.password, '--key-file', f.key]);

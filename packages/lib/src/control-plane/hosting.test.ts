@@ -12,7 +12,7 @@ import {
 import { listLocalInstances } from '../hosting/local-docker.js';
 import { hostingMachineRequest } from '../hosting/machine.js';
 import { sshDockerProvider } from '../hosting/ssh-docker.js';
-import { SSH_RPC_COMMAND } from '../hosting/ssh-native.js';
+import { SSH_RPC_COMMAND } from './ssh-native.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import {
 	capabilities,
@@ -20,7 +20,7 @@ import {
 	type HostingConnection,
 	type InstanceRef
 } from '../hosting/types.js';
-import { hostingFailure, type HostingProcess } from '../hosting/process.js';
+import { hostingFailure, type HostingProcess } from './process.js';
 import { checkHostingConnection, repairSshCli } from '../hosting/maintenance.js';
 import { createHash } from 'node:crypto';
 
@@ -241,7 +241,10 @@ test('machine interface negotiates actions, refuses arbitrary execution and pres
 	expect(hello).toMatchObject({
 		version: 1,
 		ok: true,
-		value: { actions: expect.arrayContaining(['list', 'inspect', 'logs', 'stop']) }
+		value: {
+			actions: expect.arrayContaining(['list', 'inspect', 'logs', 'stop']),
+			features: expect.arrayContaining(['credentialPolicy'])
+		}
 	});
 	for (const input of [
 		null,
@@ -254,6 +257,70 @@ test('machine interface negotiates actions, refuses arbitrary execution and pres
 });
 
 describe('native SSH transport', () => {
+	test('feeds the server credential-policy feature into SSH operation availability without status warm-up', async () => {
+		const response = await hostingMachineRequest({ version: 1, action: 'hello' });
+		if (!response.ok) throw new Error(response.error);
+		const run: HostingProcess = async (_binary, _args, options) => {
+			const request = JSON.parse(options?.input || '{}') as { action?: string };
+			if (request.action === 'hello')
+				return JSON.stringify({ version: 1, ok: true, value: response.value });
+			return JSON.stringify({
+				version: 1,
+				ok: true,
+				value: {
+					ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
+					name: 'agent',
+					location: '/agent',
+					services: [],
+					warnings: []
+				}
+			});
+		};
+		const bindings = sshDockerProvider(ssh, run).open({
+			kind: 'ssh-docker',
+			connectionId: 'lab',
+			remoteHome: '/agent'
+		}).applicationBindings!();
+		const policy = bindings.apps!.credentials.updatePolicy;
+		if (policy.support !== 'supported') throw new Error('fixture');
+		// Before discovery, an old/unknown host is not falsely disabled.
+		expect(policy.availability()).toEqual({ state: 'ready' });
+		await bindings.initialize!();
+		expect(policy.availability()).toEqual({ state: 'ready' });
+	});
+
+	test('an older SSH hello disables only its unadvertised credential-policy feature', async () => {
+		const run: HostingProcess = async (_binary, _args, options) => {
+			const request = JSON.parse(options?.input || '{}') as { action?: string };
+			return JSON.stringify({
+				version: 1,
+				ok: true,
+				value:
+					request.action === 'hello'
+						? { actions: ['inspect'], management: ['snapshot', 'providers', 'credential'] }
+						: {
+								ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
+								name: 'agent',
+								location: '/agent',
+								services: [],
+								warnings: []
+							}
+			});
+		};
+		const bindings = sshDockerProvider(ssh, run).open({
+			kind: 'ssh-docker',
+			connectionId: 'lab',
+			remoteHome: '/agent'
+		}).applicationBindings!();
+		await bindings.initialize!();
+		const policy = bindings.apps!.credentials.updatePolicy;
+		const providers = bindings.agent!.providers!;
+		if (policy.support !== 'supported' || providers.support !== 'supported')
+			throw new Error('fixture');
+		expect(policy.availability()).toMatchObject({ state: 'unavailable' });
+		expect(providers.availability()).toEqual({ state: 'ready' });
+	});
+
 	test('fixed remote command and JSON stdin preserve paths with shell metacharacters', async () => {
 		const remoteHome = "/opt/stacks/owner's agent; echo bad";
 		const requests: Array<{ args: string[]; input: unknown }> = [];

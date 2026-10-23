@@ -250,8 +250,8 @@ test('an app-policy operation preserves unrelated host intent behind the retaine
 		busy: () => false,
 		close: async () => {}
 	};
-	const operation = rpcManagementBindings(manager, { credentialPolicy: true }).apps!.credentials
-		.updatePolicy;
+	const operation = rpcManagementBindings(manager, { credentialPolicy: () => true }).apps!
+		.credentials.updatePolicy;
 	if (operation.support !== 'supported') throw new Error('fixture');
 	await operation.invoke(
 		{ username: 'owner', policy: 'read', previousPolicy: config.credentials.owner.policy },
@@ -264,6 +264,33 @@ test('an app-policy operation preserves unrelated host intent behind the retaine
 		policy: 'read',
 		previousPolicy: config.credentials.owner.policy
 	});
+});
+
+test('a deferred SSH feature discovery enables credential policy invocation without inspect warm-up', async () => {
+	const writes: unknown[] = [];
+	let discovered = false;
+	const manager: InstanceManagement = {
+		call: async (method, value) => {
+			if (method !== 'credential') throw new Error('Unexpected fixture operation.');
+			writes.push(value);
+			return undefined as never;
+		},
+		busy: () => false,
+		close: async () => {}
+	};
+	const policy = rpcManagementBindings(manager, {
+		initialize: async () => {
+			discovered = true;
+		},
+		supports: (method) => (discovered ? method === 'credential' : undefined),
+		credentialPolicy: () => (discovered ? true : undefined)
+	}).apps!.credentials.updatePolicy;
+	if (policy.support !== 'supported') throw new Error('fixture');
+	expect(policy.availability()).toEqual({ state: 'ready' });
+	await policy.invoke({ username: 'owner', policy: 'read', previousPolicy: 'chat' }, {});
+	expect(writes).toEqual([
+		{ action: 'policy', username: 'owner', policy: 'read', previousPolicy: 'chat' }
+	]);
 });
 
 test('the retained RPC boundary translates canonical confirmation only for legacy wire calls', async () => {

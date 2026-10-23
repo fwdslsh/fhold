@@ -140,6 +140,12 @@ installation completion fails, with the partial result reported separately.
 Preference results distinguish saved intent from verified effective settings;
 neither implies a durable recovery checkpoint. Lifecycle effects come from host
 operation metadata, not provider branches in shared confirmation dialogs.
+Host capability negotiation belongs to the adapter, not a caller's preliminary
+status read. A direct operation negotiates its methods/features before dispatch;
+unknown optional capabilities do not become false upgrade requirements. Shared
+native transport and Docker host primitives sit below hosting and management.
+CLI `connect` defaults to MCP consistently and uses advertised route metadata to
+explain an OpenCode-only connection before requesting native credentials.
 Native host authentication stays with SSH/Azure. A fixed SSH command receives
 typed JSON and uses the native PATH plus standard `~/.local/bin`. Discovery reads
 managed Compose labels and bounded root/child/home candidates. Host-CLI repair is

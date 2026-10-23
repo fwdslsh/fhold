@@ -28,7 +28,7 @@ The composition root is
 [`hosting/provider.ts`](../../packages/lib/src/hosting/provider.ts).
 It selects the adapter and composes its bound host/application contributions;
 opening an instance does not add another vendor switch or concrete-class check.
-Shared DTOs live in `packages/lib/src/contracts/`, below the adapters and use cases.
+Shared DTOs live in `packages/lib/src/dto/`, below the adapters and use cases.
 The session contract lives in
 [`management/contracts.ts`](../../packages/lib/src/management/contracts.ts);
 [`management/instance-session.ts`](../../packages/lib/src/management/instance-session.ts)
@@ -38,8 +38,10 @@ not a provider-name branch or optional full-management mode.
 Each adapter contributes application bindings through the same session interface.
 Services receive a bound host port, not an unused home argument or concrete host
 adapter. The native HTTP client and preference editor live in `control-plane/`;
-that lower layer does not import management implementations. Dependency-graph
-tests enforce the layer direction and reject cross-layer runtime cycles.
+that lower layer does not import management implementations. Native process/SSH
+mechanics and the bound local Docker host port also live in `control-plane/`,
+shared by adapters and the native command server rather than wrapping each other.
+Dependency-graph tests enforce the directory directions and reject runtime cycles.
 
 ## Responsibility boundaries
 
@@ -125,6 +127,15 @@ snapshot calls do not acquire forwarding resources; explicit connection does.
 Confirmation travels only in the normalized request context and is translated
 to published wire fields inside the adapter. Keep supported old wire shapes explicitly compatible instead of
 requiring identical desktop, remote CLI and image releases.
+
+SSH capability discovery is adapter-owned and cached per session. A first operation
+negotiates `hello` itself; callers do not need a throwaway status read. Unknown
+capabilities do not masquerade as an old-CLI refusal. Negotiated method/feature
+checks happen before dispatch, and atomic policy editing uses the additive
+`credentialPolicy` feature advertisement. Older hosts retain their other operations.
+Connection metadata describes the client routes that explicit acquisition can
+provide. CLI `connect` defaults to MCP consistently; an OpenCode-only route gives
+`connect opencode` guidance before requesting native credentials.
 
 ACA hosting uses the native workstation Azure CLI. The reachable OpenCode HTTP
 subset is independent of deployment management, but HTTPS does not provide

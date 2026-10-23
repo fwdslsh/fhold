@@ -3,7 +3,7 @@ import { localDockerProvider } from './local-docker.js';
 import { sshDockerProvider } from './ssh-docker.js';
 import { azureContainerAppsProvider } from './azure-container-apps.js';
 import { azureClient } from './azure-client.js';
-import type { HostingProcess } from './process.js';
+import type { HostingProcess } from '../control-plane/process.js';
 import type { HostingConnection, HostingProvider, InstanceRef, InstanceSession } from './types.js';
 import { composeInstanceSession, type ComposedInstanceSession } from '../management/index.js';
 import { hostOperations } from '../management/host-operations.js';

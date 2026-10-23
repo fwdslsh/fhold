@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import { hostingConnectionSetup } from '../hosting/provider.js';
 import { checkHostingConnection } from '../hosting/maintenance.js';
-import { hostingFailure, type HostingProcess, type HostingTerminal } from '../hosting/process.js';
+import { hostingFailure, type HostingProcess, type HostingTerminal } from './process.js';
 import type { HostingConnection } from '../hosting/types.js';
 
 const subscriptionId = '00000000-1111-2222-3333-444444444444';
@@ -207,9 +207,12 @@ test('console is a native interactive action with explicit replica scope and no 
 test('inspection advertises native log sources without contacting the agent', async () => {
 	const { provider, calls } = fixture();
 	expect((await provider.open(ref).inspect()).logSources).toEqual([
-		{ type: 'system', label: 'Platform' }, { type: 'console', label: 'Agent console' }
+		{ type: 'system', label: 'Platform' },
+		{ type: 'console', label: 'Agent console' }
 	]);
-	expect(calls.some(args => args.includes('logs') || args.includes('exec') || args.includes('rest'))).toBe(false);
+	expect(
+		calls.some((args) => args.includes('logs') || args.includes('exec') || args.includes('rest'))
+	).toBe(false);
 });
 
 test('console log selection is scoped, native and bounded, while system logs remain replica independent', async () => {

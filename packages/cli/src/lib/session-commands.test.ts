@@ -139,6 +139,57 @@ test('native connection results remain usable before optional public-link observ
 	});
 });
 
+test('default connection remains MCP even before optional public links have been observed', async () => {
+	const f = fixture();
+	let acquired = false;
+	f.session.agent.connect = supportedOperation(
+		async () => {
+			acquired = true;
+			return { endpoint: 'http://127.0.0.1:40002' };
+		},
+		undefined,
+		{ acquireClients: ['opencode', 'mcp', 'claude'] }
+	);
+	const inspect = f.session.inspect.bind(f.session);
+	f.session.inspect = async () => {
+		const snapshot = await inspect();
+		if (acquired)
+			return {
+				...snapshot,
+				apps: {
+					...snapshot.apps,
+					connections: {
+						state: 'known',
+						observedAt: '2026-10-23T00:00:00Z',
+						value: { mcp: { url: 'http://127.0.0.1:40003/mcp', note: 'synthetic route' } }
+					}
+				}
+			};
+		return snapshot;
+	};
+	const output: string[] = [];
+	await runSessionConnectCommand(f.session, [], (value) => output.push(value));
+	expect(acquired).toBe(true);
+	expect(output[0]).toBe('mcp: http://127.0.0.1:40003/mcp');
+});
+
+test('unsupported MCP connection gives route guidance before requesting a native password', async () => {
+	const f = fixture();
+	let acquired = false;
+	f.session.agent.connect = supportedOperation(
+		async () => {
+			acquired = true;
+			throw new Error('Enter this agent native password');
+		},
+		undefined,
+		{ requiresPassword: true, acquireClients: ['opencode'] }
+	);
+	await expect(runSessionConnectCommand(f.session, ['mcp'], () => {})).rejects.toThrow(
+		'Use connect opencode'
+	);
+	expect(acquired).toBe(false);
+});
+
 test('shared archive operations receive caller paths and confirmation only in context', async () => {
 	const f = fixture();
 	const calls: unknown[] = [];
@@ -175,7 +226,7 @@ test('shared archive operations receive caller paths and confirmation only in co
 			{ confirmed: true }
 		]
 	]);
-	expect(f.inspections()).toBe(1);
+	expect(f.inspections()).toBe(0);
 });
 
 test('shared full restore applies exactly its preview digest through the same operation', async () => {

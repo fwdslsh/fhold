@@ -9,6 +9,8 @@ import {
 	checkHostingConnection,
 	repairSshCli,
 	invokeOperation as invoke,
+	parseLegacyCredentialOperation,
+	parseLegacyRecoveryOperation,
 	parseOperationInput as parseInput,
 	parseRequestContext as confirmationContext,
 	type ComposedInstanceSession
@@ -287,21 +289,21 @@ export function registerAdminIpc(): void {
 	);
 	handleAdmin(ADMIN_CHANNELS.credential, async (_event, value) => {
 		const active = session();
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Choose a credential action.');
-		const input = value as Record<string, unknown>;
-		if (input.action === 'create')
-			await invoke(active.apps.credentials.create, parseInput('apps.credentials.create', value));
-		else if (input.action === 'rotate')
-			await invoke(active.apps.credentials.rotate, parseInput('apps.credentials.rotate', value));
-		else if (input.action === 'remove')
-			await invoke(active.apps.credentials.remove, parseInput('apps.credentials.remove', value));
-		else if (input.action === 'policy')
-			await invoke(
-				active.apps.credentials.updatePolicy,
-				parseInput('apps.credentials.updatePolicy', value)
-			);
-		else throw new Error('Choose a credential action.');
+		const operation = parseLegacyCredentialOperation(value);
+		switch (operation.name) {
+			case 'apps.credentials.create':
+				await invoke(active.apps.credentials.create, operation.input);
+				break;
+			case 'apps.credentials.updatePolicy':
+				await invoke(active.apps.credentials.updatePolicy, operation.input);
+				break;
+			case 'apps.credentials.rotate':
+				await invoke(active.apps.credentials.rotate, operation.input);
+				break;
+			case 'apps.credentials.remove':
+				await invoke(active.apps.credentials.remove, operation.input);
+				break;
+		}
 		return active.inspect();
 	});
 	handleAdmin(ADMIN_CHANNELS.credentialKey, (_event, value) =>
@@ -339,30 +341,22 @@ export function registerAdminIpc(): void {
 	);
 	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value) => {
 		const active = session();
-		if (!value || typeof value !== 'object' || Array.isArray(value))
-			throw new Error('Choose a recovery action.');
-		const action = (value as Record<string, unknown>).action;
-		const context = confirmationContext(value);
-		switch (action) {
-			case 'status':
-				return invoke(active.data.recovery.status, undefined);
-			case 'inspect':
-				return invoke(active.data.recovery.inspect, undefined, context);
-			case 'init':
-				return invoke(active.data.recovery.initialize, undefined, context);
-			case 'restore':
-				return invoke(active.data.recovery.restore, undefined, context);
-			case 'save':
-				await invoke(active.data.recovery.save, parseInput('data.recovery.save', value));
+		const operation = parseLegacyRecoveryOperation(value);
+		switch (operation.name) {
+			case 'data.recovery.status':
+				return invoke(active.data.recovery.status, operation.input, operation.context);
+			case 'data.recovery.inspect':
+				return invoke(active.data.recovery.inspect, operation.input, operation.context);
+			case 'data.recovery.initialize':
+				return invoke(active.data.recovery.initialize, operation.input, operation.context);
+			case 'data.recovery.restore':
+				return invoke(active.data.recovery.restore, operation.input, operation.context);
+			case 'data.recovery.save':
+				await invoke(active.data.recovery.save, operation.input, operation.context);
 				return active.inspect();
-			case 'credential':
-				await invoke(
-					active.data.recovery.setCredential,
-					parseInput('data.recovery.setCredential', value)
-				);
+			case 'data.recovery.setCredential':
+				await invoke(active.data.recovery.setCredential, operation.input, operation.context);
 				return active.inspect();
-			default:
-				throw new Error('Choose a recovery action.');
 		}
 	});
 	handleAdmin(ADMIN_CHANNELS.update, (_event, value) => {

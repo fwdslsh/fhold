@@ -52,16 +52,31 @@ export function httpsAgentBindings(
 		state: 'not-inspected',
 		reason: 'Run an explicit model test.'
 	};
-	function clearConnection(reason: string): void {
+	function clearConnection(
+		reason: string,
+		phase: 'connecting' | 'unavailable' = 'unavailable'
+	): void {
 		if (connection.state === 'connected' || connection.state === 'connecting')
 			connection.route.abort();
 		connection = { state: 'idle' };
-		access = { state: 'unavailable', reason };
+		access =
+			phase === 'connecting'
+				? { state: 'not-inspected', reason }
+				: { state: 'unavailable', reason };
 		account = {
 			state: 'not-inspected',
-			reason: 'Reconnect to inspect the current native accounts.'
+			reason:
+				phase === 'connecting'
+					? 'Refresh saved AI accounts after connecting.'
+					: 'Reconnect to inspect the current native accounts.'
 		};
-		models = { state: 'not-inspected', reason: 'Reconnect to inspect the current model.' };
+		models = {
+			state: 'not-inspected',
+			reason:
+				phase === 'connecting'
+					? 'Refresh the active model after connecting.'
+					: 'Reconnect to inspect the current model.'
+		};
 		readiness = {
 			state: 'not-inspected',
 			reason: 'Run a requested test against the current runtime.'
@@ -168,13 +183,7 @@ export function httpsAgentBindings(
 					throw new Error(
 						'Enter this agent’s native OpenCode password. Azure sign-in is a separate credential.'
 					);
-				if (connection.state === 'connected' || connection.state === 'connecting')
-					connection.route.abort();
-				connection = { state: 'idle' };
-				access = { state: 'not-inspected', reason: 'Connecting to the selected native agent.' };
-				account = { state: 'not-inspected', reason: 'Refresh saved AI accounts after connecting.' };
-				models = { state: 'not-inspected', reason: 'Refresh the active model after connecting.' };
-				readiness = { state: 'not-inspected', reason: 'Run an explicit model test.' };
+				clearConnection('Connecting to the selected native agent.', 'connecting');
 				const pendingRoute = new AbortController();
 				connection = { state: 'connecting', route: pendingRoute };
 				const pending = createHttpsNativeAgentService({
@@ -186,14 +195,10 @@ export function httpsAgentBindings(
 				try {
 					await pending.waitForReady({ timeoutMs: 10_000, signal: context.signal });
 				} catch (error) {
-					pendingRoute.abort();
 					if (connection.state === 'connecting' && connection.route === pendingRoute) {
-						connection = { state: 'idle' };
-						access = {
-							state: 'unavailable',
-							reason:
-								'Native OpenCode connection could not be established. Check its address and password.'
-						};
+						clearConnection(
+							'Native OpenCode connection could not be established. Check its address and password.'
+						);
 					}
 					throw error;
 				}
@@ -209,7 +214,7 @@ export function httpsAgentBindings(
 				return { endpoint: snapshot.clientUrl, username: 'opencode' };
 			},
 			undefined,
-			{ requiresPassword: true }
+			{ requiresPassword: true, acquireClients: ['opencode'] }
 		),
 		providers: connected(async (_input, context) => providers(context)),
 		modelInventory: connected(async (_input, context) => (await providers(context)).providers),

@@ -8,7 +8,7 @@ import type {
 	RecoverySettings,
 	RecoverySnapshot,
 	RecoveryStatus
-} from '../contracts/recovery.js';
+} from '../dto/recovery.js';
 import {
 	createFholdState,
 	managedComposeFile,
@@ -33,7 +33,7 @@ import { acquireStackLock, releaseStackLock } from './lock.js';
 import { auditCompose } from './secret-audit.js';
 import { assertManagedHarnessImage } from './activation.js';
 
-export type { RecoverySettings, RecoverySelection } from '../contracts/recovery.js';
+export type { RecoverySettings, RecoverySelection } from '../dto/recovery.js';
 export const RECOVERY_POLICY_FILE = 'config/recovery/include.json';
 const MAX_POLICY_BYTES = 4 * 1024 * 1024;
 
