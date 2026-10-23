@@ -63,7 +63,7 @@ async function seed({ open, api }: NativeWorkerContext) {
 			...root,
 			id: parent,
 			title: 'parent',
-			metadata: { guardianOwner: 'must-not-transfer' },
+			metadata: { fixture: 'preserved' },
 			permissions: [{ action: '*', resource: '*', effect: 'allow' }]
 		},
 		messages,
@@ -103,7 +103,7 @@ async function seed({ open, api }: NativeWorkerContext) {
 }
 
 describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)', () => {
-	it('preserves paginated parent/child history, strips authority, round-trips keys and OAuth, and retries without duplicating', async () => {
+	it('preserves paginated parent/child history and session metadata, round-trips keys and OAuth, and retries without duplicating', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-v2-transfer-'));
 		const source = await home(root, 'source');
 		const target = await home(root, 'target');
@@ -127,6 +127,10 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 		);
 		await runNativeWorker(image!, mounts(target), async ({ open, api }) => {
 			await open('/native-data');
+			const restored = ((await api('/session/ses_source')) as { data: { metadata?: unknown } })
+				.data;
+			if ((restored.metadata as { fixture?: unknown } | undefined)?.fixture !== 'preserved')
+				throw new Error('Native session metadata was not preserved.');
 			await api('/session/ses_source/synthetic', {
 				text: 'Later work must survive retry',
 				resume: false

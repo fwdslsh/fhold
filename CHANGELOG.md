@@ -13,8 +13,12 @@ dependencies. npm 12.2.1 fixes the three previously approved npm-bundle image
 advisories, so the runtime image scan no longer uses any exceptions. See the
 [0.3 dependency review](docs/operations/dependency-refresh-0.3.md) for provenance.
 
-OpenCode remains on 2.0.32 pending the 2.1 history-import review (#57); Effect
-4.0.1 and Electron 44 holds also remain.
+Native history restore now passes OpenCode's session and message records through
+unchanged, apart from the required workspace mapping. It no longer strips session
+metadata or permissions, or message metadata. Guardian ownership proofs are keyed
+to each instance's secret, so they only verify in the instance that created them.
+
+OpenCode remains on 2.0.32 (#57); Effect 4.0.1 and Electron 44 holds also remain.
 
 ## 0.3.261002-beta — Admin refinement and automatic updates
 
