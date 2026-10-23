@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",
-    "bun-types": "^1.4.3",
+    "bun-types": "^1.4.4",
     "typescript": "^7.0.2"
   }
 }

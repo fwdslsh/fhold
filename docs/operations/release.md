@@ -217,6 +217,12 @@ not a clean-scan claim. Remove the entries when a supported npm release fixes
 them; re-review before expiry. Existing running instances are not updated by a
 source or release publication.
 
+The [published npm 12.2.1 bundle](https://registry.npmjs.org/npm/-/npm-12.2.1.tgz)
+contains `brace-expansion` 5.0.12 and `undici` 6.29.0, which fix all three
+approved findings. The Assistant now pins npm 12.2.1, and the exception file and
+its scan reference have been removed: the fixable-HIGH image gate has no advisory
+exceptions. Releases before the change still contain the npm 12.2.0 bundle.
+
 ## Scheduler build provenance
 
 The October 9, 2026 image scan found CVE-2026-78667 and CVE-2026-97031
