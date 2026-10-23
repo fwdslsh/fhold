@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.261004-beta — unified hosting and agent management
+
+Tooling-only Linux Admin and CLI release (#55). Assistant, Guardian, Portal and
+the Claude Desktop extension retain their published `0.3.261003-beta` versions.
+
+Use the same management pages and operations for local Docker, SSH and Azure
+Container Apps. Host lifecycle, agent settings, app permissions and data operations
+have separate shared interfaces, with clear explanations for unavailable features.
+Status checks remain passive; native connections are acquired only when requested.
+
+Improve SSH capability discovery, app-permission editing, connection cleanup,
+guided sign-in and instance switching. Preserve compatibility with older host
+CLIs while explaining which operations need a CLI update. Lifecycle actions
+recheck the current host rather than relying on an earlier status result.
+
+Restore consistent fresh-instance hostname validation in CLI, Admin and SSH
+installation paths. Keep observed lifecycle eligibility separate from supported
+operations, and retain the same disabled controls across hosting providers.
+
+Publish the architecture checks with the tooling test gates so management-only
+changes do not trigger container publication. Container updates and remote CLI
+updates remain separate, explicit actions.
+
 ## 0.3.261003-beta — updated AKM and container tools
 
 Full runtime release. Assistant, Guardian, Portal images, the Claude Desktop

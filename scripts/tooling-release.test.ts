@@ -25,6 +25,7 @@ test('tooling changes do not require container qualification', () => {
 				'.github/workflows/pr-admin.yml',
 				'scripts/validate-admin-update-feeds.mjs',
 				'scripts/admin-update-feeds.test.ts',
+				'scripts/management-architecture.test.ts',
 				'scripts/README.md'
 			],
 			() => '',
@@ -221,7 +222,7 @@ test('tooling assets omit the bridge and fresh installs use the published runtim
 test('tooling workflow skips image gates and publication without skipping artifact checks', () => {
 	const gates = Bun.YAML.parse(
 		readFileSync(new URL('../.github/workflows/gates.yml', import.meta.url), 'utf8')
-	) as { jobs: Record<string, { if?: string }> };
+	) as { jobs: Record<string, { if?: string; steps?: Array<{ name?: string; run?: string }> }> };
 	const release = Bun.YAML.parse(
 		readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
 	) as {
@@ -231,6 +232,9 @@ test('tooling workflow skips image gates and publication without skipping artifa
 		>;
 	};
 	expect(gates.jobs.images?.if).toBe("inputs.scope != 'tools'");
+	expect(
+		gates.jobs.quality?.steps?.find((step) => step.name === 'Check and test tooling')?.run
+	).toContain('scripts/management-architecture.test.ts');
 	const qualified =
 		"always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))";
 	expect(release.jobs.images?.if).toBe(`${qualified} && needs.validate.outputs.scope == 'full'`);
