@@ -13,9 +13,8 @@ test('standalone Assistant uses the same allowlisted bytes without host or ingre
 		'system/assistant/',
 		'config/assistant/',
 		'config/akm/',
-		'config/codex/',
-		'config/claude/',
-		'config/opencode/',
+		'system/codex/',
+		'system/claude/',
 		'knowledge/'
 	];
 	const source = [...MANAGED_FILES, ...SEEDED_FILES].filter((name) =>
@@ -23,6 +22,7 @@ test('standalone Assistant uses the same allowlisted bytes without host or ingre
 	);
 	expect(assets.map((asset: { source: string }) => asset.source)).toEqual(source);
 	expect(assistantAssets()).toEqual(assets);
+	expect(new Set(assets.map((asset: { target: string }) => asset.target)).size).toBe(assets.length);
 	for (const asset of assets) {
 		expect(readFileSync(join(output, asset.source))).toEqual(
 			readFileSync(join(skeleton, asset.source))

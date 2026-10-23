@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { isAbsolute } from 'node:path';
 import { isInstanceName } from '../control-plane/stack-config.js';
 import { sshArgs } from '../control-plane/ssh-native.js';
+import { sshHelperCommand } from '../control-plane/ssh-helper.js';
 import { hostingFailure } from '../control-plane/process.js';
 import type { HostingConnection } from '../hosting/types.js';
 import { SshInstanceManagement } from './ssh.js';
@@ -26,8 +27,6 @@ export function createSshCommandFiles(
 
 const READY = 'FH_COMMAND_READY';
 const STARTED = 'FH_COMMAND_STARTED';
-export const SSH_COMMAND =
-	'if test -t 0; then stty -echo; fi; PATH="$HOME/.local/bin:$PATH" exec fhold hosting command';
 
 /** Invoke only the ordinary fhold CLI, not a shell/exec API. Native prompts keep their SSH PTY. */
 export async function serveHostingCommand(run: (argv: string[]) => Promise<void>): Promise<void> {
@@ -61,6 +60,7 @@ export async function runSshCommand(
 		throw Error('Choose an ordinary instance-management command.');
 	const terminal = !!process.stdin.isTTY && !!process.stdout.isTTY;
 	const native = sshArgs(connection);
+	const command = await sshHelperCommand(connection, 'command');
 	const child = spawn(
 		'ssh',
 		[
@@ -71,7 +71,7 @@ export async function runSshCommand(
 			'-o',
 			'ServerAliveCountMax=3',
 			connection.host,
-			SSH_COMMAND
+			`if test -t 0; then stty -echo; fi; ${command}`
 		],
 		{ stdio: 'pipe' }
 	);
@@ -122,7 +122,7 @@ export async function runSshCommand(
 					reject(
 						Error(
 							phase < 2
-								? 'The remote CLI could not start this command. Check the connection and update its fhold CLI. No local instance was changed.'
+								? 'The management helper could not start this command. Check the SSH connection and local tooling distribution. No local instance was changed.'
 								: `The remote command exited with status ${code ?? 'unknown'}. No local instance was changed.`
 						)
 					);

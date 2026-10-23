@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +11,8 @@ import {
 } from '../hosting/preferences.js';
 import { listLocalInstances } from '../hosting/local-docker.js';
 import { hostingMachineRequest } from '../hosting/machine.js';
-import { sshDockerProvider } from '../hosting/ssh-docker.js';
-import { SSH_RPC_COMMAND } from './ssh-native.js';
+import { sshDockerProvider as createSshDockerProvider } from '../hosting/ssh-docker.js';
+import { configureSshHelperResources } from './ssh-helper.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
 import {
 	capabilities,
@@ -21,10 +21,24 @@ import {
 	type InstanceRef
 } from '../hosting/types.js';
 import { hostingFailure, type HostingProcess } from './process.js';
-import { checkHostingConnection, repairSshCli } from '../hosting/maintenance.js';
+import { checkHostingConnection } from '../hosting/maintenance.js';
 import { createHash } from 'node:crypto';
 
 const roots: string[] = [];
+const helperBytes = new TextEncoder().encode('synthetic-management-helper');
+const helperDigest = createHash('sha256').update(helperBytes).digest('hex');
+beforeEach(() => configureSshHelperResources(async () => helperBytes));
+/** These are protocol tests; native helper transfer/packaging has separate coverage. */
+function withCachedHelper(run: HostingProcess): HostingProcess {
+	return (binary, args, options) => {
+		if (binary === 'ssh' && args.at(-1) === 'uname -sm') return Promise.resolve('Linux x86_64');
+		if (binary === 'ssh' && args.at(-1)?.startsWith('if test -f ')) return Promise.resolve('ready');
+		return run(binary, args, options);
+	};
+}
+function sshDockerProvider(connection: Extract<HostingConnection, { kind: 'ssh-docker' }>, run: HostingProcess) {
+	return createSshDockerProvider(connection, withCachedHelper(run));
+}
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -51,8 +65,8 @@ const aca: Extract<HostingConnection, { kind: 'azure-container-apps' }> = {
 const resourceId = `/subscriptions/${subscription}/resourceGroups/agents/providers/Microsoft.App/containerApps/agent`;
 const acaRef: InstanceRef = { kind: 'azure-container-apps', connectionId: 'cloud', resourceId };
 
-test('native failures are actionable without leaking stderr or confusing connectivity with a missing CLI', () => {
-	expect(hostingFailure('ssh', 1, '', 'bash: fhold: command not found')).toContain('repair');
+test('native failures are actionable without leaking stderr or recommending an operator CLI install', () => {
+	expect(hostingFailure('ssh', 1, '', 'bash: fhold: command not found')).not.toContain('repair');
 	expect(hostingFailure('ssh', 1, '', 'Host key verification failed: secret')).toContain(
 		'host trust'
 	);
@@ -112,63 +126,58 @@ test('discovery finds managed Compose homes anywhere and stopped root/child/home
 	).toEqual(['nested']);
 	expect(existsSync(join(foreign, 'state'))).toBe(false);
 });
-test('connection check reports missing CLI with repair guidance without losing SSH success', async () => {
+test('connection check preserves SSH success when helper preparation fails', async () => {
 	const result = await checkHostingConnection(ssh, async (_binary, args) => {
 		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
-		throw Error('Remote fhold missing; use Repair remote CLI.');
+		throw Error('Management cache is not writable.');
 	});
 	expect(result.ok).toBe(false);
-	expect(result.repairable).toBe(true);
 	expect(result.checks[0]?.ok).toBe(true);
-	expect(result.checks[1]?.detail).toContain('Repair');
+	expect(result.checks[1]?.detail).toContain('cache');
 });
 test('connection checks report unexpected remote output without disclosing it', async () => {
-	const result = await checkHostingConnection(ssh, async (_binary, args) =>
-		args.at(-1) === 'uname -sm' ? 'Linux x86_64' : 'private startup message'
-	);
+	const result = await checkHostingConnection(ssh, withCachedHelper(async () => 'private startup message'));
 	expect(result.ok).toBe(false);
 	expect(result.checks.at(-1)?.detail).toContain('unexpected output');
 	expect(result.checks.at(-1)?.detail).not.toContain('private startup message');
 });
-test('remote repair streams a trusted artifact and checks it before atomic replacement', async () => {
-	const artifact = join(root(), 'fhold-cli');
-	writeFileSync(artifact, 'synthetic-cli');
+test('discovery prepares the bundled helper automatically without replacing an installed CLI', async () => {
 	const calls: Array<{ args: string[]; file?: string }> = [];
+	let cached = false;
 	const run: HostingProcess = async (_binary, args, options) => {
 		calls.push({ args, file: options?.inputFile });
-		return args.at(-1) === 'uname -sm' ? 'Linux x86_64' : '0.2.2610113-beta.9';
+		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
+		if (args.at(-1)?.startsWith('if test -f ')) return cached ? 'ready' : '';
+		if (options?.inputFile) {
+			expect(readFileSync(options.inputFile)).toEqual(Buffer.from(helperBytes));
+			cached = true;
+			return '';
+		}
+		const input = JSON.parse(options?.input || '{}');
+		return JSON.stringify({ version: 1, ok: true, value: input.action === 'hello' ? { actions: ['list'] } : [] });
 	};
-	await expect(repairSshCli(ssh, { confirmed: false, cliFile: artifact, run })).rejects.toThrow(
-		'Confirm'
-	);
-	expect(calls).toHaveLength(0);
-	expect(await repairSshCli(ssh, { confirmed: true, cliFile: artifact, run })).toContain(
-		'No containers'
-	);
-	expect(calls[1]?.file).toBe(artifact);
-	expect(calls[1]?.args.at(-1)).toContain(
-		createHash('sha256').update('synthetic-cli').digest('hex')
-	);
-	expect(calls[1]?.args.at(-1)).toContain('hosting --help');
-	expect(calls[1]?.args.at(-1)).not.toContain('/opt/stacks');
+	const provider = createSshDockerProvider(ssh, run);
+	expect(await provider.listInstances()).toEqual([]);
+	expect(await provider.listInstances()).toEqual([]);
+	const uploads = calls.filter((call) => call.file);
+	expect(uploads).toHaveLength(1);
+	expect(uploads[0]?.args.at(-1)).toContain(helperDigest);
+	expect(uploads[0]?.args.at(-1)).toContain('mv -f');
+	expect(calls.map((call) => call.args.join(' ')).join('\n')).not.toContain('.local/bin/fhold');
 });
-test('corrupt published downloads cannot replace the remote CLI', async () => {
-	let mutations = 0;
-	const download: typeof fetch = async (request) =>
-		String(request).endsWith('checksums-sha256.txt')
-			? new Response(`${'a'.repeat(64)}  fhold-cli-linux-x64\n`)
-			: new Response('wrong-bytes');
-	await expect(
-		repairSshCli(ssh, {
-			confirmed: true,
-			fetch: download,
-			run: async (_binary, args) => {
-				if (args.at(-1) !== 'uname -sm') mutations++;
-				return 'Linux x86_64';
-			}
-		})
-	).rejects.toThrow('checksum mismatch');
-	expect(mutations).toBe(0);
+test('failed helper upload never submits or retries an instance operation', async () => {
+	let uploads = 0;
+	let operations = 0;
+	const provider = createSshDockerProvider(ssh, async (_binary, args, options) => {
+		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
+		if (args.at(-1)?.startsWith('if test -f ')) return '';
+		if (options?.inputFile) { uploads++; throw Error('transfer interrupted'); }
+		operations++;
+		return '';
+	});
+	await expect(provider.listInstances()).rejects.toThrow('helper preparation failed');
+	expect(uploads).toBe(1);
+	expect(operations).toBe(0);
 });
 
 describe('hosting metadata is separate from instance intent and credentials', () => {
@@ -347,7 +356,7 @@ describe('native SSH transport', () => {
 			remoteHome
 		});
 		expect((await session.inspect()).ref).toEqual(session.ref);
-		expect(requests[0]?.args.at(-1)).toBe(SSH_RPC_COMMAND);
+		expect(requests[0]?.args.at(-1)).toBe(`exec "\${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/${helperDigest}"/fhold hosting rpc`);
 		expect(requests[0]?.args.join(' ')).not.toContain(remoteHome);
 		expect(requests[0]?.input).toMatchObject({
 			version: 1,

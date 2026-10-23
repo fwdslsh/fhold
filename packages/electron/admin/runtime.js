@@ -75,7 +75,7 @@ export function renderServices(snapshot) {
 	setText(
 		'runtime-version-help',
 		missingHostVersion
-			? `${snapshot.operations?.['docker.update']?.reason ? `${snapshot.operations['docker.update'].reason} ` : ''}This host has an older fhold CLI. In Host connections, choose Check, then Install / update remote CLI to show image versions. Your agent keeps running.`
+			? `${snapshot.operations?.['docker.update']?.reason ? `${snapshot.operations['docker.update'].reason} ` : ''}Image metadata is unavailable. Check this host connection and local tooling distribution. Your agent keeps running.`
 			: !instanceCapability('docker.update', snapshot).supported
 				? `${instanceCapability('docker.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
 				: view.docker?.updateImageTag
@@ -134,7 +134,7 @@ export function renderServices(snapshot) {
 					? `${configured ? 'Configured deployment image, not a running-replica observation: ' : ''}${references.join(', ')}`
 					: '') ||
 				(missingHostVersion
-					? 'Update the remote fhold CLI to report this container’s image reference.'
+					? 'Check this host connection to report this container’s image reference.'
 					: 'This connection did not report an image reference.');
 			const details = serviceImageDetails(references[0]);
 			const label = document.createElement('span');

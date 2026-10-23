@@ -228,3 +228,56 @@ upstream; the existing history-import compatibility hold retains 2.0.32 with
 Effect 4.0.1. Electron 45 retains its separate major-version qualification hold;
 the selected maintained 44 line stays at 44.9.3. No runtime dependencies or
 container inputs change for this host-tool regression fix.
+
+## Full 0.3.261006-beta review
+
+Rechecked official metadata on **October 23, 2026 at 20:12 UTC** for all 33
+workspace dependency/override names, selected channels, native AKM marketplace
+manifests, every pinned Action, Node/Go indexes, Bun, Supercronic, Trivy, cosign
+and documentation dependencies. This is a full runtime and tooling release.
+
+| Component | Previous | Selected |
+| --- | --- | --- |
+| AKM CLI | 0.10.261012-beta | 0.10.261013-beta (`next`) |
+| AKM OpenCode, Claude and Codex plugins | 0.10.261011-beta | 0.10.261012-beta |
+| Codex | 0.163.0 | 0.164.0 |
+| MCP client/server SDKs | 2.3.1 | 2.4.0 |
+
+The [AKM CLI changelog](https://github.com/itlackey/akm/blob/v0.10.261013-beta/CHANGELOG.md)
+includes task synchronization from the implicit working stash, workflow reference
+handling and environment propagation fixes. Existing fhold task commands and
+recovery paths remain applicable. The OpenCode plugin requires this exact CLI.
+The [native plugin release](https://github.com/itlackey/akm-plugins/releases/tag/v0.10.261012-beta)
+resolves to commit `1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe`, archive SHA-256
+`7b85dc778e9c4100b7e3ff7dbc7b716c5c539d0a5924aae76023aa3040c41b3e`.
+Both native manifests report 0.10.261012-beta; changes from the previous baked
+commit affect version metadata, not native hook logic. Actual native recall in
+all three harnesses remains an image gate, including the plugin's nested
+OpenCode 2.0.26 / Effect rc.112 peers.
+
+[Codex 0.164.0](https://github.com/openai/codex/releases/tag/rust-v0.164.0)
+includes resume/settings fixes and is qualified with fhold's managed native
+configuration. MCP 2.4.0's changed header-schema annotations and output wrapping
+do not require source changes for fhold's schemas; Guardian, Portal and bridge
+tests cover the updated clients/server. A recursive no-cache lock refresh also
+updates compatible `node-abi` resolutions to 3.101.0 and 4.40.0.
+
+Explicit holds remain: OpenCode **2.0.32** rather than 2.1.4 pending #57's
+history-import continuation review; Effect **4.0.1** to match that SDK's exact
+peer; Electron **44.9.3** on its maintained major rather than 45.0.0.
+electron-builder remains on the current `v26` channel, **26.18.0**.
+Claude Code 2.1.309, npm 12.2.1, Bun/types 1.4.4, Node 24.22.1 LTS,
+Go 1.27.3, Supercronic 0.2.51, Ubuntu 24.04, remaining workspace dependencies,
+overrides, Actions, Trivy 0.76.1, cosign 3.1.4 and docs renderer/template
+0.11.16/0.5.0 remain current on their selected channels.
+
+The product owner approved a new, narrowly scoped
+[Brotli exception](release.md#temporary-brotli-exception-october-23-2026):
+only CVE-2026-111497 in Debian `libbrotli1` 1.1.0-2+b7, expiring November 6.
+The raw report remains visible and other critical/fixable-high findings still
+block publication. The old npm exceptions remain removed. No library is patched,
+no floating runtime dependency is introduced, and no live instance is changed.
+
+Qualify the stamped source with source/artifact tests and all six native image
+jobs, then verify published assets and signed multi-architecture images. Release
+publication is separate from upgrading existing instances.

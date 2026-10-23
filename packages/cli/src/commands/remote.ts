@@ -46,7 +46,7 @@ async function guideRecall(
 		);
 		if (review.status !== 'ready')
 			console.log(
-				'Review config/codex/requirements.toml in the instance directory to enable all AKM hooks.'
+				'Update this instance to refresh its built-in hook settings. If you supply a custom requirements.toml mount, check that file instead. Personal approval cannot enable managed hooks.'
 			);
 		return;
 	}

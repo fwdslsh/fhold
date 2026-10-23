@@ -135,10 +135,13 @@ transcript or prove that a client reached the intended instance.
    to continue. Separate supported completed-conversation recovery from unsupported
    active-turn continuation; failure to resume an active turn must not be hidden
    by resubmission or a fabricated history entry.
-7. **Observation failure.** On a separate disposable Codex fixture, set the native
-   `[hooks] managed_dir` in its operator-owned `config/codex/requirements.toml` to
-   a separate empty directory mounted read-only at startup. Keep managed-only
-   hooks enabled. This deliberately withholds the expected managed inventory;
+7. **Observation failure.** On a separate disposable Codex fixture, copy
+   `system/codex/requirements.toml` to an operator-owned policy file and explicitly
+   mount that file at `/etc/codex/requirements.toml`, following the
+   [custom policy instructions](../managed-harness-configuration.md#deployment-inputs).
+   Set its native `[hooks] managed_dir` to a separate empty directory mounted
+   read-only at startup. Keep managed-only hooks enabled.
+   This deliberately withholds the expected managed inventory;
    do not change the image or cover `/etc/codex` with a directory mount.
    Confirm native hook review reports the missing inventory and the enabled running
    worker remains `unknown` with fresh successful keepalive requests. Record the

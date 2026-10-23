@@ -266,10 +266,10 @@ describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)
 					parts: [{ id: `prt_${id}`, sessionID: 'ses_legacy', messageID: id, type: 'text', text }]
 				});
 			}
-			const preserved = ['workspace/operator-note.txt', 'knowledge/operator-note.md', 'config/codex/config.toml'];
+			const preserved = ['workspace/operator-note.txt', 'knowledge/operator-note.md', 'config/assistant/persona.md'];
 			for (const path of preserved) writeFileSync(join(source, path), `Operator-owned ${path}\n`);
 			recordAppliedRuntime(source, runtimeRevision(source));
-			writeFileSync(join(source, 'config/codex/config.toml'), 'approval_policy = "on-request"\n');
+			writeFileSync(join(source, 'system/codex/config.toml'), 'approval_policy = "on-request"\n');
 			const pendingReceipt = digest(join(source, 'state/applied-runtime.json'));
 			const preservedHashes = preserved.map((path) => digest(join(source, path)));
 			writeFileSync(join(root, 'seed.json'), JSON.stringify(fixture));

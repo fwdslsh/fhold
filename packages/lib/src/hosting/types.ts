@@ -37,7 +37,6 @@ export type HostingConnection =
 
 export type ConnectionCheck = {
 	ok: boolean;
-	repairable: boolean;
 	checks: Array<{ name: string; ok: boolean; detail: string }>;
 	instances: InstanceSummary[];
 };

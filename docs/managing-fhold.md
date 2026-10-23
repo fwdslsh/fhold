@@ -124,10 +124,15 @@ file paths and examples. Native remote workers remain experimental.
 
 ### Edit harness settings
 
-Edit the native files under your instance's `config/` directory and run
-`fhold restart` from that home (with `FH_HOME` unset), or select it with `--name`.
-No image rebuild is required. Updates only seed missing operator files and
-preserve your edits. Managed policy is read-only inside the container.
+fhold owns the native system defaults under `system/assistant`, `system/codex`
+and `system/claude`; updates replace those files with current release bytes.
+Do not edit them. Ordinary user settings and personal native account/preferences
+remain operator-owned. For advanced policy changes, copy the current policy to
+an operator-owned file under `config/`, add an explicit individual read-only mount
+in `config/stack/custom.compose.yml`, and run `fhold restart` from that home (or
+select it with `--name`). You maintain that override across releases; no image
+rebuild is required. Old config policy files remain untouched and inert unless
+explicitly mounted. No migration or automatic transition is performed.
 OpenCode's `config/assistant/` is a writable native user directory: Admin makes
 narrow JSONC-preserving edits and verifies them through the native API.
 OpenCode v2 watches atomic edits to the selected file and user plugins without

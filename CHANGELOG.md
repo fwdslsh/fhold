@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.261006-beta — managed configuration and automatic SSH management
+
+Full release of Linux CLI/Admin, Assistant/Guardian/Portal images and the Claude
+Desktop extension. New installs and ordinary updates use this runtime cohort;
+publishing or installing the tools does not upgrade existing instances.
+
+Place fhold-managed OpenCode policy, Codex defaults/requirements and Claude
+settings under the release-owned `system/` tree. Updates replace these files
+instead of preserving stale policy in user-editable configuration. Standalone
+images use the same sources. Preserve user preferences, credentials, knowledge,
+tasks and custom deployment overrides. Old policy files remain untouched and
+are not mounted by the default stack; no migration or configuration merger is
+introduced.
+
+SSH management no longer requires installing or updating fhold on the host.
+CLI and Admin carry matching Linux x64/arm64 management helpers and prepare them
+automatically in the remote account's private cache. They do not overwrite an
+existing CLI, require sudo, download a different release, or replay failed
+mutations. Remove the manual remote-CLI repair controls and update the guides.
+
+Update AKM CLI to **0.10.261013-beta**, all three AKM plugins to
+**0.10.261012-beta**, Codex to **0.164.0**, and MCP client/server SDKs to **2.4.0**.
+See the [dependency review](docs/operations/dependency-refresh-0.3.md#full-03261006-beta-review)
+for immutable plugin provenance and the existing OpenCode 2.1, Effect and
+Electron-major compatibility holds.
+
+Disclose the approved temporary exception for **CVE-2026-111497** in Debian
+`libbrotli1` **1.1.0-2+b7** in Guardian/Portal. Malicious Brotli data can cause
+memory corruption; Debian has no patched package at this review. The exception
+expires **November 6, 2026**, retains the raw scan report, and does not waive
+other critical or fixable-high findings. See the
+[scope and follow-up](docs/operations/release.md#temporary-brotli-exception-october-23-2026).
+
 ## 0.3.261005-beta — remove the Compose policy veto
 
 Tooling-only Linux Admin and CLI release. Start, restart, update and offline

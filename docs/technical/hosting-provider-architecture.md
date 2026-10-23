@@ -56,7 +56,7 @@ Dependency-graph tests enforce the directory directions and reject runtime cycle
 
 Docker homes, StackConfig, local locks, Compose and applied-runtime receipts stay
 with their owning Docker implementation. SSH executes the same services on the
-remote machine through the installed fhold CLI. ACA has a resource locator and
+remote machine through the exact locally bundled private management executable. ACA has a resource locator and
 platform observations; it receives no synthetic home or Compose configuration.
 
 Connections, instances and storage destinations remain distinct. Native SSH/Azure
@@ -129,7 +129,9 @@ handler table checks the wire implementations' input/result types. Passive
 snapshot calls do not acquire forwarding resources; explicit connection does.
 Confirmation travels only in the normalized request context and is translated
 to published wire fields inside the adapter. Keep supported old wire shapes explicitly compatible instead of
-requiring identical desktop, remote CLI and image releases.
+requiring identical desktop and image releases. SSH management code and managed
+Skeleton are content-bound to the local distribution; operator-installed remote
+CLIs are not part of this path.
 
 SSH capability discovery is adapter-owned and cached per session. A first operation
 negotiates `hello` itself; callers do not need a throwaway status read. Unknown

@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expectedAdminAssets } from './validate-release-assets.mjs';
+import { createHash } from 'node:crypto';
 
 const version = process.env.VERSION;
 if (!version) throw new Error('VERSION is required');
@@ -52,6 +53,20 @@ try {
 		command = join(installation, 'fhold Admin.exe');
 	} else {
 		run(join(packaged, asset), ['--appimage-extract']);
+		// This gate runs for release and PR previews before publication. Require
+		// both actual resources, byte-identical to this build, not release URLs.
+		for (const [helperArch, machine] of [
+			['x64', 62],
+			['arm64', 183]
+		]) {
+			const shipped = readFileSync(
+				join(generated, 'squashfs-root/resources/management', `fhold-linux-${helperArch}`)
+			);
+			const built = readFileSync(resolve(`packages/cli/embedded/fhold-linux-${helperArch}`));
+			const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
+			if (shipped.readUInt16LE(18) !== machine || hash(shipped) !== hash(built))
+				throw new Error(`Packaged Admin ${helperArch} management helper differs from this build`);
+		}
 		const executable = join(generated, 'squashfs-root', 'fhold-admin');
 		const virtualDisplay = spawnSync('xvfb-run', ['--help'], { encoding: 'utf8' });
 		if (!virtualDisplay.error) {

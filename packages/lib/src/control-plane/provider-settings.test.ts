@@ -20,7 +20,7 @@ function fixture() {
 	const home = mkdtempSync(join(tmpdir(), 'fhold-provider-settings-'));
 	mkdirSync(join(home, 'state', 'secrets'), { recursive: true });
 	mkdirSync(join(home, 'knowledge', 'secrets'), { recursive: true });
-	mkdirSync(join(home, 'config', 'opencode'), { recursive: true });
+	mkdirSync(join(home, 'system', 'assistant'), { recursive: true });
 	mkdirSync(join(home, 'config', 'assistant'), { recursive: true });
 	mkdirSync(join(home, 'system', 'stack'), { recursive: true });
 	writeFileSync(
@@ -49,7 +49,7 @@ function fixture() {
 		}
 	};
 	writeFileSync(configPath, `${JSON.stringify(configuration, null, 2)}\n`);
-	writeFileSync(join(home, 'config', 'opencode', 'opencode.json'), '{}\n');
+	writeFileSync(join(home, 'system', 'assistant', 'opencode.json'), '{}\n');
 	return { home, configPath, configuration };
 }
 
@@ -75,7 +75,7 @@ function nativeFixture(home: string, configPath: string, override: Record<string
 		// Simulate the public watcher contract, not a made-up writable settings API.
 		const configuration = {
 			...readConfiguration(configPath),
-			...readConfiguration(join(home, 'config/opencode/opencode.json')),
+			...readConfiguration(join(home, 'system/assistant/opencode.json')),
 			...override
 		};
 		const definitions = configuration.providers as Record<
@@ -330,7 +330,7 @@ describe('Native provider manager settings', () => {
 
 	it('accepts the same native structured managed model without bypassing a different managed choice', async () => {
 		const current = fixture();
-		const policyPath = join(current.home, 'config/opencode/opencode.json');
+		const policyPath = join(current.home, 'system/assistant/opencode.json');
 		const policy = { model: { providerID: 'native-catalog', model: 'text-model' } };
 		writeFileSync(policyPath, JSON.stringify(policy));
 		const native = nativeFixture(current.home, current.configPath);
@@ -462,15 +462,15 @@ describe('Native provider manager settings', () => {
 		expect(native.modelRequests).toHaveLength(0);
 	});
 
-	it('reports operator policy overrides instead of silently overwriting them', async () => {
+	it('reports managed policy constraints with deliberate override guidance instead of overwriting them', async () => {
 		const current = fixture();
 		const native = nativeFixture(current.home, current.configPath);
-		const operatorPath = join(current.home, 'config', 'opencode', 'opencode.json');
+		const operatorPath = join(current.home, 'system', 'assistant', 'opencode.json');
 		const operator = { model: 'existing/team/model', permission: { '*': 'deny' } };
 		writeFileSync(operatorPath, JSON.stringify(operator));
 		await expect(
 			useProviderModel(current.home, 'native-catalog', 'text-model', native)
-		).rejects.toThrow();
+		).rejects.toThrow('config/stack/custom.compose.yml');
 		expect(readConfiguration(operatorPath)).toEqual(operator);
 		expect(readConfiguration(current.configPath)).toEqual(current.configuration);
 		expect(native.modelRequests).toHaveLength(0);

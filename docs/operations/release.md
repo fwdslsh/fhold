@@ -219,9 +219,24 @@ source or release publication.
 
 The [published npm 12.2.1 bundle](https://registry.npmjs.org/npm/-/npm-12.2.1.tgz)
 contains `brace-expansion` 5.0.12 and `undici` 6.29.0, which fix all three
-approved findings. The Assistant now pins npm 12.2.1, and the exception file and
-its scan reference have been removed: the fixable-HIGH image gate has no advisory
-exceptions. Releases before the change still contain the npm 12.2.0 bundle.
+approved findings. The Assistant now pins npm 12.2.1, and those npm exceptions
+have been removed. Releases before the change still contain the npm 12.2.0 bundle.
+
+### Temporary Brotli exception (October 23, 2026)
+
+The product owner approved a temporary beta exception for
+[CVE-2026-111497](https://security-tracker.debian.org/tracker/CVE-2026-111497).
+Guardian and Portal contain Debian `libbrotli1` **1.1.0-2+b7**, which has no
+patched Debian package at the time of this review. Processing malicious Brotli
+data can cause memory corruption; this is not a clean-scan claim.
+
+`.github/trivy-ignore.yaml` matches only that advisory and exact Debian package
+version, on either architecture, and expires **November 6, 2026**. Trivy's native
+expiry handling stops applying it after that date. The unfiltered high/critical
+report still includes the finding; all other critical and fixable-high findings
+continue to fail publication. No npm exception is restored and no bundled library
+is patched or replaced. Remove the entry as soon as Debian provides a supported
+fix, or re-review before expiry. Publication does not update installed instances.
 
 ## Scheduler build provenance
 

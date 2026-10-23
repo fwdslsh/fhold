@@ -74,13 +74,12 @@ function assistantService(homeDir = '/tmp/home') {
 		],
 		volumes: [
 			...[
-				['opencode/opencode.json', 'opencode/opencode.json'],
 				['codex/config.toml', 'codex/config.toml'],
 				['codex/requirements.toml', 'codex/requirements.toml'],
 				['claude/managed-settings.json', 'claude-code/managed-settings.json']
 			].map(([source, target]) => ({
 				type: 'bind',
-				source: `${homeDir}/config/${source}`,
+				source: `${homeDir}/system/${source}`,
 				target: `/etc/${target}`,
 				read_only: true
 			})),

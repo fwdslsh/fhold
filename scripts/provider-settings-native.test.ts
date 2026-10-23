@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
 	writeFileSync,
+	mkdirSync,
 	readFileSync,
 	existsSync,
 	mkdtempSync,
@@ -12,7 +13,7 @@ import {
 	constants
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, basename, resolve, isAbsolute } from 'node:path';
+import { join, basename, resolve, isAbsolute, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import {
 	defaultStackConfig,
@@ -151,10 +152,34 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			console.info('Native settings regression fixture:', root);
 			await run(['install', '--no-start', '--config', join(root, 'fixture-stack.json')]);
 			const managedPaths = [
-				join(home, 'config/opencode/opencode.json'),
-				join(home, 'system/assistant/opencode.json')
-			].filter(existsSync);
+				'system/assistant/opencode.json',
+				'system/codex/config.toml',
+				'system/codex/requirements.toml',
+				'system/claude/managed-settings.json'
+			].map((path) => join(home, path));
 			const beforeHashes = Object.fromEntries(managedPaths.map((path) => [path, digest(path)]));
+			const preserved = {
+				'config/assistant/opencode.json': '{"$schema":"https://opencode.ai/config.json"}\n',
+				'config/assistant/persona.md': 'Disposable operator persona\n',
+				'config/opencode/opencode.json': '{"permission":{"bash":"deny"}}\n',
+				'config/codex/config.toml': 'approval_policy = "never"\n',
+				'config/codex/requirements.toml': 'allowed_approval_policies = ["never"]\n',
+				'config/claude/managed-settings.json': '{"permissions":{"defaultMode":"plan"}}\n'
+			};
+			for (const path of Object.keys(preserved).filter((path) => !path.startsWith('config/assistant/')))
+				assert(!existsSync(join(home, path)), `Fresh install must not seed obsolete ${path}`);
+			for (const [path, content] of Object.entries(preserved)) {
+				mkdirSync(dirname(join(home, path)), { recursive: true });
+				writeFileSync(join(home, path), content);
+			}
+			const overlay = readFileSync(join(home, 'config/stack/custom.compose.yml'));
+			for (const path of managedPaths) writeFileSync(path, 'prior release bytes\n');
+			await run(['update', '--no-start']);
+			assert.deepEqual(Object.fromEntries(managedPaths.map((path) => [path, digest(path)])), beforeHashes);
+			for (const [path, content] of Object.entries(preserved))
+				assert.equal(readFileSync(join(home, path), 'utf8'), content);
+			assert.deepEqual(readFileSync(join(home, 'config/stack/custom.compose.yml')), overlay);
+			stages.push('normal compiled CLI install/update --no-start refreshes all native system policies, preserving user settings and inert old config policies');
 			started = true;
 			await run(['start']);
 			await waitForAssistant(home);
@@ -272,10 +297,27 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				true
 			);
 			assert.equal(mounts.find((item) => item.Destination === '/etc/opencode')?.RW, false);
-			assert.equal(
-				mounts.find((item) => item.Destination === '/etc/opencode/opencode.json')?.RW,
-				false
-			);
+			assert(!mounts.some((item) => item.Destination === '/etc/opencode/opencode.json'));
+			for (const [source, target] of [
+				['system/codex/config.toml', '/etc/codex/config.toml'],
+				['system/codex/requirements.toml', '/etc/codex/requirements.toml'],
+				['system/claude/managed-settings.json', '/etc/claude-code/managed-settings.json']
+			]) {
+				const mount = mounts.find((item) => item.Destination === target);
+				assert.equal(mount?.Source, join(home, source));
+				assert.equal(mount?.RW, false);
+			}
+			assert(!mounts.some((item) => ['/etc/codex', '/etc/claude-code'].includes(item.Destination)));
+			for (const [source, target] of [
+				['system/assistant/opencode.json', '/etc/opencode/opencode.json'],
+				['system/codex/config.toml', '/etc/codex/config.toml'],
+				['system/codex/requirements.toml', '/etc/codex/requirements.toml'],
+				['system/claude/managed-settings.json', '/etc/claude-code/managed-settings.json']
+			]) assert.equal((await execute('docker', ['exec', cid, 'cat', target])).stdout, readFileSync(join(home, source), 'utf8'));
+			await execute('docker', ['exec', cid, 'test', '-s', '/etc/codex/hooks.json']);
+			await execute('docker', ['exec', cid, 'test', '-s', '/etc/claude-code/managed-settings.d/10-fhold.json']);
+			const effective = await readAssistantConfig(home);
+			assert.deepEqual(effective.permissions, JSON.parse(readFileSync(managedPaths[0], 'utf8')).permissions);
 			const writableConfig = mounts.filter(
 				(item) => item.Destination === '/home/fhold/.config/opencode' && item.RW
 			);

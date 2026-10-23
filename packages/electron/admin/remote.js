@@ -44,7 +44,7 @@ function renderRecallStatus(review, error) {
 		(review?.managed
 			? review.status === 'ready'
 				? 'Controlled by the instance policy. No personal hook approval is required.'
-				: 'Knowledge recall is not fully enabled. Review config/codex/requirements.toml on the host; personal approval cannot change managed hooks.'
+				: 'Knowledge recall is not fully enabled. Update this instance to refresh its built-in hook settings. If you supply a custom requirements.toml mount, check that file instead. Personal approval cannot enable managed hooks.'
 			: review?.status === 'approval-needed'
 				? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
 				: review?.status === 'ready'

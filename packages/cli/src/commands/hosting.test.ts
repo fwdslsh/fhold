@@ -103,20 +103,35 @@ test('CLI edits, confirms retarget/removal, and leaves instance state untouched'
 });
 
 test('native SSH subprocess receives a fixed command, discovers and inspects the selected remote target', async () => {
+	// Source execution uses the same built helpers as packaged Admin. Build them
+	// explicitly so this test also runs from a fresh checkout without release assets.
+	const helpers = Bun.spawn([process.execPath, 'run', 'scripts/build.ts', '--helpers-only'], {
+		cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe'
+	});
+	const [buildOutput, buildError, built] = await Promise.all([
+		new Response(helpers.stdout).text(), new Response(helpers.stderr).text(), helpers.exited
+	]);
+	expect(built, `${buildOutput}\n${buildError}`).toBe(0);
 	const { root, env } = fixture();
 	const bin = join(root, 'bin');
 	mkdirSync(bin);
 	const capture = join(root, 'ssh-input.json');
 	writeFileSync(
 		join(bin, 'ssh'),
-		`#!${process.execPath}
-import { writeFileSync } from 'node:fs';
-const input = await Bun.stdin.text(); const request = JSON.parse(input);
+		`#!/usr/bin/env node
+const { readFileSync, writeFileSync } = require('node:fs');
+const command = process.argv.at(-1);
+if (command === 'uname -sm') console.log('Linux x86_64');
+else if (command.startsWith('if test -f ')) process.stdout.write('ready');
+else {
+const input = readFileSync(0, 'utf8');
+const request = JSON.parse(input);
 writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args: process.argv.slice(2), request }));
 const item = { ref: { kind:'local-docker',connectionId:'local',homeDir:'/opt/stacks/agent' },name:'agent',location:'/opt/stacks/agent',services:[],warnings:[] };
 const value = request.action==='hello' ? {actions:['list','inspect','logs','start','stop','restart']} : request.action==='list' ? [item] : item;
 if(request.action==='hello') process.exitCode=0;
 console.log(JSON.stringify({version:1,ok:true,value}));
+}
 `,
 		{ mode: 0o700 }
 	);
@@ -126,7 +141,7 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 		{ ...env, PATH: `${bin}:${process.env.PATH}` },
 		root
 	);
-	expect(result.code).toBe(0);
+	expect(result.code, result.stderr).toBe(0);
 	const snapshot = JSON.parse(result.stdout);
 	expect(snapshot.identity.ref).toEqual({
 		kind: 'ssh-docker',
@@ -139,7 +154,8 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 	});
 	expect(snapshot.docker).toBeUndefined();
 	const input = JSON.parse(readFileSync(capture, 'utf8'));
-	expect(input.args.at(-1)).toBe('PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc');
+	expect(input.args.at(-1)).toMatch(/^exec "\$\{XDG_CACHE_HOME:-\$HOME\/\.cache\}\/fhold\/management\/[a-f0-9]{64}"\/fhold hosting rpc$/);
+	expect(input.args.at(-1)).not.toContain('.local/bin/fhold');
 	expect(input.args).not.toContain('/opt/stacks/agent');
 	expect(input.request).toMatchObject({ action: 'hello', version: 1 });
 	expect(existsSync(env.FH_HOME)).toBe(false);

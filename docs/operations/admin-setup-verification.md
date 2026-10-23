@@ -9,7 +9,7 @@ or Overview, or treat an axe pass as visual approval.
 **Settings** on Welcome, the sidebar and the error view opens
 the app's own settings page, without changing the selected instance or its
 drafts. Host connections now live on this page, not in a modal or the instance
-picker. Add/Edit/Check/Remove and confirmed SSH CLI repair retain their native
+picker. Add/Edit/Check/Remove retain their native
 backends. Save stays on the page; Open explicitly returns to instance discovery.
 Returning from Settings leaves the prior page and all running agents alone.
 
@@ -52,16 +52,16 @@ and an untagged reference is shown as-is without inventing a `latest` tag. The f
 reported reference is available on hover. Status and image version remain separate.
 
 The available image tag beside Update is the published runtime cohort included
-with the CLI managing that instance. SSH instances report the remote CLI's cohort,
+with the tool managing that instance. SSH instances report the exact bundled helper's cohort,
 not the desktop app's version. This is not a live registry lookup; custom image
 pins remain preserved by the existing update operation. Matching tags do not
 disable Update or establish that mutable tags/content are current. Missing version
 metadata does not block management. No automatic container update or restart is added.
-An older SSH CLI that omits these fields gets an explanation and **Open host
-connections** action. Choose **Check → Install / update remote CLI**, explicitly
-confirm, then reopen the instance to use the new host process. This updates the
-host CLI only, not containers. Updating Admin alone cannot add metadata to an
-already-running remote CLI.
+Missing metadata gets an explanation and **Open host connections** action.
+Choose **Check**, then reopen the instance. The matching private management
+helper is supplied automatically, including from unpublished builds. This does
+not replace an operator-installed CLI or update containers. Existing management
+sessions retain their executable until closed; no submitted command is replayed.
 
 Manually check mixed container versions, stopped/unhealthy services, missing Docker
 metadata, long custom tags, narrow widths and 200% text size. Confirm Update remains

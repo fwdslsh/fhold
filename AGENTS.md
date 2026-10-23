@@ -19,7 +19,9 @@ running processes, mocked tests and source scans are not live readiness.
 - CLI owns local installation/lifecycle. Optional Admin uses the same library;
   it has no hosted server, chat, standalone background service or automatic window
   resizing. Admin's AppImage updater runs only while Admin is open; Stable is
-  the default channel and updating Admin never upgrades containers or remote CLIs.
+  the default channel and updating Admin never upgrades containers or an operator CLI.
+  SSH automatically supplies this distribution's private content-addressed management
+  executable; never depend on or replace a manually installed remote fhold CLI.
 - Shared host-side hosting adapters manage existing local Docker, SSH-Docker and
   experimental ACA targets. Keep provider selection in the shared library,
   native SSH/Azure credentials on the management host, and remote paths/resources
@@ -80,6 +82,12 @@ stopped export into an empty folder, retaining the named identity and native sta
 Managed `system/` files use an explicit allowlist. Operator `config/` is seeded
 only when missing. Knowledge/workspace remain user-owned. State/data are private
 runtime input, not portable user content. Status reads must not mutate any of them.
+fhold's native OpenCode policy, Codex defaults/requirements and Claude managed
+settings belong under `system/`, not seed-once `config/`. Updates replace their
+release bytes. Native user settings, AKM activation/custom engines, Guardian and
+custom Compose remain operator-owned. Deliberate custom policy mounts are the
+operator's maintenance responsibility. This ownership correction needs no migration,
+configuration merger or startup writer.
 Backup restore requires fhold's own verified manifest. Native history recovery
 is separate, offline and explicitly mapped. Restored task definitions remain
 inactive until reviewed for portable-content restore. Full-instance export/import

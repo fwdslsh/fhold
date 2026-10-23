@@ -88,10 +88,10 @@ access routes are acquired lazily when needed.
 
 `StackConfig`, Compose paths, image auditing, local locks and applied-runtime
 receipts stay with the Docker host implementation. On SSH these functions still
-execute on the owning host through its installed fhold CLI. ACA never receives
+execute on the owning host through the exact locally bundled private management executable. ACA never receives
 a fake home, synthetic StackConfig or a copy of Docker intent.
 
-Connection setup/edit/repair belongs to hosting and remains in Admin Settings.
+Connection setup/edit/check belongs to hosting and remains in Admin Settings.
 Provider-specific onboarding fields are appropriate there. Instance pages retain
 their common layout. Supported lifecycle semantics are presented as operation
 effects, not provider-name branches in common confirmation dialogs.
@@ -199,7 +199,9 @@ Transport code uses one typed method-to-request/result map for the supported
 operation set and validates unknown wire data once at each trust boundary. Replace
 caller-chosen `T` and variadic `extra` with inference from that map. Retain and
 evolve the existing SSH envelope through advertised operations and a compatible
-wire version; do not demand identical desktop, remote CLI and image versions.
+wire version; do not demand identical desktop and image versions. SSH executable
+and managed Skeleton bytes are content-bound to the local distribution, not an
+operator-maintained remote CLI.
 Domain methods must not know IPC channels, JSON-line framing or cloud commands.
 Today the hosting-machine `hello` uses version 1 and advertises management method
 names, while the persistent management-session request itself has no version field.
@@ -272,7 +274,7 @@ ordinary settings saves depend on forcing a new checkpoint.
 | Target | Initial implementation route | What must not be assumed |
 | --- | --- | --- |
 | Local Docker | Direct calls to shared services; host-owned preferences; existing native API and container commands. | A local agent endpoint or home is universal. |
-| SSH Docker | Existing remote CLI runs those same services; typed SSH session, existing SCP transfer and explicitly acquired loopback forwarding. | Files must be mirrored locally or native credentials copied to the desktop. |
+| SSH Docker | Exact bundled private helper runs those same services; typed SSH session, existing SCP transfer and explicitly acquired loopback forwarding. | Files must be mirrored locally or native credentials copied to the desktop. |
 | ACA | Native Azure hosting adapter plus explicit authenticated native OpenCode HTTPS access where reachable. | Azure account access authenticates to OpenCode, or HTTPS alone permits filesystem/native-worker management. |
 
 Refactor the existing OpenCode HTTP helper to receive an endpoint and a private

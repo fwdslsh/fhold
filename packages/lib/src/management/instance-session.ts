@@ -328,7 +328,7 @@ export function rpcManagementBindings(
 	function requireMethod(method: ManagementMethod) {
 		if (supports?.(method) === false)
 			throw new Error(
-				`The remote CLI does not advertise ${method}. Other supported host operations remain available; update its CLI to enable this operation.`
+				`The management helper does not advertise ${method}. Other supported host operations remain available; check the local tooling distribution.`
 			);
 	}
 	function operation<I, O>(
@@ -357,7 +357,7 @@ export function rpcManagementBindings(
 							state: 'unavailable',
 							reason:
 								supports?.(method) === false
-									? `The remote CLI does not advertise ${method}. Update its CLI to enable this operation.`
+									? `The management helper does not advertise ${method}. Check the local tooling distribution.`
 									: (extraReason ?? 'This operation is not available on the selected host.')
 						},
 			input

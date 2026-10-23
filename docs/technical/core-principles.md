@@ -32,7 +32,11 @@ with no server, chat, tray or background control plane. Its standard Electron
 AppImage updater checks/downloads while Admin is open, defaults to the Stable
 channel (even in a prerelease build), and applies on ordinary quit or an explicitly
 confirmed Admin restart. It never restarts agents, updates container images or
-repairs remote CLIs. Optional failures remain local to the updater. The optional
+replaces operator-installed CLIs. SSH connections separately prepare exact bundled
+management bytes in a private content-addressed cache, without lifecycle actions,
+home writes, release downloads, PATH fallback, daemons or new services. All SSH
+discovery, sessions, forwarded commands and transfer operations share this resolver.
+Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
@@ -204,7 +208,16 @@ authority, token broker, wrapper or new managed settings layer is introduced.
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned
 managed files, seed missing operator files and never synchronize or delete
-whole trees. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
+whole trees. Native system policies belong to that managed allowlist:
+`system/assistant/opencode.json`, `system/codex/{config,requirements}.toml` and
+`system/claude/managed-settings.json`. OpenCode uses the existing read-only
+`system/assistant` directory; Codex/Claude use individual file mounts so image-baked
+hook files remain visible. User preferences/account state, AKM task activation and
+custom engines/bundles, Guardian settings and custom Compose stay operator-owned.
+Advanced native policy overrides require deliberate operator-owned mounts and
+separate maintenance. Old config policy files remain inert and untouched without
+automatic migration, import or deletion; no refresh-untouched-seeds or startup
+configuration writer is added. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
 default is `~/fhold/instances/default`. CLI home selection is an explicit
 `--name`/`-n` directory name under that root or an absolute path, then optional
 `FH_HOME`, then cwd. Admin reopens the last-used compatible instance once per app
@@ -227,11 +240,11 @@ The existing lifecycle lock and Compose path own application. No background
 service, automatic restart or second configuration store is introduced.
 Overview shows observed container image tags independently of saved intent and
 runtime health. The available image tag comes from the managing tool's bundled
-runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
+runtime cohort (the exact locally supplied management helper for SSH), not a registry lookup or an assumed
 latest version. If Compose omits a reference, a bounded, image-only Docker inspect
 fills it from the actual container. Optional metadata failures never block management.
-Older SSH CLIs explain missing metadata and offer explicit host-tool repair, never
-invent versions from saved intent or the desktop release. Update preserves explicit
+SSH management never falls back to an installed host CLI or invents versions from
+saved intent or the desktop release. Update preserves explicit
 custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh

@@ -305,26 +305,6 @@ async function checkConnection(connection) {
 			checks.append(line);
 		}
 		details.append(checks);
-		if (connection.kind === 'ssh-docker' && result.repairable) {
-			const repair = document.createElement('button');
-			repair.type = 'button';
-			repair.className = 'secondary';
-			repair.textContent = 'Install / update remote CLI';
-			repair.addEventListener('click', async () => {
-				const done = await connectionOperation('Updating remote CLI', () =>
-					state.api.hostingRepairConnection(connection.id)
-				);
-				if (done) {
-					hostingStatus(done);
-					await checkConnection(connection);
-				} else if (
-					done === undefined &&
-					!byId('hosting-manager-status').classList.contains('danger-text')
-				)
-					hostingStatus('Remote CLI installation cancelled.');
-			});
-			details.append(repair);
-		}
 	});
 }
 async function removeConnection(connection) {

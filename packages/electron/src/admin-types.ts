@@ -66,7 +66,6 @@ export type AdminApi = {
 	hostingUpdateConnection(id: string, value: unknown): Promise<HostingConnection | undefined>;
 	hostingRemoveConnection(id: string): Promise<boolean>;
 	hostingCheckConnection(id: string): Promise<ConnectionCheck>;
-	hostingRepairConnection(id: string): Promise<string | undefined>;
 	hostingInstances(connectionId: string): Promise<InstanceSummary[]>;
 	welcome(): Promise<AdminWelcome>;
 	openInstance(target: AdminTarget): Promise<void>;
@@ -181,7 +180,6 @@ export const ADMIN_CHANNELS = {
 	hostingUpdateConnection: 'admin:hosting-update-connection',
 	hostingRemoveConnection: 'admin:hosting-remove-connection',
 	hostingCheckConnection: 'admin:hosting-check-connection',
-	hostingRepairConnection: 'admin:hosting-repair-connection',
 	hostingInstances: 'admin:hosting-instances',
 	welcome: 'admin:welcome',
 	openInstance: 'admin:open-instance',

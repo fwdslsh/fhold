@@ -1,4 +1,4 @@
-# Operator-owned native defaults. requirements.toml enforces restrictions.
+# Release-owned native defaults. requirements.toml enforces restrictions.
 approval_policy = "on-request"
 
 [marketplaces.akm-plugins]

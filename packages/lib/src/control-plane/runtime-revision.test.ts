@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { installHome } from './install.js';
 import { createFholdState, markInstalled } from './state.js';
 import { readStackConfig } from './stack-config.js';
@@ -69,9 +69,11 @@ test('native policy files and enabled portal tokens require apply, but live auth
 	writeFileSync(join(home, 'workspace/note.txt'), 'ongoing work');
 	savePortalTokens(home, { portal: 'discord', botToken: 'disabled-test-token' });
 	expect(restartStatus(home)).toEqual({ required: false });
-	writeFileSync(join(home, 'config/codex/config.toml'), 'approval_policy = "on-request"\n');
-	expect(restartStatus(home)).toEqual({ required: true });
-	recordAppliedRuntime(home, runtimeRevision(home));
+	for (const path of ['system/assistant/opencode.json', 'system/codex/config.toml', 'system/codex/requirements.toml', 'system/claude/managed-settings.json']) {
+		writeFileSync(join(home, path), 'changed system policy\n');
+		expect(restartStatus(home)).toEqual({ required: true });
+		recordAppliedRuntime(home, runtimeRevision(home));
+	}
 	const baseline = config(home);
 	const enabled = structuredClone(baseline);
 	enabled.gateway.enabled = true;
@@ -99,6 +101,16 @@ test('native preferences accept ordinary atomic saves without restart; changing 
 	recordAppliedRuntime(home, runtimeRevision(home));
 	writeFileSync(join(home, 'config/assistant/opencode.jsonc'), '// preferred native file\n{}\n');
 	expect(restartStatus(home)).toEqual({ required: true });
+});
+
+test('unreferenced old config policies never create pending runtime changes', async () => {
+	const { home } = await fixture();
+	recordAppliedRuntime(home, runtimeRevision(home));
+	for (const path of ['config/opencode/opencode.json', 'config/codex/config.toml', 'config/codex/requirements.toml', 'config/claude/managed-settings.json']) {
+		mkdirSync(dirname(join(home, path)), { recursive: true });
+		writeFileSync(join(home, path), 'inert old operator policy');
+		expect(restartStatus(home)).toEqual({ required: false });
+	}
 });
 
 test('a failed apply or stop does not clear pending settings; successful recreation does', async () => {
@@ -129,7 +141,7 @@ else if (args[0] === 'compose' && args.includes('up')) {
  const akm = JSON.parse(readFileSync(akmPath, 'utf8'));
  if (mode === 'akm-edit') akm.engines.scheduled.timeoutMs += 1;
  if (mode !== 'old') { akm.engines.scheduled.args[1] = '--server'; writeFileSync(akmPath, JSON.stringify(akm, null, 2) + '\\n'); }
- if (mode === 'edit') writeFileSync(${JSON.stringify(join(home, 'config/codex/config.toml'))}, 'approval_policy = "on-request"\\n');
+ if (mode === 'edit') writeFileSync(${JSON.stringify(join(home, 'system/codex/config.toml'))}, 'approval_policy = "on-request"\\n');
 }
 `,
 		{ mode: 0o700 }

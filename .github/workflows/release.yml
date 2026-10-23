@@ -214,6 +214,8 @@ jobs:
           actual="$("./packages/cli/dist/${ASSET}" --version)"
           test "${actual}" = "${VERSION}"
           "./packages/cli/dist/${ASSET}" --help
+      - name: Execute the native management helper and verify its embedded Skeleton
+        run: node scripts/smoke-management-helper.mjs
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.asset }}

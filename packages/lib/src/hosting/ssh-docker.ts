@@ -3,9 +3,9 @@ import { SshInstanceManagement } from '../management/ssh.js';
 import { rpcManagementBindings } from '../management/instance-session.js';
 import { runHostingProcess, type HostingProcess } from '../control-plane/process.js';
 import { checkSshConnection } from './ssh-check.js';
+import { createSshHelperResolver } from '../control-plane/ssh-helper.js';
 import {
 	HOSTING_WIRE_VERSION,
-	SSH_RPC_COMMAND,
 	sshArgs,
 	type MachineRequest,
 	type MachineResponse
@@ -23,10 +23,11 @@ export function sshDockerProvider(
 	connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
 	run: HostingProcess = runHostingProcess
 ): HostingProvider {
+	const helper = createSshHelperResolver(connection, run);
 	async function request(payload: Omit<MachineRequest, 'version'>): Promise<unknown> {
 		// OpenSSH passes remote commands through a shell. The command is fixed;
 		// directories, actions and options travel only in typed JSON stdin.
-		const stdout = await run('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
+		const stdout = await run('ssh', [...sshArgs(connection), await helper('rpc')], {
 			input: `${JSON.stringify({ version: HOSTING_WIRE_VERSION, ...payload })}\n`,
 			timeoutMs: ['start', 'stop', 'restart'].includes(payload.action) ? 600_000 : 45_000
 		});
@@ -35,12 +36,12 @@ export function sshDockerProvider(
 			response = JSON.parse(stdout) as MachineResponse;
 		} catch {
 			throw new Error(
-				'The remote fhold CLI did not return hosting protocol JSON. Install a CLI with hosting support and keep shell startup output off stdout.'
+				'The management helper did not return hosting protocol JSON. Keep SSH shell startup output off stdout and check the local tooling distribution.'
 			);
 		}
 		if (!response || response.version !== HOSTING_WIRE_VERSION || typeof response.ok !== 'boolean')
 			throw new Error(
-				'The remote CLI uses an unsupported hosting wire version. Update its CLI; identical release versions are not required.'
+				'This distribution’s management helper uses an unsupported hosting wire version. Rebuild or reinstall local tooling.'
 			);
 		if (!response.ok)
 			throw new Error(
@@ -52,7 +53,7 @@ export function sshDockerProvider(
 		const result = (await request({ action: 'hello' })) as { actions?: string[] };
 		if (!result || !Array.isArray(result.actions) || !result.actions.includes(action))
 			throw new Error(
-				`The remote CLI does not support hosting ${action}. Other supported read operations remain available.`
+				`The management helper does not support hosting ${action}. Rebuild or reinstall local tooling.`
 			);
 	}
 	function summary(value: unknown): InstanceSummary {
@@ -63,7 +64,7 @@ export function sshDockerProvider(
 			typeof value.name !== 'string' ||
 			!('ref' in value)
 		)
-			throw new Error('The remote CLI returned an invalid instance summary.');
+			throw new Error('The management helper returned an invalid instance summary.');
 		const ref = parseInstanceRef(value.ref);
 		if (ref.kind !== 'local-docker')
 			throw new Error('The remote host returned a non-Docker target.');
@@ -74,7 +75,7 @@ export function sshDockerProvider(
 		};
 	}
 	const provider: HostingProvider = {
-		check: () => checkSshConnection(connection, run, () => provider.listInstances()),
+		check: () => checkSshConnection(connection, run, () => provider.listInstances(), helper),
 		installation: {
 			async info() {
 				const value = (await request({ action: 'hello' })) as {
@@ -86,7 +87,7 @@ export function sshDockerProvider(
 					!value.management?.includes('snapshot')
 				)
 					throw new Error(
-						'Update the remote fhold CLI from Settings → Host connections before managing this computer.'
+						'Check the host connection and local tooling distribution before managing this computer.'
 					);
 				return {
 					instancesDirectory: value.instancesDirectory,
@@ -95,7 +96,7 @@ export function sshDockerProvider(
 			},
 			async directory(path) {
 				const info = await provider.installation!.info();
-				const manager = new SshInstanceManagement(connection, info.defaultHome);
+				const manager = new SshInstanceManagement(connection, info.defaultHome, { helper });
 				try {
 					return await manager.call('directory', path ?? info.instancesDirectory);
 				} finally {
@@ -110,7 +111,7 @@ export function sshDockerProvider(
 				roots: connection.roots.length ? connection.roots : undefined
 			});
 			if (!Array.isArray(values))
-				throw new Error('The remote CLI returned an invalid instance list.');
+				throw new Error('The management helper returned an invalid instance list.');
 			return values.map(summary);
 		},
 		async selectInstance(selector) {
@@ -171,7 +172,7 @@ export function sshDockerProvider(
 				const identity = summary(value);
 				const snapshot = value as HostingSnapshot;
 				if (!Array.isArray(snapshot.services) || !Array.isArray(snapshot.warnings))
-					throw new Error('The remote CLI returned an invalid status snapshot.');
+					throw new Error('The management helper returned an invalid status snapshot.');
 				let managed = false;
 				const warnings = [...snapshot.warnings];
 				try {
@@ -198,7 +199,7 @@ export function sshDockerProvider(
 						managed
 							? ['start', 'stop', 'restart', 'settings', 'transfer']
 							: ['start', 'stop', 'restart'],
-						'Update the remote fhold CLI to enable instance settings and file transfer.'
+						'Check the local tooling distribution to enable instance settings and file transfer.'
 					)
 				};
 			}
@@ -220,7 +221,7 @@ export function sshDockerProvider(
 					);
 				},
 				applicationBindings(options) {
-					manager ??= new SshInstanceManagement(connection, ref.remoteHome, options);
+					manager ??= new SshInstanceManagement(connection, ref.remoteHome, { ...options, helper });
 					return rpcManagementBindings(manager, {
 						initialize: initializeManagement,
 						supports: (method) =>

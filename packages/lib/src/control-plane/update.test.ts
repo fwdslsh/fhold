@@ -42,7 +42,7 @@ test('update preserves operator Compose customizations instead of treating recom
 	expect(readFileSync(overlay, 'utf8')).toBe(custom);
 });
 
-test('upgrades seed missing native policies, preserve operator edits and never rewrite account settings', async () => {
+test('updates replace release-owned policies and preserve user settings and inert old policies', async () => {
 	const { home } = await fixture();
 	const policies = {
 		'config/opencode/opencode.json': '{"permission":{"bash":"ask"}}\n',
@@ -50,23 +50,38 @@ test('upgrades seed missing native policies, preserve operator edits and never r
 		'config/codex/requirements.toml': 'allowed_approval_policies = ["never"]\n',
 		'config/claude/managed-settings.json': '{"permissions":{"defaultMode":"plan"}}\n'
 	};
-	// Model an earlier installation without the newly introduced policy files.
-	for (const path of Object.keys(policies)) rmSync(join(home, path));
-	const userConfig = join(home, 'data/assistant/home/.codex/config.toml');
-	mkdirSync(dirname(userConfig), { recursive: true });
-	writeFileSync(userConfig, '# Existing account preferences and unrelated hook approvals\n');
-	await updateHome({ homeDir: home, start: false });
+	const managedPolicies = [
+		'system/assistant/opencode.json',
+		'system/codex/config.toml',
+		'system/codex/requirements.toml',
+		'system/claude/managed-settings.json'
+	];
+	for (const path of managedPolicies) writeFileSync(join(home, path), 'prior release bytes\n');
+	// Old config policy files are not migrated, deleted, overwritten or mounted.
 	for (const [path, value] of Object.entries(policies)) {
-		expect(readFileSync(join(home, path))).toEqual(readFileSync(join(skeletonRoot(), path)));
+		mkdirSync(dirname(join(home, path)), { recursive: true });
+		writeFileSync(join(home, path), value);
+	}
+	const preserved = {
+		'config/assistant/opencode.json': '{"model":{"providerID":"operator","model":"chosen"}}\n',
+		'config/stack/custom.compose.yml': 'services: {}\n',
+		'config/akm/config.json': '{"scheduler":{"enabled":["reviewed-task"]},"bundles":["custom"]}\n',
+		'config/guardian/opencode.json': '{"model":"operator/moderator"}\n',
+		'data/assistant/.codex/config.toml': '# Existing native account preferences\n',
+		'data/assistant/.codex/auth.json': '{"token":"fixture-only"}\n',
+		'data/assistant/.claude/settings.json': '{"permissions":{"defaultMode":"plan"}}\n',
+		'knowledge/secrets/auth.json': '{"fixture":{"key":"fixture-only"}}\n'
+	};
+	for (const [path, value] of Object.entries(preserved)) {
+		mkdirSync(dirname(join(home, path)), { recursive: true });
 		writeFileSync(join(home, path), value);
 	}
 	await updateHome({ homeDir: home, start: false });
-	for (const [path, value] of Object.entries(policies))
+	for (const path of managedPolicies)
+		expect(readFileSync(join(home, path))).toEqual(readFileSync(join(skeletonRoot(), path)));
+	for (const [path, value] of Object.entries({ ...policies, ...preserved }))
 		expect(readFileSync(join(home, path), 'utf8')).toBe(value);
-	expect(readFileSync(userConfig, 'utf8')).toBe(
-		'# Existing account preferences and unrelated hook approvals\n'
-	);
-}, 65_000); // Two native Compose calls, each with its existing 30-second budget.
+}, 35_000);
 
 test('unknown schema leaves managed and user files unchanged before any checkpoint', async () => {
 	const { home } = await fixture();

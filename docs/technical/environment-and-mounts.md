@@ -15,6 +15,15 @@ They are not instance intent, credentials or backup members. SSH paths resolve
 on the Docker host; ACA resource IDs are not filesystem homes. The implicit
 local workflow is unchanged. See [hosted management](../hosting.md).
 
+SSH management executables live outside instance homes at
+`${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/<sha256>/fhold` on the remote
+account. CLI/Admin ship both Linux architectures and cache exact bundled bytes
+atomically; operator-installed CLIs are neither consulted nor changed. Cached
+tools contain the matching managed Skeleton, not instance state or credentials.
+Old hashes remain until manually removed when unused. Preparing a connection
+does not update containers, managed home files or runtime intent. No container
+mount or privilege changes are introduced.
+
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
 is `~/fhold/instances/default`. CLI `--name`/`-n` selects a directory name
 under that root or an absolute path. If absent, explicit `FH_HOME` takes
@@ -35,8 +44,8 @@ The following paths are relative to that instance's home, not `~/fhold`:
 
 | Host path | Owner | Purpose |
 |---|---|---|
-| `system/` | fhold release | Exact managed OpenCode and Compose files |
-| `config/` | Operator | Seed-once OpenCode, Codex, Claude, AKM, and Compose settings |
+| `system/` | fhold release | Exact managed harness policies, OpenCode assets and Compose files |
+| `config/` | Operator | Seed-once user preferences, AKM, Guardian and Compose settings; explicit custom policy overrides |
 | `config/recovery/include.json` | Operator | Same-instance recovery selection/mount policy, not a portable backup member |
 | `knowledge/` | Operator and AKM | Knowledge, task sources, scoped user environment, provider auth |
 | `workspace/` | Operator | Trusted local agent workspace |
@@ -55,8 +64,10 @@ The following paths are relative to that instance's home, not `~/fhold`:
 Updates replace only the allowlisted managed files in `seed.ts`. They seed
 operator files only when absent and never synchronize or delete whole directories.
 
-Native policy files under `config/opencode`, `config/codex` and `config/claude`
-are mounted read-only at the harnesses' system paths. See
+Native system policies under `system/assistant`, `system/codex` and `system/claude`
+are release-owned and mounted read-only at the harnesses' system paths. Old config
+policy files are untouched and unreferenced unless a custom overlay explicitly
+mounts them; no migration or automatic compatibility layer is supplied. See
 [managed harness configuration](../managed-harness-configuration.md) for exact
 mounts, task permissions and standalone deployment inputs.
 
@@ -152,10 +163,9 @@ bypasses Guardian.
 | `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
 | `knowledge/secrets/auth.json` | Legacy OpenCode auth path | v1 migration input only |
 | `system/assistant` | `/etc/opencode` | read-only |
-| `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | read-only, nested operator-policy mount |
-| `config/codex/config.toml` | `/etc/codex/config.toml` | read-only |
-| `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only |
-| `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | read-only |
+| `system/codex/config.toml` | `/etc/codex/config.toml` | read-only individual file |
+| `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only individual file |
+| `system/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | read-only individual file |
 | `config/akm` | `/etc/akm` | read-write; native AKM settings and task activation, no delegated ingress credentials |
 | `knowledge` | `/stash` | read/write |
 | `data/akm/cache` | `/opt/akm/cache` | read/write |
@@ -170,7 +180,10 @@ and its value never appears in environment settings.
 Admin makes narrow native provider/model preference edits and verifies the
 effective result through OpenCode's authenticated API. Native file watching
 applies ordinary and atomic saves; no explicit reload or process/container
-restart is needed. Managed plugins and operator policy remain read-only.
+restart is needed. Managed plugins and system policy remain read-only. OpenCode's
+policy is `system/assistant/opencode.json`, with no default nested mount hiding it.
+Individual Codex/Claude mounts preserve the image's `/etc/codex/hooks.json` and
+`/etc/claude-code/managed-settings.d/10-fhold.json`.
 `OPENCODE_CONFIG` selects the derived preferred filename inside the writable
 user-config directory. Selecting a different filename requires `fhold restart`
 to change that startup environment value; editing the selected file or a local
@@ -309,9 +322,12 @@ All four managed services:
 - drop all Linux capabilities; and
 - set `no-new-privileges:true`.
 
-Before start or restart, the control plane resolves the complete managed file
-plus user overlay and rejects boundary expansion: replaced core images or
+Optional `fhold doctor` diagnostics compare the complete managed file plus user
+overlay with recommended boundaries, reporting replaced core images or
 commands, changed mounts, secrets, networks, health commands, logging, runtime
 users or published ports beyond the StackConfig choices, plaintext secret-like environment values, custom
 managed-secret grants or access to `agent_net`, privileged containers, added
-capabilities, host namespaces/devices, and container-runtime mounts.
+capabilities, host namespaces/devices, and container-runtime mounts. These are
+advisory diagnostics, not start/restart/update policy gates. Operators own custom
+overlay behavior. Native Compose parsing, instance targeting and actual recovery
+integrity/ownership checks still apply.

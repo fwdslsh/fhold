@@ -8,9 +8,8 @@ import { MANAGED_FILES, SEEDED_FILES } from '../packages/lib/src/control-plane/s
 const locations = [
 	['system/assistant/', '/etc/opencode/'],
 	['config/assistant/', '/home/fhold/.config/opencode/'],
-	['config/opencode/', '/etc/opencode/'],
-	['config/codex/', '/etc/codex/'],
-	['config/claude/', '/etc/claude-code/'],
+	['system/codex/', '/etc/codex/'],
+	['system/claude/', '/etc/claude-code/'],
 	['config/akm/', '/etc/akm/'],
 	['knowledge/', '/stash/']
 ];

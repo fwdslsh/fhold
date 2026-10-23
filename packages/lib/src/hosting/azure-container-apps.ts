@@ -167,7 +167,6 @@ export function azureContainerAppsProvider(
 		async check() {
 			const result: import('./types.js').ConnectionCheck = {
 				ok: false,
-				repairable: false,
 				checks: [],
 				instances: []
 			};

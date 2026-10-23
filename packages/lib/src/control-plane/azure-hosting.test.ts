@@ -88,7 +88,6 @@ test('connection onboarding uses native browser auth and account choices without
 test('provider-owned diagnostics distinguish Azure account, scope and discovery, without SSH repair', async () => {
 	const checked = await fixture().provider.check!();
 	expect(checked.ok).toBe(true);
-	expect(checked.repairable).toBe(false);
 	expect(checked.checks.map((item) => item.name)).toEqual([
 		'Azure CLI',
 		'Azure sign-in',
