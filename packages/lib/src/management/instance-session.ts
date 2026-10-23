@@ -19,6 +19,7 @@ import {
 	type InstanceSnapshot,
 	type Observation,
 	type Operation,
+	type OperationInputMetadata,
 	type RequestContext
 } from './contracts.js';
 export type { ApplicationObservations, InstanceSessionBindings } from './contracts.js';
@@ -102,34 +103,27 @@ export function describeOperations(
 	return descriptions;
 }
 
-/** Snapshot capability is shown to clients but never used as an invocation preflight. */
-function describeSnapshotOperations(
-	tree: Record<string, unknown>,
-	host: HostingSnapshot
-): Record<string, import('./contracts.js').OperationDescription> {
-	const descriptions = describeOperations(tree);
-	for (const action of ['start', 'stop', 'restart'] as const) {
-		const key = `host.${action}`;
-		const description = descriptions[key];
-		if (!description || description.support !== 'supported') continue;
-		const capability = host.capabilities[action];
-		descriptions[key] = {
-			...description,
-			availability: capability.supported
-				? { state: 'ready' }
-				: {
-						state: 'unavailable',
-						reason: capability.reason ?? 'This lifecycle operation is unavailable for this target.'
-					}
-		};
-	}
-	return descriptions;
-}
-
 function hostDeployment(snapshot: HostingSnapshot): DeploymentObservation {
+	const lifecycleCapabilities = Object.fromEntries(
+		(['start', 'stop', 'restart'] as const).map((action) => {
+			const capability = snapshot.capabilities[action];
+			return [
+				action,
+				capability.supported
+					? { state: 'ready' as const }
+					: {
+							state: 'unavailable' as const,
+							reason:
+								capability.reason ??
+								'This lifecycle operation is unavailable for this target.'
+						}
+			];
+		})
+	) as NonNullable<DeploymentObservation['lifecycleCapabilities']>;
 	return {
 		...(snapshot.platformState ? { state: snapshot.platformState } : {}),
 		warnings: snapshot.warnings,
+		lifecycleCapabilities,
 		...(snapshot.revisions ? { revisions: snapshot.revisions } : {}),
 		...(snapshot.providerLabel ? { providerLabel: snapshot.providerLabel } : {}),
 		...(snapshot.guidance ? { guidance: snapshot.guidance } : {}),
@@ -250,16 +244,13 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 				services: host.serviceError
 					? { state: 'unavailable', reason: host.serviceError }
 					: { state: 'known', value: host.services, observedAt },
-				operations: describeSnapshotOperations(
-					{
-						host: bindings.host,
-						agent,
-						apps,
-						data,
-						...(bindings.docker ? { docker: bindings.docker } : {})
-					},
-					host
-				),
+				operations: describeOperations({
+					host: bindings.host,
+					agent,
+					apps,
+					data,
+					...(bindings.docker ? { docker: bindings.docker } : {})
+				}),
 				pendingChanges: optionalObservation(
 					host.pendingRestart
 						? {
@@ -299,6 +290,8 @@ export function rpcManagementBindings(
 	'agent' | 'apps' | 'data' | 'docker' | 'initialize' | 'inspectApplication' | 'busy' | 'close'
 > {
 	const { supports } = options;
+	const credentialPolicyReason =
+		'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.';
 	let acquired: AppConnections | undefined;
 	// An acquired route belongs to the source addresses from which it was
 	// created. If a later passive observation changes them, drop the route.
@@ -341,10 +334,13 @@ export function rpcManagementBindings(
 	function operation<I, O>(
 		method: ManagementMethod,
 		run: (input: I, context: RequestContext) => Promise<O>,
-		extraSupported?: () => boolean | undefined,
-		extraReason?: string,
-		input?: import('./contracts.js').OperationInputMetadata
+		operationOptions: {
+			supported?: () => boolean | undefined;
+			reason?: string;
+			input?: OperationInputMetadata;
+		} = {}
 	): Operation<I, O> {
+		const { supported: extraSupported, reason: extraReason, input } = operationOptions;
 		return supportedOperation(
 			async (input, context) => {
 				await initialize();
@@ -394,9 +390,9 @@ export function rpcManagementBindings(
 					...(options.acquireSnapshot ? { sessionBound: true as const } : {})
 				};
 			},
-			undefined,
-			undefined,
-			options.acquireSnapshot ? { acquireClients: ['opencode', 'mcp', 'claude'] } : undefined
+			options.acquireSnapshot
+				? { input: { acquireClients: ['opencode', 'mcp', 'claude'] } }
+				: undefined
 		),
 		providers: operation('providers', async () => manager.call('providers')),
 		setKey: operation('providerKey', async (input) => manager.call('providerKey', input)),
@@ -450,12 +446,12 @@ export function rpcManagementBindings(
 							async (input) => {
 								await manager.call('credential', { action: 'policy', ...input });
 							},
-							options.credentialPolicy,
-							'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.'
+							{
+								supported: options.credentialPolicy,
+								reason: credentialPolicyReason
+							}
 						)
-					: unsupportedOperation(
-							'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.'
-						),
+					: unsupportedOperation(credentialPolicyReason),
 				create: operation('credential', async (input) => {
 					await manager.call('credential', { action: 'create', ...input });
 				}),

@@ -57,6 +57,7 @@ import { withAssistantEndpoint } from '../control-plane/opencode.js';
 import type { LocalManagementHostPort } from './contracts.js';
 import { LocalAgentServices } from './agent-services.js';
 import { readCredentialKey } from '../control-plane/credential-store.js';
+import { assertInstallInstanceName } from '../control-plane/install.js';
 
 /** The same target-bound domain operations run locally or in the owning SSH host CLI. */
 export function localInstanceManagement(
@@ -246,6 +247,7 @@ export function localInstanceManagement(
 			return adminSnapshot();
 		},
 		install: async (value, automaticPorts = true) => {
+			assertInstallInstanceName(value.deployment.projectName);
 			const docker = await ensureDockerReady();
 			if (!docker.ok) throw new Error(docker.message);
 			await assertProjectOwnership(value.deployment.projectName);

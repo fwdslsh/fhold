@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { composeInstanceSession, rpcManagementBindings } from './instance-session.js';
 import type { InstanceManagement, ManagedSnapshot } from './types.js';
 import { defaultStackConfig } from '../control-plane/stack-config.js';
-import { supportedOperation, unsupportedOperation } from './contracts.js';
+import { operationDescription, supportedOperation, unsupportedOperation } from './contracts.js';
 import type { HostingSnapshot } from '../hosting/types.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,9 +63,10 @@ test('a new local folder reaches the shared install view without requiring an in
 			support: 'supported',
 			availability: { state: 'ready' }
 		});
-		expect(snapshot.operations['host.start']).toMatchObject({
-			support: 'supported',
-			availability: { state: 'unavailable' }
+		expect(snapshot.operations['host.start']).toEqual(operationDescription(session.host.start));
+		expect(snapshot.deployment).toMatchObject({
+			state: 'known',
+			value: { lifecycleCapabilities: { start: { state: 'unavailable' } } }
 		});
 	} finally {
 		await session.close();

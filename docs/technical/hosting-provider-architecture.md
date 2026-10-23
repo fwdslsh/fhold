@@ -71,10 +71,13 @@ inventory is not an empty account list. Optional failures do not erase healthy
 deployment observations or become new startup gates.
 
 The actual operation tree generates the serialized description catalog; it is
-not a second hand-written feature list. The same operation slots describe support and current availability.
-CLI and Admin invoke named, typed operations and render specific unavailable
-reasons. Unsupported controls retain their position in the common Overview,
-Agent settings, Apps and System pages.
+not a second hand-written feature list. `OperationDescription` is a pure
+projection of that tree. Lifecycle eligibility observed with a deployment
+snapshot is carried separately as narrow deployment lifecycle capabilities; the
+renderer combines that observation with operation metadata for disabled-state
+display. CLI/Admin invocation still rechecks the authoritative target rather
+than treating an earlier observation as a preflight. Unsupported controls retain
+their position in the common Overview, Agent settings, Apps and System pages.
 
 Passive inspection observes the hosting platform and already known facts. It
 does not contact OpenCode ingress, acquire a native setup process or wake an

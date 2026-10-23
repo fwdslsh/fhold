@@ -9,6 +9,12 @@ function observationReason(observation, fallback) {
 	return observation?.reason || fallback;
 }
 
+function observedLifecycleCapability(operationKey, snapshot) {
+	const action = /^host\.(start|stop|restart)$/.exec(operationKey)?.[1];
+	if (!action) return { state: 'ready' };
+	return known(snapshot.deployment)?.lifecycleCapabilities?.[action] || { state: 'ready' };
+}
+
 export function instancePresentation(snapshot) {
 	const deployment = known(snapshot.deployment) || {};
 	return {
@@ -30,6 +36,8 @@ export function instanceCapability(operationKey, snapshot = state.currentSnapsho
 	if (operation.support !== 'supported') return { supported: false, reason: operation.reason };
 	if (operation.availability.state !== 'ready')
 		return { supported: false, reason: operation.availability.reason };
+	const observed = observedLifecycleCapability(operationKey, snapshot);
+	if (observed.state !== 'ready') return { supported: false, reason: observed.reason };
 	return { supported: true };
 }
 

@@ -101,6 +101,8 @@ export type InstanceIdentity = {
 export type DeploymentObservation = {
 	state?: string;
 	warnings: string[];
+	/** Eligibility observed with this deployment snapshot; never an invoke preflight. */
+	lifecycleCapabilities?: Partial<Record<HostingAction, Availability>>;
 	revisions?: Array<{ name: string; active: boolean; replicas?: number; health: string }>;
 	providerLabel?: string;
 	guidance?: { access?: string; client?: string; restart?: string };

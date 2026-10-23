@@ -140,6 +140,8 @@ installation completion fails, with the partial result reported separately.
 Preference results distinguish saved intent from verified effective settings;
 neither implies a durable recovery checkpoint. Lifecycle effects come from host
 operation metadata, not provider branches in shared confirmation dialogs.
+Observed lifecycle eligibility is a separate deployment fact for UI display;
+it never mutates the operation-description catalog or preflights an invocation.
 Host capability negotiation belongs to the adapter, not a caller's preliminary
 status read. A direct operation negotiates its methods/features before dispatch;
 unknown optional capabilities do not become false upgrade requirements. Shared

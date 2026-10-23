@@ -186,11 +186,14 @@ or proof that a target is still running; an unknown optional diagnostic is not a
 reason to block an otherwise valid operation or stop the agent.
 
 The same registered operation slots produce the serializable feature descriptions
-for Admin. Do not maintain a second independent supported-feature matrix. Metadata
-cannot claim support when no handler exists. Temporarily offline or signed-out is
-unavailable, not unsupported; an older runtime with unknown support remains unknown
-until inspection or an explicit tool update establishes it. Explanations are short
-and actionable. Unknown optional features must not disable unrelated operations.
+for Admin. The description is a pure operation projection; observed lifecycle
+eligibility remains a separate deployment fact that the renderer combines with
+that projection for disabled controls. Do not maintain a second independent
+supported-feature matrix. Metadata cannot claim support when no handler exists.
+Temporarily offline or signed-out is unavailable, not unsupported; an older
+runtime with unknown support remains unknown until inspection or an explicit tool
+update establishes it. Explanations are short and actionable. Unknown optional
+features must not disable unrelated operations.
 
 Transport code uses one typed method-to-request/result map for the supported
 operation set and validates unknown wire data once at each trust boundary. Replace

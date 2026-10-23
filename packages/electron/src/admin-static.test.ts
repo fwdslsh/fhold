@@ -2061,6 +2061,23 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('start-stack').disabled).toBe(true);
 		expect(control('start-stack').title).toContain('does not support starting');
 	});
+	it('combines pure operation metadata with observed lifecycle eligibility for disabled actions', () => {
+		const snapshot = normalizedSnapshot({
+			deployment: {
+				lifecycleCapabilities: {
+					start: { state: 'unavailable', reason: 'The platform reports this deployment is inspect-only.' }
+				}
+			}
+		});
+		expect(snapshot.operations['host.start']).toEqual(supported());
+		expect(instanceCapability('host.start', snapshot)).toEqual({
+			supported: false,
+			reason: 'The platform reports this deployment is inspect-only.'
+		});
+		renderServices(snapshot);
+		expect(control('start-stack').disabled).toBe(true);
+		expect(control('start-stack').title).toContain('inspect-only');
+	});
 	it('shows optional-feature warnings without reporting a usable agent stopped or blocking setup', () => {
 		const assistant = {
 			name: 'assistant',

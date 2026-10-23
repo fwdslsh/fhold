@@ -20,15 +20,20 @@ import { acquireStackLock, releaseStackLock } from './lock.js';
 import { chooseInstallPorts } from './install-ports.js';
 import { defaultRecoverySettings } from './recovery-config.js';
 
-/** Shared initialization; frontends own Docker/provider prompts and asset resolution. */
-export async function installHome(
-	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {}
-): Promise<string> {
-	if (options.name !== undefined && !isInstanceName(options.name)) {
+/** Fresh-install identity is also the container hostname. Existing homes keep their identity. */
+export function assertInstallInstanceName(name: string): void {
+	if (!isInstanceName(name)) {
 		throw new Error(
 			'Instance name must be 1–63 lowercase letters, numbers or hyphens, starting and ending with a letter or number.'
 		);
 	}
+}
+
+/** Shared initialization; frontends own Docker/provider prompts and asset resolution. */
+export async function installHome(
+	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {}
+): Promise<string> {
+	if (options.name !== undefined) assertInstallInstanceName(options.name);
 	const supplied = options.config === undefined ? undefined : parseStackConfig(options.config);
 	if (supplied && !supplied.ok) throw new Error(supplied.error);
 	const name =
@@ -57,6 +62,8 @@ export async function installHome(
 		parsed.config.recovery = defaultRecoverySettings(parsed.config.deployment.projectName);
 	const check = parseStackConfig(parsed.config);
 	if (!check.ok) throw new Error(check.error);
+	// Fresh instance names become hostnames, regardless of the frontend or source of intent.
+	assertInstallInstanceName(check.config.deployment.projectName);
 	const config = (options.automaticPorts ?? options.config === undefined)
 		? await chooseInstallPorts(check.config)
 		: check.config;

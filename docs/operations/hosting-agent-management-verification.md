@@ -84,7 +84,7 @@ Final local checks on the source-frozen implementation:
 | Check | Result |
 | --- | --- |
 | `bun run check` | All six workspace typechecks passed. |
-| `FH_SOCKET_TESTS=1 bun run test` | 1,034 passed, zero failed; five opt-in image-backed tests skipped. |
+| `FH_SOCKET_TESTS=1 bun run test` | 1,041 passed, zero failed; five opt-in image-backed tests skipped. |
 | Admin real-Chromium provider workflow | Passed, 298 assertions against the synthetic native API. No vendor account or billed inference. |
 | `bun run lint` | Passed its configured gate; repository style warnings remain. This is not a warning-free lint claim. |
 | CLI compile and Admin bundle | Both passed. |
@@ -155,9 +155,9 @@ operations. A transient capability-query failure does not become a new preflight
 roadblock; the authoritative RPC still reports its own outcome.
 
 Lifecycle invocation no longer consults a hidden last-snapshot cache. The current
-snapshot explicitly supplies disabled-state descriptions for Admin, while a direct
-command rechecks current target authority. A stale denied observation cannot block
-a now-valid command before that check. CLI connect retains its fixed MCP default
+snapshot supplies observed lifecycle eligibility for Admin, while a direct command
+rechecks current target authority. A stale denied observation cannot block a
+now-valid command before that check. CLI connect retains its fixed MCP default
 and rejects an unsupported client route before asking for native credentials.
 
 Both normalized input parsers and native handlers are complete mapped tables;
@@ -171,6 +171,29 @@ mechanics beside their native client. The shared process/SSH and local Docker-ho
 primitives live below hosting and management in `control-plane/`. Obsolete internal
 path facades were removed; published CLI wire compatibility remains covered.
 The architecture graph also forbids management runtime imports of hosting adapters.
+
+### Third review pass
+
+All three additional findings were addressed. Fresh-install names are checked by
+one shared hostname rule after final intent resolution. CLI and native Admin/SSH
+entry points also apply it before Docker probes. Regression tests cover config
+and environment names, no filesystem writes or Docker calls for rejected names,
+and explicit valid-name overrides. Existing-home configuration parsing remains
+unchanged.
+
+Operation descriptions are again pure projections of their registered operations.
+Observed lifecycle eligibility lives in `deployment.lifecycleCapabilities`; one
+provider-neutral renderer helper combines it with operation metadata. Tests verify
+the catalog equality and disabled Admin control, while retaining the stale-denied
+observation followed by a successful authoritative invocation case.
+
+The RPC binding helper now takes an options object instead of positional optional
+arguments, and its credential-policy explanation has one definition.
+The architect implemented and qualified the session seam; the independent engineer
+approved the combined changes after catching and verifying the CLI preflight fix.
+The final full suite, six workspace typechecks, lint gate, docs checks, CLI/Admin
+builds, real Chromium workflow, packaged AppImage smoke and all-profile stopped
+Compose validation passed again.
 
 ## Qualification boundaries
 

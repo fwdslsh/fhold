@@ -8,10 +8,65 @@ import { localInstanceManagement } from './instance.js';
 import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
 import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
 import { installHome } from '../control-plane/install.js';
+import { defaultStackConfig, readStackConfig } from '../control-plane/stack-config.js';
+import { parseManagementArgs } from './wire-input.js';
 
 const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+test.each(['my_agent', 'agent-', 'a'.repeat(64)])(
+	'fresh managed installs reject non-hostname project names before writing or starting: %s',
+	async (name) => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-session-install-name-'));
+		roots.push(root);
+		const home = join(root, 'home');
+		const calls = join(root, 'docker-calls');
+		const docker = join(root, 'docker');
+		writeFileSync(
+			docker,
+			`#!${process.execPath}\nimport { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`,
+			{ mode: 0o700 }
+		);
+		const previousDocker = process.env.FH_DOCKER_BIN;
+		process.env.FH_DOCKER_BIN = docker;
+		const management = localInstanceManagement(home, { host: localDockerManagementHost(home) });
+		try {
+			const config = defaultStackConfig(home);
+			config.deployment.projectName = name;
+			// Exercise the same parsed install entry point as the SSH session and Admin.
+			const args = parseManagementArgs('install', config, [false]);
+			await expect(management.call('install', ...args)).rejects.toThrow('Instance name must be');
+			expect(existsSync(home)).toBe(false);
+			expect(existsSync(calls)).toBe(false);
+		} finally {
+			await management.close();
+			if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN;
+			else process.env.FH_DOCKER_BIN = previousDocker;
+		}
+	}
+);
+test('fresh installs validate ambient names and allow an explicit valid name to override config', async () => {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-session-install-name-sources-'));
+	roots.push(root);
+	const home = join(root, 'home');
+	const previousName = process.env.FH_PROJECT_NAME;
+	process.env.FH_PROJECT_NAME = 'invalid_name';
+	try {
+		await expect(installHome({ homeDir: home, automaticPorts: false })).rejects.toThrow(
+			'Instance name must be'
+		);
+		expect(existsSync(home)).toBe(false);
+		const config = defaultStackConfig(home);
+		config.deployment.projectName = 'invalid_name';
+		const name = 'a'.repeat(63);
+		await installHome({ homeDir: home, config, name, automaticPorts: false });
+		const saved = readStackConfig(home);
+		expect(saved.ok && saved.config.deployment.projectName).toBe(name);
+	} finally {
+		if (previousName === undefined) delete process.env.FH_PROJECT_NAME;
+		else process.env.FH_PROJECT_NAME = previousName;
+	}
 });
 test('snapshot reports the managing CLI runtime cohort locally and over the SSH session envelope', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-session-version-'));
