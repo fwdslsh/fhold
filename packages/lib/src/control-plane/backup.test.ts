@@ -10,7 +10,7 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { createBackup } from './backup.js';
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
@@ -75,6 +75,10 @@ describe('portable backup', async () => {
 			join(source, 'config/codex/requirements.toml'),
 			'allowed_approval_policies = ["never"]\n'
 		);
+		for (const path of ['system/assistant/opencode.json', 'system/codex/config.toml', 'system/codex/requirements.toml', 'system/claude/managed-settings.json']) {
+			mkdirSync(dirname(join(source, path)), { recursive: true });
+			writeFileSync(join(source, path), 'release-owned policy fixture');
+		}
 
 		const manifest = await createBackup({ sourceHome: source, destination });
 
@@ -86,6 +90,10 @@ describe('portable backup', async () => {
 		]);
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'auth.json'))).toBe(false);
 		expect(existsSync(join(destination, 'config/codex/requirements.toml'))).toBe(false);
+		expect(existsSync(join(destination, 'system/codex/requirements.toml'))).toBe(false);
+		expect(manifest.excludedCategories).toContain(
+			'Release-managed system/ files, including native harness policies; supplied by the target release'
+		);
 		expect(manifest.excludedCategories).toContain(
 			'Operator harness policies (config/opencode, config/codex, config/claude); preserve and reapply separately'
 		);

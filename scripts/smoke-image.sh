@@ -208,7 +208,6 @@ assistant)
 		"$root/config"
 	cp -R packages/skeleton/system/assistant "$root/system"
 	cp -R packages/skeleton/config/assistant/. "$root/config/"
-	cp packages/skeleton/config/opencode/opencode.json "$root/opencode-policy.json"
 	cp packages/skeleton/config/akm/config.json "$root/akm.json"
 	printf '%s\n' 'assistant-smoke-password-0000000000000000' >"$root/password"
 	printf '%s\n' '{}' >"$root/knowledge/secrets/auth.json"
@@ -233,7 +232,6 @@ assistant)
 		-e OPENCODE_SERVER_PASSWORD_FILE=/run/fhold/password \
 		-v "$root/data:/home/fhold" \
 		-v "$root/system:/etc/opencode:ro" \
-		-v "$root/opencode-policy.json:/etc/opencode/opencode.json:ro" \
 		-v "$root/config:/home/fhold/.config/opencode" \
 		-v "$root/akm.json:/etc/akm/config.json:ro" \
 		-v "$root/knowledge:/stash" \

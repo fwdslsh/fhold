@@ -35,7 +35,7 @@ test('tooling changes do not require container qualification', () => {
 	for (const path of [
 		'containers/assistant/entrypoint.sh',
 		'packages/portal/src/server.ts',
-		'packages/skeleton/config/opencode/opencode.json',
+		'packages/skeleton/system/assistant/opencode.json',
 		'packages/lib/src/control-plane/seed-manifest.ts',
 		'unknown-input'
 	])

@@ -8,7 +8,7 @@ credential, session or plugin service.
 | Layer | Host path | Purpose |
 |---|---|---|
 | Managed directory | `system/assistant` | Release-owned instructions, restricted agents and native AKM/fhold plugins; read-only in Assistant |
-| Operator policy | `config/opencode/opencode.json` | Native permission defaults and enforced resource policies; separate read-only mount |
+| System policy | `system/assistant/opencode.json` | Release-owned native permission defaults and resource policies within the managed directory; no shadowing nested mount |
 | User configuration | `config/assistant/` | Writable native preferences, persona and user plugins |
 | Native database | `data/assistant/.local/share/opencode/opencode.db` | OpenCode sessions and provider credentials |
 | Workspace | `workspace/` | Trusted local working files |
@@ -17,8 +17,11 @@ credential, session or plugin service.
 `OPENCODE_CONFIG` selects the user preferences file: `opencode.jsonc` when
 present, otherwise `opencode.json`, otherwise the existing `config.json`.
 Fresh installs seed `opencode.json`. The directory is writable so ordinary
-atomic editor saves work. Managed files and operator policy remain read-only.
-Updates preserve operator edits; see
+atomic editor saves work. Managed files remain read-only in Assistant; updates
+replace their release bytes and preserve user preferences. Custom policy requires
+an explicit operator-owned native mount through the existing Compose overlay,
+maintained separately from release defaults. Old `config/opencode/opencode.json`
+files remain untouched and inert unless explicitly mounted; see
 [managed harness configuration](../managed-harness-configuration.md).
 
 Project and Claude compatibility configuration discovery remain disabled in

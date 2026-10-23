@@ -204,7 +204,16 @@ authority, token broker, wrapper or new managed settings layer is introduced.
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned
 managed files, seed missing operator files and never synchronize or delete
-whole trees. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
+whole trees. Native system policies belong to that managed allowlist:
+`system/assistant/opencode.json`, `system/codex/{config,requirements}.toml` and
+`system/claude/managed-settings.json`. OpenCode uses the existing read-only
+`system/assistant` directory; Codex/Claude use individual file mounts so image-baked
+hook files remain visible. User preferences/account state, AKM task activation and
+custom engines/bundles, Guardian settings and custom Compose stay operator-owned.
+Advanced native policy overrides require deliberate operator-owned mounts and
+separate maintenance. Old config policy files remain inert and untouched without
+automatic migration, import or deletion; no refresh-untouched-seeds or startup
+configuration writer is added. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
 default is `~/fhold/instances/default`. CLI home selection is an explicit
 `--name`/`-n` directory name under that root or an absolute path, then optional
 `FH_HOME`, then cwd. Admin reopens the last-used compatible instance once per app

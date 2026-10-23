@@ -48,19 +48,14 @@ const CORE_MOUNTS: Readonly<Record<string, readonly MountGrant[]>> = {
 			readOnly: false
 		},
 		{ source: 'system/assistant', target: '/etc/opencode', readOnly: true },
+		{ source: 'system/codex/config.toml', target: '/etc/codex/config.toml', readOnly: true },
 		{
-			source: 'config/opencode/opencode.json',
-			target: '/etc/opencode/opencode.json',
-			readOnly: true
-		},
-		{ source: 'config/codex/config.toml', target: '/etc/codex/config.toml', readOnly: true },
-		{
-			source: 'config/codex/requirements.toml',
+			source: 'system/codex/requirements.toml',
 			target: '/etc/codex/requirements.toml',
 			readOnly: true
 		},
 		{
-			source: 'config/claude/managed-settings.json',
+			source: 'system/claude/managed-settings.json',
 			target: '/etc/claude-code/managed-settings.json',
 			readOnly: true
 		},

@@ -136,9 +136,8 @@ COPY --from=tools /native-defaults /native-defaults
 COPY --from=tools /managed-defaults/ /
 # Native system configuration exists before the non-root entrypoint starts.
 COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
-COPY --from=tools /assistant-defaults/config/opencode/ /etc/opencode/
-COPY --from=tools /assistant-defaults/config/codex/ /etc/codex/
-COPY --from=tools /assistant-defaults/config/claude/ /etc/claude-code/
+COPY --from=tools /assistant-defaults/system/codex/ /etc/codex/
+COPY --from=tools /assistant-defaults/system/claude/ /etc/claude-code/
 
 ARG PLATFORM_VERSION
 ARG VCS_REF

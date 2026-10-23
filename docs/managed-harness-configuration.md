@@ -2,27 +2,30 @@
 
 fhold installs AKM and fhold integrations for OpenCode, Codex and Claude Code
 at image build time. Fresh sessions load the built-in hooks without personal
-hook approval. Operators supply task permissions and other settings in each
-harness's native format; fhold does not translate between permission models.
+hook approval. fhold supplies native system defaults; user preferences and any
+deliberate deployment overrides use each harness's native format. fhold does not
+translate between permission models.
 
 For a normal personal instance, no policy editing is necessary. Use the usual
-provider/remote sign-in flows. Change these files only to customize permissions,
-add managed integrations or enforce restrictions for a hosted deployment.
+provider/remote sign-in flows. Advanced operators can explicitly mount their own
+policy to customize permissions or integrations for a hosted deployment.
 
 ## Deployment inputs
 
-The CLI/Admin seed these files only when missing. Updates preserve operator
-edits. Managed Compose mounts each file read-only into Assistant:
+These files belong to the release-managed allowlist. Install and update write
+the current release bytes, not seed-once defaults. Managed Compose mounts
+`system/assistant` read-only at `/etc/opencode` and the other files individually:
 
 | Instance file | Container path | Purpose |
 | --- | --- | --- |
-| `config/opencode/opencode.json` | `/etc/opencode/opencode.json` | Native OpenCode permissions, resource policies, agents and MCP servers |
-| `config/codex/config.toml` | `/etc/codex/config.toml` | Codex defaults, including `approval_policy`, plugins and MCP servers |
-| `config/codex/requirements.toml` | `/etc/codex/requirements.toml` | Enforced Codex constraints and managed-only hooks |
-| `config/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | Claude managed settings, including `permissions` and managed-only hooks |
+| `system/assistant/opencode.json` | `/etc/opencode/opencode.json` | Native OpenCode permissions and resource policies |
+| `system/codex/config.toml` | `/etc/codex/config.toml` | Codex defaults, including `approval_policy` and plugins |
+| `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | Codex constraints and managed-only hooks |
+| `system/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | Claude managed settings, including `permissions` and managed-only hooks |
 
-Standalone containers contain the same defaults. Provisioners supply read-only
-file mounts at the same container paths before starting the container, for example:
+Standalone images bake the same allowlisted policy bytes with one source per
+target. No policy mounts are required for the defaults. Advanced provisioners
+can explicitly replace them with operator-owned read-only files, for example:
 
 ```sh
 docker run --env-file ./runtime.env \
@@ -36,22 +39,46 @@ docker run --env-file ./runtime.env \
 `runtime.env` supplies the normal runtime inputs, including the required OpenCode
 server password. Mount individual files so the built-in hook files, managed
 plugins and skills remain visible. Restart the container after changing policy.
-Use the seeded files as a base to retain the built-in settings and marketplace
+Use copies of the release-managed files as a base to retain built-in settings and marketplace
 declarations. Agents cannot modify these system files. Their normal home and
 account settings remain writable and recoverable.
 
-For a local instance, edit the files under the selected instance directory and
-run `fhold --name personal-agent restart` (replace `personal-agent` with your instance name or
-absolute directory). Standalone Docker, Compose, Kubernetes and ephemeral hosts
+For a managed instance, create separate operator-owned policy copies under
+`config/` and add explicit individual mounts to `config/stack/custom.compose.yml`.
+For example, an intentional OpenCode replacement is:
+
+```yaml
+services:
+  assistant:
+    volumes:
+      - ${FH_HOME}/config/opencode/opencode.json:/etc/opencode/opencode.json:ro
+```
+
+This is an advanced override, not a default mount. The operator owns its contents,
+native precedence and compatibility with future releases; updates preserve the
+overlay and custom files but cannot refresh a policy that the overlay shadows.
+Never mount whole Codex/Claude system directories: preserve `/etc/codex/hooks.json`
+and `/etc/claude-code/managed-settings.d/10-fhold.json` from the image.
+Run `fhold --name personal-agent restart` (replace the name with your instance name
+or absolute directory). Standalone Docker, Compose, Kubernetes and ephemeral hosts
 use the same image paths: the deployment tool supplies the files and recreates
 the container. No cloud-specific fhold settings or bootstrap script is needed.
 
 `config/assistant/opencode.json` remains the ordinary user/provider configuration.
-Use `config/opencode/opencode.json` for operator-managed policy that takes
-precedence over it. Do not move provider credentials into the policy files.
+Codex/Claude personal settings and sign-in remain under their native home paths.
+`config/akm` remains operator-owned because task activation, custom bundles and
+engines are mutable intent, as do Guardian settings and the custom Compose overlay.
+Do not move provider credentials into system policy files.
 Neither an image rebuild nor a new environment variable is required. You can
 also change into the instance home and run `fhold restart` with `FH_HOME` unset.
 Do not edit `system/` or generated `state/stack.env`; updates own those files.
+
+Old `config/opencode/opencode.json`, `config/codex/{config,requirements}.toml`
+and `config/claude/managed-settings.json` files may remain on disk. The default
+stack no longer mounts or reads them. Unreferenced files do not affect
+pending-restart tracking. They are not migrated, imported, overwritten or deleted automatically.
+Review any desired custom policy and explicitly mount it; there is no transition
+or backward-compatibility layer.
 
 Upgrade the CLI/Admin and Assistant image together. Activation checks the image's
 `dev.fwdslsh.fhold.managed-harness-policy=1` capability label before applying the
@@ -119,8 +146,10 @@ project settings, agent defaults and session approvals:
 The read-only global resource policy has native precedence over conflicting
 user/project/inline resource policies. Ordinary `permissions` are defaults,
 not a managed ceiling; agent/session rules may override them. This differs from
-v1. Existing operator files are preserved: review any v1 `permission` rules
-that were intended as mandatory denials and express them as resource policies.
+v1. When deliberately supplying custom policy, review any v1 `permission` rules
+intended as mandatory denials and express them as resource policies. Installed
+OpenCode 2 also normalizes supported v1 syntax; old syntax alone does not identify
+an old binary.
 Native action names include `shell` (formerly `bash`) and `subagent`
 (formerly `task`). Resource policies have allow/deny, not ask.
 
@@ -149,8 +178,8 @@ project and ordinary plugin hooks no longer run. Plugin skills and MCP servers
 remain available through their native installation process; managed-only hooks
 are not an MCP or plugin-installation allowlist.
 
-To add an operator-reviewed hook without changing the image, put it in the
-already-mounted native policy file. Codex accepts `[hooks]` tables in
+To add an operator-reviewed hook without changing the image, explicitly mount an
+operator-owned native policy copy as described above. Codex accepts `[hooks]` tables in
 `config/codex/requirements.toml`. For example, append:
 
 ```toml
@@ -208,14 +237,15 @@ the generic fhold image does not bake in third-party service clients.
 ## Startup, recovery and verification
 
 System files are present before recovery and native workers start. Recovery
-restores account/user data; current deployment policy comes from the image and
-operator mounts. Do not include system policy paths in custom recovery inputs.
+restores account/user data; current deployment policy comes from the release-managed
+files/image and deliberate operator mounts. Do not include system policy paths in custom recovery inputs.
 Existing personal hook approvals are preserved but do not control managed hooks.
 
-Portable `fhold backup`/`restore` deliberately does not transfer these operator
-policies or their executable integrations to a new instance. Preserve them in
-your private deployment configuration or full-home backup, review them, then
-provision them separately before starting the restored instance. Ephemeral
+Portable `fhold backup`/`restore` does not transfer release-managed system files
+or custom executable policy to a new instance. The target release supplies system
+defaults. Preserve custom policy separately, review it, then explicitly provision
+it before starting the restored instance. A stopped full-instance export includes
+the whole home, including managed files; it is not a portable policy import. Ephemeral
 recovery likewise depends on the deployment supplying policy on every boot.
 
 Codex's `fhold-codex-recall.mjs review` checks the exact built-in managed inventory

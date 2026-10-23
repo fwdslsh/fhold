@@ -45,12 +45,13 @@ No separate instance selector or second instance-name registry is introduced.
 Never point fhold at a foreign or unrelated nonempty home. Supported portable
 restore requires fhold's own backup manifest; no old-product import is provided.
 
-Edit managed OpenCode, Codex and Claude policies under the instance's `config/`
-directory, then restart. AI-service and model preferences instead use the native
-OpenCode API through Admin and apply without restarting the container.
-Updates preserve these operator-owned files; managed
-policies are read-only inside the container. See [harness configuration](docs/managed-harness-configuration.md)
-for paths, permissions, hooks and the alpha.3 upgrade considerations.
+OpenCode, Codex and Claude system policies live under release-owned `system/`;
+updates refresh them and they are read-only inside Assistant. User preferences
+remain operator-owned. AI-service/model preferences use native OpenCode through
+Admin and apply without restarting. Advanced custom policy requires an explicit
+operator-maintained mount through the custom Compose overlay, then restart.
+See [harness configuration](docs/managed-harness-configuration.md) for ownership,
+paths, permissions and hooks.
 
 For ephemeral containers, opt-in [Assistant recovery](docs/assistant-recovery.md)
 uses directory or Blob destinations while working SQLite stays local. Configure

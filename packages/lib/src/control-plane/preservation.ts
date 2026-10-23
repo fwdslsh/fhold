@@ -90,6 +90,7 @@ export const PORTABLE_BACKUP_EXCLUSIONS = [
 	'Runtime snapshots, tool output and other data/ artifacts',
 	'External bind sources, named volumes and symlink targets',
 	'Guardian/portal handles, credentials and runtime authority',
+	'Release-managed system/ files, including native harness policies; supplied by the target release',
 	'Operator harness policies (config/opencode, config/codex, config/claude); preserve and reapply separately',
 	'Unselected secrets and custom executable configuration'
 ];

@@ -31,7 +31,7 @@ export type ProviderEndpointInput = {
 };
 type Options = NativeAgentRequestOptions;
 type ConfigFile = { value: Record<string, unknown> };
-const POLICY_FILE = 'config/opencode/opencode.json';
+const POLICY_FILE = 'system/assistant/opencode.json';
 
 function record(value: unknown): Record<string, unknown> | undefined {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -315,7 +315,7 @@ export async function saveProviderEndpoint(
 		const { users, policy } = configurations(home);
 		if (definition(policy, provider))
 			throw new Error(
-				'This service is controlled by config/opencode/opencode.json. Edit its managed settings there.'
+				'This service is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
 			);
 		const existing = [...users].reverse().find((file) => definition(file, provider));
 		const native = (await listProviders(home, options)).find((item) => item.id === provider);
@@ -401,7 +401,7 @@ export async function useProviderModel(
 			!(managedModel?.providerID === provider && managedModel.model === model)
 		)
 			throw new Error(
-				'The default model is controlled by config/opencode/opencode.json. Edit its managed model setting there.'
+				'The default model is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
 			);
 		const write = await applyConfigChange(
 			home,
@@ -430,7 +430,7 @@ export async function removeProviderSetup(
 			const { users, policy } = configurations(home);
 			if (definition(policy, provider))
 				throw new Error(
-					'This endpoint is controlled by managed settings; edit config/opencode/opencode.json instead.'
+					'This endpoint is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
 				);
 			const files = users.filter((file) => definition(file, provider));
 			if (
