@@ -32,7 +32,11 @@ with no server, chat, tray or background control plane. Its standard Electron
 AppImage updater checks/downloads while Admin is open, defaults to the Stable
 channel (even in a prerelease build), and applies on ordinary quit or an explicitly
 confirmed Admin restart. It never restarts agents, updates container images or
-repairs remote CLIs. Optional failures remain local to the updater. The optional
+replaces operator-installed CLIs. SSH connections separately prepare exact bundled
+management bytes in a private content-addressed cache, without lifecycle actions,
+home writes, release downloads, PATH fallback, daemons or new services. All SSH
+discovery, sessions, forwarded commands and transfer operations share this resolver.
+Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
 with Node's built-in SQLite and HTTP server. Bun remains its build/test tool.
@@ -236,11 +240,11 @@ The existing lifecycle lock and Compose path own application. No background
 service, automatic restart or second configuration store is introduced.
 Overview shows observed container image tags independently of saved intent and
 runtime health. The available image tag comes from the managing tool's bundled
-runtime cohort (the remote CLI for SSH), not a registry lookup or an assumed
+runtime cohort (the exact locally supplied management helper for SSH), not a registry lookup or an assumed
 latest version. If Compose omits a reference, a bounded, image-only Docker inspect
 fills it from the actual container. Optional metadata failures never block management.
-Older SSH CLIs explain missing metadata and offer explicit host-tool repair, never
-invent versions from saved intent or the desktop release. Update preserves explicit
+SSH management never falls back to an installed host CLI or invents versions from
+saved intent or the desktop release. Update preserves explicit
 custom image pins and native confirmation.
 Fresh setup prefers 3810/3830 and chooses an available pair if either is in use;
 manual ports live under Advanced. Existing instances never change ports on refresh

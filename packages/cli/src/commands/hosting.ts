@@ -10,7 +10,7 @@ import {
 	hostingMachineRequest,
 	openInstanceSession
 } from '@fhold/lib';
-import { checkHostingConnection, repairSshCli, connectionEndpoint } from '@fhold/lib';
+import { checkHostingConnection, connectionEndpoint } from '@fhold/lib';
 import { serveManagementSession } from '@fhold/lib';
 import {
 	serveHostingCommand,
@@ -19,7 +19,7 @@ import {
 	type SshCommandFiles
 } from '@fhold/lib';
 import { main } from '../main.js';
-import { SSH_RPC_COMMAND, sshArgs } from '@fhold/lib';
+import { sshHelperCommand, sshArgs } from '@fhold/lib';
 import { runHostingProcess } from '@fhold/lib';
 import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
 import { runSessionCommand } from '../lib/hosting-command.js';
@@ -135,29 +135,6 @@ export const hostingCommand = defineCommand({
 				const result = await checkHostingConnection(store().connection(args.id));
 				console.log(JSON.stringify(result, null, 2));
 				if (!result.ok) process.exitCode = 1;
-			}
-		}),
-		repair: defineCommand({
-			meta: {
-				name: 'repair',
-				description: 'Install/update only the remote Linux CLI in ~/.local/bin/fhold'
-			},
-			args: {
-				id: { type: 'positional', required: true },
-				confirm: { type: 'boolean', default: false },
-				'cli-file': {
-					type: 'string',
-					description:
-						'Trusted offline Linux CLI artifact; otherwise download this published tooling release'
-				}
-			},
-			async run({ args }) {
-				console.log(
-					await repairSshCli(store().connection(args.id), {
-						confirmed: args.confirm,
-						cliFile: args['cli-file']
-					})
-				);
 			}
 		}),
 		list: defineCommand({
@@ -311,7 +288,7 @@ export async function runHostedCommand(
 				}
 				if (!uploader) {
 					const hello = JSON.parse(
-						await runHostingProcess('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
+						await runHostingProcess('ssh', [...sshArgs(connection), await sshHelperCommand(connection, 'rpc')], {
 							input: JSON.stringify({ version: 1, action: 'hello' })
 						})
 					) as { value: { instancesDirectory: string } };

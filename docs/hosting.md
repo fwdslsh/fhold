@@ -8,17 +8,17 @@ keys and recovery storage credentials.
 
 ## Docker over SSH
 
-The remote Docker host needs a fhold CLI with hosting support. Its release may
-differ from your local tooling. fhold checks `~/.local/bin` as well as the native
-noninteractive SSH PATH. Complete ordinary SSH authentication and
+The remote Docker host needs Linux x64 or arm64, Docker/Compose and standard
+shell utilities (`uname`, `sha256sum`, `mktemp`). No installed fhold CLI is needed.
+The local CLI/Admin automatically supplies its exact management executable and
+embedded managed files through SSH, without using or replacing a remote CLI.
+Complete ordinary SSH authentication and
 host-key review first, for example `ssh lab`. Native SSH configuration owns keys,
 ports, jump hosts and known hosts; fhold never accepts host trust automatically.
 
 ```bash
 fhold hosting add lab --provider ssh-docker --host lab --roots '["/opt/stacks"]'
 fhold hosting check lab
-# If the remote CLI is missing/old (only the CLI is replaced, no restart):
-fhold hosting repair lab --confirm
 fhold hosting instances --connection lab
 fhold --connection lab --name agent status
 fhold --connection lab --name /opt/stacks/agent logs
@@ -38,26 +38,39 @@ match the discovered, persisted instance name; use an exact absolute directory
 when names are ambiguous. Remote paths are never resolved against this computer,
 and remote commands never override this computer's `FH_HOME`.
 
-The remote CLI executes the existing lifecycle, lock, recovery drain, Compose
+The private management executable executes the existing lifecycle, lock, recovery drain, Compose
 parsing and pending-settings receipt paths. Compose policy recommendations are
-optional `fhold doctor` diagnostics, not lifecycle gates. An SSH host needs the
-updated CLI to receive this behavior; updating Admin does not replace remote tools.
-The wire envelope and advertised
-actions determine compatibility, not exact release-version equality. An older
-RPC-only CLI can still provide host status and supported lifecycle operations;
-an unavailable session method disables only its named agent/app/data operation.
+optional `fhold doctor` diagnostics, not lifecycle gates. Updating local tooling
+selects its matching management bytes on the next connection. This does not update
+an operator-installed CLI or change an instance until you request an operation.
 The machine
 endpoint accepts one typed operation on stdin; it is not a network server or
 arbitrary remote command runner. SSH failures do not replay a mutation.
 
-`hosting check` reports SSH, remote CLI/protocol, Docker and discovery separately.
-It never changes host trust or instance configuration. `hosting repair` downloads
-the local tooling version's Linux x64/arm64 CLI and verifies the published checksum
-before atomically installing it in `~/.local/bin/fhold`. It does not use sudo,
-change shell startup files, install Docker, restart containers or touch homes.
-For offline/private development, `--cli-file /path/to/trusted-linux-cli` accepts an
-operator-supplied artifact instead; the remote staged binary must run successfully
-and support hosting before replacement. Unpublished versions need this option.
+`hosting check` reports SSH, management helper/protocol, Docker and discovery
+separately. It may populate the private executable cache but never changes host
+trust or instance configuration. Cache preparation uses no sudo, shell startup
+changes, release downloads, container operations or instance-home writes.
+
+Both standalone CLI and Admin ship Linux x64 and arm64 helpers compiled from the
+same source and embedded Skeleton as the local build, including unpublished PR
+previews. Helpers are the existing CLI, not another protocol implementation.
+The outer CLI compresses these resources; helpers do not recursively contain
+other architectures. The target architecture comes from remote `uname -sm`.
+The SHA-256 of the executable selects
+`${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/<sha256>/fhold` on that host.
+Each connection verifies the cached bytes and executability; cache hits reuse
+them. Missing or corrupt entries are streamed into unique private staging files,
+hashed, checked with `--version`, then atomically renamed. Concurrent clients
+install the same immutable content, with no mutable current-version link. Failed
+transfers leave the operator CLI and instance unchanged and never fall back to
+PATH. Old content-addressed entries are retained; they may be removed manually
+when no management session uses them. A noexec or unwritable cache requires
+operator correction; fhold never changes mount permissions or uses another home.
+
+Source development uses the normal `bun run packages/cli/src/main.ts` entrypoint;
+run `bun run --cwd packages/cli build:helpers` after source changes first. Shipping
+CLI and Admin builds always regenerate both helpers from their current source.
 
 SSH instances use the same Admin pages and operations as local instances:
 Overview, Agent settings, Apps and System. You can install into a remote folder,
@@ -244,17 +257,16 @@ instance and unsaved drafts intact; Back returns without a switch. **Settings â†
 Host connections** offers the same SSH/ACA metadata as the CLI. Settings is
 available from Welcome and the management sidebar, without selecting an instance.
 The instance picker contains only recent instances and Open another instance. The page
-offers Add, Edit, Check and Remove; **Open instances** browses that host. SSH checks offer an explicitly confirmed
-**Install / update remote CLI** action. Errors remain visible in the hosted-agent
+offers Add, Edit, Check and Remove; **Open instances** browses that host. SSH
+checks automatically prepare the matching private helper. Errors remain visible in the hosted-agent
 picker, not hidden in the management sidebar. Display names, roots and SSH ports
 can be edited. Changing a host or Azure scope requires confirmation, clears only
 that connection's recent selections and closes its selected view. Removing a
 connection forgets metadata only: no instance is stopped or deleted.
 **New assistant** and **Import assistantâ€¦** start separate workflows on the
 selected location; neither action silently opens or starts an existing instance.
-Older host CLIs may not report image versions. Overview explains this and links
-to host connections; explicitly update the remote CLI, then reopen the instance.
-It reports the host CLI's bundled update image, never the desktop app's version.
+Overview reports the managing helper's bundled update image, never inferring an
+image tag from the desktop application's version or an installed remote CLI.
 
 The same operations are available in the CLI:
 

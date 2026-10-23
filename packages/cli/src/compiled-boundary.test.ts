@@ -21,7 +21,8 @@ const explicitDockerMarker = join(root, 'explicit-docker-called');
 const poisonedDockerMarker = join(root, 'poisoned-docker-called');
 const poisonedDocker = join(root, 'poisoned-docker');
 const explicitDocker = join(root, 'explicit-docker');
-const compileFlags = cliPackage.scripts.build.split(/\s+/).filter((arg) => arg.startsWith('--no-compile-autoload-'));
+const buildSource = readFileSync(join(import.meta.dir, '../scripts/build.ts'), 'utf8');
+const compileFlags = [...buildSource.matchAll(/'(--no-compile-autoload-[^']+)'/g)].map((match) => match[1]);
 
 // Child processes get a private operator home and no inherited provider/account
 // secrets. PATH resolves only our harmless Docker fixture before system tools.
@@ -71,9 +72,9 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 test('every shipped CLI compile target disables both ambient autoload mechanisms', () => {
 	for (const target of ['build', 'build:linux-x64', 'build:linux-arm64'] as const) {
 		const script = cliPackage.scripts[target];
-		expect(script).toContain('--no-compile-autoload-dotenv');
-		expect(script).toContain('--no-compile-autoload-bunfig');
+		expect(script).toContain('scripts/build.ts');
 	}
+	expect(buildSource).toContain("...flags");
 	expect(compileFlags).toEqual(['--no-compile-autoload-dotenv', '--no-compile-autoload-bunfig']);
 });
 

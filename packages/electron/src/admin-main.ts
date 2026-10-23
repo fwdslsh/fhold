@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import { createAdminWindow, registerAdminIpc } from './admin-app.js';
+import { configureSshHelperDirectory } from '@fhold/lib';
+
+configureSshHelperDirectory(app.isPackaged
+	? join(process.resourcesPath, 'management')
+	: join(app.getAppPath(), '../cli/embedded'));
 
 if (process.platform === 'win32') app.setAppUserModelId('dev.fwdslsh.fhold.admin');
 app.setPath('userData', join(app.getPath('appData'), 'fhold-admin'));

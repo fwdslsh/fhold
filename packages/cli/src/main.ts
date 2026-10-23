@@ -12,6 +12,8 @@ import {
 
 import cliPackage from '../package.json' with { type: 'json' };
 import { instanceArguments, resolveInstanceHome } from './lib/instance.js';
+import { configureSshHelperDirectory } from '@fhold/lib';
+import { join } from 'node:path';
 
 async function assistantHealthy(): Promise<boolean> {
 	const homeDir = resolveFholdHome();
@@ -93,7 +95,7 @@ const subCommands = {
 } as const;
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
-	hosting: 'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | repair <connection> --confirm | instances --connection <connection>',
+	hosting: 'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | instances --connection <connection>',
 	console: 'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup: 'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote]',
@@ -208,6 +210,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 if (import.meta.main) {
+	configureSshHelperDirectory(join(import.meta.dir, '../embedded'));
 	main().catch((error) => {
 		console.error(error instanceof Error ? error.message : String(error));
 		process.exit(1);

@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isIP } from 'node:net';
 import { sshArgs } from '../control-plane/ssh-native.js';
-import { hostingFailure, runHostingProcess } from '../control-plane/process.js';
+import { sshHelperCommand, type SshHelperResolver } from '../control-plane/ssh-helper.js';
+import {
+	hostingFailure,
+	runHostingProcess,
+	type HostingProcess
+} from '../control-plane/process.js';
 import { packTransfer, unpackTransfer, preserveTransferMetadata } from './transfer.js';
 import type { HostingConnection } from '../hosting/types.js';
 import type {
@@ -17,7 +22,6 @@ import type {
 } from './types.js';
 import { SshTunnel } from './tunnel.js';
 
-export const SSH_MANAGEMENT_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting session';
 export type ManagementRequest = {
 	id: number;
 	homeDir: string;
@@ -50,11 +54,26 @@ export class SshInstanceManagement implements InstanceManagement {
 			setupName?: string;
 			openUrl?: (url: string) => void;
 			spawn?: typeof spawn;
+			run?: HostingProcess;
+			helper?: SshHelperResolver;
 		} = {}
 	) {}
-	private connect(): void {
+	private connecting?: Promise<void>;
+	private async connect(): Promise<void> {
+		if (this.connecting) return this.connecting;
+		this.connecting = this.openTransport();
+		try {
+			await this.connecting;
+		} finally {
+			this.connecting = undefined;
+		}
+	}
+	private async openTransport(): Promise<void> {
 		if (this.closing) throw Error('This instance connection is closed. Open the instance again.');
 		if (this.child) return;
+		const command = await (this.options.helper?.('session') ??
+			sshHelperCommand(this.connection, 'session', this.options.run));
+		if (this.closing) throw Error('This instance connection is closed. Open the instance again.');
 		const native = sshArgs(this.connection);
 		const child = (this.options.spawn ?? spawn)(
 			'ssh',
@@ -65,7 +84,7 @@ export class SshInstanceManagement implements InstanceManagement {
 				'-o',
 				'ServerAliveCountMax=3',
 				this.connection.host,
-				SSH_MANAGEMENT_COMMAND
+				command
 			],
 			{ stdio: 'pipe' }
 		);
@@ -91,7 +110,7 @@ export class SshInstanceManagement implements InstanceManagement {
 			} catch {
 				this.fail(
 					Error(
-						'Remote management returned unexpected output. Check the remote CLI and shell startup messages.'
+						'Remote management returned unexpected output. Check this tooling distribution and SSH shell startup messages.'
 					)
 				);
 				child.stdin.end();
@@ -122,7 +141,7 @@ export class SshInstanceManagement implements InstanceManagement {
 		value?: unknown,
 		...extra: unknown[]
 	): Promise<unknown> {
-		this.connect();
+		await this.connect();
 		const id = ++this.serial;
 		const result = await new Promise<unknown>((resolve, reject) => {
 			this.pending.set(id, { resolve, reject });

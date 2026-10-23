@@ -7,7 +7,6 @@ import {
 	parseHostingConnection,
 	connectionEndpoint,
 	checkHostingConnection,
-	repairSshCli,
 	invokeOperation as invoke,
 	parseLegacyCredentialOperation,
 	parseLegacyRecoveryOperation,
@@ -455,25 +454,6 @@ export function registerAdminIpc(): void {
 		requireAdminSender(event);
 		requireSwitchable();
 		return instances.runConnection(() => checkHostingConnection(instances.hosting.connection(id)));
-	});
-	ipcMain.handle(ADMIN_CHANNELS.hostingRepairConnection, async (event, id: string) => {
-		requireAdminSender(event);
-		requireSwitchable();
-		const connection = instances.hosting.connection(id);
-		if (
-			!(await confirmConnectionChange(
-				event,
-				'Install or update the remote fhold CLI?',
-				`Download this tooling release and replace ~/.local/bin/fhold on ${connection.label}. No sudo, SSH trust changes, container restarts or instance configuration changes are made.`
-			))
-		)
-			return undefined;
-		requireSwitchable();
-		return instances.runConnection(async () => {
-			const result = await repairSshCli(connection, { confirmed: true });
-			if (selectedConnection(id)) await discardSession();
-			return result;
-		});
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingConnections, (event) => {
 		requireAdminSender(event);

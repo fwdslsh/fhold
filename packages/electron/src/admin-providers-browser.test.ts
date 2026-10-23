@@ -403,10 +403,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			false
 		);
 		expect(await evaluate("document.querySelector('#runtime-version-help').textContent")).toContain(
-			'older fhold CLI'
+			'local tooling distribution'
 		);
 		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
-		await capture('overview-older-host-cli.png');
+		await capture('overview-missing-host-metadata.png');
 		await evaluate(`window.overviewQa.services.value[0].image='registry.example.com:5000/team/assistant:long-custom-image-tag-for-multiple-release-channels-2026';
 			import('./runtime.js').then(({renderServices})=>renderServices(window.overviewQa));`);
 		await command('Emulation.setDeviceMetricsOverride', {
@@ -1115,8 +1115,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.hostingSaveConnection=async value=>{qa.saved++;qa.connections.push(value);return value;};
 			state.api.hostingUpdateConnection=async(id,value)=>{qa.saved++;qa.connections=qa.connections.map(item=>item.id===id?value:item);return value;};
 			state.api.hostingRemoveConnection=async id=>{if(!qa.approve)return false;qa.removed++;qa.connections=qa.connections.filter(item=>item.id!==id);return true;};
-			state.api.hostingCheckConnection=async()=>({ok:!qa.checkFails,repairable:true,instances:[],checks:[{name:'SSH',ok:true,detail:'Connected to krang.'},{name:'Remote CLI',ok:!qa.checkFails,detail:qa.checkFails?'Missing CLI. Install / update remote CLI.':'CLI ready.'}]});
-			state.api.hostingRepairConnection=async()=>{qa.repair++;qa.checkFails=false;return 'Remote CLI updated. No containers changed.';};
+			state.api.hostingCheckConnection=async()=>({ok:!qa.checkFails,instances:[],checks:[{name:'SSH',ok:true,detail:'Connected to krang.'},{name:'Management helper',ok:!qa.checkFails,detail:qa.checkFails?'Cache needs writable executable storage.':'Helper ready.'}]});
 			state.api.hostingFeatures=async()=>({installation:true});
 			state.api.hostingInstances=async()=>{throw Error('SSH sign-in failed. Review native SSH configuration.');};
 			bindAdminSettingsEvents();await manageHostingConnections();
@@ -1161,8 +1160,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(
 			await evaluate("document.querySelector('#hosting-manager-status').textContent")
 		).toContain('needs attention');
-		await click('#hosting-check-details button');
-		expect(await evaluate('window.connectionQa.repair')).toBe(1);
+		expect(await evaluate("document.querySelector('#hosting-check-details button')===null")).toBe(true);
+		await evaluate('window.connectionQa.checkFails=false');
+		await click('button[aria-label="Check Krang"]');
 		expect(
 			await evaluate("document.querySelector('#hosting-manager-status').textContent")
 		).toContain('ready');

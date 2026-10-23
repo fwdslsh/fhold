@@ -30,16 +30,12 @@ export const runHostingTerminal: HostingTerminal = (binary, args) =>
 export function hostingFailure(
 	binary: string,
 	code: unknown,
-	stdout: string,
+	_stdout: string,
 	stderr: string
 ): string {
 	if (code === 'ENOENT')
 		return `${binary} is not installed on this computer. Install it using its native setup instructions.`;
 	if (binary === 'ssh') {
-		if (
-			/Unknown command: hosting|(?:exec:|sh:|bash:).*fhold.*not found/i.test(`${stderr}\n${stdout}`)
-		)
-			return 'The remote fhold CLI is missing or too old. Use Check connection, then Repair remote CLI (or fhold hosting repair <connection> --confirm).';
 		if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(stderr))
 			return 'SSH host trust needs review. Run ssh <host> in a terminal and verify the host key before reconnecting.';
 		if (/Permission denied|Authentication failed/i.test(stderr))

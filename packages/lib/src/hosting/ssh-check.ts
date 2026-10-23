@@ -1,4 +1,5 @@
-import { sshArgs, SSH_RPC_COMMAND, HOSTING_WIRE_VERSION } from '../control-plane/ssh-native.js';
+import { sshArgs, HOSTING_WIRE_VERSION } from '../control-plane/ssh-native.js';
+import { createSshHelperResolver, type SshHelperResolver } from '../control-plane/ssh-helper.js';
 import type { HostingProcess } from '../control-plane/process.js';
 import type { HostingConnection, ConnectionCheck, InstanceSummary } from './types.js';
 
@@ -6,11 +7,12 @@ import type { HostingConnection, ConnectionCheck, InstanceSummary } from './type
 export async function checkSshConnection(
 	connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
 	run: HostingProcess,
-	list: () => Promise<InstanceSummary[]>
+	list: () => Promise<InstanceSummary[]>,
+	helper: SshHelperResolver = createSshHelperResolver(connection, run)
 ): Promise<ConnectionCheck> {
-	const result: ConnectionCheck = { ok: false, repairable: false, checks: [], instances: [] };
+	const result: ConnectionCheck = { ok: false, checks: [], instances: [] };
 	async function request(action: string) {
-		const raw = await run('ssh', [...sshArgs(connection), SSH_RPC_COMMAND], {
+		const raw = await run('ssh', [...sshArgs(connection), await helper('rpc')], {
 			input: JSON.stringify({
 				version: HOSTING_WIRE_VERSION,
 				action,
@@ -30,7 +32,7 @@ export async function checkSshConnection(
 			};
 		} catch {
 			throw new Error(
-				'The remote CLI returned unexpected output. Repair the CLI, and keep shell startup messages off stdout.'
+				'The management helper returned unexpected output. Keep SSH shell startup messages off stdout and reinstall this local tooling if the issue persists.'
 			);
 		}
 	}
@@ -41,7 +43,6 @@ export async function checkSshConnection(
 			ok: true,
 			detail: `Connected to ${connection.host} (${platform}).`
 		});
-		result.repairable = /^Linux (?:x86_64|aarch64|arm64)$/.test(platform);
 		const hello = await request('hello');
 		if (
 			hello.version !== HOSTING_WIRE_VERSION ||
@@ -49,10 +50,10 @@ export async function checkSshConnection(
 			!hello.value?.actions?.includes('list')
 		)
 			throw new Error(
-				'Remote CLI lacks compatible hosting support. Repair remote CLI to update it.'
+				'This distribution’s management helper lacks compatible hosting support. Rebuild or reinstall local tooling.'
 			);
 		result.checks.push({
-			name: 'Remote CLI',
+			name: 'Management helper',
 			ok: true,
 			detail: hello.value.release || 'Compatible hosting protocol.'
 		});
@@ -62,7 +63,7 @@ export async function checkSshConnection(
 			ok: management,
 			detail: management
 				? 'Settings, apps, updates and import/export are available.'
-				: 'Update the remote fhold CLI to enable full management. Discovery and supported lifecycle commands remain available.'
+				: 'This management helper lacks full management support. Rebuild or reinstall local tooling.'
 		});
 		if (hello.value.actions.includes('diagnose')) {
 			const response = await request('diagnose');
@@ -84,7 +85,7 @@ export async function checkSshConnection(
 		result.ok = result.checks.every((item) => item.ok);
 	} catch (error) {
 		result.checks.push({
-			name: result.checks.length ? 'Remote CLI / discovery' : 'Connection',
+			name: result.checks.length ? 'Management helper / discovery' : 'Connection',
 			ok: false,
 			detail: error instanceof Error ? error.message : 'Connection check failed.'
 		});

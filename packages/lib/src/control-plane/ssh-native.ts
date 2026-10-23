@@ -3,7 +3,6 @@
  * management RPC. They deliberately do not import either adapter layer.
  */
 export const HOSTING_WIRE_VERSION = 1;
-export const SSH_RPC_COMMAND = 'PATH="$HOME/.local/bin:$PATH" exec fhold hosting rpc';
 
 export type SshTransportConnection = { host: string; port?: number };
 

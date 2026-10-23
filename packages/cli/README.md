@@ -15,5 +15,12 @@ The embedded Skeleton archive is built from the shared managed/seed-once
 allowlists in the library. `scripts/packaged-assets.test.ts` verifies equality
 with staged Admin resources. All subprocesses use argument arrays, secrets
 remain private file/stdin input and instance intent belongs in StackConfig.
+Builds compile the same CLI with its Skeleton into Linux x64/arm64 private SSH
+helpers, then embed compressed copies in the outer standalone executable.
+Admin ships the same helpers as resources. No release download or installed
+remote CLI is needed, including for PR previews. Source development uses
+`bun run --cwd packages/cli build:helpers` before normal source CLI SSH commands;
+rebuild after changes to avoid stale development resources. Shipping builds
+always rebuild both. See [SSH cache lifecycle](../../docs/hosting.md#docker-over-ssh).
 Linux artifact requirements and public publishing are described in
 [release gates](../../docs/operations/release.md); macOS/Windows are deferred.

@@ -15,6 +15,15 @@ They are not instance intent, credentials or backup members. SSH paths resolve
 on the Docker host; ACA resource IDs are not filesystem homes. The implicit
 local workflow is unchanged. See [hosted management](../hosting.md).
 
+SSH management executables live outside instance homes at
+`${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/<sha256>/fhold` on the remote
+account. CLI/Admin ship both Linux architectures and cache exact bundled bytes
+atomically; operator-installed CLIs are neither consulted nor changed. Cached
+tools contain the matching managed Skeleton, not instance state or credentials.
+Old hashes remain until manually removed when unused. Preparing a connection
+does not update containers, managed home files or runtime intent. No container
+mount or privilege changes are introduced.
+
 New named homes live under `~/fhold/instances/<name>`; Admin's unnamed default
 is `~/fhold/instances/default`. CLI `--name`/`-n` selects a directory name
 under that root or an absolute path. If absent, explicit `FH_HOME` takes

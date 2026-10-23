@@ -10,7 +10,7 @@ constraints below within a shared provider boundary. See the
 [current supported workflow](../hosting.md) before using future ideas below.
 
 A future local Admin could remember explicit SSH targets and dispatch host
-operations through the remote fhold CLI using system OpenSSH. It must preserve
+operations through its exact bundled private management executable using system OpenSSH. It must preserve
 host-key verification, native SSH config and per-home locking, add no daemon,
 service, key store or public management API, and never silently fall back to
 local execution.

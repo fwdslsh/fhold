@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { SshInstanceManagement, SSH_MANAGEMENT_COMMAND } from './ssh.js';
+import { SshInstanceManagement } from './ssh.js';
+import { configureSshHelperResources } from '../control-plane/ssh-helper.js';
+import type { HostingProcess } from '../control-plane/process.js';
+configureSshHelperResources(async () => Buffer.from('session-fixture'));
+const run: HostingProcess = async (_binary, args) =>
+	args.at(-1) === 'uname -sm' ? 'Linux x86_64' : 'ready';
 const connection = {
 	kind: 'ssh-docker' as const,
 	id: 'lab',
@@ -27,6 +32,7 @@ test('one native SSH process preserves setup context and delivers browser events
 	const api = new SshInstanceManagement(connection, home, {
 		setupName: 'named-agent',
 		spawn: native,
+		run,
 		openUrl: (url) => urls.push(url)
 	});
 	try {
@@ -35,7 +41,7 @@ test('one native SSH process preserves setup context and delivers browser events
 		await api.call('directory');
 		expect(commands).toHaveLength(1);
 		expect(commands[0]?.binary).toBe('ssh');
-		expect(commands[0]?.args.at(-1)).toBe(SSH_MANAGEMENT_COMMAND);
+		expect(commands[0]?.args.at(-1)).toMatch(/^exec .*\/fhold hosting session$/);
 		expect(commands[0]?.args).toContain('BatchMode=yes');
 		expect(commands[0]?.args).toContain('2222');
 		expect(commands[0]?.args.join(' ')).not.toContain(home);
@@ -52,11 +58,35 @@ test('a disconnected submitted operation is reported, never silently replayed', 
 			stdio: 'pipe'
 		});
 	}) as typeof spawn;
-	const api = new SshInstanceManagement(connection, '/opt/stacks/qa', { spawn: native });
+	const api = new SshInstanceManagement(connection, '/opt/stacks/qa', { spawn: native, run });
 	try {
 		await expect(api.call('saveConfig', {})).rejects.toThrow('check its current state');
 		expect(starts).toBe(1);
 	} finally {
 		await api.close();
 	}
+});
+test('closing while helper preparation is pending never starts an orphan session', async () => {
+	let release!: (value: string) => void;
+	let starts = 0;
+	let preparing = true;
+	const api = new SshInstanceManagement(connection, '/opt/stacks/qa', {
+		run: async () =>
+			preparing
+				? new Promise<string>((resolve) => {
+						release = resolve;
+						preparing = false;
+					})
+				: 'ready',
+		spawn: (() => {
+			starts++;
+			throw Error('must not spawn');
+		}) as typeof spawn
+	});
+	const pending = api.call('directory');
+	await Promise.resolve();
+	await api.close();
+	release('Linux x86_64');
+	await expect(pending).rejects.toThrow('connection is closed');
+	expect(starts).toBe(0);
 });
