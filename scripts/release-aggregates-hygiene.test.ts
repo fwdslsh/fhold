@@ -112,8 +112,19 @@ describe('release manifest', () => {
 });
 
 describe('release workflows', () => {
-	test('runtime image scans use no advisory exceptions', () => {
-		expect(existsSync(join(ROOT, '.github/trivy-ignore.yaml'))).toBe(false);
+	test('runtime image scans retain raw findings and only the approved, expiring Brotli exception', () => {
+		const exceptions = Bun.YAML.parse(
+			readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')
+		) as { vulnerabilities: Array<Record<string, unknown>> };
+		expect(Object.keys(exceptions)).toEqual(['vulnerabilities']);
+		expect(exceptions.vulnerabilities).toEqual([
+			{
+				id: 'CVE-2026-111497',
+				purls: ['pkg:deb/debian/libbrotli1@1.1.0-2%2Bb7'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('Malicious Brotli data may cause memory corruption.'),
+			},
+		]);
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: {
 				images: {
@@ -125,11 +136,25 @@ describe('release workflows', () => {
 				};
 			};
 		};
-		for (const step of workflow.jobs.images.steps.filter((step) =>
+		const scans = workflow.jobs.images.steps.filter((step) =>
 			step.uses?.startsWith('aquasecurity/trivy-action@')
-		)) {
-			expect(step.env?.TRIVY_IGNOREFILE).toBeUndefined();
+		);
+		expect(scans).toHaveLength(3);
+		for (const step of scans) {
+			expect(step.env?.TRIVY_IGNOREFILE).toBe(
+				step.with?.['exit-code'] === '0' ? undefined : '.github/trivy-ignore.yaml'
+			);
 		}
+		expect(scans[1]?.with).toMatchObject({
+			severity: 'CRITICAL',
+			'ignore-unfixed': false,
+			'exit-code': '1',
+		});
+		expect(scans[2]?.with).toMatchObject({
+			severity: 'HIGH',
+			'ignore-unfixed': true,
+			'exit-code': '1',
+		});
 	});
 
 	test('unprivileged CI also runs for contributors in forks', () => {

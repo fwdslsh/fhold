@@ -1,0 +1,12 @@
+# Approved by the product owner on 2026-10-23 for this beta.
+# Keep the unfiltered report visible; remove when Debian ships a fixed package.
+vulnerabilities:
+  - id: CVE-2026-111497
+    purls:
+      - pkg:deb/debian/libbrotli1@1.1.0-2%2Bb7
+    expired_at: 2026-11-06
+    statement: >-
+      Temporary beta exception for Debian's unpatched Brotli decoder package
+      in Guardian and Portal. Malicious Brotli data may cause memory corruption.
+      No upstream package patch or alternate decoder is injected into the images.
+      Re-review when Debian publishes a fix or before expiry; see release.md.
