@@ -22,11 +22,6 @@ jobs:
           bun-version: 1.4.4
       - name: Install the single locked workspace
         run: bun install --frozen-lockfile
-      - name: Audit dependencies with reviewed specific exceptions
-        # node-forge is absent from runtime images/bridge; no signing/certificate processing.
-        # sprintf-js is an unpatched proxy-logger dependency; its reviewed caller uses fixed formats.
-        # Raw bun audit still reports these findings. See docs/operations/release.md.
-        run: bun run audit
       - name: Type check active packages
         if: inputs.scope != 'tools'
         run: bun run check
@@ -82,6 +77,10 @@ jobs:
             --env-file "${FH_HOME}/state/stack.env" \
             --profile gateway --profile discord --profile slack \
             config --quiet
+      - name: Audit dependencies with reviewed specific exceptions
+        # Audit remains mandatory, but new advisories must not hide source-test failures.
+        # Exact reviewed exceptions are documented in docs/operations/release.md.
+        run: bun run audit
 
   images:
     if: inputs.scope != 'tools'

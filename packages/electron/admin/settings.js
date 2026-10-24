@@ -15,6 +15,31 @@ let returnScroll;
 let previousSkip;
 let preferencesDirty = false;
 let updateAction = false;
+let desktopAction = false;
+
+function renderDesktop(status) {
+	byId('admin-desktop-section').hidden = !status.supported;
+	byId('admin-desktop-status').setAttribute('role', 'status');
+	setText('admin-desktop-path', status.appImage);
+	setText(
+		'admin-desktop-status',
+		status.replacesExistingCopy
+			? `The menu copy may be newer. Replace it only if you want to use this running version (${status.version}).`
+			: status.installed
+				? status.runningInstalledCopy
+					? 'Installed. Menu launches and automatic updates use this copy.'
+					: 'Installed. Open Admin from the application menu next time.'
+				: 'Adds the fhold icon and a launcher for your user account.'
+	);
+	setText(
+		'admin-desktop-install',
+		status.replacesExistingCopy
+			? `Replace menu copy with ${status.version}`
+			: status.installed
+				? 'Refresh menu entry'
+				: 'Add to application menu'
+	);
+}
 
 export function settingsMessage(value, error = false) {
 	const element = byId('admin-settings-message');
@@ -41,13 +66,16 @@ export function renderAdminSettings(snapshot) {
 		}[byId('admin-update-channel').value]
 	);
 	const busy = updateAction || ['checking', 'downloading', 'installing'].includes(update.phase);
+	byId('admin-desktop-install').disabled =
+		desktopAction || ['ready', 'installing'].includes(update.phase);
+	byId('admin-desktop-update-notice').hidden = !['ready', 'installing'].includes(update.phase);
 	for (const id of ['admin-update-channel', 'admin-update-automatic', 'admin-updates-save'])
 		byId(id).disabled = busy;
 	byId('admin-update-check').disabled = busy || !update.supported || update.phase === 'ready';
 	byId('admin-update-download').hidden = update.phase !== 'available';
 	byId('admin-update-download').disabled = busy;
 	byId('admin-update-install').hidden = update.phase !== 'ready';
-	byId('admin-update-install').disabled = busy;
+	byId('admin-update-install').disabled = busy || desktopAction;
 	const status = byId('admin-update-status');
 	status.textContent =
 		update.error ||
@@ -87,8 +115,13 @@ export async function openAdminSettings(section) {
 	byId('admin-settings-title').focus();
 	settingsMessage('');
 	try {
-		const [snapshot] = await Promise.all([state.api.appSettings(), loadHostingConnections()]);
+		const [snapshot, desktop] = await Promise.all([
+			state.api.appSettings(),
+			state.api.desktopStatus(),
+			loadHostingConnections()
+		]);
 		renderAdminSettings(snapshot);
+		renderDesktop(desktop);
 		if (section === 'connections') byId('hosting-manager').scrollIntoView({ block: 'start' });
 	} catch (error) {
 		settingsMessage(message(error), true);
@@ -126,6 +159,21 @@ async function updateOperation(action) {
 }
 
 export function bindAdminSettingsEvents() {
+	byId('admin-desktop-install').addEventListener('click', async () => {
+		if (desktopAction) return;
+		desktopAction = true;
+		byId('admin-desktop-install').disabled = true;
+		setText('admin-desktop-status', 'Installing the menu entry and application copy…');
+		try {
+			renderDesktop(await state.api.installDesktop());
+		} catch (error) {
+			byId('admin-desktop-status').setAttribute('role', 'alert');
+			setText('admin-desktop-status', message(error));
+		} finally {
+			desktopAction = false;
+			if (state.appSettingsSnapshot) renderAdminSettings(state.appSettingsSnapshot);
+		}
+	});
 	for (const button of all('[data-admin-settings]'))
 		button.addEventListener('click', () => void openAdminSettings());
 	byId('admin-settings-back').addEventListener('click', closeAdminSettings);

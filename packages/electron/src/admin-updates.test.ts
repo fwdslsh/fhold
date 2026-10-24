@@ -216,7 +216,7 @@ test('install errors retain ready state for retry instead of claiming the app re
 	native[0].installFailure = Error('EACCES');
 	updates.install();
 	expect(updates.snapshot().update.phase).toBe('ready');
-	expect(updates.snapshot().update.error).toContain('folder you can write');
+	expect(updates.snapshot().update.error).toContain('write permissions');
 });
 test('development, extracted builds and smoke runs do not initialize the native updater', async () => {
 	const { updates, native } = setup(store(), 'Run the AppImage.');

@@ -150,6 +150,7 @@ export function changeScope(files, readBefore, readAfter) {
 			[
 				'.github/workflows/ci.yml',
 				'.github/workflows/pr-admin.yml',
+				'.github/workflows/admin-desktop-native.yml',
 				'.github/workflows/gates.yml',
 				'.github/workflows/release.yml',
 				'.github/release-manifest.json',

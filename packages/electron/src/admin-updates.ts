@@ -1,8 +1,8 @@
-import type { AppImageUpdater } from 'electron-updater';
+import type { AppUpdater } from 'electron-updater';
 import type { AdminSettings, AdminSettingsStore, UpdateChannel } from './admin-settings.js';
 
 type NativeUpdater = Pick<
-	AppImageUpdater,
+	AppUpdater,
 	| 'autoDownload'
 	| 'autoInstallOnAppQuit'
 	| 'allowPrerelease'
@@ -44,12 +44,12 @@ function updateError(error: unknown, channel: UpdateChannel): string {
 	)
 		return `No ${channel} Admin update feed is available yet. You can check again later or choose another channel.`;
 	if (/EACCES|EPERM/.test(raw))
-		return 'Admin could not replace its AppImage. Move it to a folder you can write to, or download the update manually.';
+		return 'Admin could not replace its installed files. Check write permissions for its installation, or download the update manually.';
 	return 'Admin could not complete the update. Check your internet connection and try again, or download it from GitHub.';
 }
 
 // Owns only this desktop process. All release discovery, checksums, caching and
-// AppImage replacement belong to electron-updater, not a second update protocol.
+// platform-specific installation belong to electron-updater, not a second update protocol.
 export class AdminUpdates {
 	private updater?: NativeUpdater;
 	private pending?: Promise<AdminAppSnapshot>;

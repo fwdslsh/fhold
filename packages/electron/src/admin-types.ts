@@ -16,6 +16,7 @@ import type { CodexRecallReview } from '@fhold/lib';
 import type { InstanceSnapshot } from '@fhold/lib';
 import type { AdminSettings } from './admin-settings.js';
 import type { AdminAppSnapshot } from './admin-updates.js';
+import type { DesktopStatus } from './admin-desktop.js';
 
 export type AdminSnapshot = InstanceSnapshot;
 
@@ -41,6 +42,8 @@ export type AdminWelcome = {
 };
 
 export type AdminApi = {
+	desktopStatus(): Promise<DesktopStatus>;
+	installDesktop(): Promise<DesktopStatus>;
 	appSettings(): Promise<AdminAppSnapshot>;
 	saveAppSettings(value: AdminSettings): Promise<AdminAppSnapshot>;
 	checkAppUpdate(): Promise<AdminAppSnapshot>;
@@ -164,6 +167,8 @@ export type AdminApi = {
 
 export const ADMIN_CHANNELS = {
 	appSettings: 'admin:app-settings',
+	desktopStatus: 'admin:desktop-status',
+	installDesktop: 'admin:install-desktop',
 	saveAppSettings: 'admin:save-app-settings',
 	checkAppUpdate: 'admin:check-app-update',
 	downloadAppUpdate: 'admin:download-app-update',

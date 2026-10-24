@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 
 const version = process.env.VERSION;
 if (!version) throw new Error('VERSION is required');
-const packaged = resolve('packages/electron/dist/packages');
+const packaged = resolve(process.env.ADMIN_SMOKE_DIRECTORY ?? 'packages/electron/dist/packages');
 const generated = mkdtempSync(join(tmpdir(), 'fhold-packaged-smoke-'));
 const report = join(generated, 'startup-report.json');
 
@@ -21,15 +21,21 @@ function run(command, args, options = {}) {
 		env: {
 			...process.env,
 			FH_HOME: join(generated, 'home'),
-			FH_REPO_ROOT: '',
+			// Model a native updater relaunch inheriting an obsolete AppImage mount.
+			FH_REPO_ROOT: join(generated, 'obsolete-repo'),
+			FH_SKELETON_DIR: join(generated, 'obsolete-mount/skeleton'),
 			FH_ADMIN_SMOKE_VERSION: version,
 			FH_ADMIN_SMOKE_REPORT: report
 		},
 		...options
 	});
 	if (result.error || result.status !== 0) {
-		const detail = existsSync(report) ? readFileSync(report, 'utf8') : result.stderr;
-		throw new Error(`Packaged Admin command failed: ${result.error?.message ?? detail}`);
+		const detail = existsSync(report)
+			? readFileSync(report, 'utf8')
+			: 'No startup report was produced.';
+		throw new Error(
+			`Packaged Admin command failed: ${result.error?.message ?? ''}\n${detail}\n${result.stdout ?? ''}\n${result.stderr ?? ''}`
+		);
 	}
 	return result.stdout ?? '';
 }
@@ -38,15 +44,30 @@ try {
 	const platform =
 		process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux';
 	const arch = platform === 'linux' && process.arch === 'x64' ? 'x86_64' : process.arch;
-	const asset = expectedAdminAssets(version).find((name) =>
-		platform === 'windows' ? name.endsWith('.exe') : name.includes(`-${arch}-${platform}.`)
-	);
+	const asset =
+		process.env.ADMIN_SMOKE_ARTIFACT ||
+		expectedAdminAssets(version).find((name) =>
+			platform === 'windows' ? name.endsWith('.exe') : name.includes(`-${arch}-${platform}.`)
+		);
 	if (!asset) throw new Error('No release artifact supports this runner');
 	let command;
 	let args = ['--fhold-release-smoke', '--disable-gpu'];
 	if (platform === 'mac') {
 		run('unzip', ['-q', join(packaged, asset), '-d', generated]);
 		command = join(generated, 'fhold Admin.app', 'Contents', 'MacOS', 'fhold Admin');
+		const contents = join(generated, 'fhold Admin.app/Contents');
+		const id = run('/usr/libexec/PlistBuddy', [
+			'-c',
+			'Print :CFBundleIdentifier',
+			join(contents, 'Info.plist')
+		]).trim();
+		const icon = run('/usr/libexec/PlistBuddy', [
+			'-c',
+			'Print :CFBundleIconFile',
+			join(contents, 'Info.plist')
+		]).trim();
+		if (id !== 'dev.fwdslsh.fhold.admin' || !existsSync(join(contents, 'Resources', icon)))
+			throw new Error('macOS bundle identity or Dock icon is missing');
 	} else if (platform === 'windows') {
 		const installation = join(generated, 'installed');
 		run(join(packaged, asset), ['/S', `/D=${installation}`]);
@@ -81,10 +102,22 @@ try {
 				args.push('--ozone-platform=wayland');
 		}
 	}
-	run(command, args);
+	run(command, args, {
+		env: {
+			...process.env,
+			APPIMAGE: platform === 'linux' ? join(packaged, asset) : undefined,
+			FH_HOME: join(generated, 'home'),
+			FH_REPO_ROOT: join(generated, 'obsolete-repo'),
+			FH_SKELETON_DIR: join(generated, 'obsolete-mount/skeleton'),
+			FH_ADMIN_SMOKE_VERSION: version,
+			FH_ADMIN_SMOKE_REPORT: report,
+			FH_ADMIN_SMOKE_DESKTOP: '1'
+		}
+	});
 	const result = existsSync(report) ? JSON.parse(readFileSync(report, 'utf8')) : null;
 	if (result?.ok !== true || result.version !== version)
 		throw new Error('Packaged Admin did not confirm renderer and bridge readiness');
+	console.log(JSON.stringify(result.progress));
 	console.log(`Verified packaged Admin startup: ${asset}`);
 } finally {
 	console.log(`Packaged smoke fixtures retained at ${generated}`);

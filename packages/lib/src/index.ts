@@ -106,6 +106,7 @@ export {
 } from './control-plane/stack-config.js';
 export {
 	applyHomeSeed,
+	configureSkeletonDirectory,
 	preflightHomeSeed,
 	MANAGED_FILES,
 	SEEDED_FILES

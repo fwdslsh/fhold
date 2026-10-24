@@ -29,13 +29,29 @@ Assistant is the only default container and includes OpenCode, AKM and
 supercronic. Guardian and the single Discord/Slack Portal image are optional.
 CLI is the primary installer/orchestrator; Admin is a local settings utility
 with no server, chat, tray or background control plane. Its standard Electron
-AppImage updater checks/downloads while Admin is open, defaults to the Stable
+platform-native updater checks/downloads while Admin is open, defaults to the Stable
 channel (even in a prerelease build), and applies on ordinary quit or an explicitly
 confirmed Admin restart. It never restarts agents, updates container images or
 replaces operator-installed CLIs. SSH connections separately prepare exact bundled
 management bytes in a private content-addressed cache, without lifecycle actions,
 home writes, release downloads, PATH fallback, daemons or new services. All SSH
 discovery, sessions, forwarded commands and transfer operations share this resolver.
+Packaged Admin selects its current bundled Skeleton and SSH helpers directly,
+never through inherited resource-location environment variables. Automatic
+relaunch cannot combine new code with an old AppImage's assets. Optional Linux
+application-menu installation explicitly copies Admin to a stable per-user
+AppImage path and installs standard XDG desktop/icon identities (verified on KDE;
+GNOME and X11/Wayland-specific grouping still need manual qualification).
+Replacing that copy from another download requires explicit confirmation and
+does not infer version ordering from desktop-entry metadata or file sizes.
+Windows packaging uses a per-user NSIS Start menu shortcut
+and matching AppUserModelID; macOS uses an Applications bundle with its own Dock
+icon. Windows/macOS desktop integration is preview-tested on native runners,
+independently of Linux container publishing. Public distribution/signing remains
+unqualified; native update checks stay unavailable until feeds are published.
+Linux menu installation requires
+no system installer, background agent or instance changes;
+native AppImage updates preserve that stable launcher target.
 Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
@@ -589,6 +605,7 @@ not an npm bootstrap package.
 Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
 Explicit local builds use the `fhold` namespace without registry pulls. Native
 Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
-and Windows/macOS packaging remain unqualified. No cross-host publishing bridge
+remains unqualified. Windows/macOS desktop integration is preview-tested on native
+runners; public distribution/signing remains unqualified. No cross-host publishing bridge
 is needed. An existing version/receipt permits identical-byte retries only; changed
 source or content requires a new version, including unpublished candidates.

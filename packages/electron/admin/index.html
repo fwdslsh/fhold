@@ -54,6 +54,13 @@
         <div class="button-row"><button id="hosting-save" class="primary" type="submit">Save connection</button><button id="hosting-edit-cancel" class="secondary" type="button">Cancel</button></div>
       </form>
     </section>
+        <section id="admin-desktop-section" class="settings-section" aria-labelledby="admin-desktop-title" hidden>
+          <div class="section-heading"><h2 id="admin-desktop-title">Application menu</h2></div>
+          <p class="help-text">Open fhold Admin from your application menu and pin it to your taskbar. Installs a copy at <span id="admin-desktop-path"></span>; your agents are not changed.</p>
+          <p id="admin-desktop-status" class="help-text" role="status" aria-live="polite"></p>
+          <button id="admin-desktop-install" class="secondary" type="button">Add to application menu</button>
+          <p id="admin-desktop-update-notice" class="help-text" hidden>Restart Admin to finish its downloaded update before installing a menu copy.</p>
+        </section>
         <section class="settings-section" aria-labelledby="admin-updates-title">
           <div class="section-heading"><h2 id="admin-updates-title">App updates</h2><span id="admin-app-version" class="help-text"></span></div>
           <form id="admin-updates-form" class="form-stack">
