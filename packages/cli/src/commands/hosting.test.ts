@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeAll, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -8,6 +8,17 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 const cli = resolve(import.meta.dir, '..', 'main.ts');
+// Build the real packaged helpers once, outside the subprocess test's 5s budget.
+// A clean runner may need to download Bun's cross-compilation runtime as well.
+beforeAll(async () => {
+	const helpers = Bun.spawn([process.execPath, 'run', 'scripts/build.ts', '--helpers-only'], {
+		cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe'
+	});
+	const [buildOutput, buildError, built] = await Promise.all([
+		new Response(helpers.stdout).text(), new Response(helpers.stderr).text(), helpers.exited
+	]);
+	expect(built, `${buildOutput}\n${buildError}`).toBe(0);
+}, 120_000);
 function fixture() {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-hosting-cli-'));
 	roots.push(root);
@@ -103,15 +114,6 @@ test('CLI edits, confirms retarget/removal, and leaves instance state untouched'
 });
 
 test('native SSH subprocess receives a fixed command, discovers and inspects the selected remote target', async () => {
-	// Source execution uses the same built helpers as packaged Admin. Build them
-	// explicitly so this test also runs from a fresh checkout without release assets.
-	const helpers = Bun.spawn([process.execPath, 'run', 'scripts/build.ts', '--helpers-only'], {
-		cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe'
-	});
-	const [buildOutput, buildError, built] = await Promise.all([
-		new Response(helpers.stdout).text(), new Response(helpers.stderr).text(), helpers.exited
-	]);
-	expect(built, `${buildOutput}\n${buildError}`).toBe(0);
 	const { root, env } = fixture();
 	const bin = join(root, 'bin');
 	mkdirSync(bin);
