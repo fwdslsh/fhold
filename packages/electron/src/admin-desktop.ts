@@ -14,9 +14,10 @@ type DesktopEnvironment = {
 export type DesktopStatus = {
 	supported: boolean;
 	installed: boolean;
-	needsUpdate: boolean;
+	replacesExistingCopy: boolean;
 	runningInstalledCopy: boolean;
 	appImage: string;
+	version: string;
 };
 
 function escapeValue(value: string): string {
@@ -55,32 +56,30 @@ export class AdminDesktop {
 			env.platform === 'linux' && env.packaged && !!env.appImage && isAbsolute(env.appImage);
 		const runningInstalledCopy =
 			supported && !!env.appImage && resolve(env.appImage) === resolve(this.paths.appImage);
-		const [entry, image, icon, source] = await Promise.all([
+		const [entry, image, icon] = await Promise.all([
 			readFile(this.paths.entry, 'utf8').catch(() => ''),
 			stat(this.paths.appImage).catch(() => undefined),
-			stat(this.paths.icon).catch(() => undefined),
-			env.appImage ? stat(env.appImage).catch(() => undefined) : undefined
+			stat(this.paths.icon).catch(() => undefined)
 		]);
 		const installed =
 			entry.startsWith(desktopEntry(this.paths.appImage)) &&
 			!!image?.isFile() &&
 			!!(image.mode & 0o111) &&
 			!!icon?.isFile();
-		const current =
-			runningInstalledCopy ||
-			(entry.includes(`\nX-fhold-Version=${escapeValue(env.version)}\n`) &&
-				source?.size === image?.size);
 		return {
 			supported,
 			installed,
-			needsUpdate: installed && !current,
+			// A desktop entry cannot tell which version self-update has installed.
+			// Treat another download as an explicit replacement, never an upgrade.
+			replacesExistingCopy: !!image?.isFile() && !runningInstalledCopy,
 			runningInstalledCopy,
-			appImage: this.paths.appImage
+			appImage: this.paths.appImage,
+			version: env.version
 		};
 	}
-	install(): Promise<DesktopStatus> {
+	install(confirmReplacement: () => Promise<boolean> = async () => false): Promise<DesktopStatus> {
 		// One click/copy at a time, including repeated IPC requests.
-		this.pending ??= this.performInstall().finally(() => {
+		this.pending ??= this.performInstall(confirmReplacement).finally(() => {
 			this.pending = undefined;
 		});
 		return this.pending;
@@ -91,12 +90,13 @@ export class AdminDesktop {
 	async finish(): Promise<void> {
 		await this.pending?.catch(() => undefined);
 	}
-	private async performInstall(): Promise<DesktopStatus> {
+	private async performInstall(confirmReplacement: () => Promise<boolean>): Promise<DesktopStatus> {
 		const status = await this.status();
 		const env = this.environment;
 		const appImage = env.appImage;
 		if (!status.supported || !appImage)
 			throw Error('Menu installation is available in the Linux AppImage.');
+		if (status.replacesExistingCopy && !(await confirmReplacement())) return status;
 		const icon = await readFile(env.icon);
 		const staged: { temporary: string; destination: string }[] = [];
 		const stage = async (
@@ -117,11 +117,7 @@ export class AdminDesktop {
 				writeFile(temporary, icon, { flag: 'wx' })
 			);
 			await stage(this.paths.entry, 0o644, (temporary) =>
-				writeFile(
-					temporary,
-					`${desktopEntry(this.paths.appImage)}X-fhold-Version=${escapeValue(env.version)}\n`,
-					{ flag: 'wx' }
-				)
+				writeFile(temporary, desktopEntry(this.paths.appImage), { flag: 'wx' })
 			);
 			// Publish the entry last, after its executable and icon are available.
 			for (const { temporary, destination } of staged) await rename(temporary, destination);

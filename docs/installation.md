@@ -131,13 +131,17 @@ AppImage. This installs a per-user copy at `~/.local/bin/fhold-admin.AppImage`,
 plus a standard desktop entry and fhold icon under `$XDG_DATA_HOME` (normally
 `~/.local/share`). No administrator access or AppImage integration utility is
 needed. Open **fhold Admin** from KDE's launcher or GNOME's Applications search;
-pin that entry to the taskbar or dash. X11 and Wayland use the same application
-identity as the menu entry. The original download is left alone; no agent files change.
+pin that entry to the taskbar or dash. This uses standard XDG application identity
+and has been verified on KDE; GNOME and X11/Wayland-specific window grouping
+still need manual qualification. The original download is left alone; no agent files change.
 
 The menu copy has a stable filename, so automatic updates keep its launcher
-working. Launch the menu copy for everyday use. If you instead open a newer
-download, **Update menu copy** installs that version in the same location.
-**Refresh menu entry** repairs its launcher/icon. A previously pinned shortcut
+working. Launch the menu copy for everyday use. From another download,
+**Replace menu copy with [version]** installs that running version only after
+confirmation. The menu copy may have updated itself and be newer; replacement
+can downgrade it. Cancel to keep it. When running the menu copy,
+**Refresh menu entry** repairs its launcher/icon without copying the executable.
+A previously pinned shortcut
 to a downloaded AppImage may need to be unpinned and replaced with the menu entry.
 
 Automatic Admin updates use the selected Stable/Beta/Alpha channel and never
@@ -161,7 +165,8 @@ renderer startup. Preview updates are disabled. These checks do not start agents
 or publish releases. Windows/macOS packages are not yet in the public release
 asset set; native CI and platform testing must pass before distribution. Public
 macOS updates additionally require a signed/notarized release and its ZIP/feed;
-Windows uses the native NSIS updater. This is desktop integration, not a claim
+Windows has native NSIS updater support. Update checks remain disabled on both
+platforms until their public feeds are published. This is desktop integration, not a claim
 that local Docker hosting on Windows/macOS has been qualified.
 
 For development:

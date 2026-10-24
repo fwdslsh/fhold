@@ -40,12 +40,16 @@ Packaged Admin selects its current bundled Skeleton and SSH helpers directly,
 never through inherited resource-location environment variables. Automatic
 relaunch cannot combine new code with an old AppImage's assets. Optional Linux
 application-menu installation explicitly copies Admin to a stable per-user
-AppImage path and installs matching XDG desktop/icon identities for KDE and GNOME,
-on X11 and Wayland. Windows packaging uses a per-user NSIS Start menu shortcut
+AppImage path and installs standard XDG desktop/icon identities (verified on KDE;
+GNOME and X11/Wayland-specific grouping still need manual qualification).
+Replacing that copy from another download requires explicit confirmation and
+does not infer version ordering from desktop-entry metadata or file sizes.
+Windows packaging uses a per-user NSIS Start menu shortcut
 and matching AppUserModelID; macOS uses an Applications bundle with its own Dock
-icon. Native-platform preview checks qualify desktop integration independently
-of Linux container publishing. Public Windows/macOS distribution and signing
-remain separate release qualification work. Linux menu installation requires
+icon. Windows/macOS desktop integration is preview-tested on native runners,
+independently of Linux container publishing. Public distribution/signing remains
+unqualified; native update checks stay unavailable until feeds are published.
+Linux menu installation requires
 no system installer, background agent or instance changes;
 native AppImage updates preserve that stable launcher target.
 Optional failures remain local to the updater. The optional
@@ -601,6 +605,7 @@ not an npm bootstrap package.
 Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.
 Explicit local builds use the `fhold` namespace without registry pulls. Native
 Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
-and Windows/macOS packaging remain unqualified. No cross-host publishing bridge
+remains unqualified. Windows/macOS desktop integration is preview-tested on native
+runners; public distribution/signing remains unqualified. No cross-host publishing bridge
 is needed. An existing version/receipt permits identical-byte retries only; changed
 source or content requires a new version, including unpublished candidates.

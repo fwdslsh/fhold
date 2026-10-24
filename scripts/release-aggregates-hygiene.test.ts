@@ -390,6 +390,16 @@ describe('portal image source boundary', () => {
 describe('release completeness gate', () => {
 	const productName = readElectronProductName();
 
+	test('the mandatory audit runs after source qualification and still gates images', () => {
+		const gates = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
+		const steps = gates.jobs.quality.steps;
+		const auditIndex = steps.findIndex((step: { run?: string }) => step.run === 'bun run audit');
+		expect(auditIndex).toBe(steps.length - 1);
+		expect(steps[auditIndex]['continue-on-error']).not.toBe(true);
+		expect(steps[auditIndex].if).toBeUndefined();
+		expect(gates.jobs.images.needs).toBe('quality');
+	});
+
 	test('the builder declares the optional Admin product', () => {
 		expect(productName).toBe('fhold Admin');
 	});
@@ -398,7 +408,19 @@ describe('release completeness gate', () => {
 		const builder = readFileSync(join(ROOT, 'packages/electron/electron-builder.yml'), 'utf8');
 		expect(Bun.YAML.parse(builder).publish).toEqual({ provider: 'github', owner: 'fwdslsh', repo: 'fhold' });
 		expect(builder).toContain('artifactName: fhold-admin-${version}-${arch}-${os}.${ext}');
-		expect(builder).not.toMatch(/^mac:|^win:/m);
+		// Native preview packaging is allowed; public distribution remains Linux-only.
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8'));
+		expect(workflow.jobs.admin.strategy.matrix.include).toEqual([
+			{ os: 'ubuntu-latest', platform: 'linux', script: 'build:linux' }
+		]);
+		expect(readJson('packages/electron/package.json').scripts?.['build:linux']).toContain('--linux');
+		for (const scope of ['full', 'tools']) {
+			const assets = requiredReleaseAssets('0.3.261006-beta', productName, scope);
+			expect(assets.filter((asset: string) => asset.endsWith('.AppImage'))).toHaveLength(2);
+			expect(assets.some((asset: string) => /\.(exe|dmg|zip)$/.test(asset))).toBe(false);
+			expect(assets).not.toContain('latest.yml');
+			expect(assets).not.toContain('latest-mac.yml');
+		}
 	});
 
 	test('the cli job matrix and CLI_BINARIES stay in lockstep', () => {

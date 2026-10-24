@@ -31,7 +31,7 @@ test('menu installation is opt-in, per user, and publishes a stable executable a
 	await desktop.install();
 	expect(await desktop.status()).toMatchObject({
 		installed: true,
-		needsUpdate: false,
+		replacesExistingCopy: true,
 		runningInstalledCopy: false
 	});
 	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('old AppImage fixture');
@@ -57,7 +57,7 @@ test('installed menu survives native self-update at the stable path; repair neve
 	});
 	expect(await updated.status()).toMatchObject({
 		installed: true,
-		needsUpdate: false,
+		replacesExistingCopy: false,
 		runningInstalledCopy: true
 	});
 	expect(await readFile(desktop.paths.entry, 'utf8')).toBe(entry);
@@ -68,7 +68,7 @@ test('installed menu survives native self-update at the stable path; repair neve
 	expect((await updated.status()).installed).toBe(true);
 });
 
-test('new portable version can explicitly update the menu copy; failed staging retains the old copy', async () => {
+test('another download can explicitly replace the menu copy; failed staging retains the old copy', async () => {
 	const { env, desktop } = await fixture();
 	await desktop.install();
 	const next = {
@@ -77,15 +77,40 @@ test('new portable version can explicitly update the menu copy; failed staging r
 		appImage: join(env.home, 'download-2.AppImage')
 	};
 	const updated = new AdminDesktop(next);
-	expect((await updated.status()).needsUpdate).toBe(true);
-	await expect(updated.install()).rejects.toThrow();
+	expect((await updated.status()).replacesExistingCopy).toBe(true);
+	await expect(updated.install(async () => true)).rejects.toThrow();
 	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('old AppImage fixture');
 	await writeFile(next.appImage, 'new AppImage fixture');
-	await Promise.all([updated.install(), updated.install()]);
+	let confirmations = 0;
+	const confirm = async () => { confirmations++; return true; };
+	await Promise.all([updated.install(confirm), updated.install(confirm)]);
+	expect(confirmations).toBe(1);
 	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('new AppImage fixture');
-	expect((await updated.status()).needsUpdate).toBe(false);
-	await writeFile(next.appImage, 'different same-version preview build');
-	expect((await updated.status()).needsUpdate).toBe(true);
+	// No version/size heuristic: replacing from any other download stays explicit.
+	expect((await updated.status()).replacesExistingCopy).toBe(true);
+});
+
+test('an old download cannot silently replace a self-updated menu copy, even when its icon is missing', async () => {
+	const { desktop } = await fixture();
+	await desktop.install();
+	await writeFile(desktop.paths.appImage, 'newer self-updated AppImage');
+	await rm(desktop.paths.icon);
+	expect(await desktop.status()).toMatchObject({ installed: false, replacesExistingCopy: true });
+	await desktop.install();
+	await desktop.install(async () => false);
+	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('newer self-updated AppImage');
+	await desktop.install(async () => true);
+	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('old AppImage fixture');
+});
+
+test('same-size builds are still explicit replacements, not assumed identical or newer', async () => {
+	const { env, desktop } = await fixture();
+	await desktop.install();
+	await writeFile(env.appImage, 'NEW AppImage fixture');
+	expect((await stat(env.appImage)).size).toBe((await stat(desktop.paths.appImage)).size);
+	expect((await desktop.status()).replacesExistingCopy).toBe(true);
+	await desktop.install();
+	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('old AppImage fixture');
 });
 
 test('XDG data home is respected only when absolute and development is not installed', async () => {

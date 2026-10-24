@@ -18,8 +18,10 @@ running processes, mocked tests and source scans are not live readiness.
   Compose profiles.
 - CLI owns local installation/lifecycle. Optional Admin uses the same library;
   it has no hosted server, chat, standalone background service or automatic window
-  resizing. Admin's AppImage updater runs only while Admin is open; Stable is
+  resizing. Admin's platform-native updater runs only while Admin is open; Stable is
   the default channel and updating Admin never upgrades containers or an operator CLI.
+  Update feeds currently ship only for Linux; Windows/macOS preview packaging is
+  native-tested, but public distribution/signing and update feeds remain unqualified.
   SSH automatically supplies this distribution's private content-addressed management
   executable; never depend on or replace a manually installed remote fhold CLI.
 - Shared host-side hosting adapters manage existing local Docker, SSH-Docker and

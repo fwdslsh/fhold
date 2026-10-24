@@ -832,6 +832,9 @@ async function run(): Promise<Record<string, unknown>> {
 	app.once('ready', () => progress('Electron ready event received'));
 	await waitForAppReady();
 	progress('opening the real Admin renderer');
+	// This development harness intentionally leaves configureAdminResources unset:
+	// it swaps FH_SKELETON_DIR below to exercise seed failures. Packaged resource
+	// selection is tested in admin-resources.test.ts and smoke-admin-artifact.mjs.
 	registerAdminIpc();
 	const window = createAdminWindow({ show: true });
 	window.webContents.on('console-message', (event) => {

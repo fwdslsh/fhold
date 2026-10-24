@@ -23,8 +23,8 @@ function renderDesktop(status) {
 	setText('admin-desktop-path', status.appImage);
 	setText(
 		'admin-desktop-status',
-		status.needsUpdate
-			? 'Your menu opens a different copy. Updating it will use this running version of Admin.'
+		status.replacesExistingCopy
+			? `The menu copy may be newer. Replace it only if you want to use this running version (${status.version}).`
 			: status.installed
 				? status.runningInstalledCopy
 					? 'Installed. Menu launches and automatic updates use this copy.'
@@ -33,8 +33,8 @@ function renderDesktop(status) {
 	);
 	setText(
 		'admin-desktop-install',
-		status.needsUpdate
-			? 'Update menu copy'
+		status.replacesExistingCopy
+			? `Replace menu copy with ${status.version}`
 			: status.installed
 				? 'Refresh menu entry'
 				: 'Add to application menu'

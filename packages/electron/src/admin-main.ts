@@ -105,7 +105,7 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 						const before = await window.fholdAdmin.desktopStatus();
 						if (!before.supported || before.installed) throw new Error('Menu smoke profile is not fresh.');
 						const installed = await window.fholdAdmin.installDesktop();
-						if (!installed.installed || installed.needsUpdate) throw new Error('Native menu installation failed.');
+						if (!installed.installed) throw new Error('Native menu installation failed.');
 					}
 					document.querySelector('#instance-welcome [data-admin-settings]').click();
 					if (document.querySelector('#admin-settings').hidden || !document.querySelector('#hosting-manager').closest('#admin-settings')) throw new Error('Admin settings page did not open.');

@@ -149,7 +149,9 @@ export function registerAdminIpc(): void {
 					? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
 					: process.platform === 'linux' && !process.env.APPIMAGE
 						? 'Run the AppImage to enable automatic updates, or download Admin from GitHub.'
-						: undefined,
+						: process.platform !== 'linux'
+							? 'Automatic updates are not yet published for Windows or macOS. Use a new native build to update Admin.'
+							: undefined,
 		createUpdater: () =>
 			process.platform === 'win32'
 				? new electronUpdater.NsisUpdater()
@@ -207,7 +209,21 @@ export function registerAdminIpc(): void {
 			throw Error(
 				'Restart Admin to finish its downloaded update, then add it to your application menu.'
 			);
-		return desktop.install();
+		return desktop.install(async () => {
+			const owner = BrowserWindow.fromWebContents(event.sender);
+			const options = {
+				type: 'question' as const,
+				buttons: ['Cancel', 'Replace menu copy'],
+				defaultId: 0,
+				cancelId: 0,
+				message: `Replace the menu copy with Admin ${app.getVersion()}?`,
+				detail: `This replaces ${desktop.paths.appImage} with this running download. The menu copy may be newer, so this can downgrade Admin. To keep it, cancel and open Admin from your application menu. Your agents are not changed.`
+			};
+			const result = owner
+				? await dialog.showMessageBox(owner, options)
+				: await dialog.showMessageBox(options);
+			return result.response === 1;
+		});
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingFeatures, (event, id: string) => {
 		requireAdminSender(event);
