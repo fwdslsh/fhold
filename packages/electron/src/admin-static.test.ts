@@ -1615,6 +1615,7 @@ describe('Admin app settings', () => {
 		state.dirtyForms.add('discord-connections-form');
 		let instanceCalls = 0;
 		state.api = {
+			desktopStatus: async () => ({ supported: true, installed: false, appImage: '/test/fhold-admin.AppImage' }),
 			appSettings: async () => ({
 				settings: { updates: { channel: 'stable', automatic: true } },
 				update: { version: '0.3.261001-beta', supported: true, phase: 'idle' }

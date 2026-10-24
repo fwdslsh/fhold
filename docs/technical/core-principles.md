@@ -29,13 +29,25 @@ Assistant is the only default container and includes OpenCode, AKM and
 supercronic. Guardian and the single Discord/Slack Portal image are optional.
 CLI is the primary installer/orchestrator; Admin is a local settings utility
 with no server, chat, tray or background control plane. Its standard Electron
-AppImage updater checks/downloads while Admin is open, defaults to the Stable
+platform-native updater checks/downloads while Admin is open, defaults to the Stable
 channel (even in a prerelease build), and applies on ordinary quit or an explicitly
 confirmed Admin restart. It never restarts agents, updates container images or
 replaces operator-installed CLIs. SSH connections separately prepare exact bundled
 management bytes in a private content-addressed cache, without lifecycle actions,
 home writes, release downloads, PATH fallback, daemons or new services. All SSH
 discovery, sessions, forwarded commands and transfer operations share this resolver.
+Packaged Admin selects its current bundled Skeleton and SSH helpers directly,
+never through inherited resource-location environment variables. Automatic
+relaunch cannot combine new code with an old AppImage's assets. Optional Linux
+application-menu installation explicitly copies Admin to a stable per-user
+AppImage path and installs matching XDG desktop/icon identities for KDE and GNOME,
+on X11 and Wayland. Windows packaging uses a per-user NSIS Start menu shortcut
+and matching AppUserModelID; macOS uses an Applications bundle with its own Dock
+icon. Native-platform preview checks qualify desktop integration independently
+of Linux container publishing. Public Windows/macOS distribution and signing
+remain separate release qualification work. Linux menu installation requires
+no system installer, background agent or instance changes;
+native AppImage updates preserve that stable launcher target.
 Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,

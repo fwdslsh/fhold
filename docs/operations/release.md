@@ -174,6 +174,14 @@ PR AppImages carry `fholdPreview: true` build metadata and do not self-update aw
 from the reviewed PR. Existing updater-free versions require one manual install
 of an updater-enabled release. Never add feeds to or replace older public tags.
 
+The separate `admin-desktop-native.yml` workflow produces Windows/macOS previews
+without container jobs or release publication. It exercises the NSIS Start menu
+shortcut/taskbar ID, macOS bundle/Dock icon, packaged resources and actual renderer
+startup on native runners. macOS CI uses ad-hoc preview signing only. Native preview
+checks are not public release qualification: signed/notarized distribution, native
+update feeds and supported hosting workflows must be verified before adding these
+platforms to the required release asset inventory.
+
 The retained local alpha may be qualified for the actual Linux x64 host while
 ARM64 runtime qualification remains deferred without native hardware. Cross-build
 evidence must verify the extracted ARM64 ELF architecture and be labeled

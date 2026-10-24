@@ -1,0 +1,66 @@
+name: Native Admin desktop checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/admin-desktop-native.yml'
+      - 'packages/electron/**'
+      - 'scripts/smoke-admin-artifact.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-admin-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.platform }} installer and desktop integration
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            script: build:windows
+            previewOptions: ''
+          - runner: macos-latest
+            platform: macOS
+            script: build:mac
+            # Ad-hoc signing for a runnable CI preview, not a public release signature.
+            previewOptions: '--config.mac.identity=- --config.mac.hardenedRuntime=false'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Build native preview (never publish)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: bun run --cwd packages/electron ${{ matrix.script }} --config.extraMetadata.fholdPreview=true ${{ matrix.previewOptions }}
+      - name: Verify installer identity, icons, packaged assets and startup
+        run: |
+          export VERSION="$(node -p 'require("./packages/electron/package.json").version')"
+          export ADMIN_SMOKE_ARTIFACT="$(node -e 'const fs=require("node:fs");const extension=process.platform==="win32"?".exe":".zip";console.log(fs.readdirSync("packages/electron/dist/packages").find(name=>name.endsWith(extension)))')"
+          node scripts/smoke-admin-artifact.mjs
+      - name: Upload native test packages
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: admin-${{ matrix.platform }}-preview
+          path: |
+            packages/electron/dist/packages/*.exe
+            packages/electron/dist/packages/*.dmg
+            packages/electron/dist/packages/*.zip
+          if-no-files-found: error
+          retention-days: 14

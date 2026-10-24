@@ -24,6 +24,7 @@ import { AdminInstances } from './admin-instances.js';
 import electronUpdater from 'electron-updater';
 import { AdminSettingsStore } from './admin-settings.js';
 import { AdminUpdates } from './admin-updates.js';
+import { AdminDesktop } from './admin-desktop.js';
 
 import { ADMIN_CHANNELS, type AdminSnapshot, type StackAction } from './admin-types.js';
 import {
@@ -38,6 +39,7 @@ const adminIndexPath = join(adminDirectory, 'index.html');
 const adminIndexUrl = pathToFileURL(adminIndexPath).href;
 let instances: AdminInstances;
 let updates: AdminUpdates;
+let desktop: AdminDesktop;
 let activeSession: { key: string; api: ComposedInstanceSession } | undefined;
 // A native sign-in flow can request that Admin opens a browser after its IPC call
 // has completed. Keep that callback bound to the selected session rather than the
@@ -109,12 +111,6 @@ function requireSwitchable(): void {
 		throw new Error('Finish or cancel native remote setup before switching instances.');
 }
 
-if (!process.env.FH_SKELETON_DIR && !process.env.FH_REPO_ROOT) {
-	process.env.FH_SKELETON_DIR = app.isPackaged
-		? join(process.resourcesPath, 'skeleton')
-		: join(import.meta.dirname, '..', '..', 'skeleton');
-}
-
 function requireAdminSender(event: IpcMainInvokeEvent): void {
 	if (
 		event.senderFrame !== event.sender.mainFrame ||
@@ -134,18 +130,32 @@ export async function runAdminAction(action: StackAction): Promise<AdminSnapshot
 
 export function registerAdminIpc(): void {
 	instances = new AdminInstances(app.getPath('userData'));
+	desktop = new AdminDesktop({
+		platform: process.platform,
+		packaged: app.isPackaged,
+		appImage: process.env.APPIMAGE,
+		home: app.getPath('home'),
+		dataHome: process.env.XDG_DATA_HOME,
+		icon: join(app.getAppPath(), 'assets/icon.png'),
+		version: app.getVersion()
+	});
 	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
 		version: app.getVersion(),
 		unavailableReason:
 			!app.isPackaged || process.argv.includes('--fhold-release-smoke')
-				? 'Automatic updates are available in the installed Linux AppImage, not development or preview smoke tests.'
+				? 'Automatic updates are available in installed releases, not development or smoke tests.'
 				: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
 						true
-					? 'Automatic updates are disabled in PR previews. Use a released AppImage to receive updates.'
-					: process.platform !== 'linux' || !process.env.APPIMAGE
-						? 'Run the Linux AppImage to enable automatic updates, or download Admin from GitHub.'
+					? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
+					: process.platform === 'linux' && !process.env.APPIMAGE
+						? 'Run the AppImage to enable automatic updates, or download Admin from GitHub.'
 						: undefined,
-		createUpdater: () => new electronUpdater.AppImageUpdater(),
+		createUpdater: () =>
+			process.platform === 'win32'
+				? new electronUpdater.NsisUpdater()
+				: process.platform === 'darwin'
+					? new electronUpdater.MacUpdater()
+					: new electronUpdater.AppImageUpdater(),
 		changed: (snapshot) => {
 			for (const window of BrowserWindow.getAllWindows())
 				if (!window.isDestroyed())
@@ -182,10 +192,23 @@ export function registerAdminIpc(): void {
 			? await dialog.showMessageBox(owner, options)
 			: await dialog.showMessageBox(options);
 		if (result.response !== 1) return;
+		await desktop.finish();
 		requireSwitchable();
 		updates.install();
 	});
 	updates.start();
+	ipcMain.handle(ADMIN_CHANNELS.desktopStatus, (event) => {
+		requireAdminSender(event);
+		return desktop.status();
+	});
+	ipcMain.handle(ADMIN_CHANNELS.installDesktop, (event) => {
+		requireAdminSender(event);
+		if (['ready', 'installing'].includes(updates.snapshot().update.phase))
+			throw Error(
+				'Restart Admin to finish its downloaded update, then add it to your application menu.'
+			);
+		return desktop.install();
+	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingFeatures, (event, id: string) => {
 		requireAdminSender(event);
 		const provider = hostingProvider(instances.hosting.connection(id));
@@ -383,9 +406,9 @@ export function registerAdminIpc(): void {
 		return adminSnapshot();
 	});
 	app.on('before-quit', (event) => {
-		if (!activeSession) return;
+		if (!activeSession && !desktop.busy()) return;
 		event.preventDefault();
-		void discardSession().finally(() => app.quit());
+		void Promise.all([discardSession(), desktop.finish()]).finally(() => app.quit());
 	});
 	async function confirmConnectionChange(
 		event: IpcMainInvokeEvent,
@@ -610,6 +633,7 @@ export function createAdminWindow(options: { show?: boolean } = {}): BrowserWind
 		minWidth: 640,
 		minHeight: 540,
 		title: 'fhold Admin',
+		icon: join(app.getAppPath(), 'assets/icon.png'),
 		backgroundColor: '#0d1117',
 		show: options.show ?? true,
 		webPreferences: {

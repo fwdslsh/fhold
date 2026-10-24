@@ -23,6 +23,7 @@ test('tooling changes do not require container qualification', () => {
 				'packages/electron/admin/hosting.js',
 				'packages/cli/src/commands/hosting.ts',
 				'.github/workflows/pr-admin.yml',
+				'.github/workflows/admin-desktop-native.yml',
 				'scripts/validate-admin-update-feeds.mjs',
 				'scripts/admin-update-feeds.test.ts',
 				'scripts/management-architecture.test.ts',

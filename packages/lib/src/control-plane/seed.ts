@@ -6,7 +6,15 @@ import { ensureHomeDirs, writeFileAtomic } from './foundation.js';
 import { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 export { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 
+let distributionSkeleton: string | undefined;
+
+/** Distribution resources belong to this process, not an inherited shell environment. */
+export function configureSkeletonDirectory(directory?: string): void {
+	distributionSkeleton = directory;
+}
+
 export function skeletonRoot(): string {
+	if (distributionSkeleton) return distributionSkeleton;
 	if (process.env.FH_SKELETON_DIR) return process.env.FH_SKELETON_DIR;
 	if (process.env.FH_REPO_ROOT) {
 		return join(process.env.FH_REPO_ROOT, 'packages', 'skeleton');

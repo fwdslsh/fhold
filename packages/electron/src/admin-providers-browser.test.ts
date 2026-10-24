@@ -1110,6 +1110,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.onAppUpdate=listener=>{window.appQa.emit=listener;return()=>{};};
 			state.api.checkAppUpdate=async()=>{window.appQa.snapshot.update={...window.appQa.snapshot.update,phase:'ready',availableVersion:'0.3.261002-beta'};return structuredClone(window.appQa.snapshot);};
 			state.api.installAppUpdate=async()=>{window.appQa.installs++;};
+			state.api.desktopStatus=async()=>({supported:true,installed:false,needsUpdate:false,runningInstalledCopy:false,appImage:'/test/fhold-admin.AppImage'});
+			state.api.installDesktop=async()=>({supported:true,installed:true,needsUpdate:false,runningInstalledCopy:false,appImage:'/test/fhold-admin.AppImage'});
 			window.connectionQa={connections:[{kind:'local-docker',id:'local',label:'This computer'},{kind:'ssh-docker',id:'krang',label:'Krang',host:'krang',roots:[]}],saved:0,removed:0,repair:0,approve:false,checkFails:true};const qa=window.connectionQa;
 			state.api.hostingConnections=async()=>structuredClone(qa.connections);
 			state.api.hostingSaveConnection=async value=>{qa.saved++;qa.connections.push(value);return value;};
@@ -1126,6 +1128,13 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe(true);
 		expect(await evaluate("document.querySelector('#admin-update-channel').value")).toBe('stable');
+		expect(await evaluate("document.querySelector('#admin-desktop-install').textContent")).toBe(
+			'Add to application menu'
+		);
+		await click('#admin-desktop-install');
+		expect(await evaluate("document.querySelector('#admin-desktop-install').textContent")).toBe(
+			'Refresh menu entry'
+		);
 		expect(await evaluate("document.querySelector('#app-shell').inert")).toBe(true);
 		expect(
 			await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")
@@ -1139,6 +1148,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			expect(await evaluate('document.activeElement.getAttribute("aria-label")')).toBe(label);
 		}
 		for (const id of [
+			'admin-desktop-install',
 			'admin-update-channel',
 			'admin-update-automatic',
 			'admin-updates-save',
@@ -1160,7 +1170,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(
 			await evaluate("document.querySelector('#hosting-manager-status').textContent")
 		).toContain('needs attention');
-		expect(await evaluate("document.querySelector('#hosting-check-details button')===null")).toBe(true);
+		expect(await evaluate("document.querySelector('#hosting-check-details button')===null")).toBe(
+			true
+		);
 		await evaluate('window.connectionQa.checkFails=false');
 		await click('button[aria-label="Check Krang"]');
 		expect(

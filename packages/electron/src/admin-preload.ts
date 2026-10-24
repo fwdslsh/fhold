@@ -4,6 +4,8 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	desktopStatus: () => ipcRenderer.invoke(ADMIN_CHANNELS.desktopStatus),
+	installDesktop: () => ipcRenderer.invoke(ADMIN_CHANNELS.installDesktop),
 	appSettings: () => ipcRenderer.invoke(ADMIN_CHANNELS.appSettings),
 	saveAppSettings: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.saveAppSettings, value),
 	checkAppUpdate: () => ipcRenderer.invoke(ADMIN_CHANNELS.checkAppUpdate),

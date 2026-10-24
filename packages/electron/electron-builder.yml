@@ -33,3 +33,22 @@ linux:
   target:
     - AppImage
   icon: assets/icon.png
+
+win:
+  target: nsis
+  icon: assets/icon.png
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  shortcutName: fhold Admin
+  runAfterFinish: false
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.utilities
+  icon: assets/icon.png

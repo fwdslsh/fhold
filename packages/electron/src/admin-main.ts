@@ -1,16 +1,17 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import { createAdminWindow, registerAdminIpc } from './admin-app.js';
-import { configureSshHelperDirectory } from '@fhold/lib';
+import { configureAdminResources } from './admin-resources.js';
+import { ADMIN_DESKTOP_ID } from './admin-desktop.js';
+import { preflightHomeSeed } from '@fhold/lib';
 
-configureSshHelperDirectory(app.isPackaged
-	? join(process.resourcesPath, 'management')
-	: join(app.getAppPath(), '../cli/embedded'));
+configureAdminResources(app, process.resourcesPath);
+if (process.platform === 'linux') app.setDesktopName(`${ADMIN_DESKTOP_ID}.desktop`);
 
-if (process.platform === 'win32') app.setAppUserModelId('dev.fwdslsh.fhold.admin');
+if (process.platform === 'win32') app.setAppUserModelId(ADMIN_DESKTOP_ID);
 app.setPath('userData', join(app.getPath('appData'), 'fhold-admin'));
 
 const releaseSmoke = process.argv.includes('--fhold-release-smoke');
@@ -37,15 +38,37 @@ if (releaseSmoke) {
 	} else if (!home || !isAbsolute(home) || (existsSync(home) && readdirSync(home).length !== 0)) {
 		finishReleaseSmoke('Release smoke requires an absolute, empty FH_HOME.');
 	} else {
+		// Exercise packaged resources, not just window startup, after inherited-env relaunches.
+		try {
+			preflightHomeSeed(home);
+		} catch (error) {
+			finishReleaseSmoke(error instanceof Error ? error.message : String(error));
+		}
 		// Packaged startup uses the real preload and CSP, with no production-profile writes.
 		app.setPath('userData', mkdtempSync(join(tmpdir(), 'fhold-admin-release-profile-')));
 		process.env.XDG_CONFIG_HOME = join(app.getPath('userData'), 'host-config');
+		if (process.env.FH_ADMIN_SMOKE_DESKTOP === '1' && process.platform === 'linux') {
+			app.setPath('home', app.getPath('userData'));
+			process.env.XDG_DATA_HOME = join(app.getPath('userData'), 'share');
+		}
 	}
 }
 
 async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 	let timeout: NodeJS.Timeout | undefined;
 	try {
+		if (process.env.FH_ADMIN_SMOKE_DESKTOP === '1' && process.platform === 'win32') {
+			const shortcut = shell.readShortcutLink(
+				join(app.getPath('appData'), 'Microsoft/Windows/Start Menu/Programs/fhold Admin.lnk')
+			);
+			if (
+				shortcut.target.toLowerCase() !== app.getPath('exe').toLowerCase() ||
+				shortcut.appUserModelId !== ADMIN_DESKTOP_ID
+			)
+				throw new Error(
+					'Installed Start menu shortcut does not match the Admin executable and taskbar identity.'
+				);
+		}
 		await Promise.race([
 			(async () => {
 				if (window.webContents.isLoading()) {
@@ -76,6 +99,12 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					});
 					const preferences = await window.fholdAdmin.appSettings();
 					if (preferences.settings.updates.channel !== 'stable' || !preferences.settings.updates.automatic) throw new Error('Packaged Admin update defaults are incorrect.');
+					if (${JSON.stringify(process.env.FH_ADMIN_SMOKE_DESKTOP === '1' && process.platform === 'linux')}) {
+						const before = await window.fholdAdmin.desktopStatus();
+						if (!before.supported || before.installed) throw new Error('Menu smoke profile is not fresh.');
+						const installed = await window.fholdAdmin.installDesktop();
+						if (!installed.installed || installed.needsUpdate) throw new Error('Native menu installation failed.');
+					}
 					document.querySelector('#instance-welcome [data-admin-settings]').click();
 					if (document.querySelector('#admin-settings').hidden || !document.querySelector('#hosting-manager').closest('#admin-settings')) throw new Error('Admin settings page did not open.');
 					document.querySelector('#admin-settings-back').click();

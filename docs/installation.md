@@ -126,6 +126,46 @@ with the explicit provider-auth option.
 
 ## Optional local Admin
 
+On Linux, open **Settings → Application menu → Add to application menu** in the
+AppImage. This installs a per-user copy at `~/.local/bin/fhold-admin.AppImage`,
+plus a standard desktop entry and fhold icon under `$XDG_DATA_HOME` (normally
+`~/.local/share`). No administrator access or AppImage integration utility is
+needed. Open **fhold Admin** from KDE's launcher or GNOME's Applications search;
+pin that entry to the taskbar or dash. X11 and Wayland use the same application
+identity as the menu entry. The original download is left alone; no agent files change.
+
+The menu copy has a stable filename, so automatic updates keep its launcher
+working. Launch the menu copy for everyday use. If you instead open a newer
+download, **Update menu copy** installs that version in the same location.
+**Refresh menu entry** repairs its launcher/icon. A previously pinned shortcut
+to a downloaded AppImage may need to be unpinned and replaced with the menu entry.
+
+Automatic Admin updates use the selected Stable/Beta/Alpha channel and never
+upgrade agents. Every launch resolves managed assets from the running Admin's
+own resources, including the first launch after an automatic update; an old
+AppImage mount or inherited developer override cannot select another release's
+assets. Development builds retain explicit asset overrides.
+
+Native desktop packaging is also configured for Windows and macOS:
+
+- Windows uses a per-user NSIS installer with a **fhold Admin** Start menu shortcut,
+  an embedded application icon and a matching taskbar identity. Pin the installed
+  application to the taskbar; no separate menu-install button is needed.
+- macOS uses a DMG: drag **fhold Admin** into **Applications**, then open it there
+  and keep it in the Dock. The bundle contains its icon and stable application ID.
+
+Build these on their native platforms with `build:windows` or `build:mac` in
+`packages/electron`. The **Native Admin desktop checks** workflow builds preview
+installers and checks their installed shortcut/bundle identity, icons and real
+renderer startup. Preview updates are disabled. These checks do not start agents
+or publish releases. Windows/macOS packages are not yet in the public release
+asset set; native CI and platform testing must pass before distribution. Public
+macOS updates additionally require a signed/notarized release and its ZIP/feed;
+Windows uses the native NSIS updater. This is desktop integration, not a claim
+that local Docker hosting on Windows/macOS has been qualified.
+
+For development:
+
 ```bash
 bun run --cwd packages/electron bundle
 bun run --cwd packages/electron start
@@ -174,5 +214,5 @@ and policy-scoped; see [connections](remote-mcp.md), [Discord](portals/discord-s
 For supported portable backups, initialize a fresh home with `--no-start`,
 preview and apply `fhold restore` before completing setup. See
 [management and recovery](managing-fhold.md). Raw folders and foreign manifests
-are not accepted. Windows/macOS distribution requires future native packaging
-and release verification; public source availability does not qualify those hosts.
+are not accepted. Windows/macOS distribution still requires native release
+verification; desktop packaging alone does not qualify local hosting on those systems.
