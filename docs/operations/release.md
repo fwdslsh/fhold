@@ -285,11 +285,39 @@ fixed format strings with request/error data supplied separately; the finding
 concerns attacker-controlled precision format strings. That reduces the observed
 exposure, but is not a clean-audit claim or a guarantee for arbitrary extra apps.
 
-The audit command ignores only this exact advisory and the separately reviewed
-unsigned MCPB advisory. All other findings still fail. No dependency is patched,
+The audit command ignores individually reviewed advisory IDs only, including the
+exceptions documented below. All other findings still fail. No dependency is patched,
 replaced or removed. Re-review by November 6, 2026, when a supported upstream
 fix is released, or before changing the caller/format-string boundary. Runtime
 image scans and all other release gates remain enabled.
+
+## Temporary upstream MSAL and Zod exceptions
+
+On October 23, 2026 (October 24 UTC), the product owner approved these two exact
+exceptions pending supported upstream fixes. Track removal in
+[issue #63](https://github.com/fwdslsh/fhold/issues/63):
+
+- [GHSA-xcx6-jx8p-x3h5](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5): MSAL Node
+  authentication-code parameter disclosure, fixed in 7.1.0. Azure Identity 4.14.0
+  still requests MSAL Node `^6.0.0`; latest 6.x is 6.0.1. Blob recovery uses
+  `ManagedIdentityCredential`, SAS or connection-string credentials, not
+  `AuthorizationCodeCredential`/`acquireTokenByCode`. That limits observed exposure;
+  it does not make the dependency patched. This chain needs an Azure upstream fix
+  independently of AKM.
+- [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5): Zod memory
+  exhaustion from oversized invalid collections, fixed in 4.6.6. Direct fhold Zod
+  is already 4.6.7, but AKM CLI 0.10.261013-beta and MCPB 2.1.2 still require Zod 3
+  (latest 3.25.76). MCPB packs repository-owned manifests; AKM handles imported and
+  operator inputs, which can be hostile. Do not describe this exposure as unreachable.
+
+`bun run audit` excludes only the named advisories; raw `bun audit` still reports
+them. No global major-version override, vendor patch, severity-wide exclusion or
+disabled audit is introduced. Source checks run before the mandatory audit, so
+an advisory cannot hide unrelated test failures. Runtime image scans are unchanged.
+Re-review with the next AKM update, before any release, and no later than
+**November 6, 2026**. Remove each exception as soon as its supported dependency
+chain is patched (including the separate MCPB and Azure chains), and qualify AKM
+or Blob behavior when updating those dependencies. This is not a clean-audit claim.
 
 ## Public release gates
 
