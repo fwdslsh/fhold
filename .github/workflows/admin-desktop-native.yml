@@ -53,7 +53,11 @@ jobs:
         run: |
           export VERSION="$(node -p 'require("./packages/electron/package.json").version')"
           export ADMIN_SMOKE_ARTIFACT="$(node -e 'const fs=require("node:fs");const extension=process.platform==="win32"?".exe":".zip";console.log(fs.readdirSync("packages/electron/dist/packages").find(name=>name.endsWith(extension)))')"
-          node scripts/smoke-admin-artifact.mjs
+          # Build once; require three independent clean installs/launches to pass.
+          # This is repetition for reliability evidence, not retry-on-failure.
+          for attempt in 1 2 3; do
+            node scripts/smoke-admin-artifact.mjs
+          done
       - name: Upload native test packages
         uses: actions/upload-artifact@v7.0.2
         with:

@@ -30,8 +30,12 @@ function run(command, args, options = {}) {
 		...options
 	});
 	if (result.error || result.status !== 0) {
-		const detail = existsSync(report) ? readFileSync(report, 'utf8') : result.stderr;
-		throw new Error(`Packaged Admin command failed: ${result.error?.message ?? detail}`);
+		const detail = existsSync(report)
+			? readFileSync(report, 'utf8')
+			: 'No startup report was produced.';
+		throw new Error(
+			`Packaged Admin command failed: ${result.error?.message ?? ''}\n${detail}\n${result.stdout ?? ''}\n${result.stderr ?? ''}`
+		);
 	}
 	return result.stdout ?? '';
 }
@@ -113,6 +117,7 @@ try {
 	const result = existsSync(report) ? JSON.parse(readFileSync(report, 'utf8')) : null;
 	if (result?.ok !== true || result.version !== version)
 		throw new Error('Packaged Admin did not confirm renderer and bridge readiness');
+	console.log(JSON.stringify(result.progress));
 	console.log(`Verified packaged Admin startup: ${asset}`);
 } finally {
 	console.log(`Packaged smoke fixtures retained at ${generated}`);

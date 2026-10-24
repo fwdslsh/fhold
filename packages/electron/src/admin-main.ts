@@ -15,14 +15,25 @@ if (process.platform === 'win32') app.setAppUserModelId(ADMIN_DESKTOP_ID);
 app.setPath('userData', join(app.getPath('appData'), 'fhold-admin'));
 
 const releaseSmoke = process.argv.includes('--fhold-release-smoke');
+const smokeStarted = Date.now();
+const smokeProgress: Array<{ phase: string; elapsedMs: number }> = [];
+function markSmokePhase(phase: string): void {
+	const progress = { phase, elapsedMs: Date.now() - smokeStarted };
+	smokeProgress.push(progress);
+	process.stdout.write(`${JSON.stringify(progress)}\n`);
+}
 function finishReleaseSmoke(error?: string): void {
 	const report = process.env.FH_ADMIN_SMOKE_REPORT;
 	if (report) {
 		if (!isAbsolute(report)) throw new Error('Release smoke report must be an absolute path.');
-		writeFileSync(report, JSON.stringify({ ok: !error, version: app.getVersion(), error }), {
-			flag: 'wx',
-			mode: 0o600
-		});
+		writeFileSync(
+			report,
+			JSON.stringify({ ok: !error, version: app.getVersion(), error, progress: smokeProgress }),
+			{
+				flag: 'wx',
+				mode: 0o600
+			}
+		);
 	} else if (error) {
 		process.stderr.write(`${error}\n`);
 	} else {
@@ -56,6 +67,12 @@ if (releaseSmoke) {
 
 async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 	let timeout: NodeJS.Timeout | undefined;
+	const onConsole = ({ message }: { message: string }) => {
+		if (message.startsWith('FH_SMOKE_PHASE:'))
+			markSmokePhase(message.slice('FH_SMOKE_PHASE:'.length));
+	};
+	window.webContents.on('console-message', onConsole);
+	markSmokePhase('renderer loading');
 	try {
 		if (process.env.FH_ADMIN_SMOKE_DESKTOP === '1' && process.platform === 'win32') {
 			const shortcut = shell.readShortcutLink(
@@ -82,6 +99,8 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					});
 				}
 				await window.webContents.executeJavaScript(`(async () => {
+					const phase = name => console.info('FH_SMOKE_PHASE:' + name);
+					phase('preload and welcome');
 					if (typeof window.fholdAdmin?.snapshot !== 'function') {
 						throw new Error('Packaged Admin preload bridge is missing.');
 					}
@@ -99,14 +118,17 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 						};
 						check();
 					});
+					phase('app settings');
 					const preferences = await window.fholdAdmin.appSettings();
 					if (preferences.settings.updates.channel !== 'stable' || !preferences.settings.updates.automatic) throw new Error('Packaged Admin update defaults are incorrect.');
 					if (${JSON.stringify(process.env.FH_ADMIN_SMOKE_DESKTOP === '1' && process.platform === 'linux')}) {
+						phase('desktop installation');
 						const before = await window.fholdAdmin.desktopStatus();
 						if (!before.supported || before.installed) throw new Error('Menu smoke profile is not fresh.');
 						const installed = await window.fholdAdmin.installDesktop();
 						if (!installed.installed) throw new Error('Native menu installation failed.');
 					}
+					phase('settings and setup navigation');
 					document.querySelector('#instance-welcome [data-admin-settings]').click();
 					if (document.querySelector('#admin-settings').hidden || !document.querySelector('#hosting-manager').closest('#admin-settings')) throw new Error('Admin settings page did not open.');
 					document.querySelector('#admin-settings-back').click();
@@ -126,19 +148,34 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 					if (folder.value !== welcome.defaultInstance.homeDir) throw new Error('Custom folder was overwritten.');
 					// Validate the native selection bridge without installing a stack.
 					// Setup now chooses this target as part of Install, not a second form.
+					phase('prepare empty instance');
 					await window.fholdAdmin.prepareNewInstance({kind:'local',homeDir:folder.value,name:name.value});
+					phase('snapshot and Docker readiness');
 					const snapshot = await window.fholdAdmin.snapshot();
 					if (snapshot.lifecycle.state !== 'known' || snapshot.lifecycle.value !== 'not-installed')
 						throw new Error('Smoke home is not fresh.');
 					if (snapshot.docker?.config.deployment.projectName !== 'custom-agent') throw new Error('New instance name did not reach setup.');
+					phase('complete');
 				})()`);
 			})(),
 			new Promise<never>((_resolve, reject) => {
-				timeout = setTimeout(() => reject(new Error('Packaged Admin startup timed out.')), 20_000);
+				// This smoke includes a fresh-home snapshot, not just renderer startup.
+				// Readiness can spend 10s on each Docker context/info/context/Compose call;
+				// allow those existing bounds plus the 10s welcome wait and launch overhead.
+				timeout = setTimeout(
+					() =>
+						reject(
+							new Error(
+								`Packaged Admin startup timed out during ${smokeProgress.at(-1)?.phase ?? 'startup'}.`
+							)
+						),
+					60_000
+				);
 			})
 		]);
 	} finally {
 		if (timeout) clearTimeout(timeout);
+		window.webContents.removeListener('console-message', onConsole);
 	}
 }
 
