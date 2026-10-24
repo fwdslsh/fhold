@@ -1,5 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron';
-import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
@@ -62,11 +62,13 @@ async function verifyPackagedStartup(window: BrowserWindow): Promise<void> {
 				join(app.getPath('appData'), 'Microsoft/Windows/Start Menu/Programs/fhold Admin.lnk')
 			);
 			if (
-				shortcut.target.toLowerCase() !== app.getPath('exe').toLowerCase() ||
+				// NSIS and Windows may express the same path using long or DOS 8.3 names.
+				realpathSync.native(shortcut.target).toLowerCase() !==
+					realpathSync.native(app.getPath('exe')).toLowerCase() ||
 				shortcut.appUserModelId !== ADMIN_DESKTOP_ID
 			)
 				throw new Error(
-					'Installed Start menu shortcut does not match the Admin executable and taskbar identity.'
+					`Installed Start menu shortcut differs: ${JSON.stringify({ target: shortcut.target, executable: app.getPath('exe'), appUserModelId: shortcut.appUserModelId })}`
 				);
 		}
 		await Promise.race([

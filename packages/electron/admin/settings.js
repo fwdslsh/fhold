@@ -24,7 +24,7 @@ function renderDesktop(status) {
 	setText(
 		'admin-desktop-status',
 		status.needsUpdate
-			? 'Your menu opens an older copy. Update it to this version.'
+			? 'Your menu opens a different copy. Updating it will use this running version of Admin.'
 			: status.installed
 				? status.runningInstalledCopy
 					? 'Installed. Menu launches and automatic updates use this copy.'
