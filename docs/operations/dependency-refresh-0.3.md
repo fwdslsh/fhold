@@ -281,3 +281,40 @@ no floating runtime dependency is introduced, and no live instance is changed.
 Qualify the stamped source with source/artifact tests and all six native image
 jobs, then verify published assets and signed multi-architecture images. Release
 publication is separate from upgrading existing instances.
+
+## Tooling-only 0.3.261007-beta review
+
+Rechecked official registry metadata on **October 24, 2026 UTC**, immediately
+before merging PR #62: all workspace dependencies/overrides via recursive Bun
+inspection, compatible transitive refresh, selected AKM channels, immutable native
+marketplace tag, pinned Actions/tools and Node/Go release indexes. The docs
+renderer/template retain their supported 0.11.16/0.5.0 versions.
+
+Update Admin's **electron-updater 6.8.9 → 6.8.11** on the stable channel, including
+upstream differential-download/cache fixes and cached-filename validation. Electron
+**44.9.3** remains latest on the supported 44 line; 45.0.0 retains its separate
+major-version qualification hold. Other direct tooling pins remain current.
+
+Retain runtime **0.3.261006-beta** and its exact package resolutions. AKM CLI
+`next` **0.10.261013-beta**, all three plugins **0.10.261012-beta**, native archive
+commit `1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe`, Codex 0.164.0, Bun 1.4.4,
+Node 24.22.1 LTS, npm 12.2.1, Go 1.27.3 and Supercronic 0.2.51 remain current on
+their selected channels. Actions, Trivy 0.76.1 and cosign 3.1.4 are unchanged.
+
+Explicit holds: OpenCode **2.0.32 → 2.1.4** and Effect **4.0.1 → 4.0.6** remain
+pending the native compatibility work in #57. Claude Code **2.1.309 → 2.1.310**
+waits for the next qualified runtime refresh. The compatible lock refresh also
+found ONNX/AKM's **global-agent 4.1.3 → 4.1.6** and MCPB's
+**ignore 7.0.13 → 7.0.14**. Both are deferred to that full runtime/extension
+qualification, not silently shipped in a tools-only candidate. Their known-good
+lock records were retained and frozen installation reverified.
+
+The owner approved the two precise temporary MSAL/Zod exceptions described in
+the [release runbook](release.md#temporary-upstream-msal-and-zod-exceptions),
+tracked by [#63](https://github.com/fwdslsh/fhold/issues/63). Azure Identity still
+requires MSAL 6; AKM and MCPB still require Zod 3. Re-review on the next AKM update,
+before release and by November 6; remove each exception when its supported chain
+is fixed. No forced major override or vendor patch is used. Runtime images and
+their existing Brotli exception are unchanged and are not requalified by a
+tooling publication. Qualify the stamped tools on canonical main CI and verify
+the public downloads and update feeds before calling publication complete.

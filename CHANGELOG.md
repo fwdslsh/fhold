@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.261007-beta — reliable Admin updates and desktop integration
+
+Tooling-only Linux Admin and CLI release (#62). Assistant, Guardian, Portal and
+the Claude Desktop extension remain at **0.3.261006-beta**. Publishing or
+installing these tools does not update existing instances.
+
+Fix Admin updates selecting stale Skeleton/helper files from a previous
+AppImage's inherited environment. The running distribution now selects its own
+packaged resources, including the managed Codex configuration. No instance-file
+repair or environment workaround is required.
+
+Add opt-in **Install in application menu** in Admin Settings. On Linux this
+installs a stable per-user AppImage and standard desktop/icon identity, verified
+on KDE. Replacing an existing menu copy requires explicit confirmation and warns
+when it may replace a newer download; native self-updates keep that stable target.
+GNOME and display-server-specific grouping still need manual qualification.
+Windows/macOS desktop integration is native-preview tested, but public downloads,
+signing and update feeds for those platforms are not part of this release.
+
+Update **electron-updater to 6.8.11** for upstream cache/differential-download
+fixes. Improve packaged startup diagnostics and separate native-readiness and
+helper-build test budgets without weakening behavior assertions.
+
+Disclose the owner-approved temporary MSAL Node **GHSA-xcx6-jx8p-x3h5** and
+transitive Zod 3 **GHSA-mrhx-c7xc-m3w5** audit exceptions pending supported upstream
+fixes. Direct fhold Zod is already patched; the AKM/MCPB and Azure dependency
+chains are not. See the [scope and removal conditions](docs/operations/release.md#temporary-upstream-msal-and-zod-exceptions)
+and [dependency review](docs/operations/dependency-refresh-0.3.md#tooling-only-03261007-beta-review).
+The retained runtime's previously disclosed Brotli exception is unchanged.
+
 ## 0.3.261006-beta — managed configuration and automatic SSH management
 
 Full release of Linux CLI/Admin, Assistant/Guardian/Portal images and the Claude
