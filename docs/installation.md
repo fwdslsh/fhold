@@ -45,9 +45,11 @@ FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli install --name personal-a
 ./packages/cli/dist/fhold-cli -n personal-agent setup
 ```
 
-These are local source-build instructions, not an identical-byte release retry.
-Do not overwrite an existing frozen candidate's images or artifacts. Changed
-source/content needs a new version following [release operations](operations/release.md).
+These are local source-build instructions. Identify development candidates by
+commit SHA/image digest; unpublished builds may change without consuming another
+release counter. Qualify the final stamped source and artifacts. Once a Git tag,
+versioned image or release download is public, its bytes are immutable and changed
+content needs a new version. See [release operations](operations/release.md).
 Only the exact runtime revision and artifacts recorded in
 [Admin/artifact qualification](operations/alpha-qualification.md) or the
 [Assistant recovery qualification](assistant-recovery.md#qualification-limits) carry that qualification;
