@@ -33,8 +33,9 @@ const credentialFile = process.env.FH_RECOVERY_TEST_CREDENTIAL_FILE;
 const instance = `smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-recovery-smoke-only';
 const lockMarker = `synthetic-process-lock-${randomUUID()}`;
+const claudeSpawnFile = '/home/fhold/.claude/bridge-spawn/fhold-recovery-fixture/append-system-prompt.txt';
 const processLockFiles = [
-	'/home/fhold/.claude/bridge-spawn/fhold-recovery-fixture/append-system-prompt.txt',
+	claudeSpawnFile,
 	'/opt/akm/data/index.rebuild.lock',
 	'/opt/akm/data/akm.lock.lck',
 	'/opt/akm/data/state/locks/fhold-recovery-fixture/improve.lock',
@@ -306,7 +307,7 @@ async function stop(container) {
 		report.checks.pid1ShutdownAndRecoveryCompletionLogged = true;
 	}
 }
-async function released() {
+async function released(checkpointImage = image) {
 	if (url !== 'file:///backup') return;
 	const descriptor = JSON.parse(await readFile(join(backup, 'descriptor.json'), 'utf8'));
 	const ownerGone = await readFile(join(backup, 'owner/nonce'))
@@ -343,11 +344,17 @@ async function released() {
 		manifest.members.some((member) => /-wal$|-shm$|not-selected/.test(member.path)),
 		false
 	);
-	assert.equal(
-		manifest.members.some((member) => member.root === 'home' && member.path.startsWith('.claude/bridge-spawn/')),
-		false,
-		'Claude per-spawn argument files must not enter the accepted checkpoint'
+	const capturedClaudeSpawn = manifest.members.some(
+		(member) => member.root === 'home' && member.path.startsWith('.claude/bridge-spawn/')
 	);
+	if (checkpointImage === image) {
+		assert.equal(capturedClaudeSpawn, false, 'candidate checkpoints must exclude Claude spawn files');
+		report.checks.candidateCheckpointsExcludeClaudeSpawn = true;
+	} else {
+		// Historical source images predate this exclusion. The replacement must
+		// accept those manifests and omit their spawn files from fresh storage.
+		report.historicalCheckpointContainsClaudeSpawn = capturedClaudeSpawn;
+	}
 	report.checks.customSelectionRecordedAndSqliteSnapshotted = true;
 	report.checks.externalMountsAbsentFromCheckpoint = true;
 	report.descriptor = {
@@ -691,7 +698,7 @@ async function qualifyRuntimeRecovery() {
 	report.checks.realPinnedCatalogInspected = true;
 	const nativeBeforeStop = first.v2 ? await completeNativeReply(first, session.id) : null;
 	await stop(first);
-	await released();
+	await released(first.image);
 	if (survivingHome)
 		await writeFile(
 			join(nativeHome, '.custom-client/newer-local-note'),
@@ -707,6 +714,11 @@ async function qualifyRuntimeRecovery() {
 		`import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
 	for(const file of ${JSON.stringify(processLockFiles)}){
 		const value=await readFile(file,'utf8').catch(error=>{if(error.code==='ENOENT')return '';throw error;});
+		if(${survivingHome} && file===${JSON.stringify(claudeSpawnFile)}){
+			// This file survived on the bind mount; recovery must not delete it.
+			assert.equal(value,JSON.stringify({pid:1,fixture:${JSON.stringify(lockMarker)}}),'surviving native state must remain unchanged');
+			continue;
+		}
 		assert.equal(value.includes(${JSON.stringify(lockMarker)}),false,'historical process lock must not be restored');
 	}
 	assert.equal(await readFile('/opt/akm/data/akm.lock.lck.notes','utf8'),${JSON.stringify(lockMarker)});`
