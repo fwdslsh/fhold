@@ -30,10 +30,11 @@
 - [Documentation website](operations/docs-website.md): native npm template builds and Pages deployment.
 
 Canonical source and contributions live at [fwdslsh/fhold](https://github.com/fwdslsh/fhold).
-The [Linux beta release](https://github.com/fwdslsh/fhold/releases/tag/0.2.2610134-beta.11)
-includes CLI/Admin downloads and matching public Docker Hub images. Native x64
-and ARM64 CI test the runtime images and CLI. ARM64 Admin startup and non-Linux
-packaging remain unqualified; earlier local qualification is historical evidence.
+The [Linux beta releases](https://github.com/fwdslsh/fhold/releases)
+include CLI/Admin downloads and matching public Docker Hub images. Native x64
+and ARM64 CI test the runtime images and CLI. ARM64 Admin startup and public
+non-Linux distribution remain unqualified. Windows/macOS native preview packaging
+is checked separately; earlier local qualification is historical evidence.
 
 Host-specific deployment scripts and third-party addon installers are not part
 of fhold's image, CLI/Admin or product test suite. The recovery documents retain

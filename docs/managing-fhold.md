@@ -98,9 +98,9 @@ Explicit `fhold update --pull` is refused for this local-only namespace.
 An explicitly configured nonlocal registry namespace retains its default pull
 behavior; `--no-pull` selects existing local copies for that registry intent.
 
-### Upgrade from alpha.3
+### Update an existing installation
 
-Download the new CLI or Admin from the [Linux release](https://github.com/fwdslsh/fhold/releases/tag/0.1.2610061043-beta.1)
+Download the new CLI or Admin from the [Linux releases](https://github.com/fwdslsh/fhold/releases)
 first; `fhold update` updates the selected instance, not the CLI executable.
 Select the existing home's **absolute path** in the new CLI, or open that folder
 in the new Admin, then update:
