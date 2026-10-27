@@ -31,18 +31,14 @@ RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/
               node_modules/@opencode/cli-linux-x64-baseline \
               node_modules/@opencode/cli-linux-x64-baseline-musl \
               node_modules/@opencode/cli-linux-arm64-musl \
-              node_modules/onnxruntime-node/bin/napi-v6/darwin \
-              node_modules/onnxruntime-node/bin/napi-v6/win32 \
     && case "${TARGETARCH}" in \
-      amd64) rm -rf node_modules/onnxruntime-node/bin/napi-v6/linux/arm64 \
-                    node_modules/@img/sharp-libvips-linux-arm64 \
+      amd64) rm -rf node_modules/@img/sharp-libvips-linux-arm64 \
                     node_modules/@img/sharp-libvips-linuxmusl-arm64 \
                     node_modules/@img/sharp-linux-arm64 \
                     node_modules/@img/sharp-linuxmusl-arm64 \
                     node_modules/@img/sharp-libvips-linuxmusl-x64 \
                     node_modules/@img/sharp-linuxmusl-x64 ;; \
-      arm64) rm -rf node_modules/onnxruntime-node/bin/napi-v6/linux/x64 \
-                    node_modules/@img/sharp-libvips-linux-x64 \
+      arm64) rm -rf node_modules/@img/sharp-libvips-linux-x64 \
                     node_modules/@img/sharp-libvips-linuxmusl-x64 \
                     node_modules/@img/sharp-linux-x64 \
                     node_modules/@img/sharp-linuxmusl-x64 \
@@ -63,19 +59,31 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:7b85dc778e9c4100b7e3ff7dbc7b716c5c539d0a5924aae76023aa3040c41b3e \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:1d36e583aad4b124b46cd2c96fde003eaf6db8e9642182ce6685612dd28033f8 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/62066b5d82c86c07b62e2e0a1fddec97b3182825 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/claude \
+    && plugin_root=akm-plugins-62066b5d82c86c07b62e2e0a1fddec97b3182825/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/.agents/plugins/marketplace.json \
-      akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/.claude-plugin/marketplace.json \
-      akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/LICENSE
+      akm-plugins-62066b5d82c86c07b62e2e0a1fddec97b3182825/.agents/plugins/marketplace.json \
+      akm-plugins-62066b5d82c86c07b62e2e0a1fddec97b3182825/.claude-plugin/marketplace.json \
+      akm-plugins-62066b5d82c86c07b62e2e0a1fddec97b3182825/LICENSE
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
+# AKM owns acquisition and integrity verification. Bake its native runtime into
+# its ordinary cache, without retaining a build-only setup config or installing
+# anything at container startup. Local embeddings are upstream-supported on x64;
+# ARM64 uses native keyword search or an operator's remote embedding endpoint.
+RUN export AKM_CACHE_DIR=/akm-cache AKM_CONFIG_DIR=/tmp/akm-build/config \
+      AKM_DATA_DIR=/tmp/akm-build/data AKM_STATE_DIR=/tmp/akm-build/state \
+      AKM_BUNDLE_DIR=/tmp/akm-build/bundle \
+    && bun -e "import { ensureRuntimeBinary } from 'akm-cli/dist/integrations/harnesses/opencode/runtime/binary.js'; await ensureRuntimeBinary();" \
+    && if [ "${TARGETARCH}" = amd64 ]; then \
+      akm setup --yes --embedding local --dir /tmp/akm-build/bundle --format json -q > /tmp/akm-setup.json \
+      && bun -e "import assert from 'node:assert/strict'; const result = await Bun.file('/tmp/akm-setup.json').json(); assert.equal(result.semanticAssets, 'ready', JSON.stringify(result));"; \
+    fi
 RUN mkdir -p /native-defaults/codex \
     && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /akm-marketplace \
     && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install akm@akm-plugins \
@@ -130,6 +138,7 @@ COPY --from=tools /fhold-plugins /fhold-plugins
 COPY plugins/fhold /opt/fhold/tools/plugins/fhold
 COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
+COPY --from=tools /akm-cache /opt/akm/cache
 # Native system configuration exists before the non-root entrypoint starts.
 COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
 COPY --from=tools /assistant-defaults/system/codex/ /etc/codex/

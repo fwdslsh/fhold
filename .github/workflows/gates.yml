@@ -195,9 +195,11 @@ jobs:
         env:
           FH_NATIVE_TEST_IMAGE: fhold/fhold-assistant:ci
           FH_HISTORY_SOURCE_IMAGE: fwdslsh/fhold-assistant:0.1.2610081904-beta.2
+          FH_HISTORY_V2_SOURCE_IMAGE: fwdslsh/fhold-assistant:0.3.261006-beta
         run: |
           docker tag fhold/assistant:ci fhold/fhold-assistant:ci
           docker pull "$FH_HISTORY_SOURCE_IMAGE"
+          docker pull "$FH_HISTORY_V2_SOURCE_IMAGE"
           bun test scripts/native-transfer.test.ts
       - name: Verify native settings, Guardian interactions and scheduled execution
         if: matrix.image == 'assistant'

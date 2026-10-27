@@ -197,6 +197,24 @@ verify_optional_failure_isolation() {
 verify_image_metadata
 case "$kind" in
 assistant)
+	# Fresh native state must find the image-baked AKM assets with no network,
+	# including the real local embedder on platforms upstream supports.
+	docker run --rm --network none --read-only --tmpfs /tmp:rw,mode=1777 \
+		-e HOME=/tmp/fresh-home -e AKM_CONFIG_DIR=/tmp/akm-config \
+		-e AKM_DATA_DIR=/tmp/akm-data -e AKM_STATE_DIR=/tmp/akm-state \
+		-e HF_HUB_OFFLINE=1 --entrypoint bun "$image" -e '
+		import assert from "node:assert/strict";
+		import {ensureRuntimeBinary, runtimeBinaryPath} from "/opt/fhold/tools/node_modules/akm-cli/dist/integrations/harnesses/opencode/runtime/binary.js";
+		import {hasLocalEmbeddings} from "/opt/fhold/tools/node_modules/akm-cli/dist/llm/embedders/onnx-runtime.js";
+		import {checkEmbeddingAvailability} from "/opt/fhold/tools/node_modules/akm-cli/dist/llm/embedder.js";
+		assert.equal(await ensureRuntimeBinary(), runtimeBinaryPath());
+		if (hasLocalEmbeddings()) {
+			const result = await checkEmbeddingAvailability();
+			assert.equal(result.available, true, JSON.stringify(result));
+		} else {
+			assert.equal(process.arch, "arm64", "Review upstream embedding platform support");
+		}
+		console.log("Fresh AKM native runtime/cache discovery passed without network or startup installation");'
 	mkdir -p \
 		"$root/data/.cache/opencode" \
 		"$root/data/.config/opencode" \
