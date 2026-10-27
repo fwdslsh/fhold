@@ -35,16 +35,20 @@ audit ignore are also removed. No vendor code or installed package contents are 
 The image build runs AKM's own `ensureRuntimeBinary` acquisition export for its
 private pinned OpenCode runtime. Linux x64 also runs native
 `akm setup --yes --embedding local` and requires `semanticAssets: ready`.
-The ordinary `/opt/akm/cache` is copied into the final image. No generated build
-configuration, credentials or bundle is copied. The current seed remains keyword
+Assets are baked under `/assistant-defaults/akm-cache`, outside Compose's bind
+mount, and ordinary filesystem initialization copies only missing files into
+the native `/opt/akm/cache` (or explicit `AKM_CACHE_DIR`). Existing operator files
+and symlinks are preserved; no setup command or network acquisition runs at boot.
+No generated build configuration, credentials or bundle is copied. The current seed remains keyword
 search with the installed `opencode` harness; operator preferences are preserved.
 The additional runtime cache lets operators choose native connection-based work
 without a first-use binary installation. Linux ARM64 uses upstream-supported
 keyword search or remote embeddings; no fhold fallback implementation is added.
 
-The image smoke uses a fresh home and configuration, a read-only filesystem and
-no network to verify native cache discovery and actual local model availability
-where AKM supports it. No native asset is supplied by a test.
+The image smoke uses the normal entrypoint, a fresh home/configuration and an
+empty writable cache bind mount with no network to verify native cache discovery
+and actual local model availability where AKM supports it. A restart preserves
+existing cache bytes and a native asset symlink. No native asset is supplied by a test.
 
 ## Continuation and integration evidence
 

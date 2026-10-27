@@ -27,10 +27,15 @@ CLI015 acquires native runtime pieces outside its npm dependency tree. The image
 build uses AKM's own acquisition code to populate its ordinary cache with its
 pinned OpenCode runtime. Native `akm setup --yes --embedding local` also prepares
 the ONNX binding and model on Linux x64. Only the cache is copied into the image;
-build setup preferences never replace operator configuration. Linux ARM64 follows
+build setup preferences never replace operator configuration. The immutable
+assets stay under `/assistant-defaults/akm-cache`, outside Compose's writable
+cache mount. Ordinary filesystem initialization copies only missing assets into
+the native cache; existing operator files and symlinks win. No setup or network
+download runs during initialization. Linux ARM64 follows
 upstream's keyword/remote-embedding support. Fresh-instance smoke tests require
 cache discovery and local embedding availability where supported with networking
-disabled. No installer or configuration writer is added to startup.
+disabled and the actual writable cache mount in place. No installer or
+configuration writer is added to startup.
 Upstream's `docs/reference/configuration.md`,
 `dist/integrations/harnesses/opencode/agent-builder.js` and native session reader
 own bounded model work and the `akm-model-work` recursion exclusion.

@@ -138,7 +138,7 @@ COPY --from=tools /fhold-plugins /fhold-plugins
 COPY plugins/fhold /opt/fhold/tools/plugins/fhold
 COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
-COPY --from=tools /akm-cache /opt/akm/cache
+COPY --from=tools /akm-cache /assistant-defaults/akm-cache
 # Native system configuration exists before the non-root entrypoint starts.
 COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
 COPY --from=tools /assistant-defaults/system/codex/ /etc/codex/
@@ -162,7 +162,7 @@ RUN test -n "$PLATFORM_VERSION" \
     && usermod -l fhold -d /home/fhold ubuntu \
     && groupmod -n fhold ubuntu \
     && chmod -R a-w /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
-    && chmod -R a+rX /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
+    && chmod -R a+rX /assistant-defaults /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
     && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
     && for command in opencode akm codex claude playwright; do \

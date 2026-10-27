@@ -306,8 +306,10 @@ fixed format strings with request/error data supplied separately; the finding
 concerns attacker-controlled precision format strings. That reduces the observed
 exposure, but is not a clean-audit claim or a guarantee for arbitrary extra apps.
 
-The October27 AKM upgrade removes this dependency chain from the resolved
-workspace. Its obsolete audit ignore is removed; the other individually reviewed
+The advisory was withdrawn on October22, 2026, so its obsolete audit ignore is
+removed. AKM's former ONNX branch is gone, but Electron's independent
+`@electron/get` → `global-agent` → `roarr` → `sprintf-js` chain remains in the
+resolved workspace. The other individually reviewed
 exceptions below remain. Runtime image scans and all other release gates remain
 enabled.
 
