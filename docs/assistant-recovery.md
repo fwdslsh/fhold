@@ -186,7 +186,12 @@ procedure below only after external confirmation that every old owner stopped.
 Keep deployment-specific lifecycle scripts outside the fhold runtime.
 
 Blob uses a 60-second descriptor lease, renewed every 10 seconds with a conservative
-45-second local safety window. A persistent owner nonce remains after lease expiry:
+45-second local safety window. Azure's native retry policy retries transient
+renewal failures only within the remaining existing window; claims, publication
+and release keep their separate single-attempt request bounds. Only a positively
+confirmed renewal before the old deadline extends authority. Definitive lease
+conflicts fail immediately; a sustained outage stops writers at the safety
+deadline, and a late response cannot revive ownership. A persistent owner nonce remains after lease expiry:
 expiry alone never authorizes takeover. Neither descriptor fencing nor a timer can
 stop a partitioned native process's local writes or arbitrary external tool action.
 External routing must not expose two owners, and a paused old host must be confirmed
@@ -758,6 +763,15 @@ contact Azure. It uses emulator-only `--skipApiVersionCheck` because shipped
 SDK 12.34.0 requests REST 2026-10-06, newer than that emulator's accepted versions.
 Do not apply that workaround to a cloud endpoint or interpret it as cloud API
 compatibility qualification.
+
+Emulator qualification also injects a single delayed renewal, a server-accepted
+renewal whose response is lost, a definitive lease conflict, a response arriving
+after the safety deadline, and a sustained service outage. It exercises the
+shipped Azure retry policy and adapter with real monotonic timing. The real
+recovery wrapper must signal its synthetic writer parent by the original safety
+deadline, retain the last accepted checkpoint and refuse automatic takeover.
+Both native CI architectures run this fixture and the full Blob replacement
+smoke. This does not inject faults into Azure or qualify a real hosted outage.
 
 Run the smokes as a non-root Linux user with Docker access. Their containers use
 that user's numeric UID/GID, matching private bind-mount ownership without

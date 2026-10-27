@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,7 +85,7 @@ async function command(executable, args, { timeout = 120000, env = process.env }
 	}
 }
 const docker = (args, timeout) => command('docker', args, { timeout });
-async function imageScript(name, script, timeout = 180000) {
+async function imageScript(name, script, timeout = 180000, runtime = 'bun') {
 	const target = `fhold-recovery-smoke-${suffix}-${name}`;
 	created.add(target);
 	return docker(
@@ -115,10 +115,11 @@ async function imageScript(name, script, timeout = 180000) {
 			'-e',
 			`FIXTURE_CONTAINER=${container}`,
 			'--entrypoint',
-			'bun',
+			'/usr/bin/tini',
 			image,
-			'--no-env-file',
-			'--config=/dev/null',
+			'--',
+			runtime,
+			...(runtime === 'bun' ? ['--no-env-file', '--config=/dev/null'] : ['--input-type=module']),
 			'-e',
 			script
 		],
@@ -267,6 +268,11 @@ try {
 	}
 	report.conformance = JSON.parse(await imageScript('conformance', conformance));
 	report.checks.transportConformance = true;
+	if (!live) {
+		const renewal = await readFile(new URL('./fixtures/blob-renewal.mjs', import.meta.url), 'utf8');
+		report.renewal = JSON.parse(await imageScript('renewal', renewal, 90000, 'node'));
+		report.checks.boundedNativeLeaseRetry = true;
+	}
 	const smoke = join(dirname(fileURLToPath(import.meta.url)), 'smoke-recovery.mjs');
 	const output = await command(process.execPath, [smoke], {
 		timeout: 420000,

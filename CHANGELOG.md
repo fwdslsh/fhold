@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.261008-beta — native agents and resilient Blob renewal
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Includes issues #65, #66, #57 and #64. Publishing or updating the tools
+does not upgrade an existing instance.
+
+Remove fhold's extra internal agent/tool restrictions and duplicate memory/hook
+machinery. AKM and the native harnesses own discovery, memory and consent;
+operator settings and Guardian's external credential boundaries remain intact.
+Retire only known unchanged managed assets and preserve operator edits.
+
+Upgrade AKM CLI to **0.10.261015-beta**, all three plugins to
+**0.10.261013-beta**, and OpenCode CLI/client/plugin SDK to **2.1.4**. Bake AKM's
+native runtime assets, seed only missing files atomically into the real mounted
+cache, and verify offline startup. Native compaction-continuation tests cover
+published 2.0 history and the current engine. Local embeddings are available on
+upstream-supported Linux x64; ARM64 retains native keyword/remote options.
+
+Recover from transient Azure Blob lease-renewal failures using the Azure SDK's
+own retry policy, bounded by the original ownership safety deadline. Confirmed
+same-owner renewal permits normal release/restart. Sustained outages and lease
+conflicts still stop writers and retain the persistent owner fence; there is no
+automatic takeover. Add real SDK/Azurite faults and full Blob Stop/restore smoke
+to both native architecture gates.
+
+Retain the owner's approved, narrowly scoped MSAL, Zod, npm-bundled Undici and
+Debian Brotli advisory exceptions pending supported upstream fixes; these are
+**not fixed** by this release. Their November 6 review/expiry is unchanged.
+See the [dependency review](docs/operations/dependency-refresh-2026-10-27.md)
+and [release inventory](docs/operations/dependency-refresh-0.3.md#full-03261008-beta-review).
+
 ## 0.3.261007-beta — reliable Admin updates and desktop integration
 
 Tooling-only Linux Admin and CLI release (#62). Assistant, Guardian, Portal and

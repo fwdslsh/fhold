@@ -110,9 +110,10 @@ finding is no longer present. Supported upstream releases must resolve the
 owning chains; no vendor edits, unsupported major override or scanner bypass is
 used to claim a fix. The exact image exceptions expire **November6, 2026**.
 
-Issue57 must remain open while its exception-removal acceptance is unresolved.
-Merging or releasing with further deferral requires an explicit owner decision;
-this implementation does not infer one from approval of PR67. Issue63 retains
-the separate Azure/MSAL and MCPB dependency ownership. Other dependency updates
+On October27 the owner explicitly approved retaining the existing exceptions
+until supported upstream fixes are available. This resolves issue57's deferral
+acceptance; merging PR68 closes57. Issue63 remains open for actual removal of
+the MSAL, Zod and npm-bundled Undici findings. The existing November6 review/
+expiry and exact ignore scopes remain unchanged. Other dependency updates
 are deferred to a deliberate batch; this PR holds Effect at its required4.0.1
 and leaves unrelated tools and desktop major-version decisions unchanged.

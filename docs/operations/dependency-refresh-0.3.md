@@ -318,3 +318,42 @@ is fixed. No forced major override or vendor patch is used. Runtime images and
 their existing Brotli exception are unchanged and are not requalified by a
 tooling publication. Qualify the stamped tools on canonical main CI and verify
 the public downloads and update feeds before calling publication complete.
+
+## Full 0.3.261008-beta review
+
+Reviewed **October 27, 2026** across all workspaces/overrides, image tools and
+native marketplaces, runtime/compiler bases, CI tools and documentation inputs.
+The focused native integration work in PR67/68 and Blob ownership fix are the
+release scope. The [upgrade record](dependency-refresh-2026-10-27.md) gives exact
+AKM/plugin/OpenCode provenance and native qualification.
+
+Selected AKM CLI **0.10.261015-beta**, all three plugins **0.10.261013-beta** and
+OpenCode CLI/client/plugin SDK **2.1.4** together. Effect **4.0.1** is retained as
+their compatible required peer. The unused Transformers/adm-zip overrides and
+ONNX pruning are removed. The sprintf-js advisory ignore is removed because the
+advisory was withdrawn; this is not a claim that every independent dependency
+chain disappeared.
+
+The recursive inventory still offers Claude Code **2.1.309 → 2.1.311**, Biome
+**2.6.2 → 2.6.3**, Effect **4.0.1 → 4.0.6** and Electron **44.9.3 → 45.0.0**.
+These unrelated updates/major qualification remain deferred under the scoped
+dependency policy; held versions are not called latest. Codex **0.164.0**,
+Playwright **1.64.1**, Azure/MCP/Slack/Discord SDKs, Bun/types **1.4.4**,
+Node **24.22.1** LTS, npm **12.2.1**, Go **1.27.3**, Supercronic **0.2.51**,
+Actions, Trivy **0.76.1**, cosign **3.1.4**, docs renderer **0.11.16** and template
+**0.5.0** retain the reviewed supported selections. The Blob fix changes no
+dependency pins or credential implementation; Azure's shipped native retry
+policy handles transient renewal errors.
+
+Existing exact MSAL, transitive Zod, npm-bundled Undici and Debian Brotli
+exceptions remain approved until supported upstream fixes, with the existing
+**November 6, 2026** review/expiry and raw reporting unchanged. #63 remains open;
+no forced major override, package-manager replacement or vendor patch is added.
+Issue57's deferral acceptance is resolved by the owner's October27 decision.
+
+Qualify the final stamped SHA on native amd64/arm64 CI, including real Blob
+faults, normal Stop/replacement, history continuation and published-image
+upgrades. Synthetic fixtures do not qualify live Azure identity, signed-in
+vendors, real CIFS/host backups, or the still-open hosted ENOENT investigation.
+Use the exact successful canonical-main run for publication, then verify the
+public downloads, checksums/update feeds and signed multi-architecture images.
