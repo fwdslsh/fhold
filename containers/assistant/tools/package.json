@@ -7,11 +7,11 @@
 		"@azure/identity": "4.14.0",
 		"@openai/codex": "0.164.0",
 		"@anthropic-ai/claude-code": "2.1.309",
-		"akm-opencode-v2": "0.10.261013-beta",
+		"akm-opencode-v2": "0.10.261014-beta",
 		"@opencode/cli": "2.1.4",
 		"@opencode/client": "2.1.4",
 		"@opencode/plugin": "2.1.4",
-		"akm-cli": "0.10.261015-beta",
+		"akm-cli": "0.10.261016-beta",
 		"playwright": "1.64.1"
 	}
 }

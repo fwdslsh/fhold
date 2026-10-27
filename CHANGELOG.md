@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.261009-beta — AKM refresh and Admin browser sign-in
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Upgrade AKM CLI to **0.10.261016-beta** and all three native plugins
+to **0.10.261014-beta**, retaining their supported OpenCode **2.1.4** and Effect
+**4.0.1** peer pair. The CLI now resolves patched Zod **4.6.7**, removing its
+image exception. MCPB's independent Zod chain and the existing MSAL, npm-bundled
+Undici and Debian Brotli exceptions remain tracked with unchanged expiry.
+
+Admin's **Open OpenCode** action now signs the default browser in through
+OpenCode's own authenticated, single-use pairing link. Overview, Apps and
+System reuse the selected instance's native credentials and owned SSH route.
+The password and temporary link stay out of renderer state and snapshots.
+No auth proxy, extra service or container permission restriction is introduced.
+
+See the [dependency review](docs/operations/dependency-refresh-beta09.md).
+Publishing or updating Admin/CLI does not upgrade an existing instance.
+
 ## 0.3.261008-beta — native agents and resilient Blob renewal
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop

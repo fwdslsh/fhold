@@ -328,9 +328,10 @@ exceptions pending supported upstream fixes. Track removal in
   independently of AKM.
 - [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5): Zod memory
   exhaustion from oversized invalid collections, fixed in 4.6.6. Direct fhold Zod
-  is already 4.6.7, but AKM CLI 0.10.261015-beta and MCPB 2.1.2 still require Zod 3
-  (latest 3.25.76). MCPB packs repository-owned manifests; AKM handles imported and
-  operator inputs, which can be hostile. Do not describe this exposure as unreachable.
+  and AKM CLI 0.10.261016-beta now resolve patched Zod 4.6.7. The AKM image
+  exception has been removed. MCPB 2.1.2 independently still requires Zod 3
+  (latest 3.25.76), so its source-audit exception remains. MCPB packs
+  repository-owned manifests; do not describe this remaining exposure as patched.
 
 `bun run audit` excludes only the named advisories; raw `bun audit` still reports
 them. No global major-version override, vendor patch, severity-wide exclusion or
@@ -345,26 +346,26 @@ or Blob behavior when updating those dependencies. This is not a clean-audit cla
 ## Temporary Assistant image exceptions (October 26, 2026)
 
 On October 26, 2026 (October 27 UTC), the product owner explicitly approved
-these three identified PR #67 Assistant findings until **November 6, 2026**:
+three identified PR #67 Assistant findings until **November 6, 2026**. The AKM
+Zod entry was removed with CLI 0.10.261016-beta; these two entries remain:
 
 | Trivy ID / exact GitHub alias | Package/version | Exact image package path |
 | --- | --- | --- |
 | CVE-2026-109461 / GHSA-xcx6-jx8p-x3h5 | `@azure/msal-node@6.0.1` | `opt/fhold/tools/node_modules/@azure/msal-node/package.json` |
-| CVE-2023-54404 / GHSA-mrhx-c7xc-m3w5 | `zod@3.25.76` | `opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json` |
 | CVE-2026-109869 / GHSA-xjj6-f33q-929c | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 
 Trivy0.76.1 applies the path and exact package/version PURL together; there are
 no directory globs or severity-wide exclusions. The unfiltered high/critical
 report remains visible. Other critical/fixable-high findings still fail, and
-native expiry stops these entries applying after the deadline. The first two
-retain the exposure and upstream constraints described under #63 above. The
-third permits npm's bundled HTTP client's unhandled-error denial-of-service
+native expiry stops these entries applying after the deadline. MSAL retains
+the exposure and upstream constraints described under #63 above. The npm
+entry permits its bundled HTTP client's unhandled-error denial-of-service
 finding from excessive content-encodings. Official npm12.2.1 and maintained
 11.21.1 tarballs both still contain undici6.29.0; no vendor tree is modified.
 
-[Issue #57](https://github.com/fwdslsh/fhold/issues/57) must verify and remove
-all three entries during the next native dependency qualification. AKM updates
-can fix its Zod chain, but do not fix Azure/MSAL or npm independently. Adopt a
+[Issue #63](https://github.com/fwdslsh/fhold/issues/63) tracks removal of the
+remaining entries. The supported AKM upgrade fixes its Zod chain independently
+of Azure/MSAL, MCPB and npm. Adopt a
 supported Azure chain and qualify Blob behavior, and a supported patched npm
 release and qualify npm/npx, before removing their respective entries. Preserve
 [issue #63](https://github.com/fwdslsh/fhold/issues/63)'s separate Azure and MCPB
