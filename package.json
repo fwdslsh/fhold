@@ -56,6 +56,7 @@
     "@biomejs/biome": "^2.6.2"
   },
   "overrides": {
+    "adm-zip": "0.6.1",
     "akm-cli": "0.10.261014-beta",
     "@discordjs/rest": "2.6.3",
     "@huggingface/transformers": "4.3.1",

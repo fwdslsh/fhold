@@ -21,6 +21,9 @@ The current plugin remains `akm-opencode-v2@0.10.261012-beta`. Its exact CLI013
 dependency is resolved to014 through the normal Bun override, keeping one CLI
 version across the three plugin harnesses and the installed command. No vendor
 source is patched. Published package integrity is recorded in `bun.lock`.
+The ONNX transitive `adm-zip` is pinned through the same standard override
+mechanism to patched0.6.1: ONNX's0.5 range otherwise introduces eight archive
+handling advisories. No audit exceptions are added.
 Upstream's `docs/reference/configuration.md`,
 `dist/integrations/harnesses/opencode/agent-builder.js` and native session reader
 own bounded model work and the `akm-model-work` recursion exclusion.
