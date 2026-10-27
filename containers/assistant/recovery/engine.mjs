@@ -358,13 +358,13 @@ export function createEngine(config, options = {}) {
 				throw new Error('recovery selection identity rejected');
 		} else if (manifest.networkMounts !== undefined || selection.version !== undefined)
 			throw new Error('recovery selection identity rejected');
-		// Older checkpoints may contain native AKM process locks. Validate their
+		// Older checkpoints may contain native locks or Claude spawn files. Validate their
 		// original catalog/identity normally, then omit them through the current
 		// catalog before staging. Other excluded members remain invalid.
 		const saved = createCatalog(roots, selection, {
 			...catalogOptions,
 			networkMounts,
-			historicalProcessLocks: true
+			historicalProcessState: true
 		});
 		if (
 			saved.metadata.catalog !== manifest.catalog ||

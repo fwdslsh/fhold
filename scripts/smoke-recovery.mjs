@@ -34,6 +34,7 @@ const instance = `smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-recovery-smoke-only';
 const lockMarker = `synthetic-process-lock-${randomUUID()}`;
 const processLockFiles = [
+	'/home/fhold/.claude/bridge-spawn/fhold-recovery-fixture/append-system-prompt.txt',
 	'/opt/akm/data/index.rebuild.lock',
 	'/opt/akm/data/akm.lock.lck',
 	'/opt/akm/data/state/locks/fhold-recovery-fixture/improve.lock',
@@ -341,6 +342,11 @@ async function released() {
 	assert.equal(
 		manifest.members.some((member) => /-wal$|-shm$|not-selected/.test(member.path)),
 		false
+	);
+	assert.equal(
+		manifest.members.some((member) => member.root === 'home' && member.path.startsWith('.claude/bridge-spawn/')),
+		false,
+		'Claude per-spawn argument files must not enter the accepted checkpoint'
 	);
 	report.checks.customSelectionRecordedAndSqliteSnapshotted = true;
 	report.checks.externalMountsAbsentFromCheckpoint = true;

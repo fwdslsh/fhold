@@ -69,10 +69,15 @@ function defaultExcluded(root, name) {
 // The atomic lock helper also creates exact PID/UUID temporary/quarantine names.
 const AKM_LOCK_FILES = ['index.db.write.lock', 'index.rebuild.lock', 'akm.lock.lck'];
 const LOCK_COMPANION = /^\.(?:tmp|stale)-[1-9][0-9]*-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
-function nativeProcessLocks(baseRoots) {
-	const directories = ['state/locks', 'secret-locks', 'extract-locks', 'workflow-run-locks'].map(
-		(name) => path.join(baseRoots.akmData, name)
-	);
+function nativeProcessState(baseRoots) {
+	const directories = [
+		...['state/locks', 'secret-locks', 'extract-locks', 'workflow-run-locks'].map(
+			(name) => path.join(baseRoots.akmData, name)
+		),
+		// Claude owns these per-spawn argument files and removes them on child
+		// exit. They are not conversation/auth state, even under an explicit home.
+		path.join(baseRoots.home, '.claude/bridge-spawn')
+	];
 	const files = [
 		...AKM_LOCK_FILES.map((name) => path.join(baseRoots.akmData, name)),
 		path.join(baseRoots.akmConfig, 'config.json.lck')
@@ -101,7 +106,7 @@ export function createCatalog(
 		store,
 		includeFile,
 		networkMounts = [],
-		historicalProcessLocks = false
+		historicalProcessState = false
 	} = {}
 ) {
 	const selection = normalizeSelection(value);
@@ -112,8 +117,8 @@ export function createCatalog(
 	const exclusions = [...policy.excludePaths, ...policy.externalMounts, ...networkRoots];
 	// Historical catalogs validate the original coverage only. Their transient
 	// members are never eligible for restoration through today's catalog.
-	const processLocks = nativeProcessLocks(baseRoots);
-	const processLockExcluded = (target) => !historicalProcessLocks && processLocks.contains(target);
+	const processState = nativeProcessState(baseRoots);
+	const processStateExcluded = (target) => !historicalProcessState && processState.contains(target);
 	// Process coordination is never durable data. Selecting a native home may
 	// include plugin caches, but must not opt into command wrappers or live locks.
 	const blocked = [
@@ -133,7 +138,7 @@ export function createCatalog(
 		if (
 			['/proc', '/sys', '/dev'].some((root) => overlapsPath(root, selected)) ||
 			blocked.some((root) => containsPath(root, selected)) ||
-			processLockExcluded(selected) ||
+			processStateExcluded(selected) ||
 			outside.some((item) => overlapsPath(item, selected))
 		)
 			throw new Error('recovery include path overlaps protected state or destination');
@@ -177,7 +182,7 @@ export function createCatalog(
 	const excludedPath = (target) => {
 		return (
 			exclusions.some((item) => containsPath(item, target)) ||
-			processLockExcluded(target) ||
+			processStateExcluded(target) ||
 			blocked.some((item) => containsPath(item, target)) ||
 			outside.some((item) => containsPath(item, target)) ||
 			(Object.entries(baseRoots).some(
@@ -214,7 +219,7 @@ export function createCatalog(
 		protectedPaths: [
 			...blocked,
 			...outside,
-			...(!historicalProcessLocks ? processLocks.paths : [])
+			...(!historicalProcessState ? processState.paths : [])
 		],
 		exclusions
 	};
