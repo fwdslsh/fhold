@@ -215,6 +215,11 @@ jobs:
         env:
           FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
         run: node scripts/smoke-recovery.mjs
+      - name: Verify Blob recovery and bounded native lease renewal with Azurite
+        if: matrix.image == 'assistant'
+        env:
+          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
+        run: node scripts/smoke-blob-recovery.mjs
       - name: Verify published-image upgrades with empty storage and surviving receipts
         if: matrix.image == 'assistant'
         env:

@@ -160,18 +160,33 @@ export async function createBlobStore(
 	}
 	const container = service.getContainerClient(destination.container);
 	const descriptor = container.getBlockBlobClient(`${destination.prefix}descriptor.json`);
+	// Renewal is idempotent for this exact lease ID. Let Azure's own policy retry
+	// transient transport/service failures, without broadening retries for claims,
+	// publications or releases. The outer monotonic deadline below bounds the
+	// whole sequence; tryTimeoutInMs alone is only a server-side timeout hint.
+	const renewalDescriptor = new BlobServiceClient(service.url, service.credential, {
+		...clientOptions,
+		retryOptions: {
+			maxTries: 60,
+			tryTimeoutInMs: operationTimeoutMs,
+			retryDelayInMs: 250,
+			maxRetryDelayInMs: 1000
+		}
+	})
+		.getContainerClient(destination.container)
+		.getBlockBlobClient(`${destination.prefix}descriptor.json`);
 	let active;
 	const key = (value) => {
 		if (!/^(objects|manifests)\/[a-f0-9]{64}$/.test(value))
 			throw failure('invalid recovery object key');
 		return container.getBlockBlobClient(`${destination.prefix}${value}`);
 	};
-	const request = async (operation, signal) => {
+	const request = async (operation, signal, timeoutMs = operationTimeoutMs) => {
 		try {
 			return await operation(
 				signal
-					? AbortSignal.any([signal, AbortSignal.timeout(operationTimeoutMs)])
-					: AbortSignal.timeout(operationTimeoutMs)
+					? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+					: AbortSignal.timeout(timeoutMs)
 			);
 		} catch (error) {
 			throw classified(error);
@@ -237,7 +252,14 @@ export async function createBlobStore(
 		if (active.renewing) return active.renewing;
 		const current = active;
 		const began = performance.now();
-		current.renewing = request((abortSignal) => current.lease.renewLease({ abortSignal }))
+		// A failed/unknown attempt cannot extend authority. Even a positive reply
+		// arriving after the previous safety deadline must never revive this owner.
+		const remaining = Math.max(1, Math.floor(current.safeUntil - began));
+		current.renewing = request(
+			(abortSignal) => current.renewalLease.renewLease({ abortSignal }),
+			undefined,
+			remaining
+		)
 			.then(() => {
 				if (active !== current || current.lost || performance.now() >= current.safeUntil)
 					throw failure('recovery ownership lost');
@@ -342,6 +364,7 @@ export async function createBlobStore(
 			active = {
 				nonce,
 				lease,
+				renewalLease: renewalDescriptor.getBlobLeaseClient(nonce),
 				safeUntil: began + 45000,
 				renewedAt: began,
 				lost: false,
