@@ -211,7 +211,16 @@ a packaged-release claim.
 
 ## Choose a client
 
-Open OpenCode for trusted native access. Guardian MCP and portals are optional
+Admin's **Open OpenCode** button opens your browser already signed in using a
+native single-use link. The OpenCode links in Apps and System do the same; no
+password copying is required for a local or SSH-managed instance. For an
+HTTPS-hosted agent, connect it once in Admin's Apps → OpenCode section first.
+Admin does not change or restart the instance to open it. Keep Admin open while
+using an SSH-forwarded workspace. Pairing links expire after five minutes and
+work once; click Open OpenCode again if a link expires. OpenCode owns the browser
+session, which expires after 30 days or when the instance password changes.
+
+OpenCode provides trusted native access. Guardian MCP and portals are optional
 and policy-scoped; see [connections](remote-mcp.md), [Discord](portals/discord-setup.md),
 [Slack](portals/slack-setup.md) and [native remote workers](native-remote-access.md).
 

@@ -375,6 +375,21 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate("document.querySelector('#start-stack').closest('.runtime-update-action')")
 		).toBeNull();
 		await capture('overview-desktop.png');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');
+			const {bindConnectionsEvents}=await import('./connections.js');bindConnectionsEvents();
+			window.browserOpenQa=0;
+			state.api.openOpenCode=async()=>{window.browserOpenQa++;};
+		})()`);
+		await pointerClick('#overview-opencode-link');
+		await idle();
+		expect(await evaluate('window.browserOpenQa')).toBe(1);
+		await evaluate("document.querySelector('#overview-opencode-link').focus()");
+		await keypress('Enter', 'Enter', 13);
+		await idle();
+		expect(await evaluate('window.browserOpenQa')).toBe(2);
+		expect(await evaluate('location.pathname')).toBe('/');
+		expect(await evaluate("document.querySelector('#direct-password').value")).toBe('');
 		expect(await evaluate("document.querySelector('#overview-name').textContent")).toBe('april');
 		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe(
 			'/home/user/fhold/instances/april'
@@ -1135,7 +1150,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#admin-desktop-install').textContent")).toBe(
 			'Replace menu copy with 0.3.261001-beta'
 		);
-		expect(await evaluate("document.querySelector('#admin-desktop-status').textContent")).toContain('may be newer');
+		expect(await evaluate("document.querySelector('#admin-desktop-status').textContent")).toContain(
+			'may be newer'
+		);
 		expect(await evaluate("document.querySelector('#app-shell').inert")).toBe(true);
 		expect(
 			await evaluate("document.querySelector('#hosting-manager').closest('#admin-settings')!==null")

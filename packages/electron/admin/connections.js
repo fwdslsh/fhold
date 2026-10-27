@@ -241,14 +241,10 @@ export function renderNetworkDetails(snapshot) {
 		link.setAttribute('href', assistantUrl || 'about:blank');
 		link.hidden = !assistantUrl;
 	}
-	const connect = snapshot.operations?.['agent.connect'];
-	const canAcquire =
-		connect?.support === 'supported' &&
-		connect.availability?.state === 'ready' &&
-		!connect.input?.requiresPassword;
+	const browser = snapshot.operations?.['agent.browserLink'];
+	const canOpen = browser?.support === 'supported' && browser.availability?.state === 'ready';
 	const open = byId('overview-opencode-link');
-	open.dataset.acquireAgent = String(!assistantUrl && canAcquire);
-	if (!assistantUrl && canAcquire) {
+	if (!assistantUrl && canOpen) {
 		open.hidden = false;
 		open.setAttribute('href', '#');
 	}
@@ -316,17 +312,23 @@ export function bindConnectionsEvents() {
 			byId('native-agent-password').focus();
 		} else void connectNativeAgent();
 	});
-	byId('overview-opencode-link').addEventListener('click', async (event) => {
-		if (event.currentTarget.dataset.acquireAgent !== 'true') return;
-		event.preventDefault();
-		const connected = await connectNativeAgent();
-		if (connected)
-			await operation(
-				'Opening OpenCode',
-				() => state.api.openExternal(connected.endpoint),
-				'OpenCode opened.'
-			);
-	});
+	for (const id of ['overview-opencode-link', 'direct-url', 'assistant-url-detail']) {
+		byId(id).addEventListener('click', async (event) => {
+			event.preventDefault();
+			if (state.operationInFlight) return;
+			const browser = state.currentSnapshot?.operations?.['agent.browserLink'];
+			if (
+				browser?.availability?.state !== 'ready' &&
+				state.currentSnapshot?.operations?.['agent.connect']?.input?.requiresPassword
+			) {
+				showConnectionApp('opencode');
+				byId('native-agent-password').focus();
+				notice('Connect this agent once below, then Open OpenCode will sign your browser in.');
+				return;
+			}
+			await operation('Opening OpenCode', () => state.api.openOpenCode(), 'OpenCode opened.');
+		});
+	}
 
 	for (const button of all('[data-enable-gateway]')) {
 		button.addEventListener('click', async () => {

@@ -312,6 +312,18 @@ export function registerAdminIpc(): void {
 	handleAdmin(ADMIN_CHANNELS.connectAgent, (_event, value) =>
 		invoke(session().agent.connect, parseInput('agent.connect', value ?? {}))
 	);
+	handleAdmin(ADMIN_CHANNELS.openOpenCode, async () => {
+		const selected = session();
+		const { url } = await invoke(selected.agent.browserLink, undefined);
+		if (activeSession?.api !== selected)
+			throw new Error('The selected instance changed. Try again.');
+		try {
+			await shell.openExternal(externalAdminUrl(url));
+		} catch {
+			// OS launcher errors may include the private one-use link.
+			throw new Error('Could not open your browser. Check your default browser and try again.');
+		}
+	});
 	handleAdmin(ADMIN_CHANNELS.assistantPassword, () =>
 		invoke(session().agent.assistantPassword, undefined)
 	);

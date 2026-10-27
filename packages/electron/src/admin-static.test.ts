@@ -472,43 +472,53 @@ describe('Admin static security boundary', () => {
 		expect(observationValue(known('known value'))).toBe('known value');
 		expect(observationValue({ state: 'unavailable', reason: 'Offline' })).toBeUndefined();
 	});
-	it('acquires a passwordless native route on one explicit Overview click', async () => {
+	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
 			lifecycle: 'externally-managed',
-			operations: { 'agent.connect': supported() }
+			operations: { 'agent.browserLink': supported() }
 		});
-		const refreshed = {
-			...snapshot,
-			apps: {
-				...snapshot.apps,
-				connections: known({
-					opencode: { url: 'https://agent.example.com', note: 'Open your agent.' }
-				})
-			}
-		};
-		const opened: string[] = [];
-		let snapshots = 0;
+		let opened = 0;
 		state.currentSnapshot = snapshot;
 		state.api = {
-			connectAgent: async () => ({ endpoint: 'https://agent.example.com' }),
-			snapshot: async () => {
-				snapshots++;
-				return refreshed;
-			},
-			openExternal: async (url: string) => {
-				opened.push(url);
+			openOpenCode: async () => {
+				opened++;
 			}
 		};
 		bindConnectionsEvents();
 		renderNetworkDetails(snapshot);
 		const link = control('overview-opencode-link');
 		expect(link.hidden).toBe(false);
-		expect(link.dataset.acquireAgent).toBe('true');
 		expect(link.getAttribute('href')).toBe('#');
 		await link.listeners.get('click')?.({ currentTarget: link, preventDefault() {} });
-		expect(snapshots).toBe(1);
-		expect(opened).toEqual(['https://agent.example.com']);
+		expect(opened).toBe(1);
+		for (const id of ['direct-url', 'assistant-url-detail']) {
+			await control(id).listeners.get('click')?.({ preventDefault() {} });
+		}
+		expect(opened).toBe(3);
+		expect(control('direct-password').value).toBe('');
+	});
+	it('takes an unconnected HTTPS agent to native sign-in instead of opening an unauthenticated browser', async () => {
+		state.currentSnapshot = normalizedSnapshot({
+			lifecycle: 'externally-managed',
+			operations: {
+				'agent.connect': { ...supported(), input: { requiresPassword: true } },
+				'agent.browserLink': {
+					support: 'supported',
+					availability: { state: 'unavailable', reason: 'Connect first.' }
+				}
+			}
+		});
+		let opened = false;
+		state.api = {
+			openOpenCode: async () => {
+				opened = true;
+			}
+		};
+		bindConnectionsEvents();
+		await control('overview-opencode-link').listeners.get('click')?.({ preventDefault() {} });
+		expect(opened).toBe(false);
+		expect(control('notice-message').textContent).toContain('Connect this agent once');
 	});
 	it('keeps remote status failures in the selected remote view, with no local fallback', async () => {
 		state.currentSnapshot = normalizedSnapshot({
@@ -1607,7 +1617,11 @@ describe('Admin app settings', () => {
 		state.dirtyForms.add('discord-connections-form');
 		let instanceCalls = 0;
 		state.api = {
-			desktopStatus: async () => ({ supported: true, installed: false, appImage: '/test/fhold-admin.AppImage' }),
+			desktopStatus: async () => ({
+				supported: true,
+				installed: false,
+				appImage: '/test/fhold-admin.AppImage'
+			}),
 			appSettings: async () => ({
 				settings: { updates: { channel: 'stable', automatic: true } },
 				update: { version: '0.3.261001-beta', supported: true, phase: 'idle' }
@@ -2058,7 +2072,10 @@ describe('Admin instance picker and automatic status', () => {
 		const snapshot = normalizedSnapshot({
 			deployment: {
 				lifecycleCapabilities: {
-					start: { state: 'unavailable', reason: 'The platform reports this deployment is inspect-only.' }
+					start: {
+						state: 'unavailable',
+						reason: 'The platform reports this deployment is inspect-only.'
+					}
 				}
 			}
 		});
@@ -2609,7 +2626,7 @@ describe('Admin renderer behavior', () => {
 		expect(css).toContain('.field textarea {');
 	});
 
-	it('renders a normal browser link and copyable dialable Guardian endpoints', async () => {
+	it('renders an authenticated browser action and copyable dialable Guardian endpoints', async () => {
 		const link = control('assistant-url-detail');
 		link.hidden = true;
 		const copy = new Control();
@@ -2623,7 +2640,7 @@ describe('Admin renderer behavior', () => {
 		};
 		bindConnectionsEvents();
 		expect(link.hidden).toBe(true);
-		expect(link.listeners.has('click')).toBe(false);
+		expect(link.listeners.has('click')).toBe(true);
 		renderNetworkDetails(
 			normalizedSnapshot({
 				connections: {

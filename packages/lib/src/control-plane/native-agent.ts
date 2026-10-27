@@ -31,6 +31,8 @@ export type NativeAgentRequestOptions = {
 	signal?: AbortSignal;
 };
 export type NativeAgentService = {
+	/** Native one-use browser sign-in; never returns the server password. */
+	browserLink(options?: NativeAgentRequestOptions): Promise<{ url: string }>;
 	listProviders(options?: NativeAgentRequestOptions): Promise<ProviderSummary[]>;
 	setProviderApiKey(
 		provider: string,
@@ -409,6 +411,14 @@ export function createNativeAgentService(
 		}
 	}
 	return {
+		async browserLink(options = {}) {
+			const pairing = record(await request('/pair', { method: 'POST' }, options));
+			if (typeof pairing?.code !== 'string' || !/^[A-Za-z0-9_-]+$/.test(pairing.code))
+				throw new Error(
+					'OpenCode did not return a browser sign-in link. Check its version and retry.'
+				);
+			return { url: new URL(`/auth/connect/${pairing.code}`, endpoint).href };
+		},
 		listProviders,
 		async setProviderApiKey(provider, key, options = {}) {
 			provider = providerId(provider);

@@ -1633,8 +1633,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const openedUrls: string[] = [];
 		const originalOpenExternal = shell.openExternal;
 		const adminPageUrl = window.webContents.getURL();
-		// Exercise a normal link through Electron's existing window opener;
-		// intercept only the OS browser launch.
+		// Exercise native pairing through IPC; intercept only the OS browser launch.
 		shell.openExternal = async (url) => {
 			openedUrls.push(url);
 		};
@@ -1658,8 +1657,28 @@ async function run(): Promise<Record<string, unknown>> {
 			await waitForBrowserOpen(2);
 			assert(
 				openedUrls.length === 2 &&
-					openedUrls.every((url) => url === `http://127.0.0.1:${assistantPort}/`),
-				'OpenCode link did not open the displayed address.'
+					openedUrls.every(
+						(url) =>
+							new URL(url).origin === `http://127.0.0.1:${assistantPort}` &&
+							/^\/auth\/connect\/[A-Za-z0-9_-]+$/.test(new URL(url).pathname)
+					) &&
+					openedUrls[0] !== openedUrls[1],
+				'OpenCode did not issue distinct native one-use browser links on the selected route.'
+			);
+			const signedIn = await fetch(openedUrls[0]!, {
+				headers: { accept: 'text/html' },
+				redirect: 'manual'
+			});
+			assert(signedIn.status === 302, 'Native browser pairing did not redirect to OpenCode.');
+			const cookie = signedIn.headers.get('set-cookie')?.split(';')[0];
+			assert(cookie, 'Native browser pairing did not set a session cookie.');
+			assert(
+				(await fetch(`http://127.0.0.1:${assistantPort}/api/info`, { headers: { cookie } })).ok,
+				'The native browser session could not access OpenCode.'
+			);
+			assert(
+				(await fetch(openedUrls[0]!, { redirect: 'manual' })).status === 401,
+				'Native browser pairing link was reusable.'
 			);
 			assert(
 				await window.webContents.executeJavaScript(
@@ -1674,7 +1693,9 @@ async function run(): Promise<Record<string, unknown>> {
 		} finally {
 			shell.openExternal = originalOpenExternal;
 		}
-		progress('MCP details and normal OpenCode link verified with real keyboard/click events');
+		progress(
+			'MCP details and native OpenCode browser sign-in verified with real keyboard/click events'
+		);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-view=provider]').click()"
 		);

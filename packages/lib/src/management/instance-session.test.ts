@@ -30,6 +30,82 @@ const hosting: HostingSnapshot = {
 	warnings: []
 };
 
+test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
+	'local and SSH browser links use the selected acquired route and private credential',
+	async () => {
+		const calls: string[] = [];
+		const requests: string[] = [];
+		const server = Bun.serve({
+			hostname: '127.0.0.1',
+			port: 0,
+			fetch(request) {
+				requests.push(new URL(request.url).pathname);
+				expect(request.method).toBe('POST');
+				expect(request.headers.get('authorization')).toBe(
+					`Basic ${Buffer.from('opencode:fixture-password').toString('base64')}`
+				);
+				return Response.json({ code: 'private-one-use-code', expires_in: 300 });
+			}
+		});
+		const endpoint = `http://127.0.0.1:${server.port}`;
+		const snapshot = (url: string) =>
+			({
+				homeDir: '/synthetic/home',
+				config: defaultStackConfig('/synthetic/home'),
+				phase: 'ready',
+				portalMappings: {},
+				portalSecrets: {},
+				connectionDetails: {
+					opencode: { type: 'opencode', url, username: 'opencode', note: 'Native' }
+				}
+			}) as ManagedSnapshot;
+		try {
+			for (const remote of [false, true]) {
+				const manager: InstanceManagement = {
+					call: (async (method: string) => {
+						calls.push(method);
+						if (method === 'assistantPassword') return { password: 'fixture-password' };
+						if (method === 'snapshot') return snapshot(endpoint);
+						throw new Error(`Unexpected call ${method}`);
+					}) as InstanceManagement['call'],
+					busy: () => false,
+					close: async () => {}
+				};
+				const bindings = rpcManagementBindings(
+					manager,
+					remote
+						? {
+								passiveSnapshot: async () => snapshot('http://remote-only.invalid:3810'),
+								acquireSnapshot: async () => {
+									calls.push('forward');
+									return snapshot(endpoint);
+								}
+							}
+						: {}
+				);
+				const before = calls.length;
+				await bindings.inspectApplication!();
+				expect(calls.slice(before)).not.toContain('assistantPassword');
+				expect(calls.slice(before)).not.toContain('forward');
+				const link = bindings.agent!.browserLink!;
+				if (link.support !== 'supported') throw new Error('Expected browser pairing');
+				expect(await link.invoke(undefined, {})).toEqual({
+					url: `${endpoint}/auth/connect/private-one-use-code`
+				});
+				const observations = JSON.stringify(await bindings.inspectApplication!());
+				expect(observations).not.toContain('fixture-password');
+				expect(observations).not.toContain('private-one-use-code');
+				await bindings.close!();
+				await expect(link.invoke(undefined, {})).rejects.toThrow();
+			}
+			expect(requests).toEqual(['/api/pair', '/api/pair']);
+			expect(calls.filter((call) => call === 'forward')).toHaveLength(1);
+		} finally {
+			await server.stop(true);
+		}
+	}
+);
+
 test('checkpoint inspection stays an engine operation rather than a saved-settings query', async () => {
 	const calls: unknown[] = [];
 	const manager: InstanceManagement = {
