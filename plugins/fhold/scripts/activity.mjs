@@ -103,6 +103,11 @@ export function nativeEvent(tool, input, root = runtime()) {
 	if (!['claude', 'codex'].includes(tool)) throw Error('Invalid native harness');
 	const session = input.session_id;
 	const mark = (token, busy) => activity(tool, session, token, busy, root);
+	const turn = (busy) => {
+		if (tool === 'codex' && (typeof input.turn_id !== 'string' || !input.turn_id || input.turn_id.length > 1024))
+			throw Error('Invalid native turn identity');
+		mark(tool === 'codex' ? `turn:${input.turn_id}` : 'turn', busy);
+	};
 	const background = () => {
 		if (tool !== 'claude') return;
 		// Missing task metadata cannot prove that background work finished.
@@ -116,10 +121,10 @@ export function nativeEvent(tool, input, root = runtime()) {
 			coverage(tool, true, root);
 			break;
 		case 'UserPromptSubmit':
-			mark('turn', true);
+			turn(true);
 			break;
 		case 'PreToolUse':
-			mark('turn', true);
+			turn(true);
 			mark(`tool:${input.tool_use_id || 'unknown'}`, true);
 			break;
 		case 'PostToolUse':
@@ -142,12 +147,12 @@ export function nativeEvent(tool, input, root = runtime()) {
 			break;
 		case 'Stop':
 			background();
-			mark('turn', false);
+			turn(false);
 			break;
 		case 'StopFailure':
 		case 'Interrupt':
 			// Tools/subagents still need their own completion signals.
-			mark('turn', false);
+			turn(false);
 			break;
 		case 'SessionEnd':
 			endSession(tool, session, root);

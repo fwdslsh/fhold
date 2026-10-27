@@ -135,22 +135,29 @@ transcript or prove that a client reached the intended instance.
    to continue. Separate supported completed-conversation recovery from unsupported
    active-turn continuation; failure to resume an active turn must not be hidden
    by resubmission or a fabricated history entry.
-7. **Observation failure.** On a separate disposable Codex fixture, copy
-   `system/codex/requirements.toml` to an operator-owned policy file and explicitly
-   mount that file at `/etc/codex/requirements.toml`, following the
-   [custom policy instructions](../managed-harness-configuration.md#deployment-inputs).
-   Set its native `[hooks] managed_dir` to a separate empty directory mounted
-   read-only at startup. Keep managed-only hooks enabled.
-   This deliberately withholds the expected managed inventory;
-   do not change the image or cover `/etc/codex` with a directory mount.
-   Confirm native hook review reports the missing inventory and the enabled running
+7. **Observation failure.** On a separate disposable Codex fixture, use native
+   `/hooks` or the existing hook review helper to review and explicitly disable
+   only `fhold@fhold-plugins` activity hooks. Current images use ordinary native
+   plugin hooks, not the historical managed-only hook policy. Preserve the
+   selected sandbox, account, other plugins and user/project hooks.
+   Confirm native hook review reports disabled hooks and the enabled running
    worker remains `unknown` with fresh successful keepalive requests. Record the
-   policy change privately. If native policy validation prevents the worker from
+   native choice privately. If native policy validation prevents the worker from
    launching, this case is blocked; an inactive worker is not a failed observation
    of a running worker. Do not manually delete ready/busy markers, expire a
    busy marker, force idle or run a second server. Restore the ordinary fixture
-   configuration only through its normal stopped lifecycle after collecting the
-   failure evidence. This deliberate fault is not evidence for the healthy case.
+   hooks through a fresh native review and explicit operator approval after
+   collecting the failure evidence. This deliberate fault is not evidence for
+   the healthy case.
+8. **Failed turn returns to idle.** In a disposable native conversation, cause a
+   controlled provider failure and require the native client to report a terminal
+   failed turn. The supervisor must retire that exact turn within its next
+   successful observation, then keepalive must stop for three intervals once
+   all other work is idle. Start another quiet turn before an observation and
+   verify that the older failure never clears the newer work. Repeat the failure.
+   Do not treat a pending retry as a terminal failure. The image regression uses
+   a loopback provider with actual Codex binaries and hooks; it does not qualify
+   signed-in vendor connectivity or replace the two-hour foreground case.
 
 ## Report and close the gate
 

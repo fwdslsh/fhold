@@ -40,7 +40,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 const event = (root: string, name: string, extra = {}, tool = 'codex', session = 'session-a') =>
-	nativeEvent(tool, { session_id: session, hook_event_name: name, ...extra }, root);
+	nativeEvent(tool, { session_id: session, turn_id: 'turn-a', hook_event_name: name, ...extra }, root);
 
 test('a quiet, observed runtime sends no request; a turn has no time-based expiry', async () => {
 	const root = fixture();
@@ -88,6 +88,19 @@ test('compaction and resume do not erase active work; duplicate notifications ar
 	expect(activityStatus(root, [])).toBe('busy');
 	event(root, 'Stop');
 	event(root, 'Stop');
+	expect(activityStatus(root, [])).toBe('idle');
+});
+
+test('Codex late completion cannot clear a newer turn and missing turn identity is refused', () => {
+	const root = fixture();
+	event(root, 'UserPromptSubmit', { turn_id: 'earlier' });
+	event(root, 'UserPromptSubmit', { turn_id: 'newer' });
+	event(root, 'Stop', { turn_id: 'earlier' });
+	expect(activityStatus(root, [])).toBe('busy');
+	for (const turn_id of [undefined, null, '', 7])
+		expect(() => event(root, 'Stop', { turn_id })).toThrow('turn identity');
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'Stop', { turn_id: 'newer' });
 	expect(activityStatus(root, [])).toBe('idle');
 });
 

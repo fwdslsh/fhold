@@ -315,6 +315,8 @@ assistant)
 		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
+	docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
+	docker exec "$container" bun /tmp/smoke-codex-activity.mjs
 	docker cp scripts/smoke-native-akm-policy.mjs "$container:/tmp/smoke-native-akm-policy.mjs"
 	docker exec "$container" bun /tmp/smoke-native-akm-policy.mjs
 	# An image upgrade refreshes only untouched native installer output. A native

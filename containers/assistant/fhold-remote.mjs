@@ -1,9 +1,11 @@
 #!/usr/bin/env -S bun --no-env-file
 // Optional vendor-native agents. Their failures never stop OpenCode or cron.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
+import { setTimeout as pause } from 'node:timers/promises';
 
 export const remoteDirectory = join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'remote');
 export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'workspace-write') {
@@ -92,17 +94,76 @@ export function claudePrompt(text) {
 // first thread, prove that the running server has the natively approved activity hooks
 // armed and no loaded sessions. Never infer idle from its PID or missing busy
 // markers, and never create a synthetic session or approve native hooks.
-export async function bootstrapCodexActivity({ env, alive, signal, inspect } = {}) {
+export async function inspectCodexActivity({ env, alive, signal, inspect, failedTurns = false } = {}) {
 	const { withCodexControl, reviewRecall } = await import('./fhold-codex-recall.mjs');
 	const check = async (rpc) => {
 		const hooks = await reviewRecall(rpc, 'fhold@fhold-plugins');
-		if (hooks.status !== 'ready') return false;
+		if (hooks.status !== 'ready') return { known: false };
 		const loaded = await rpc('thread/loaded/list', {});
-		if (!Array.isArray(loaded?.data) || loaded.data.length || loaded.nextCursor !== null) return false;
-		if (!alive()) return false;
-		return true;
+		if (!Array.isArray(loaded?.data) || loaded.nextCursor !== null || loaded.data.length > 1000 ||
+			loaded.data.some((id) => typeof id !== 'string' || !id || id.length > 1024)) return { known: false };
+		const failed = [];
+		if (failedTurns) for (const threadId of loaded.data) {
+			// Metadata only: never read prompts, tool arguments or conversation bodies.
+			// A bounded page is enough to retire any failed turns it positively identifies;
+			// omitted/older turns retain their conservative observations.
+			const turns = await rpc('thread/turns/list', { threadId, limit: 100, itemsView: 'notLoaded' });
+			if (!Array.isArray(turns?.data) || turns.data.length > 100) return { known: false };
+			for (const turn of turns.data) {
+				if (typeof turn?.id !== 'string' || !turn.id || turn.id.length > 1024 ||
+					!['failed', 'completed', 'interrupted', 'inProgress'].includes(turn.status)) return { known: false };
+				if (turn.status === 'failed') failed.push({ threadId, turnId: turn.id });
+			}
+		}
+		if (!alive()) return { known: false };
+		return { known: true, empty: loaded.data.length === 0, failed };
 	};
 	return inspect ? inspect(check) : withCodexControl(check, { env, signal });
+}
+
+export async function bootstrapCodexActivity(options = {}) {
+	const result = await inspectCodexActivity(options);
+	return result.known === true && result.empty === true;
+}
+
+export function retireFailedCodexTurns(failed, root) {
+	const hash = (value) => createHash('sha256').update(value).digest('hex');
+	for (const { threadId, turnId } of failed) {
+		// The per-turn key prevents an old failure from clearing a newer prompt.
+		// Tools/subagents retain their independent completion observations.
+		try { unlinkSync(join(root, 'activity', `codex-${hash(threadId)}-${hash(`turn:${turnId}`)}`)); }
+		catch (error) { if (error.code !== 'ENOENT') throw error; }
+	}
+}
+
+export async function monitorCodexActivity({ env, alive, signal, root }) {
+	const control = env.CODEX_HOME || (env.HOME && join(env.HOME, '.codex'));
+	const ready = join(root, 'activity', 'codex.ready');
+	const unknown = () => {
+		try { unlinkSync(ready); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+	};
+	try {
+		while (control && alive()) {
+			if (!existsSync(join(control, 'app-server-control', 'app-server-control.sock'))) {
+				unknown();
+				await pause(250, undefined, { signal });
+				continue;
+			}
+			try {
+				const observation = await inspectCodexActivity({ env, alive, signal, failedTurns: true });
+				if (!alive()) return;
+				if (!observation.known) throw Error('Native observation unavailable');
+				retireFailedCodexTurns(observation.failed, root);
+				if (observation.empty) writeFileSync(ready, '', { mode: 0o600 });
+			} catch {
+				// Losing native coverage is conservative, even after an earlier success.
+				unknown();
+			}
+			await pause(20_000, undefined, { signal });
+		}
+	} catch (error) {
+		if (!signal?.aborted) { unknown(); throw error; }
+	}
 }
 
 export async function superviseRemote(
@@ -248,22 +309,11 @@ export async function superviseRemote(
 					status('process-running', { pid: child.pid });
 					const worker = child;
 					bootstrapAbort = new AbortController();
-					const control = env.CODEX_HOME || (env.HOME && join(env.HOME, '.codex'));
 					const alive = () => !stopping && !restartRequested && child === worker && worker.exitCode === null && worker.signalCode === null;
-					bootstrap = (async () => {
-						// The native socket is created asynchronously during startup.
-						for (let attempt = 0; control && attempt < 120 && alive(); attempt++) {
-							if (!existsSync(join(control, 'app-server-control', 'app-server-control.sock'))) {
-								await new Promise((done) => setTimeout(done, 250));
-								continue;
-							}
-							try {
-								if (await bootstrapCodexActivity({ env, alive, signal: bootstrapAbort.signal }) && alive())
-									writeFileSync(join(dirname(directory), 'activity', 'codex.ready'), '', { mode: 0o600 });
-							} catch { /* Native startup/configuration may not yet be ready. */ }
-							return; // A failed observation remains unknown, never guessed idle.
-						}
-					})();
+					// Codex 0.164 does not emit Stop when a model request fails.
+					// Recheck this same worker after startup/consent and terminal failures.
+					bootstrap = monitorCodexActivity({ env, alive, signal: bootstrapAbort.signal, root: dirname(directory) })
+						.catch(() => { /* An optional observer failure must not stop the worker. */ });
 				});
 				child.on('error', () => resolve(127));
 				child.on('exit', () => {
