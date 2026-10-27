@@ -132,13 +132,6 @@ describe('release workflows', () => {
 				statement: expect.stringContaining('GHSA-xcx6-jx8p-x3h5'),
 			},
 			{
-				id: 'CVE-2023-54404',
-				paths: ['opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json'],
-				purls: ['pkg:npm/zod@3.25.76'],
-				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-mrhx-c7xc-m3w5'),
-			},
-			{
 				id: 'CVE-2026-109869',
 				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
 				purls: ['pkg:npm/undici@6.29.0'],

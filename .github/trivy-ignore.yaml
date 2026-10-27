@@ -24,17 +24,6 @@ vulnerabilities:
       disclosed; fhold recovery uses managed identity, SAS or connection strings.
       Remove after a supported Azure chain fix and Blob qualification; issue 57
       must verify removal, with independent chain ownership retained in issue 63.
-  - id: CVE-2023-54404
-    paths:
-      - opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json
-    purls:
-      - pkg:npm/zod@3.25.76
-    expired_at: 2026-11-06
-    statement: >-
-      GHSA-mrhx-c7xc-m3w5: temporary owner-approved Assistant exception for
-      AKM's Zod 3 chain. Oversized invalid collections can exhaust memory;
-      imported/operator inputs can be hostile. Remove with a supported patched
-      AKM chain and native qualification in issue 57; issue 63 also tracks MCPB.
   - id: CVE-2026-109869
     paths:
       - usr/local/lib/node_modules/npm/node_modules/undici/package.json

@@ -9,7 +9,7 @@ executable; installed releases do not require Bun, Node.js or npm on the host.
 For example, on Linux x64:
 
 ```bash
-curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.3.261008-beta/fhold-cli-linux-x64
+curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.3.261009-beta/fhold-cli-linux-x64
 chmod +x fhold
 ./fhold install --name personal-agent
 ./fhold --name personal-agent setup
