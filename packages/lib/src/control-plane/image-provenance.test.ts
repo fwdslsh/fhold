@@ -51,33 +51,18 @@ if (args[0] === 'inspect' && ${buildAddon}) console.log(JSON.stringify({ Id: 'fi
 	return { home, state, calls };
 }
 
-test('an older pinned image cannot activate managed-only policy or change a running stack during update', async () => {
-	const { home, state, calls } = await fixture({ managedPolicy: false });
-	const managed = join(home, 'system/assistant/AGENTS.md');
-	writeFileSync(managed, 'prior release sentinel');
-	const config = readFileSync(join(home, 'state/stack.json'));
-	await expect(updateHome({ homeDir: home, start: true })).rejects.toThrow('does not support managed harness policy');
-	expect(readFileSync(managed, 'utf8')).toBe('prior release sentinel');
-	expect(readFileSync(join(home, 'state/stack.json'))).toEqual(config);
-	expect(existsSync(join(home, 'state/update-receipts'))).toBe(false);
-	await expect(activateComposeCommand(state, ['up', '-d'])).rejects.toThrow('does not support managed harness policy');
-	expect(calls().some(args => args.includes('up') || args.includes('pull'))).toBe(false);
-});
-
-test('fresh registry activation pulls a missing image before policy inspection', async () => {
-	const { state, calls } = await fixture({ namespace: 'registry.example.test/fhold', imagePresent: false });
+test('activation does not impose a second native hook policy compatibility gate', async () => {
+	const { state, calls } = await fixture({ managedPolicy: false });
 	await activateComposeCommand(state, ['up', '-d']);
-	const pull = calls().findIndex(args => args.includes('pull'));
-	const up = calls().findIndex(args => args.includes('up'));
-	expect(pull).toBeGreaterThanOrEqual(0);
-	expect(up).toBeGreaterThan(pull);
-	expect(calls()[pull]?.slice(-2)).toEqual(['pull', 'assistant']);
+	expect(calls().some(args => args.includes('managed-harness-policy'))).toBe(false);
+	expect(calls().some(args => args.includes('up'))).toBe(true);
 });
 
 test.each(['fhold', 'registry.example.test/fhold'])('a missing %s image with no-pull never triggers an implicit registry fetch', async (namespace) => {
 		const { state, calls } = await fixture({ namespace, imagePresent: false });
-		await expect(activateComposeCommand(state, ['up', '-d', '--pull', 'never'])).rejects.toThrow('Pull or build');
-		expect(calls().some(args => args.includes('pull') || args.includes('up'))).toBe(false);
+		await activateComposeCommand(state, ['up', '-d', '--pull', 'never']);
+	// Docker Compose owns a missing-image error; the forwarding contract forbids an implicit fetch.
+		expect(calls().some(args => args.includes('pull') && !args.includes('up'))).toBe(false);
 });
 
 test('an omitted pull never contacts a registry for the exact local fhold namespace', async () => {

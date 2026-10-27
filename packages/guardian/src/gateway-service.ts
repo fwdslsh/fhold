@@ -298,7 +298,8 @@ export class GatewayService {
 				created.id,
 				{
 					...(created.metadata ?? {}),
-					fholdGuardian: createGuardianOwnership(created.id, this.principal, this.handleKey)
+					fholdGuardian: createGuardianOwnership(created.id, this.principal, this.handleKey),
+					fholdGuardianKnowledge: this.policy === 'full'
 				},
 				signal
 			);
@@ -614,6 +615,12 @@ export class GatewayService {
 		this.startingSessions.add(session.id);
 		try {
 			await progress?.(0.2, 'Submitting work to the agent');
+			// A credential can change policy while retaining the same principal and
+			// session handle. Refresh context authority before every native turn.
+			await this.assistant.setSessionMetadata(session.id, {
+				...(session.metadata ?? {}),
+				fholdGuardianKnowledge: this.policy === 'full'
+			}, signal);
 			await this.assistant.runAsync(
 				session.id,
 				messageId,
@@ -743,7 +750,8 @@ export class GatewayService {
 				fork.id,
 				{
 					...(fork.metadata ?? {}),
-					fholdGuardian: createGuardianOwnership(fork.id, this.principal, this.handleKey)
+					fholdGuardian: createGuardianOwnership(fork.id, this.principal, this.handleKey),
+					fholdGuardianKnowledge: true
 				},
 				signal
 			);
@@ -889,6 +897,10 @@ export class GatewayService {
 		if (!hasGuardianOwnership(session.metadata, session.id, this.principal, this.handleKey)) {
 			throw new GatewayError('Invalid or expired interaction handle.', 'invalid_handle');
 		}
+		await this.assistant.setSessionMetadata(session.id, {
+			...(session.metadata ?? {}),
+			fholdGuardianKnowledge: this.policy === 'full'
+		}, signal);
 		if (decoded.value.interaction === 'question') {
 			const pending = await this.assistant.pendingQuestions(session.id, signal);
 			const question = pending.find((item) => item.id === decoded.value.requestId);

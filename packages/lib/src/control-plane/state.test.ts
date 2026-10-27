@@ -90,7 +90,7 @@ describe('fhold clean install boundary', () => {
 		ensureHomeDirs(home);
 		mkdirSync(outside);
 		symlinkSync(outside, join(home, 'system', 'assistant', 'agents'));
-		await expect(applyHomeSeed(home)).rejects.toThrow('linked seed path');
+		await expect(applyHomeSeed(home)).rejects.toThrow('unsafe component');
 		expect(existsSync(join(outside, 'remote.md'))).toBe(false);
 	});
 

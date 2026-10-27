@@ -1,5 +1,7 @@
-# Release-owned native defaults. requirements.toml enforces restrictions.
-approval_policy = "on-request"
+# Image-baked native plugins; native operator consent controls their hooks.
+
+[features]
+hooks = true
 
 [marketplaces.akm-plugins]
 source_type = "local"

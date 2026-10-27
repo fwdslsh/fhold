@@ -20,12 +20,6 @@ function renderSandboxHelp() {
 }
 
 export function recallStatusLabel(review) {
-	if (review?.managed)
-		return review.status === 'ready'
-			? 'Managed · ready'
-			: review.status === 'installed'
-				? 'Managed · disabled'
-				: 'Managed · needs attention';
 	return (
 		{ installed: 'Installed', 'approval-needed': 'Approval needed', ready: 'Ready' }[
 			review?.status
@@ -41,11 +35,7 @@ function renderRecallStatus(review, error) {
 	);
 	byId('codex-recall-guidance').textContent =
 		error ??
-		(review?.managed
-			? review.status === 'ready'
-				? 'Controlled by the instance policy. No personal hook approval is required.'
-				: 'Knowledge recall is not fully enabled. Update this instance to refresh its built-in hook settings. If you supply a custom requirements.toml mount, check that file instead. Personal approval cannot enable managed hooks.'
-			: review?.status === 'approval-needed'
+		(review?.status === 'approval-needed'
 				? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
 				: review?.status === 'ready'
 					? 'Native approval was verified in this explicit review. Review again after a restart or hook changes.'
@@ -93,23 +83,12 @@ async function loadRecall() {
 					`${h.event} (${h.trust}${h.enabled ? '' : ', off'})\n${h.command}\nDefinition: ${h.sourcePath}\nHash: ${h.hash}`
 			)
 			.join('\n\n');
-		byId('remote-recall').disabled = review.managed === true;
-		byId('remote-recall').required = recallOnly && !review.managed;
+		byId('remote-recall').disabled = false;
+		byId('remote-recall').required = recallOnly;
 		byId('remote-recall').checked = review.status === 'ready';
 		byId('remote-recall-disable').hidden =
-			review.managed || !recallOnly || !review.hooks.some((h) => h.enabled);
-		byId('remote-begin').hidden = recallOnly && review.managed;
-		if (review.managed) {
-			byId('remote-guidance').textContent =
-				review.status === 'ready'
-					? 'The instance manages these hooks. No approval is needed.'
-					: 'The instance policy must enable all AKM hooks for automatic recall to work.';
-			if (recallOnly)
-				byId('remote-stage').textContent =
-					review.status === 'ready'
-						? 'Managed hook configuration verified.'
-						: 'Managed knowledge recall needs attention.';
-		}
+			!recallOnly || !review.hooks.some((h) => h.enabled);
+		byId('remote-begin').hidden = false;
 		byId('remote-begin').disabled = false;
 	} catch (error) {
 		if (request !== reviewRequest || !byId('remote-dialog').open) return;
@@ -179,7 +158,7 @@ function showProgress(progress) {
 		byId('remote-begin').disabled = false;
 		byId('remote-trust').disabled = false;
 		byId('remote-sandbox').disabled = false;
-		byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
+		byId('remote-recall').disabled = !recallReview;
 		byId('remote-answer').value = '';
 		void refresh();
 	} else {
@@ -267,7 +246,6 @@ export function bindRemoteEvents() {
 		}
 		if (
 			starting ||
-			(recallOnly && recallReview?.managed) ||
 			byId('remote-begin').disabled ||
 			(!connectionOnly && !recallOnly && !byId('remote-trust').checked) ||
 			(recallOnly && !byId('remote-recall').checked)
@@ -284,7 +262,7 @@ export function bindRemoteEvents() {
 				byId('remote-stage').textContent = 'Setup postponed. No containers were restarted.';
 				return;
 			}
-			if (!connectionOnly && tool === 'codex' && recallRequested && !recallReview?.managed) {
+			if (!connectionOnly && tool === 'codex' && recallRequested) {
 				if (!recallReview) throw new Error('Review current AKM hooks first.');
 				{
 					const review = await state.api.codexRecall({
@@ -303,7 +281,6 @@ export function bindRemoteEvents() {
 				!recallOnly &&
 				tool === 'codex' &&
 				!recallRequested &&
-				!recallReview?.managed &&
 				recallReview?.status === 'ready'
 			) {
 				await state.api.codexRecall({
@@ -348,7 +325,7 @@ export function bindRemoteEvents() {
 		} finally {
 			starting = false;
 			if (!running) setBusy(false);
-			if (!running) byId('remote-recall').disabled = !recallReview || recallReview.managed === true;
+			if (!running) byId('remote-recall').disabled = !recallReview;
 		}
 	});
 	byId('remote-send').addEventListener('click', async () => {
@@ -388,7 +365,7 @@ export function bindRemoteEvents() {
 		void cancel();
 	});
 	byId('remote-recall-disable').addEventListener('click', async () => {
-		if (starting || running || !recallOnly || !recallReview || recallReview.managed) return;
+		if (starting || running || !recallOnly || !recallReview) return;
 		starting = true;
 		setBusy(true);
 		try {

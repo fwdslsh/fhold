@@ -10,6 +10,7 @@ Only a small script surface remains active.
 | `bump-release.mjs` | Stamp the complete product release |
 | `smoke-image.sh` | Assert image startup and runtime security boundaries |
 | `smoke-akm-harnesses.mjs` | Image-internal real-harness AKM hook and recall checks, without vendor credentials |
+| `smoke-native-akm-policy.mjs` | Native custom/default/subagent context, Guardian confidentiality and native proposal extraction against a controlled model |
 | `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |
 | `smoke-recovery.mjs` | Real-image directory checkpoints, required/excluded mounts, cold replacement and offline restore |
 | `smoke-blob-recovery.mjs` | Standard Blob transport conformance and native recovery against Azurite or an explicitly scoped live destination |
@@ -80,7 +81,7 @@ FH_LIVE_TEST_REPORT=/absolute/path/to/private/live-report.json \
 ```
 
 The thin entrypoint imports the runner beside Guardian's private MCP client
-dependency. It verifies trusted-native automatic memory, natural-language task
+dependency. It verifies native Guardian interactions and natural-language task
 creation and real timer history/output, recall after update/restart, MCP policy
 boundaries, resumable job and identity isolation, explicit permission approval
 with cross-identity rejection, and credential rotation.

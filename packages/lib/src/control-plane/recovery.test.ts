@@ -30,7 +30,7 @@ import { buildComposeOptions } from './compose.js';
 import { composeConfigJson } from './docker.js';
 import { auditCompose } from './secret-audit.js';
 import { createBackup } from './backup.js';
-import { assertManagedHarnessImage } from './activation.js';
+import { assertRecoveryImage } from './activation.js';
 
 const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
@@ -166,11 +166,11 @@ describe('managed runtime recovery', () => {
 			`#!${process.execPath}\nconst label = process.argv[5];\nconsole.log(label.includes('managed-harness-policy') ? '1' : '<no value>');\n`,
 			0o700
 		);
-		await expect(assertManagedHarnessImage(config)).resolves.toBeUndefined();
+		await expect(assertRecoveryImage(config)).resolves.toBeUndefined();
 		config.services.assistant.environment.FH_RECOVERY_URL = 'file:///recovery';
-		await expect(assertManagedHarnessImage(config)).rejects.toThrow('mixed-storage recovery');
+		await expect(assertRecoveryImage(config)).rejects.toThrow('mixed-storage recovery');
 		writeFileAtomic(docker, `#!${process.execPath}\nconsole.log('1');\n`, 0o700);
-		await expect(assertManagedHarnessImage(config)).resolves.toBeUndefined();
+		await expect(assertRecoveryImage(config)).resolves.toBeUndefined();
 	});
 	it('derives a fresh recovery identity from the final explicit instance name', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-recovery-name-test-'));

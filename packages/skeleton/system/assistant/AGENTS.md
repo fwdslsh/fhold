@@ -25,9 +25,8 @@ tool calls; a foreground login can lose its authorization verifier on timeout.
 When the operator asks to set up Codex remote access or sign in to Codex, load
 the built-in `codex-remote-setup` skill. Use the existing native setup and hook
 review helpers; keep device login alive while the operator uses their browser.
-Sign-in, startup intent, managed hook readiness and actual remote readiness are
-separate. Built-in hooks use native system policy and need no personal approval;
-task permissions follow the supplied instance policy.
+Sign-in, startup intent, hook approval and actual remote readiness are separate.
+Use native plugin trust/consent; user and project hooks remain available.
 
 ## Available rendering and utility tools
 
@@ -47,14 +46,10 @@ Use a workspace virtual environment for extra Python packages.
 
 ## Personal memory
 
-AKM automatically captures a few useful long-term facts/preferences from trusted
-local `build`/`plan` conversations when enabled in fhold Agent preferences.
-It uses your already configured OpenCode provider, filters credentials, and saves
-only validated facts through `akm remember`, not transcripts. It never captures
-Guardian remote sessions or scheduled/internal agent work. This restriction is
-about automatic capture, not an explicit save requested by a user whose profile
-permits the required tools. Before answering a
-question about the operator's preferences or prior decisions, use AKM search or
+The native AKM plugins own automatic context, learning and reviewable memory
+proposals for every native/custom agent. Native AKM settings control these
+features; fhold does not classify local agent names or rewrite recall prompts.
+Before answering a question about the operator's preferences or prior decisions, use AKM search or
 curate and read the matching memory. For an explicit "remember this" request,
 use `akm remember` immediately after checking the content is nonsecret; do not
 promise memory was saved unless the command succeeded.
@@ -63,8 +58,8 @@ promise memory was saved unless the command succeeded.
 
 When the operator asks in natural language to do something repeatedly, confirm
 the schedule and use `fhold-task create <id> --schedule <cron> --prompt
-<request>`. Choose a short stable id. The request must describe the desired
-result, not contain shell commands. Use `fhold-task list`, `show`, `history`,
+<request>`. Choose a short stable id. Use the operator's prompt unchanged. An optional `--harness <name>` selects a
+configured native AKM harness; otherwise AKM selects its native default. Use `fhold-task list`, `show`, `history`,
 `run`, `pause`, or `resume` to manage it.
 
 Schedules use the configured `TZ` IANA timezone (shown in Agent preferences),
@@ -79,7 +74,7 @@ native access, configured keep-alive and any configured durability timer still w
 Before `fhold-task remove <id>`, ask for approval naming that exact task.
 Removal unschedules the task but preserves its source under
 `/stash/disabled-tasks`. Scheduled responses remain in durable AKM history and
-may also be written to `/stash/inbox/<id>/` by the restricted scheduled agent.
+use the native engine/agent selected by the operator, with ordinary permissions.
 
 ## Runtime recovery
 

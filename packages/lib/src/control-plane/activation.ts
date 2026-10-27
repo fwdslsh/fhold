@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
 import { composeConfigJson, runComposeStreaming, runDocker } from './docker.js';
 import type { FholdState } from './foundation.js';
@@ -10,31 +8,19 @@ import {
 	recordAppliedRuntime,
 	recordRuntimeActivation,
 	restartStatus,
-	runtimeRevision,
-	upgradedScheduledEngineContents
+	runtimeRevision
 } from './runtime-revision.js';
-import { assertSafePortablePath } from './provider-files.js';
 
-/** Older images must not receive a policy that disables their only hook source. */
-export async function assertManagedHarnessImage(resolved: unknown, prepareMissing?: () => Promise<void>): Promise<void> {
-	const assistant = (resolved as { services?: { assistant?: { image?: string; volumes?: { target?: string }[]; environment?: Record<string, unknown> } } }).services?.assistant;
-	// Older installed Compose files keep their original unmanaged hook workflow.
-	if (!assistant?.volumes?.some((mount) => mount.target === '/etc/codex/requirements.toml')) return;
+/** Recovery capability protects actual checkpoint semantics, not task policy. */
+export async function assertRecoveryImage(resolved: unknown, prepareMissing?: () => Promise<void>): Promise<void> {
+	const assistant = (resolved as { services?: { assistant?: { image?: string; environment?: Record<string, unknown> } } }).services?.assistant;
+	if (!assistant?.environment?.FH_RECOVERY_URL) return;
 	if (!assistant.image) throw new Error('Assistant image is missing from the resolved configuration.');
-	const args = ['image', 'inspect', '--format', '{{index .Config.Labels "dev.fwdslsh.fhold.managed-harness-policy"}}', assistant.image];
+	const args = ['image', 'inspect', '--format', '{{index .Config.Labels "dev.fwdslsh.fhold.recovery-partial-resume"}}', assistant.image];
 	let image = await runDocker(args);
-	if (!image.ok && prepareMissing) {
-		await prepareMissing();
-		image = await runDocker(args);
-	}
-	if (!image.ok) throw new Error(`Assistant image ${assistant.image} is not available. Pull or build the matching image before starting this instance.`);
-	if (image.stdout.trim() !== '1')
-		throw new Error(`Assistant image ${assistant.image} does not support managed harness policy. Select the matching fhold release image (or rebuild your local image) before updating or starting this instance. Existing containers have not been restarted.`);
-	if (assistant.environment?.FH_RECOVERY_URL) {
-		const recovery = await runDocker(['image', 'inspect', '--format', '{{index .Config.Labels "dev.fwdslsh.fhold.recovery-partial-resume"}}', assistant.image]);
-		if (!recovery.ok || recovery.stdout.trim() !== '1')
-			throw new Error(`Assistant image ${assistant.image} does not support managed mixed-storage recovery. Select the matching release image before enabling recovery. Existing containers and checkpoints were not changed.`);
-	}
+	if (!image.ok && prepareMissing) { await prepareMissing(); image = await runDocker(args); }
+	if (!image.ok || image.stdout.trim() !== '1')
+		throw new Error('Assistant image does not support managed mixed-storage recovery. Select the matching release image before enabling recovery. Existing containers and checkpoints were not changed.');
 }
 
 export async function activateComposeCommand(
@@ -63,10 +49,6 @@ export async function activateComposeCommand(
 		}
 		ensureRuntime(state);
 		const revision = runtimeRevision(state.homeDir);
-		const upgradedAkm = selectedArgs[0] === 'up'
-			? upgradedScheduledEngineContents(state.homeDir) : undefined;
-		const upgradedRevision = upgradedAkm === undefined
-			? undefined : runtimeRevision(state.homeDir, upgradedAkm);
 		// Compose does not detect changed bind-mounted file contents. A pending
 		// configuration therefore needs recreation, not merely `docker restart`.
 		if (selectedArgs[0] === 'up' && restartStatus(state.homeDir).required) {
@@ -82,7 +64,7 @@ export async function activateComposeCommand(
 			if (selectedArgs.includes('--build'))
 				await runComposeStreaming([...buildComposeCliArgs(state), 'build', 'assistant'], { envFiles: composeOptions.envFiles });
 			const noPull = selectedArgs.includes('--pull=never') || selectedArgs.some((arg, i) => arg === '--pull' && selectedArgs[i + 1] === 'never');
-			await assertManagedHarnessImage(resolved.config, !noPull && read.config.deployment.imageNamespace !== 'fhold'
+			await assertRecoveryImage(resolved.config, !noPull && read.config.deployment.imageNamespace !== 'fhold'
 				? () => runComposeStreaming([...buildComposeCliArgs(state), 'pull', 'assistant'], { envFiles: composeOptions.envFiles })
 				: undefined);
 		}
@@ -90,21 +72,9 @@ export async function activateComposeCommand(
 		await runComposeStreaming([...buildComposeCliArgs(state), ...selectedArgs], {
 			envFiles: composeOptions.envFiles
 		});
-		let appliedRevision = revision;
-		// Never acknowledge arbitrary late file changes. Only the exact predicted
-		// image-owned conversion may select the revision captured before startup.
-		if (upgradedAkm !== undefined && upgradedRevision !== undefined) {
-			try {
-				assertSafePortablePath(state.homeDir, 'config/akm/config.json', true);
-				if (readFileSync(join(state.homeDir, 'config/akm/config.json')).equals(upgradedAkm))
-					appliedRevision = upgradedRevision;
-			} catch {
-				// Optional scheduler diagnostics are not a core activation gate.
-			}
-		}
 		if (selectedArgs[0] === 'up' && selectedArgs.includes('--wait') && !options.deferAppliedReceipt)
-			recordAppliedRuntime(state.homeDir, appliedRevision);
-		return appliedRevision;
+			recordAppliedRuntime(state.homeDir, revision);
+		return revision;
 	} finally {
 		if (ownsLock) releaseStackLock(lock);
 	}

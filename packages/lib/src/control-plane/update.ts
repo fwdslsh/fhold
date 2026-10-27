@@ -8,7 +8,7 @@ import { readStackConfig, stackConfigEnv } from './stack-config.js';
 import { ensureRuntime, requireInstall } from './state.js';
 import { buildComposeArgs, composeConfigJson, ensureDockerReady, runComposeStreaming, runDocker } from './docker.js';
 import { buildComposeOptions } from './compose.js';
-import { activateComposeCommand, assertManagedHarnessImage } from './activation.js';
+import { activateComposeCommand, assertRecoveryImage } from './activation.js';
 import { FH_RELEASE_VERSION, FH_RUNTIME_VERSION } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
 import { assertSafePortablePath, nativePreferencesFile } from './provider-files.js';
@@ -78,7 +78,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 				if (!image.ok || !/^sha256:[a-f0-9]{64}$/.test(image.stdout.trim())) throw new Error(`Candidate image identity could not be verified: ${service}`);
 				selectedImages.push({ service, imageReference: definition.image, imageId: image.stdout.trim() });
 			}
-			await assertManagedHarnessImage(resolved.config);
+			await assertRecoveryImage(resolved.config);
 		}
 		const id = `${Date.now()}-${crypto.randomUUID()}`;
 		const checkpoint = join(state.homeDir, 'state', 'update-receipts', id);
@@ -91,7 +91,8 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 		}
 		phase = 'applying-assets'; record();
 		rememberRuntimeBeforeChange(state.homeDir);
-		await applyHomeSeed(state.homeDir);
+		const seeded = await applyHomeSeed(state.homeDir);
+		evidence = { ...evidence, managedAssetWarnings: seeded.warnings };
 		writeStackConfig(state.homeDir, candidateConfig);
 		phase = 'reconciling'; record();
 		ensureRuntime(state);

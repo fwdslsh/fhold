@@ -1,2 +1,2 @@
-// Released native v2 plugin, adapted only for trusted memory and redacted telemetry.
+// Released native plugin; adapter preserves only Guardian's credential boundary.
 export { default } from '/opt/fhold/tools/plugins/fhold/knowledge.js';

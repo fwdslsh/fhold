@@ -1,6 +1,6 @@
 ---
 name: codex-remote-setup
-description: Set up experimental Codex remote access from a fhold OpenCode conversation. Use the shipped scripts for native device sign-in, sandbox preflight, managed AKM hook verification and pairing of the existing worker. Use for sign-in, pairing failures or sandbox prerequisite errors in headless containers.
+description: Set up experimental Codex remote access from a fhold OpenCode conversation. Use the shipped scripts for native device sign-in, sandbox preflight, native AKM hook verification and pairing of the existing worker. Use for sign-in, pairing failures or sandbox prerequisite errors in headless containers.
 ---
 
 # Codex remote setup
@@ -59,14 +59,8 @@ account/configuration intact. Repeat clean after cancellation finishes.
 fhold-codex-recall.mjs review
 ```
 
-Current images register the built-in AKM and fhold hooks as system-managed.
-When the result has `managed: true` and `status: "ready"`, proceed to pairing;
-no personal hook approval is needed. Task permissions follow the instance's
-native policy files and are independent of hook trust. If managed hooks are
-disabled or missing, report the policy/configuration error to the operator.
-
-Older images may still return unmanaged plugin hooks. For those, explain the
-exact AKM hooks: session hints and prompt recall via `akm curate`. Configured
+Current images register hooks once through the native plugins. If the result
+has `status: "ready"`, proceed to pairing. Otherwise explain the exact AKM hooks: session hints and prompt recall via `akm curate`. Configured
 search/embedding services may be contacted. Only after explicit consent:
 
 ```bash

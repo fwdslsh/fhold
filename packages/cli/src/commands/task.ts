@@ -49,7 +49,8 @@ const create = defineCommand({
 	args: {
 		id: { type: 'positional', required: true, description: 'stable task id' },
 		schedule: { type: 'string', required: true, description: 'cron schedule, such as 0 8 * * *' },
-		prompt: { type: 'string', required: true, description: 'plain-language request' }
+		prompt: { type: 'string', required: true, description: 'plain-language request' },
+		harness: { type: 'string', description: 'native AKM harness (otherwise AKM selects its default)' }
 	},
 	run: defineAction(async ({ args }) =>
 		runTask([
@@ -58,7 +59,8 @@ const create = defineCommand({
 			'--schedule',
 			String(args.schedule),
 			'--prompt',
-			String(args.prompt)
+			String(args.prompt),
+			...(args.harness ? ['--harness', String(args.harness)] : [])
 		])
 	)
 });

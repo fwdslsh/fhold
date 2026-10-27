@@ -7,7 +7,7 @@ import * as recall from '../containers/assistant/fhold-codex-recall.mjs';
 
 afterEach(() => mock.restore());
 
-test('only managed ready hooks plus an empty complete native session inventory prove initial coverage', async () => {
+test('native approved hooks plus an empty complete session inventory prove initial coverage', async () => {
 	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready', managed: true });
 	const methods: string[] = [];
 	let loaded: unknown = { data: [], nextCursor: null };
@@ -24,7 +24,7 @@ test('only managed ready hooks plus an empty complete native session inventory p
 	loaded = { data: [], nextCursor: null }; alive = false;
 	expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
 	alive = true;
-	for (const hooks of [{ status: 'approval-needed', managed: true }, { status: 'ready', managed: false }]) {
+	for (const hooks of [{ status: 'approval-needed' }, { status: 'installed' }]) {
 		review.mockResolvedValue(hooks);
 		expect(await bootstrapCodexActivity({ inspect, alive: () => alive })).toBe(false);
 	}

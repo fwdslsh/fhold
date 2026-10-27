@@ -24,9 +24,8 @@ maintained separately from release defaults. Old `config/opencode/opencode.json`
 files remain untouched and inert unless explicitly mounted; see
 [managed harness configuration](../managed-harness-configuration.md).
 
-Project and Claude compatibility configuration discovery remain disabled in
-the hosted process. Explicitly configured native user plugins are trusted code.
-Image-baked wrappers load pinned `akm-opencode-v2` and fhold integrations from
+Native project, Claude compatibility and external-skill discovery remain enabled. Explicitly configured native user plugins are trusted code.
+Image-baked registrations load pinned `akm-opencode-v2` and fhold integrations from
 `/opt/fhold/tools/node_modules`; nothing is installed at startup.
 
 ## AI services and live settings
@@ -117,18 +116,16 @@ forms and permission decisions remain available.
 
 Supercronic and AKM run inside Assistant. Operator task definitions live in
 `knowledge/tasks/*.yml`; host-local `scheduler.enabled` controls activation.
-The scheduled engine in `config/akm/config.json` runs
-`opencode run --server http://127.0.0.1:4096 --agent scheduled` through the
-existing password-loading helper. Provider credentials stay in OpenCode.
+The native OpenCode harness in `config/akm/config.json` runs
+`opencode run --standalone`, using native provider credentials and configuration.
 
 `fhold-task sync` delegates to `akm task sync --rebind` at startup and every
-60 seconds. On upgrade, it changes only the exact formerly shipped engine's
-`--attach` argument to native v2 `--server`. Custom engine definitions remain
-operator-owned and need review. Task sources and activation are preserved.
+60 seconds. Operator-owned harness configuration, task sources and activation
+are preserved. Retired launchers need explicit native configuration review;
+fhold does not rewrite them.
 
-The restricted scheduled agent may read non-secret knowledge/workspace files,
-fetch public content and write under `/stash/inbox/`; it cannot execute shell
-commands or modify the workspace. Results persist in AKM task history.
+Native AKM/OpenCode select the task agent and its permissions; fhold adds no
+task-specific tool ceiling or prompt policy. Results persist in AKM task history.
 Invalid tasks, sync failures or optional scheduler failure report degraded state
 without stopping the native agent. Downtime does not replay missed cron slots.
 The timezone defaults to the detected host timezone.

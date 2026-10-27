@@ -24,11 +24,10 @@ const assistantEnvironment = {
 	AKM_CONFIG_DIR: '/etc/akm',
 	AKM_DATA_DIR: '/opt/akm/data',
 	AKM_STATE_DIR: '/opt/akm/data/state',
-	AKM_AUTO_MEMORY: '0',
-	AKM_AUTO_LEARNING: '0',
+	AKM_AUTO_MEMORY: '1',
+	AKM_AUTO_LEARNING: '1',
 	AKM_REDACT_HIGH_ENTROPY: '1',
 	AKM_REDACT_PII: '1',
-	FH_AUTOMATIC_MEMORY: '1',
 	FH_CODEX_REMOTE: '1',
 	FH_CODEX_SANDBOX: 'workspace-write',
 	FH_CLAUDE_REMOTE: '1',
@@ -36,9 +35,6 @@ const assistantEnvironment = {
 	HOME: '/home/fhold',
 	OPENCODE_CONFIG_DIR: '/etc/opencode',
 	OPENCODE_CONFIG: '/home/fhold/.config/opencode/opencode.json',
-	OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
-	OPENCODE_DISABLE_CLAUDE_CODE: 'true',
-	OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
 	OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 	OPENCODE_API_URL: 'http://127.0.0.1:4096',
 	OPENCODE_PORT: '4096',
@@ -289,7 +285,7 @@ describe('Compose security audit', () => {
 		expect(auditCompose(config, home)).toContain(
 			'assistant timezone must match StackConfig intent'
 		);
-		config.services.assistant.environment.FH_AUTOMATIC_MEMORY = '0';
+		config.services.assistant.environment.AKM_AUTO_MEMORY = '0';
 		config.services.assistant.environment.TZ = 'America/Chicago';
 		expect(auditCompose(config, home)).toEqual([]);
 	});

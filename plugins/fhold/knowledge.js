@@ -16,29 +16,35 @@ function degraded(feature, message) {
 export default Plugin.define({
 	id: 'fhold.knowledge',
 	effect: (context) => Effect.gen(function* () {
-		const memory = yield* Effect.tryPromise(() => import('/etc/opencode/lib/memory.js'));
-		const capture = memory.createMemoryCapture({ report: (status) => degraded('memory',
-			status.startsWith('capture failed') ? 'Automatic memory capture failed. Review AKM/provider settings; it will retry on a later turn.' : undefined) });
+		// Automatic context runs outside native tool permission checks. This is
+		// exclusively the Guardian credential boundary, never a local agent policy.
+		const allowed = (sessionID) => Effect.gen(function* () {
+			const session = yield* context.session.get({ sessionID });
+			return !session.metadata?.fholdGuardian || session.metadata.fholdGuardianKnowledge === true;
+		});
 		const safeSessionHook = (name, hook) => context.session.hook(name, (input) => Effect.gen(function* () {
-			const session = yield* context.session.get({ sessionID: input.sessionID });
-			const agent = name === 'context' ? input.agent : session.agent;
-			if (session.metadata?.fholdGuardian || !memory.trustedMemoryAgent(agent)) return;
-			// Only the upstream telemetry copy is redacted, never the native prompt.
-			yield* hook(name === 'prompt' ? { ...input, prompt: { ...input.prompt, text: memory.memorySource(input.prompt.text) } } : input);
+			if (!(yield* allowed(input.sessionID))) return;
+			yield* hook(input);
 			degraded('knowledge');
 		}).pipe(Effect.catchCause(() => Effect.sync(() => degraded('knowledge',
 			'A knowledge hook failed. Other tools remain available; review AKM settings and logs. It will retry on subsequent turns.')))));
 		// Use the released plugin and native registration APIs. Its tool write gate
 		// is deliberately not caught: rejected knowledge writes must remain rejected.
-		yield* upstream.effect({ ...context, session: { ...context.session,
+		yield* upstream.effect({ ...context, event: { ...context.event,
+			subscribe: () => context.event.subscribe().pipe(Stream.filterEffect((event) => {
+				// Deleted sessions no longer resolve; native cleanup must still run.
+				if (event.type === 'session.deleted') return Effect.succeed(true);
+				const id = event.data?.sessionID ?? event.data?.session?.id;
+				return id ? allowed(id).pipe(Effect.catchCause(() => Effect.succeed(false))) : Effect.succeed(true);
+			}))
+		}, tool: { ...context.tool,
+			hook: (name, hook) => context.tool.hook(name, (input) => Effect.gen(function* () {
+				if (yield* allowed(input.sessionID)) yield* hook(input);
+			}))
+		}, session: { ...context.session,
 			hook: (name, hook) => name === 'prompt' || name === 'context' ? safeSessionHook(name, hook) : context.session.hook(name, hook)
 		} });
 		degraded('knowledge');
-		yield* Stream.runForEach(context.event.subscribe(), (event) => {
-			if (event.location?.directory && event.location.directory !== context.location.directory) return Effect.void;
-			if (event.type === 'session.execution.succeeded') void capture(event.data.sessionID);
-			return Effect.void;
-		}).pipe(Effect.catchCause(() => Effect.sync(() => degraded('memory', 'Memory observation stopped. Reload OpenCode to resume automatic capture.'))), Effect.forkScoped);
 	}).pipe(Effect.catchCause(() => Effect.sync(() => degraded('knowledge',
 		'Knowledge integration is unavailable. Review AKM configuration and recent logs, then reload OpenCode; other agent tools remain available.'))))
 });

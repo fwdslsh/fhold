@@ -6,7 +6,6 @@ import { requireInstall } from './state.js';
 
 export type CodexRecallReview = {
 	status: 'installed' | 'approval-needed' | 'ready';
-	managed?: boolean;
 	digest: string;
 	hooks: Array<{
 		key: string;
@@ -15,7 +14,7 @@ export type CodexRecallReview = {
 		command: string;
 		sourcePath: string;
 		enabled: boolean;
-		trust: 'trusted' | 'untrusted' | 'modified' | 'managed';
+		trust: 'trusted' | 'untrusted' | 'modified';
 	}>;
 };
 
@@ -24,7 +23,6 @@ function parseReview(value: unknown): CodexRecallReview {
 	const input = value as Record<string, unknown>;
 	if (
 		!['installed', 'approval-needed', 'ready'].includes(String(input.status)) ||
-		(input.managed !== undefined && typeof input.managed !== 'boolean') ||
 		!/^[a-f0-9]{64}$/.test(String(input.digest)) ||
 		!Array.isArray(input.hooks) ||
 		!input.hooks.length ||
@@ -39,7 +37,7 @@ function parseReview(value: unknown): CodexRecallReview {
 				(k) => typeof h[k] !== 'string' || (h[k] as string).length > 8192
 			) ||
 			typeof h.enabled !== 'boolean' ||
-			!(input.managed ? ['managed'] : ['trusted', 'untrusted', 'modified']).includes(
+			!['trusted', 'untrusted', 'modified'].includes(
 				String(h.trust)
 			)
 		)

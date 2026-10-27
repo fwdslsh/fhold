@@ -11,10 +11,11 @@
 		"@opencode/cli": "2.0.32",
 		"@opencode/client": "2.0.32",
 		"@opencode/plugin": "2.0.32",
-		"akm-cli": "0.10.261013-beta",
+		"akm-cli": "0.10.261014-beta",
 		"playwright": "1.64.1"
 	},
 	"overrides": {
+		"akm-cli": "0.10.261014-beta",
 		"@huggingface/transformers": "4.3.1"
 	}
 }
