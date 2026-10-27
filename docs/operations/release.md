@@ -23,7 +23,13 @@ The persisted literal `fhold` namespace is local-only: activation uses
 is rejected. Missing tags require reviewed local builds. Explicit nonlocal
 registry intent retains its pull behavior; this is not a new configuration flag.
 
-## Frozen version contract
+## Candidate and published version contract
+
+Develop and functionally validate candidates using their commit SHA and image
+digests. Finish intentional dependency updates early; focused fixes need not
+include unrelated upgrades. Reserve and stamp the release version near
+publication, then qualify the final stamped SHA and artifacts. Do not repeat
+completed qualification merely because a newer noncritical dependency appears.
 
 ### Tooling-only publication
 
@@ -57,20 +63,33 @@ still uses the default `SCOPE=full` stamping and the complete existing gates.
 For the historical **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
 `-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
 canonical integers and numeric precedence are enforced by `scripts/set-version.mjs`.
-Released candidate versions are frozen. An existing receipt permits an
-identical source/content retry only. Changed source or artifact bytes require
-a new version; unpublished candidates are not an exception.
+Unpublished local builds, nonpublishing dry runs and candidate receipts do not
+consume a version or monthly counter. They can change under the same provisional
+version. Keep evidence by SHA/digest and regenerate local checksums/manifests
+after a rebuild; older evidence never qualifies changed content. A local
+manifest can be regenerated with `validate-release-assets.mjs --write-manifest`.
+CI/development artifact downloads are candidate evidence identified by SHA/digest,
+not release publication, and do not reserve a counter.
+Read-only validation still rejects stale or mismatched checksums.
 
-Establish release intent once and carry it across the selected scope's package
+A public release Git tag, versioned registry image or release-download asset freezes that version,
+even if publication later fails before the GitHub release is visible. Never
+overwrite those bytes. An exact-content image retry may reuse its public tag;
+changed source or public artifact bytes require a new version. Do not reuse
+public partial-publication counters as though they were local dry runs.
+
+Establish final publication intent and carry it across the selected scope's package
 manifests, artifacts, filenames, checksums and receipt. Full releases also advance
 image and MCPB versions; tooling-only releases retain those published versions.
-`releaseIntent` binds version to revision/content hash, rejects regressed
-clocks/collisions and accepts retries only for the same identity.
+`releaseIntent` binds version to revision/content hash. Its `existing` input is
+an immutable publication identity, not an unpublished candidate receipt; exact
+publication retries must match it. Regenerate unpublished candidate intent from
+the current revision/hash without treating old local evidence as a reservation.
 For historical 0.1 releases, at the same minute use a higher prerelease serial;
 stable collisions require another minute. Historical 0.2 releases use the daily
 build counter below; current releases use the monthly counter.
 
-`VERSION=<frozen-version> node scripts/bump-release.mjs` previews stamping;
+`VERSION=<release-version> node scripts/bump-release.mjs` previews stamping;
 `STAMP=true` explicitly writes. It must preflight every listed input first.
 Regenerate the single root lockfile and rebuild all embedded assets after
 manifest changes. No automatic release/schema migration registry is needed.
@@ -114,25 +133,29 @@ tags, recovery formats or instance identities.
 ### Monthly versions from 0.3
 
 From **0.3 onward**, use `X.Y.YYMMNN[-alpha|-beta|-rc]`, with UTC year/month
-and a two-digit monthly counter `NN`. The first October 2026 candidate is
+and a two-digit monthly counter `NN`. The first October 2026 release is
 `0.3.261000-beta`. There is no additional prerelease serial. The patch is a
 canonical SemVer integer (no leading zero); this calendar format covers 2010–2099.
 Month must be 01–12, and counter must be exactly 00–99.
 
 For each major/minor line, start at `00` each UTC month and increment for every
-new candidate, sharing the counter across alpha, beta, rc and stable. Promoting
+public release, sharing the counter across alpha, beta, rc and stable. Promoting
 `0.3.261000-beta` therefore consumes `0.3.261001-rc` or `0.3.261001`;
-do not reuse counter 00 for another channel. Abandoned frozen candidates also
-consume their counter. Check tags, releases, receipts and reserved candidates
-before choosing the next unused counter. Gaps are allowed; reuse is not.
+do not reuse a public counter for another channel. Abandoned unpublished
+candidates do not consume a counter; an abandoned partial public publication
+does. Check public tags, releases and versioned images before choosing the next
+unused counter. Local candidate receipts do not reserve versions. Gaps are
+allowed; public counter reuse is not.
 After 99, refuse further candidates in that month: wait for the next UTC month
 or explicitly review a new minor line. Never widen/wrap the counter or change
 the date to evade overflow. A new month/year resets the counter to 00.
 
 Comparison uses major/minor, UTC month, counter, then channel
 `alpha < beta < rc < stable`. Channel ordering remains defined even though new
-release intent requires advancing the counter. Exact retries retain the frozen
-version, revision and content identity; changed bytes require another counter.
+public release intent requires advancing the counter. Exact publication retries
+retain the public version, revision and content identity; changed public bytes
+require another counter. Unpublished rebuilds use fresh SHA/digest evidence
+without consuming another counter.
 Historical 0.1 timestamps and 0.2 daily builds remain readable and immutable.
 Cross-format clock checks use shared month precision, so moving from an October
 21 daily release to October's monthly line is valid. Moving to a prior month
@@ -142,7 +165,7 @@ All stamping, release workflow and artifact validation use the shared parser.
 CLI/Admin derive their own, runtime and MCPB versions from the owning manifests;
 updates advance only previously managed image defaults, preserving explicit pins.
 Download names, native plugin manifests, Compose defaults and release asset
-receipts retain the exact frozen string. No native database, recovery schema,
+receipts retain the exact release string. No native database, recovery schema,
 credentials, instance identity or checkpoint authority changes with this naming
 transition.
 
@@ -341,8 +364,14 @@ executable, not an npm bootstrap package.
 
 Published bytes/tags must not be overwritten. Matching retries are no-write;
 differing content requires a new version. Stable uses `latest`; alpha/beta/rc
-use their explicit channels. Preserve release/checkpoint evidence and disclose
-incomplete live/renderer/platform gates.
+use their explicit channels. While fhold remains prerelease-only, retain the
+temporary **beta-as-latest recommended release** policy: use the supported beta
+release and its pinned artifacts/beta image channel. GitHub's stable-only
+`releases/latest` endpoint may be absent; use the releases list or explicit beta
+links. This does not relabel a prerelease as stable, change an operator's native
+updater channel choice or broaden Stable to accept prereleases. Revisit this
+workaround at the first stable release. Preserve release/checkpoint evidence and
+disclose incomplete live/renderer/platform gates.
 
 ## Licensing
 

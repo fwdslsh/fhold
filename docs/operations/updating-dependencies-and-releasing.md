@@ -14,14 +14,20 @@ results and skipped gates in the PR.
 
 ## Find and review updates
 
-Dependency review is required before **every PR merge**, including changes that
-started without dependency edits. Check upstream again during final review and
-record the date, release channels, old/new versions and any compatibility holds.
-Update all supported compatible direct pins and transitive resolutions before
-freezing the candidate. New dependencies invalidate the earlier commit's CI;
-complete one full qualification on the final SHA and reuse it for publication
-while eligible. Do not merge silently outdated pins or call a held dependency
-the latest release. Use the repository's PR template to record this review.
+Review dependency freshness before **every PR merge**, but scope updates to the
+work. A focused fix does not have to absorb unrelated upgrades. Apply urgent
+security fixes and required compatibility updates promptly. Batch other updates
+in explicit dependency PRs or early release preparation, reviewing the full
+inventory below and selecting supported compatible versions deliberately.
+
+Record the date, review scope, release channels, changed versions, compatibility
+holds and deferred updates in the PR. Finish intended updates before final
+qualification. A newer noncritical upstream release appearing during testing
+does not restart that work; record it for the next batch. Do not call a held
+dependency the latest release. Changed pins or resolutions still require the
+affected checks on the final SHA; earlier CI cannot qualify changed inputs.
+Reuse eligible successful final-SHA CI for publication. Use the PR template to
+record the review rather than repeatedly refreshing the entire dependency tree.
 
 Use the Bun version declared by the root `packageManager` and a native Node
 binary compatible with the pinned Node image. A shell shim that runs Node
@@ -97,15 +103,16 @@ tar -tzf /tmp/fhold-akm-plugins.tar.gz
 
 Update the Dockerfile's archive URL, `ADD --checksum`, `plugin_root` and all
 archive extraction prefixes together. Inspect the manifests and hook source
-inside the archive; `scripts/bake-managed-hooks.mjs` consumes those definitions.
-The vendor installers still run at build time against that baked marketplace.
+inside the archive. The native plugin installers run at build time against that
+baked marketplace; do not copy its hooks into a second registration path.
 Personal plugin updates or a `git pull` in an unrelated AKM checkout do not
 change this image.
 
 After editing the owning manifests, run `bun install` with the selected Bun to
-regenerate the single lockfile. Also run `bun update --recursive --no-cache` to
-refresh transitive resolutions within the reviewed manifest constraints. The
-root-only outdated command can miss workspace updates; neither form checks the
+regenerate the single lockfile. For an intentional full dependency batch, run
+`bun update --recursive --no-cache` to refresh transitive resolutions within the
+reviewed manifest constraints. A targeted update need not refresh unrelated
+resolutions. The root-only outdated command can miss workspace updates; neither form checks the
 native marketplace archive, Docker bases, scanner or workflow pins. Review the
 lockfile diff and resolved transitive versions,
 then verify `bun install --frozen-lockfile`. Do not edit integrity records by hand
@@ -189,9 +196,12 @@ tooling-only release retains the existing published runtime and cannot ship
 pending container or dependency-resolution changes.
 
 From 0.3, choose an unused UTC version using `X.Y.YYMMNN-beta` (or alpha/rc/stable).
-Start the monthly counter at 00 and consume a new counter for each candidate,
-including channel promotion. No prerelease serial is used. Check existing
-tags/releases and frozen candidate receipts first; see the
+Use commit SHAs and image digests while developing and functionally validating
+candidates. Choose and stamp the public version near publication. Start the
+monthly counter at 00 and advance it for each public release, including channel
+promotion. No prerelease serial is used. Check public tags, releases and images
+for used counters; local candidate receipts and nonpublishing dry runs do not
+reserve one. See the
 [monthly version policy](release.md#monthly-versions-from-03) for retries,
 overflow and historical 0.1/0.2 compatibility:
 
@@ -208,10 +218,15 @@ bun install --lockfile-only
 Review every manifest and Compose default listed in
 [.github/release-manifest.json](../../.github/release-manifest.json), the
 lockfile, changelog and download instructions. Rebuild embedded/staged assets
-and rerun the affected gates after stamping. Frozen versions bind source and
-artifact bytes: any changed candidate content requires a new version, even if
-the earlier candidate was not published. Native data-schema compatibility is
-owned by the vendor tools, not the product release number.
+and rerun the affected gates after stamping. An unpublished candidate can change
+under the same provisional version; discard stale local output or regenerate its
+checksums and manifest, and qualify the changed build. A candidate receipt is
+evidence for its recorded SHA/digests, not a permanent version reservation.
+Once a release Git tag, versioned registry image or release download becomes
+public, even in a partial publication, its version and bytes are immutable and
+changed content requires a new counter. CI/development artifacts remain candidate
+evidence identified by SHA/digest; they do not reserve counters. Native data-schema compatibility is owned by the vendor tools,
+not the product release number.
 
 Submit the reviewed change through a PR and retain its validation evidence.
 After the stamped candidate reaches the intended release branch, wait for that

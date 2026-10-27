@@ -75,6 +75,8 @@ export function checksumFor(checksumsText, filename) {
 	return undefined;
 }
 
+// Derived local build evidence, not a reservation of a public release version.
+// Publication owns remote immutability; read-only validation never rewrites it.
 export function writeReleaseAssetManifest(dir, version, productName = readElectronProductName(), scope = 'full') {
 	const hashes = Object.fromEntries(requiredReleaseAssets(version, productName, scope).map((name) => {
 		const path = join(dir, name);
@@ -92,8 +94,8 @@ export function writeReleaseAssetManifest(dir, version, productName = readElectr
 	const output = `${JSON.stringify(manifest, null, 2)}\n`;
 	const path = join(dir, 'release-assets-manifest.json');
 	if (existsSync(path)) {
-		if (!lstatSync(path).isFile() || readFileSync(path, 'utf8') !== output)
-			throw new Error('Immutable release asset collision: retry bytes differ');
+		if (!lstatSync(path).isFile()) throw new Error('Release manifest must be a regular file');
+		if (readFileSync(path, 'utf8') !== output) writeFileSync(path, output);
 		return manifest;
 	}
 	writeFileSync(

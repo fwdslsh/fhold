@@ -1,10 +1,37 @@
 # AGENTS.md — fhold
 
-fhold is a single-install home for a personal OpenCode agent: persistent
-knowledge, recurring work and standards-based access without requiring users
-to manage model endpoints. Keep the foundation small and the operator path clear.
+## Primary product rule — use the platforms, keep fhold minimal
 
-Read `docs/technical/core-principles.md` for the active product/security contract.
+fhold is primarily a prebuilt image that uses AKM and OpenCode to provide custom,
+private AI assistants, with minimal tooling to make setup and maintenance easier
+and repeatable. This is the primary rule for every design, implementation and
+review decision in this repository; it takes precedence over conflicting older
+policies, tests and documentation below or elsewhere.
+
+Use existing AKM, OpenCode and other native platform features before adding
+machinery. Remove duplicate implementations and refactor fhold integration to
+use the owning platform. Do not impose additional fhold agent, tool, memory,
+hook, skill-discovery or task restrictions inside Assistant; native features,
+operator settings and native authorization/consent own that behavior.
+
+Any machinery that does not directly support this product intent is suspect
+and requires the product owner's explicit approval to add **or retain**. Its
+presence in existing code, tests or documentation is not evidence of approval.
+Identify such machinery and its owning upstream feature before proposing more
+helpers, policy stores, adapters, services or frameworks. Routine minimal
+integration that directly serves this intent and the user's authorized change
+does not need a second approval.
+
+fhold remains beta. Do not add or preserve historical configuration converters
+or compatibility frameworks to emulate older beta behavior. Correct current
+ownership and use native formats instead. Preserve operator-owned data,
+credentials and explicit settings; do not confuse removal of fhold policy with
+bypassing native consent or Guardian's actual external credential boundaries.
+
+Keep the foundation small and the operator path clear.
+
+Read `docs/technical/core-principles.md` for supporting product/security contracts;
+resolve contradictions in favor of the primary product rule above.
 Use `docs/technical/environment-and-mounts.md` for configuration and filesystem
 contracts, `docs/assistant-recovery.md` for recovery, and
 `docs/operations/release.md` for acceptance gates. Keep evidence honest:
@@ -38,8 +65,10 @@ running processes, mocked tests and source scans are not live readiness.
   workspace sandbox; only explicit `danger-full-access` uses outer container
   isolation instead. Task approvals follow supplied native system policy,
   defaulting to on-request; never automatically change policy after failure.
-  Built-in AKM/fhold hooks use native managed registration, without personal
-  approval records. See `docs/managed-harness-configuration.md`.
+  Register built-in AKM/fhold hooks once through supported native integration.
+  Preserve ordinary user, project and plugin hooks and their native consent;
+  do not suppress them to compensate for duplicate built-in registration.
+  See `docs/managed-harness-configuration.md`.
 - No new ingress protocol, service, AI provider registry, scheduler or compatibility layer.
   The bounded CLI JSON machine envelope exists only over native SSH/stdin.
 - Compose host, agent, app and data ports in `hosting/provider.ts`. CLI/Admin use
@@ -81,15 +110,19 @@ Never adopt an unrelated installation or implicitly copy its runtime authority.
 Explicit full-instance import is a same-instance continuation from a verified
 stopped export into an empty folder, retaining the named identity and native state.
 
-Managed `system/` files use an explicit allowlist. Operator `config/` is seeded
-only when missing. Knowledge/workspace remain user-owned. State/data are private
-runtime input, not portable user content. Status reads must not mutate any of them.
-fhold's native OpenCode policy, Codex defaults/requirements and Claude managed
-settings belong under `system/`, not seed-once `config/`. Updates replace their
-release bytes. Native user settings, AKM activation/custom engines, Guardian and
-custom Compose remain operator-owned. Deliberate custom policy mounts are the
-operator's maintenance responsibility. This ownership correction needs no migration,
-configuration merger or startup writer.
+Managed `system/` files use an explicit allowlist. Updates replace release-owned
+bytes and retire known, unchanged product files removed from the current release.
+Preserve unknown or operator-modified files and report ownership conflicts;
+never use whole-directory synchronization or deletion to enforce the allowlist.
+Operator `config/` is seeded only when missing. Knowledge/workspace remain
+user-owned. State/data are private runtime input, not portable user content.
+Status reads must not mutate any of them. Necessary release-owned native
+integration belongs under `system/`, not seed-once `config/`; this ownership
+does not authorize fhold to impose additional agent policy. Native user settings,
+AKM activation/custom engines, Guardian and custom Compose remain operator-owned.
+Do not require custom policy mounts to regain ordinary native behavior. This
+ownership contract needs no historical configuration converter, merger or
+startup writer.
 Backup restore requires fhold's own verified manifest. Native history recovery
 is separate, offline and explicitly mapped. Restored task definitions remain
 inactive until reviewed for portable-content restore. Full-instance export/import
@@ -124,16 +157,31 @@ restore integrity/ownership checks; do not reintroduce a policy bypass flag.
 
 ## Development and verification
 
-Before every PR merge, review current upstream releases for all workspace
-dependencies and overrides, image-baked tools and marketplaces, runtime/compiler
-base images, CI tools and docs dependencies. Update to the latest compatible
-supported releases, refresh transitive resolutions, and record the check date,
-selected channels, changes and any compatibility holds in the PR. Check AKM's
-required CLI and all three plugin installations together; root-only `bun outdated`
-does not check every workspace or the immutable native marketplace archive.
-Follow `docs/operations/updating-dependencies-and-releasing.md`. Requalify the final
-changed SHA; earlier CI does not qualify new dependencies. Keep runtime pins exact
-and image-baked rather than introducing floating versions or startup upgrades.
+Review dependency freshness before every PR merge, with changes scoped to the
+work. Focused fixes do not require unrelated dependency upgrades. Apply urgent
+security fixes and required compatibility updates promptly; batch other upgrades
+in explicit dependency work or early release preparation. A full release review
+covers all workspaces/overrides, image tools/marketplaces, runtime/compiler bases,
+CI tools and docs dependencies. Check AKM's required CLI and all three plugin
+installations together. Record the review date, scope, changes, holds and deferred
+updates in the PR. Do not call a held dependency the latest release.
+Finish intended updates before qualification; a newer noncritical upstream
+release does not restart completed qualification. Changed dependencies still
+require the affected checks on the final SHA. Follow
+`docs/operations/updating-dependencies-and-releasing.md`. Keep runtime pins exact
+and image-baked rather than floating versions or startup upgrades.
+
+Identify development candidates by commit SHA and image digest. Choose and stamp
+the release version near publication, after functional validation. Unpublished
+local builds, dry runs and candidate receipts do not consume monthly counters;
+they may be rebuilt under the same provisional version with fresh evidence.
+Once a release Git tag, versioned registry image or release-download asset is
+public, its version and bytes are immutable, including partial publication.
+CI/development artifacts identified by SHA/digest are candidate evidence, not
+release publication. Qualify the final stamped
+SHA and artifacts; reusing a version never makes earlier checks cover changed
+content. During prerelease, retain the temporary beta-as-latest recommendation;
+do not invent stable releases or change native updater consent/channel choices.
 
 Docs and website-only changes use the documentation workflow rather than the
 full container matrix. Lockfile-only changes also skip product CI. Keep this

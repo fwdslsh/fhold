@@ -44,13 +44,13 @@ export function assertReleaseAdvance(version, previous) {
 	if (parsed.timestamp.slice(0, precision) < prior.timestamp.slice(0, precision))
 		throw new Error('Release clock regressed');
 	if (compareVersions(version, previous) <= 0) throw new Error('Release collision or precedence regression');
-	// Every new monthly candidate consumes a counter, including a channel promotion.
+	// Compare against the prior public release: promotions share its counter space.
 	if (parsed.format === 'monthly' && prior.format === 'monthly' &&
 		parsed.ma === prior.ma && parsed.mi === prior.mi && parsed.pa === prior.pa)
 		throw new Error('Monthly release counter must advance across channels');
 }
 
-/** Establish once; persist this result with the release, and never recalculate on retry. */
+/** Final publication identity. `existing` is public immutable intent, never a local candidate reservation. */
 export function releaseIntent({ version, revision, contentSha256, previous = null, existing = null }) {
 	const parsed = parseSemver(version);
 	if (!parsed || !/^[a-f0-9]{40}$/.test(revision) || !/^[a-f0-9]{64}$/.test(contentSha256))

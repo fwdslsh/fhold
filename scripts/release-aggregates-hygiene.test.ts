@@ -594,11 +594,8 @@ describe('release completeness gate', () => {
 		}
 	}
 
-	function writeCompleteDist(dir: string, version: string): string[] {
-		const required = requiredReleaseAssets(version, productName);
+	function writeChecksums(dir: string, required: string[]): void {
 		const withoutChecksums = required.filter((name) => name !== 'checksums-sha256.txt');
-		for (const name of withoutChecksums) writeFileSync(join(dir, name), `content-of-${name}`);
-
 		const lines = withoutChecksums.map((name) => {
 			const hash = createHash('sha256')
 				.update(readFileSync(join(dir, name)))
@@ -606,6 +603,13 @@ describe('release completeness gate', () => {
 			return `${hash}  ${name}`;
 		});
 		writeFileSync(join(dir, 'checksums-sha256.txt'), `${lines.join('\n')}\n`);
+	}
+
+	function writeCompleteDist(dir: string, version: string): string[] {
+		const required = requiredReleaseAssets(version, productName);
+		for (const name of required.filter((name) => name !== 'checksums-sha256.txt'))
+			writeFileSync(join(dir, name), `content-of-${name}`);
+		writeChecksums(dir, required);
 		writeReleaseAssetManifest(dir, version, productName);
 		return required;
 	}
@@ -617,7 +621,7 @@ describe('release completeness gate', () => {
 		});
 	});
 
-	test('daily-build releases share artifact naming, checksums and immutable retry validation', () => {
+	test('daily-build releases share artifact naming, checksums and validation', () => {
 		withDir((dir) => {
 			const version = '0.2.2610081-beta.1';
 			const required = writeCompleteDist(dir, version);
@@ -629,18 +633,23 @@ describe('release completeness gate', () => {
 		expect(() => requiredReleaseAssets('0.2.26100801-beta.1')).toThrow('Invalid');
 	});
 
-	test('release asset retries are immutable and version/calendar validation is shared', () => {
+	test('local candidate evidence can be regenerated but stale checksums remain invalid', () => {
 		withDir((dir) => {
 			const version = '0.1.2610020008-alpha.1';
-			writeCompleteDist(dir, version);
+			const required = writeCompleteDist(dir, version);
 			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
 			writeFileSync(join(dir, CLI_BINARIES[0]), 'different retry bytes');
-			expect(() => writeReleaseAssetManifest(dir, version, productName)).toThrow('Immutable');
+			expect(validateReleaseAssets(dir, version, productName)).toContain(`Manifest checksum mismatch for ${CLI_BINARIES[0]}`);
+			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
+			expect(validateReleaseAssets(dir, version, productName)).toContain(`Checksum mismatch for ${CLI_BINARIES[0]}`);
+			writeChecksums(dir, required);
+			writeReleaseAssetManifest(dir, version, productName);
+			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
 		});
 		expect(() => requiredReleaseAssets('0.1.2602300000')).toThrow('Invalid');
 	});
 
-	test('monthly artifacts retain exact versions and reject changed retry bytes', () => {
+	test('monthly unpublished rebuilds retain the provisional version and require fresh evidence', () => {
 		withDir((dir) => {
 			const version = '0.3.261000-beta';
 			const required = writeCompleteDist(dir, version);
@@ -648,8 +657,11 @@ describe('release completeness gate', () => {
 			expect(required).toContain(`fhold-claude-desktop-${version}.mcpb`);
 			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
 			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
-			writeFileSync(join(dir, CLI_BINARIES[0]), 'changed frozen candidate');
-			expect(() => writeReleaseAssetManifest(dir, version, productName)).toThrow('Immutable');
+			writeFileSync(join(dir, CLI_BINARIES[0]), 'changed unpublished candidate');
+			expect(validateReleaseAssets(dir, version, productName).length).toBeGreaterThan(0);
+			writeChecksums(dir, required);
+			writeReleaseAssetManifest(dir, version, productName);
+			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
 		});
 		expect(() => requiredReleaseAssets('0.3.261000-beta.1')).toThrow('Invalid');
 		expect(() => requiredReleaseAssets('0.3.2610100')).toThrow('Invalid');
