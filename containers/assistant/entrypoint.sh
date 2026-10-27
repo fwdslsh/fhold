@@ -251,9 +251,43 @@ prepare_filesystem() {
     /home/fhold/.local/state/opencode \
     /opt/akm/cache /opt/akm/data/state /stash/tasks /stash/inbox /stash/disabled-tasks /work
 
+  # Compose mounts the operator's writable cache over /opt/akm/cache. Retain
+  # baked assets outside it and seed missing files, just like native defaults.
+  # No setup/download runs here; existing native cache files and symlinks win.
+  if ! prepare_akm_assets; then
+    mark_degraded akm-assets 'Baked AKM assets could not be prepared. Check cache permissions; native AKM remains responsible for asset availability and acquisition.'
+  fi
+
   if ! prepare_native_defaults; then
     mark_degraded native-defaults 'Native remote defaults could not be prepared. Check home permissions and recent logs, then restart; OpenCode remains available.'
   fi
+}
+
+prepare_akm_assets() {
+  local cache source target parent ancestor temporary
+  cache=$(realpath -m "${AKM_CACHE_DIR:-/opt/akm/cache}") || return
+  [ -d /assistant-defaults/akm-cache ] || return 1
+  mkdir -p "$cache" || return
+  while IFS= read -r -d '' source; do
+    target="$cache/${source#/assistant-defaults/akm-cache/}"
+    if [ -e "$target" ] || [ -L "$target" ]; then continue; fi
+    parent=$(dirname "$target")
+    ancestor="$parent"
+    # Keep operator directory symlinks intact instead of writing through them.
+    while [ "$ancestor" != "$cache" ]; do
+      [ ! -L "$ancestor" ] || return 1
+      ancestor=$(dirname "$ancestor")
+    done
+    mkdir -p "$parent" || return
+    temporary=$(mktemp "$parent/.fhold-akm-asset.XXXXXXXX") || return
+    # Large binaries/models must never become visible under their native final
+    # names until complete. -n also preserves files created concurrently.
+    if ! cp --preserve=mode "$source" "$temporary" || ! mv -nT "$temporary" "$target"; then
+      rm -f "$temporary"
+      return 1
+    fi
+    rm -f "$temporary" || return
+  done < <(find /assistant-defaults/akm-cache -type f -print0)
 }
 
 prepare_native_defaults() {
@@ -368,7 +402,7 @@ mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
 rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults akm-index-cache; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults akm-assets akm-index-cache; do
   rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
 done
 if [ "$configuration_degraded" = 1 ]; then

@@ -300,19 +300,18 @@ Keep the useful bridge; do not introduce a custom crypto fork or packer.
 
 On October 6, 2026 the product owner approved the specific moderate advisory
 [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)
-in `sprintf-js` 1.1.3. It remains the latest published version with no patched
-release; the standard `bun audit fix` reports no available correction.
-It is reached through `global-agent` → `roarr` in Electron's download/build
-tools and AKM's ONNX proxy dependency. Reviewed proxy-logger call sites use
+in `sprintf-js` 1.1.3. It was reached through `global-agent` → `roarr` in
+download/build tools and AKM's former ONNX proxy dependency. Reviewed call sites used
 fixed format strings with request/error data supplied separately; the finding
 concerns attacker-controlled precision format strings. That reduces the observed
 exposure, but is not a clean-audit claim or a guarantee for arbitrary extra apps.
 
-The audit command ignores individually reviewed advisory IDs only, including the
-exceptions documented below. All other findings still fail. No dependency is patched,
-replaced or removed. Re-review by November 6, 2026, when a supported upstream
-fix is released, or before changing the caller/format-string boundary. Runtime
-image scans and all other release gates remain enabled.
+The advisory was withdrawn on October22, 2026, so its obsolete audit ignore is
+removed. AKM's former ONNX branch is gone, but Electron's independent
+`@electron/get` → `global-agent` → `roarr` → `sprintf-js` chain remains in the
+resolved workspace. The other individually reviewed
+exceptions below remain. Runtime image scans and all other release gates remain
+enabled.
 
 ## Temporary upstream MSAL and Zod exceptions
 
@@ -329,7 +328,7 @@ exceptions pending supported upstream fixes. Track removal in
   independently of AKM.
 - [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5): Zod memory
   exhaustion from oversized invalid collections, fixed in 4.6.6. Direct fhold Zod
-  is already 4.6.7, but AKM CLI 0.10.261013-beta and MCPB 2.1.2 still require Zod 3
+  is already 4.6.7, but AKM CLI 0.10.261015-beta and MCPB 2.1.2 still require Zod 3
   (latest 3.25.76). MCPB packs repository-owned manifests; AKM handles imported and
   operator inputs, which can be hostile. Do not describe this exposure as unreachable.
 

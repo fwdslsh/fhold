@@ -137,7 +137,7 @@ bun run docs:check
 bun run docs:build
 bash -n scripts/dev-setup.sh scripts/smoke-image.sh \
   containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh \
-  containers/assistant/opencode-run.sh containers/guardian/entrypoint.sh
+  containers/guardian/entrypoint.sh
 ```
 
 The raw audit intentionally reports the narrowly reviewed advisories described

@@ -8,7 +8,7 @@ Guardian's authenticated chat/read/full credential boundary remains in place.
 
 ## Required dependency update
 
-The official npm `akm-cli@0.10.261014-beta` package supplies the native child
+The official npm `akm-cli@0.10.261015-beta` package retains the native child
 environment fix required by this refactor. Its `dist/core/paths.js`
 `childProcessEnv`/`akmLocations` and `dist/integrations/agent/spawn.js`
 `buildChildEnv` preserve resolved AKM config, data, cache and state locations.
@@ -17,22 +17,35 @@ Fresh fhold configuration uses the supported `harnesses.opencode` configuration
 with `args: ["run", "--standalone"]`, reusing the installed OpenCode and its
 native settings/authentication without a fhold launcher or first-use download.
 
-The current plugin remains `akm-opencode-v2@0.10.261012-beta`. Its exact CLI013
-dependency is resolved to014 through the normal Bun override, keeping one CLI
-version across the three plugin harnesses and the installed command. No vendor
-source is patched. Published package integrity is recorded in `bun.lock`.
-The ONNX transitive `adm-zip` is pinned through the same standard override
-mechanism to patched0.6.1: ONNX's0.5 range otherwise introduces eight archive
-handling advisories. No audit exceptions are added.
+The current plugin is `akm-opencode-v2@0.10.261013-beta`, whose exact CLI015
+dependency matches the installed command without a version override. Its native
+Claude and Codex marketplace is baked from the same immutable release. OpenCode
+CLI/client/plugin SDK are aligned at **2.1.4**, with the required **Effect 4.0.1**.
+No vendor source is patched. Published package integrity is recorded in `bun.lock`.
+
+CLI015 acquires native runtime pieces outside its npm dependency tree. The image
+build uses AKM's own acquisition code to populate its ordinary cache with its
+pinned OpenCode runtime. Native `akm setup --yes --embedding local` also prepares
+the ONNX binding and model on Linux x64. Only the cache is copied into the image;
+build setup preferences never replace operator configuration. The immutable
+assets stay under `/assistant-defaults/akm-cache`, outside Compose's writable
+cache mount. Ordinary filesystem initialization copies only missing assets into
+the native cache; existing operator files and symlinks win. No setup or network
+download runs during initialization. Linux ARM64 follows
+upstream's keyword/remote-embedding support. Fresh-instance smoke tests require
+cache discovery and local embedding availability where supported with networking
+disabled and the actual writable cache mount in place. No installer or
+configuration writer is added to startup.
 Upstream's `docs/reference/configuration.md`,
 `dist/integrations/harnesses/opencode/agent-builder.js` and native session reader
 own bounded model work and the `akm-model-work` recursion exclusion.
 
-Dependency freshness was reviewed on October 27, 2026. This is a required AKM
-compatibility update. OpenCode remains2.0.32 pending native AKM plugin/SDK/Effect
-alignment and2.1 integration qualification tracked in issue57; the former history
-metadata blocker was removed in003. Unrelated Claude, formatter and desktop packaging updates
-are deferred to an intentional dependency batch.
+Dependency freshness was reviewed on October 27, 2026. The OpenCode 2.1
+compatibility hold is removed; the former history metadata blocker was removed
+in003. See [the upgrade record](../operations/dependency-refresh-2026-10-27.md)
+for native continuation qualification and the unresolved upstream advisory
+chains. Unrelated Claude, formatter and desktop packaging updates are deferred
+to an intentional dependency batch.
 
 ## Executable evidence and limits
 

@@ -24,6 +24,7 @@ import { recordAppliedRuntime, restartStatus, runtimeRevision } from '../package
 
 const image = process.env.FH_NATIVE_TEST_IMAGE;
 const oldImage = process.env.FH_HISTORY_SOURCE_IMAGE;
+const v2SourceImage = process.env.FH_HISTORY_V2_SOURCE_IMAGE;
 const runtime = (home: string) => join(home, 'data/assistant/.local/share');
 const digest = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 async function home(root: string, name: string) {
@@ -103,6 +104,72 @@ async function seed({ open, api }: NativeWorkerContext) {
 }
 
 describe.skipIf(!image)('native v2 offline transfer (real image, no model usage)', () => {
+	for (const [label, sourceImage] of [['2.1 round trip', image], ['2.0 upgrade', v2SourceImage]] as const) {
+		it.skipIf(!sourceImage)(`resumes compacted context after ${label} without changing the source`, async () => {
+			if (!sourceImage || !image) throw new Error('Native test images are required.');
+			const root = mkdtempSync(join(tmpdir(), 'fhold-compaction-transfer-'));
+			const source = await home(root, 'source');
+			const target = await home(root, 'target');
+			await runNativeWorker(sourceImage, mounts(source), async ({ open, api }) => {
+				await open('/native-data');
+				const info = ((await api('/session', { title: 'Compacted continuation', location: { directory: '/work' } })) as { data: Record<string, unknown> }).data;
+				await api(`/session/${info.id}`, undefined, 'DELETE');
+				await api('/experimental/session/import', {
+					info: { ...info, id: 'ses_compacted', metadata: { fixture: 'compaction-transfer' } },
+					location: { directory: '/work' },
+					messages: [
+						{ id: 'msg_compacted_old', type: 'user', text: 'FH_OBSOLETE_CONTEXT', time: { created: 1780000000000 } },
+						{ id: 'msg_compacted_kept', type: 'user', text: 'FH_KEPT_CONTEXT', time: { created: 1780000000001 } },
+						{ id: 'msg_compacted_summary', type: 'compaction', status: 'completed', reason: 'manual',
+							summary: '## Objective\nFH_SUMMARY_CONTEXT', time: { created: 1780000000002 },
+							...(process.env.FH_OLD_COMPACTION === '1'
+								? { recent: '[User]: FH_KEPT_CONTEXT' }
+								: { metadata: { keepID: 'msg_compacted_kept', recent: '[User]: FH_KEPT_CONTEXT', fixture: 'preserve-message-metadata' } }) }
+					]
+				});
+			}, [`FH_OLD_COMPACTION=${label === '2.0 upgrade' ? '1' : '0'}`]);
+			const before = digest(join(runtime(source), 'opencode/opencode.db'));
+			const archive = join(root, 'history');
+			// The new engine reads a private snapshot; upstream owns the conversion
+			// from 2.0's stored recent field to 2.1's native message metadata.
+			await exportHistory({ sourceHome: source, image, destination: archive });
+			const exported = JSON.parse(readFileSync(join(archive, 'ses_compacted.json'), 'utf8'));
+			const summary = exported.messages.find((message: { type: string }) => message.type === 'compaction');
+			expect(summary.metadata.recent).toContain('FH_KEPT_CONTEXT');
+			if (label === '2.1 round trip') expect(summary.metadata).toMatchObject({ keepID: 'msg_compacted_kept', fixture: 'preserve-message-metadata' });
+			await restoreHistory({ homeDir: target, archive, directories: { '/work': '/work' }, apply: true, sameInstance: true });
+			await runNativeWorker(image, mounts(target), async ({ open, api, close }) => {
+				const fs = await import('node:fs');
+				const captured: string[] = [];
+				const model = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+					const body = await request.json();
+					captured.push(JSON.stringify(body.messages));
+					const chunk = (delta: Record<string, unknown>, finish_reason: string | null) => ({ id: 'fixture', object: 'chat.completion.chunk', created: 1780000000, model: 'model', choices: [{ index: 0, delta, finish_reason }] });
+					return new Response(`data: ${JSON.stringify(chunk({ role: 'assistant', content: 'FH_RESUMED_OK' }, null))}\n\ndata: ${JSON.stringify(chunk({}, 'stop'))}\n\ndata: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } });
+				} });
+				try {
+					await open('/native-data');
+					fs.writeFileSync('/tmp/native-config/opencode.json', JSON.stringify({ model: 'fixture/model', providers: { fixture: {
+						package: '@opencode/ai/providers/openai-compatible', settings: { baseURL: `http://127.0.0.1:${model.port}/v1`, apiKey: 'synthetic' },
+						models: { model: { capabilities: { tools: true, input: ['text'], output: ['text'] } } }
+					} } }));
+					const readyBy = Date.now() + 15_000;
+					while (Date.now() < readyBy) {
+						if (((await api('/model/default?location[directory]=/work')) as { data?: { id: string } }).data?.id === 'model') break;
+						await Bun.sleep(100);
+					}
+					await api('/session/ses_compacted/prompt', { text: 'Continue the compacted task and report FH_CONTINUATION_PROBE' });
+					const deadline = Date.now() + 30_000;
+					while (Date.now() < deadline && !captured.some((body) => body.includes('FH_CONTINUATION_PROBE'))) await Bun.sleep(100);
+					const resumed = captured.find((body) => body.includes('FH_CONTINUATION_PROBE'));
+					if (!resumed?.includes('FH_SUMMARY_CONTEXT') || !resumed.includes('FH_KEPT_CONTEXT') || resumed.includes('FH_OBSOLETE_CONTEXT'))
+						throw new Error('Native compaction continuation did not preserve its summary, kept context and boundary.');
+				} finally { await close(); model.stop(true); }
+			});
+			expect(digest(join(runtime(source), 'opencode/opencode.db'))).toBe(before);
+		}, 180_000);
+	}
+
 	it('preserves paginated parent/child history and session metadata, round-trips keys and OAuth, and retries without duplicating', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-v2-transfer-'));
 		const source = await home(root, 'source');

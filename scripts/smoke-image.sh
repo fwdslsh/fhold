@@ -197,6 +197,61 @@ verify_optional_failure_isolation() {
 verify_image_metadata
 case "$kind" in
 assistant)
+	# Use the normal entrypoint and the actual Compose cache bind target. An
+	# empty mount hides image-layer files; initialization must make assets usable.
+	mkdir -p "$root/akm-cache"
+	chmod a+rwx "$root/akm-cache"
+	docker run -d --name "$container" --network none --read-only \
+		--tmpfs /tmp:rw,mode=1777 --tmpfs /home/fhold:rw,mode=0777 \
+		--tmpfs /etc/akm:rw,mode=0777 --tmpfs /opt/akm/data:rw,mode=0777 \
+		--tmpfs /stash:rw,mode=0777 --tmpfs /work:rw,mode=0777 \
+		-v "$root/akm-cache:/opt/akm/cache" \
+		-e OPENCODE_SERVER_PASSWORD=assistant-offline-assets-fixture \
+		-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE=0 -e FH_CLAUDE_REMOTE=0 \
+		-e HF_HUB_OFFLINE=1 "$image" >/dev/null
+	wait_for_health
+	verify_akm_assets() {
+	docker exec "$container" bun -e '
+		import assert from "node:assert/strict";
+		import {ensureRuntimeBinary, runtimeBinaryPath} from "/opt/fhold/tools/node_modules/akm-cli/dist/integrations/harnesses/opencode/runtime/binary.js";
+		import {hasLocalEmbeddings} from "/opt/fhold/tools/node_modules/akm-cli/dist/llm/embedders/onnx-runtime.js";
+		import {checkEmbeddingAvailability} from "/opt/fhold/tools/node_modules/akm-cli/dist/llm/embedder.js";
+		assert.equal(await ensureRuntimeBinary(), runtimeBinaryPath());
+		if (hasLocalEmbeddings()) {
+			const result = await checkEmbeddingAvailability();
+			assert.equal(result.available, true, JSON.stringify(result));
+		} else {
+			assert.equal(process.arch, "arm64", "Review upstream embedding platform support");
+		}
+		console.log("Mounted AKM cache discovery passed without network or startup installation");'
+	}
+	verify_akm_assets
+	# Preserve real existing cache bytes and a native runtime symlink on restart.
+	# The symlink still points at the actual baked executable, not a test binary.
+	docker exec "$container" bun -e '
+		import {readFileSync,writeFileSync,renameSync,symlinkSync,existsSync,chmodSync} from "node:fs";
+		import {createHash} from "node:crypto";
+		import {runtimeBinaryPath} from "/opt/fhold/tools/node_modules/akm-cli/dist/integrations/harnesses/opencode/runtime/binary.js";
+		const binary=runtimeBinaryPath(), target=binary.replace("/opt/akm/cache", "/assistant-defaults/akm-cache");
+		renameSync(binary,binary+".operator-copy"); symlinkSync(target,binary);
+		const model="/opt/akm/cache/models/Xenova/bge-small-en-v1.5/config.json";
+		if(existsSync(model)){chmodSync(model,0o600);writeFileSync(model,readFileSync(model,"utf8")+"\n");}
+		writeFileSync("/opt/akm/cache/operator-sentinel","preserve native cache");
+		writeFileSync("/opt/akm/cache/operator-before.json",JSON.stringify({binary,target,modelHash:existsSync(model)?createHash("sha256").update(readFileSync(model)).digest("hex"):null}));'
+	docker stop "$container" >/dev/null
+	docker start "$container" >/dev/null
+	wait_for_health
+	verify_akm_assets
+	docker exec "$container" bun -e '
+		import assert from "node:assert/strict";
+		import {readFileSync,readlinkSync} from "node:fs";
+		import {createHash} from "node:crypto";
+		const previous=JSON.parse(readFileSync("/opt/akm/cache/operator-before.json","utf8"));
+		assert.equal(readlinkSync(previous.binary),previous.target);
+		assert.equal(readFileSync("/opt/akm/cache/operator-sentinel","utf8"),"preserve native cache");
+		if(previous.modelHash)assert.equal(createHash("sha256").update(readFileSync("/opt/akm/cache/models/Xenova/bge-small-en-v1.5/config.json")).digest("hex"),previous.modelHash);
+		console.log("Existing cache bytes and native symlink preserved through offline restart");'
+	docker rm -f "$container" >/dev/null
 	mkdir -p \
 		"$root/data/.cache/opencode" \
 		"$root/data/.config/opencode" \
@@ -233,6 +288,7 @@ assistant)
 		-v "$root/system:/etc/opencode:ro" \
 		-v "$root/config:/home/fhold/.config/opencode" \
 		-v "$root/akm.json:/etc/akm/config.json:ro" \
+		-v "$root/akm-cache:/opt/akm/cache" \
 		-v "$root/knowledge:/stash" \
 		-v "$root/knowledge/secrets/auth.json:/home/fhold/.local/share/opencode/auth.json" \
 		-v "$root/workspace:/work" \
