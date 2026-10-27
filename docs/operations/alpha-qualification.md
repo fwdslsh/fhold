@@ -241,7 +241,7 @@ should be explicitly declared. Native dependency compatibility rules are unchang
 
 `0.1.2610041911-alpha.4` adds native managed harness policies, the global
 `--name`/`-n` instance selector and a public Claude Desktop extension download
-link. See [upgrade notes](../managing-fhold.md#upgrade-from-alpha3) for retained
+link. See [upgrade notes](../managing-fhold.md#update-an-existing-installation) for retained
 homes, compatible image pins and custom-hook behavior. The
 [managed-policy review](managed-harness-policy-verification.md) records source
 and real-image checks; each alpha.4 artifact still requires its own release gate.
