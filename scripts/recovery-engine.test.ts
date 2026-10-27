@@ -68,9 +68,10 @@ async function savedManifest(f: Awaited<ReturnType<typeof fixture>>) {
 	return { head, manifest };
 }
 
-describe('AKM process lock recovery boundary', () => {
+describe('native transient process state recovery boundary', () => {
 	const uuid = '12345678-1234-1234-1234-123456789abc';
 	const locks = [
+		['home', '.claude/bridge-spawn/session-fixture/append-system-prompt.txt'],
 		['akmData', 'index.rebuild.lock'],
 		['akmData', 'index.db.write.lock'],
 		['akmData', 'akm.lock.lck'],
@@ -85,6 +86,9 @@ describe('AKM process lock recovery boundary', () => {
 		['akmConfig', `config.json.lck.tmp-123-${uuid}`]
 	];
 	const durable = [
+		['home', '.claude/projects/fixture/session.jsonl'],
+		['home', '.claude/.credentials.json'],
+		['home', '.claude/bridge-spawn-notes/append-system-prompt.txt'],
 		['akmData', 'akm.lock'],
 		['akmData', 'index.rebuild.lock.notes'],
 		['akmData', 'akm.lock.lck.backup'],
@@ -99,7 +103,7 @@ describe('AKM process lock recovery boundary', () => {
 			const f = await fixture();
 			const config = {
 				...f.config,
-				selection: explicitParents ? { paths: [f.roots.akmData, f.roots.akmConfig] } : {}
+				selection: explicitParents ? { paths: [f.roots.home, f.roots.akmData, f.roots.akmConfig] } : {}
 			};
 			for (const [root, name] of durable) {
 				const target = path.join(f.roots[root], name);
@@ -159,7 +163,7 @@ describe('AKM process lock recovery boundary', () => {
 							: variant === 'versioned'
 								? { version: 1, paths: [f.roots.akmData] }
 								: {};
-			const saved = createCatalog(f.roots, selection, { historicalProcessLocks: true });
+			const saved = createCatalog(f.roots, selection, { historicalProcessState: true });
 			Object.assign(manifest, saved.metadata);
 			if (manifest.catalog !== 1) manifest.selection = saved.selection;
 			if (manifest.catalog === 3) manifest.networkMounts = [];
@@ -254,6 +258,69 @@ describe('AKM process lock recovery boundary', () => {
 			expect(replacement.status().owned).toBe(false);
 			expect(await stat(path.join(f.roots.akmData, 'akm.lock')).catch(() => null)).toBeNull();
 		});
+});
+
+describe('Claude bridge shutdown capture', () => {
+	test('temporary bridge cleanup cannot prevent saving and restoring the latest completed reply', async () => {
+		const f = await fixture();
+		const bridge = path.join(f.roots.home, '.claude/bridge-spawn/fixture/append-system-prompt.txt');
+		const history = path.join(f.roots.home, '.claude/projects/fixture/session.jsonl');
+		const control = path.join(f.roots.home, '.claude/aaa-control');
+		for (const file of [bridge, history]) await mkdir(path.dirname(file), { recursive: true });
+		const previous = [{ uuid: 'first', type: 'assistant', message: { content: 'earlier reply' } }];
+		const latest = [
+			...previous,
+			{
+				uuid: 'latest',
+				type: 'assistant',
+				message: { content: 'completed reply immediately before Stop' }
+			}
+		];
+		await writeFile(bridge, 'synthetic per-spawn prompt carrier');
+		await writeFile(control, 'before');
+		await writeFile(history, previous.map((message) => JSON.stringify(message)).join('\n'));
+		const store = createDirectoryStore(f.config.url);
+		let stopping = false;
+		let removed = false;
+		const engine = createEngine(f.config, {
+			...f.options,
+			store: {
+				...store,
+				async createImmutable(key, bytes, owner, options) {
+					if (stopping && bytes.toString() === 'after') {
+						// Inventory is complete. Reproduce native cleanup before the next
+						// member read, without changing the engine or weakening ENOENT.
+						await rm(bridge);
+						removed = true;
+					}
+					return store.createImmutable(key, bytes, owner, options);
+				}
+			}
+		});
+		await engine.initialize();
+		await engine.acquireRestore();
+		await engine.checkpoint();
+		const priorGeneration = engine.status().generation;
+		await writeFile(history, latest.map((message) => JSON.stringify(message)).join('\n'));
+		await writeFile(control, 'after');
+		stopping = true;
+		await engine.checkpoint();
+		expect(removed).toBe(true);
+		expect(engine.status().generation).not.toBe(priorGeneration);
+		expect(engine.status().checkpointFailure).toBeNull();
+		await engine.release();
+		expect(
+			(await savedManifest(f)).manifest.members.some((member) =>
+				member.path.includes('/bridge-spawn/')
+			)
+		).toBe(false);
+		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
+		const replacement = f.engine();
+		await replacement.acquireRestore();
+		expect((await readFile(history, 'utf8')).split('\n').map((line) => JSON.parse(line))).toEqual(latest);
+		expect(await stat(bridge).catch(() => null)).toBeNull();
+		await replacement.release();
+	});
 });
 
 	describe('ordinary recovery image upgrades', () => {
