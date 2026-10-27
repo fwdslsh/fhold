@@ -1372,11 +1372,6 @@ describe('Admin static security boundary', () => {
 		expect(recallStatusLabel({ status: 'installed' })).toBe('Installed');
 		expect(recallStatusLabel({ status: 'approval-needed' })).toBe('Approval needed');
 		expect(recallStatusLabel({ status: 'ready' })).toBe('Ready');
-		expect(recallStatusLabel({ status: 'ready', managed: true })).toBe('Managed · ready');
-		expect(recallStatusLabel({ status: 'installed', managed: true })).toBe('Managed · disabled');
-		expect(recallStatusLabel({ status: 'approval-needed', managed: true })).toBe(
-			'Managed · needs attention'
-		);
 		expect(recallStatusLabel(undefined)).toBe('Not checked');
 		expect(remoteStageText({ stage: 'sandbox' })).toContain('safely run Codex');
 		expect(remoteStageText({ stage: 'container-isolation' })).toContain('explicitly selected');
@@ -1525,7 +1520,7 @@ describe('Admin static security boundary', () => {
 		expect(control('remote-recall').checked).toBe(false);
 		await control('remote-cancel').listeners.get('click')?.({});
 	});
-	it('shows managed recall without offering personal hook approval or disable', async () => {
+	it('shows native approved recall while keeping operator review and disable available', async () => {
 		const button = new Control();
 		button.dataset.codexRecallReview = '';
 		selector('[data-remote-enable], [data-remote-connect], [data-codex-recall-review]', button);
@@ -1534,15 +1529,14 @@ describe('Admin static security boundary', () => {
 			codexRecall: async (request: { action: string }) => {
 				calls.push(request.action);
 				return {
-					managed: true,
 					status: 'ready',
 					digest: 'a'.repeat(64),
 					hooks: [
 						{
 							event: 'sessionStart',
-							command: 'managed handler',
-							sourcePath: '/etc/codex/hooks.json',
-							trust: 'managed',
+							command: 'native plugin handler',
+							sourcePath: '/installed/plugin.json',
+							trust: 'trusted',
 							enabled: true
 						}
 					]
@@ -1552,13 +1546,11 @@ describe('Admin static security boundary', () => {
 		bindRemoteEvents();
 		button.listeners.get('click')?.({});
 		await Bun.sleep(1);
-		expect(control('remote-recall').disabled).toBe(true);
-		expect(control('remote-recall').required).toBe(false);
-		expect(control('remote-begin').hidden).toBe(true);
-		expect(control('remote-recall-disable').hidden).toBe(true);
-		expect(control('codex-recall-status').textContent).toBe('Managed · ready');
-		await control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
-		await control('remote-recall-disable').listeners.get('click')?.({});
+		expect(control('remote-recall').disabled).toBe(false);
+		expect(control('remote-recall').required).toBe(true);
+		expect(control('remote-begin').hidden).toBe(false);
+		expect(control('remote-recall-disable').hidden).toBe(false);
+		expect(control('codex-recall-status').textContent).toBe('Ready');
 		expect(calls).toEqual(['review']);
 		await control('remote-cancel').listeners.get('click')?.({});
 	});

@@ -7,7 +7,7 @@ Only a future release with explicit end-to-end validation may remove that label.
 This status does not apply to the core fhold agent or Claude Desktop MCPB.
 
 Use matching CLI/Admin and Assistant releases. Guided setup uses the image-baked
-helpers; built-in recall hooks use native managed registration. Replacing source
+helpers; built-in recall hooks use native plugin registration and consent. Replacing source
 or one frontend does not update a running image. See [upgrading](managing-fhold.md#upgrade-from-alpha3)
 and [managed configuration](managed-harness-configuration.md).
 
@@ -104,7 +104,7 @@ ships a runnable `scripts/setup.sh` backed by the same native setup helper as
 CLI/Admin, retaining the device
 login process while you open its link and enter the one-time code in your browser.
 It reuses existing ChatGPT sign-in, preserves configured sandbox intent and guides
-managed AKM hook verification. It installs nothing.
+native AKM hook verification. It installs nothing.
 
 The skill requires Bash-capable access. The background supervisor already starts
 by default and retries while waiting for native sign-in/consent. No startup
@@ -231,32 +231,30 @@ settings, accounts, additional plugins, and trust decisions are preserved.
 Run `claude plugin list`, `claude plugin details akm`, or
 `codex plugin list --json` inside Assistant to inspect `akm@akm-plugins`.
 Claude provides the five discovery/feedback/remember commands and AKM skill;
-Codex uses the AKM skill and CLI forms. The built-in lifecycle hooks are
-registered as native system-managed handlers and need no personal approval.
+Codex uses the AKM skill and CLI forms. The built-in lifecycle hooks run through the installed native plugins exactly
+once. Codex uses native hook review/consent; fhold does not fabricate approvals
+or suppress unrelated user/project/plugin hooks.
 Task permissions follow the operator's native policy; account sign-in and
 remote consent remain separate.
-All harnesses use `/stash` knowledge and aligned AKM versions. Automatic learning
-and session extraction remain off in the native remote workers
-(`AKM_AUTO_LEARNING=0`, `AKM_AUTO_MEMORY=0`). Image tests verify real session hooks
+All harnesses use `/stash` knowledge and aligned AKM versions. Native AKM
+learning and memory settings remain in control. The pinned Codex plugin has
+prompt learning but no SessionEnd transcript extraction hook; fhold does not
+invent extraction parity. Image tests verify real session hooks
 and knowledge recall in each harness, separately from vendor sign-in.
 See [Claude's standard plugin installation](https://code.claude.com/docs/en/discover-plugins)
 and [Codex plugins](https://developers.openai.com/plugins/build/plugins).
 
 ## Codex automatic knowledge recall
 
-On current images, automatic knowledge recall is managed by instance policy.
+Automatic knowledge recall uses the native AKM plugin and operator hook consent.
 AKM executes a session-start command to
 check its CLI and load bundle hints, then a pre-prompt command that passes the
 prompt to `akm curate` and adds relevant knowledge to Codex. Configured search or
 embedding services may be contacted. This does not enable automatic memory
 writes, approve tools, or bypass Guardian/native sandboxing.
 
-Admin **Apps → Codex → Review knowledge recall** checks the native managed
-inventory independently from remote startup and sign-in. **Managed · ready**
-means all expected handlers are enabled by policy; personal approve/disable
-controls are unavailable. CLI setup also skips the personal approval question.
-
-Older images without managed hooks retain these states and the review flow below:
+Admin **Apps → Codex → Review knowledge recall** checks native plugin hooks
+independently from remote startup and sign-in:
 
 - **Installed**: hooks are installed but automatic recall is off.
 - **Approval needed**: hooks are new/changed, not yet trusted, or only partly enabled.
@@ -271,7 +269,7 @@ is used. Unrelated user/project/plugin hooks are left alone. Approval and opt-ou
 survive container recreation and apply to new sessions. Admin also offers
 **Turn off automatic knowledge recall** without changing remote startup.
 
-On older images CLI setup/enable offers the same choice. To review separately:
+CLI setup/enable offers the same native consent choice. To review separately:
 
 ```sh
 fhold remote recall codex

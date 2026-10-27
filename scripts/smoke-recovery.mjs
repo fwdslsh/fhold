@@ -604,15 +604,23 @@ async function qualifyRuntimeRecovery() {
 		}
 	}
 	await verifyNativeFiles(first);
-	const codexInventory = JSON.parse(
-		await execBun(
-			first.id,
-			`import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);console.log(JSON.stringify({status:review.status,managed:review.managed}));`
-		)
-	);
-	assert.equal(codexInventory.status, 'ready', 'managed hooks are ready without user approval');
-	assert.equal(codexInventory.managed, true);
-	report.checks.nativeCodexInitializedWithoutAccountOrApproval = true;
+	async function nativeCodexInventory(container) {
+		return JSON.parse(await execBun(container.id,
+			`import{readFile}from'node:fs/promises';import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);const userConfig=await readFile('/home/fhold/.codex/config.toml','utf8').catch(()=>null);console.log(JSON.stringify({status:review.status,digest:review.digest,hooks:review.hooks,userConfig}));`
+		));
+	}
+	const codexInventory = await nativeCodexInventory(first);
+	assert.ok(codexInventory.hooks.length > 0, 'real native hooks must be discoverable');
+	assert.ok(codexInventory.hooks.every((hook) => hook.enabled));
+	if (sourceImage === image) {
+		assert.equal(codexInventory.status, 'approval-needed', 'fresh native hooks require explicit consent');
+	} else {
+		// The published source may have used system-managed registration. The
+		// current image must still honor its own native consent after upgrade.
+		assert.ok(['ready', 'approval-needed'].includes(codexInventory.status));
+	}
+	report.codexHookStatusBeforeRecovery = codexInventory.status;
+	report.checks.nativeCodexInventoryInitializedWithoutAccount = true;
 	const codexPresence = JSON.parse(
 		await execBun(
 			first.id,
@@ -768,6 +776,20 @@ async function qualifyRuntimeRecovery() {
 		`import assert from'node:assert/strict';import{Database}from'bun:sqlite';const presence=${JSON.stringify(codexPresence)};for(const[name,initialized]of Object.entries(presence)){if(!initialized)continue;const db=new Database('/home/fhold/.codex/'+name,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');db.close();}console.log('initialized pinned native Codex database catalog restored');`
 	);
 	report.checks.nativeCodexInitializedDatabasesRecovered = true;
+	const restoredCodexInventory = await nativeCodexInventory(second);
+	assert.equal(restoredCodexInventory.status, 'approval-needed', 'recovery must not silently approve native hooks');
+	assert.ok(restoredCodexInventory.hooks.length > 0);
+	assert.ok(restoredCodexInventory.hooks.every((hook) => hook.enabled));
+	if (codexInventory.userConfig !== null) {
+		assert.equal(restoredCodexInventory.userConfig, codexInventory.userConfig,
+			'recovery preserves existing native user settings/consent bytes');
+	}
+	if (sourceImage === image) {
+		assert.equal(restoredCodexInventory.digest, codexInventory.digest);
+		assert.deepEqual(restoredCodexInventory.hooks, codexInventory.hooks);
+	}
+	report.codexHookStatusAfterRecovery = restoredCodexInventory.status;
+	report.checks.nativeCodexInventoryAndConsentRecovered = true;
 	report.checks.syntheticKnowledgeWorkspaceAccountTrustRestored = true;
 	report.checks.schedulerDisabled = true;
 	await stop(second);

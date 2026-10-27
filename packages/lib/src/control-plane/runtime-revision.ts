@@ -9,32 +9,8 @@ import { readStackConfig } from './stack-config.js';
 const RECEIPT = 'state/applied-runtime.json';
 export type RestartStatus = { required: boolean; error?: string };
 
-/**
- * Predict only the image-owned exact default-engine conversion, without writes.
- * Optional malformed/custom settings remain unchanged and owned by the image.
- */
-export function upgradedScheduledEngineContents(homeDir: string): Buffer | undefined {
-	try {
-		assertSafePortablePath(homeDir, 'config/akm/config.json', true);
-		const config = JSON.parse(readFileSync(join(homeDir, 'config/akm/config.json'), 'utf8')) as {
-			engines?: { scheduled?: { bin?: unknown; args?: unknown } };
-		};
-		const engine = config?.engines?.scheduled;
-		const args = engine?.args;
-		if (
-			engine?.bin !== 'fhold-opencode-run' || !Array.isArray(args) ||
-			args.length !== 5 || args[0] !== 'run' || args[1] !== '--attach' ||
-			args[2] !== 'http://127.0.0.1:4096' || args[3] !== '--agent' || args[4] !== 'scheduled'
-		) return undefined;
-		args[1] = '--server';
-		return Buffer.from(`${JSON.stringify(config, null, 2)}\n`);
-	} catch {
-		return undefined;
-	}
-}
-
 /** Hash startup inputs, not mutable agent data or native provider login files. */
-export function runtimeRevision(homeDir: string, upgradedAkmConfig?: Buffer): string {
+export function runtimeRevision(homeDir: string): string {
 	const read = readStackConfig(homeDir);
 	if (!read.ok) throw new Error(read.error);
 	const { credentials: _credentials, ...intent } = read.config;
@@ -82,8 +58,7 @@ export function runtimeRevision(homeDir: string, upgradedAkmConfig?: Buffer): st
 		const absolute = join(homeDir, path);
 		const digest = existsSync(absolute)
 			? createHash('sha256').update(
-				path === 'config/akm/config.json' && upgradedAkmConfig !== undefined
-					? upgradedAkmConfig : readFileSync(absolute)
+				readFileSync(absolute)
 			).digest('hex')
 			: null;
 		hash.update(JSON.stringify([path, digest]));

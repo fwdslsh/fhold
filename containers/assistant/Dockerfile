@@ -74,8 +74,6 @@ RUN mkdir -p /akm-marketplace/claude \
       akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/.agents/plugins/marketplace.json \
       akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/.claude-plugin/marketplace.json \
       akm-plugins-1b272d8ddc07530e7378bcd76c7ff57a70d1f1fe/LICENSE
-COPY scripts/bake-managed-hooks.mjs /repo/scripts/bake-managed-hooks.mjs
-RUN bun /repo/scripts/bake-managed-hooks.mjs /managed-defaults
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
 RUN mkdir -p /native-defaults/codex \
@@ -120,7 +118,6 @@ COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_mod
 COPY containers/assistant/tools/package.json /opt/fhold/tools/package.json
 COPY containers/assistant/entrypoint.sh /usr/local/bin/fhold-assistant
 COPY containers/assistant/healthcheck.sh /usr/local/bin/fhold-healthcheck
-COPY containers/assistant/opencode-run.sh /usr/local/bin/fhold-opencode-run
 COPY containers/assistant/fhold-task.mjs /usr/local/bin/fhold-task
 COPY containers/assistant/fhold-recovery.mjs /usr/local/bin/fhold-recovery
 COPY containers/assistant/recovery /usr/local/bin/recovery
@@ -133,7 +130,6 @@ COPY --from=tools /fhold-plugins /fhold-plugins
 COPY plugins/fhold /opt/fhold/tools/plugins/fhold
 COPY --from=tools /fhold-bundle /fhold-bundle
 COPY --from=tools /native-defaults /native-defaults
-COPY --from=tools /managed-defaults/ /
 # Native system configuration exists before the non-root entrypoint starts.
 COPY --from=tools /assistant-defaults/system/assistant/ /etc/opencode/
 COPY --from=tools /assistant-defaults/system/codex/ /etc/codex/
@@ -144,7 +140,6 @@ ARG VCS_REF
 ARG BUILD_DATE
 ENV PLATFORM_VERSION=${PLATFORM_VERSION}
 LABEL org.opencontainers.image.title="fhold Assistant" \
-    dev.fwdslsh.fhold.managed-harness-policy="1" \
     dev.fwdslsh.fhold.recovery-partial-resume="1" \
     org.opencontainers.image.description="A home for your personal AI: OpenCode, persistent knowledge and recurring work" \
     org.opencontainers.image.source="https://github.com/fwdslsh/fhold" \
@@ -167,7 +162,7 @@ RUN test -n "$PLATFORM_VERSION" \
     done \
     && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && chmod 0755 /usr/local/bin/fhold-assistant /usr/local/bin/fhold-task /usr/local/bin/fhold-recovery /usr/local/bin/fhold-remote /usr/local/bin/fhold-remote-setup /usr/local/bin/fhold-codex-recall.mjs /usr/local/bin/fhold-healthcheck /usr/local/bin/fhold-opencode-run \
+    && chmod 0755 /usr/local/bin/fhold-assistant /usr/local/bin/fhold-task /usr/local/bin/fhold-recovery /usr/local/bin/fhold-remote /usr/local/bin/fhold-remote-setup /usr/local/bin/fhold-codex-recall.mjs /usr/local/bin/fhold-healthcheck \
     && ln -s fhold-remote /usr/local/bin/fhold-remote.mjs \
     && mkdir -p /home/fhold /etc/opencode /etc/akm /opt/akm/cache /opt/akm/data/state /stash /work \
     && chown -R fhold:fhold /home/fhold /etc/akm /opt/akm /stash /work \
@@ -176,9 +171,6 @@ RUN test -n "$PLATFORM_VERSION" \
 ENV HOME=/home/fhold \
     OPENCODE_CONFIG_DIR=/etc/opencode \
     OPENCODE_CONFIG=/home/fhold/.config/opencode/opencode.json \
-    OPENCODE_DISABLE_PROJECT_CONFIG=true \
-    OPENCODE_DISABLE_CLAUDE_CODE=true \
-    OPENCODE_DISABLE_EXTERNAL_SKILLS=true \
     OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \
     OPENCODE_PORT=4096 \
     AKM_BUNDLE_DIR=/stash \
@@ -186,11 +178,8 @@ ENV HOME=/home/fhold \
     AKM_CACHE_DIR=/opt/akm/cache \
     AKM_DATA_DIR=/opt/akm/data \
     AKM_STATE_DIR=/opt/akm/data/state \
-    AKM_AUTO_MEMORY=0 \
-    AKM_AUTO_LEARNING=0 \
     AKM_REDACT_HIGH_ENTROPY=1 \
     AKM_REDACT_PII=1 \
-    FH_AUTOMATIC_MEMORY=1 \
     FH_SCHEDULER_ENABLED=1 \
     DISABLE_AUTOUPDATER=1 \
     BUN_OPTIONS="--no-env-file --config=/dev/null" \

@@ -123,15 +123,10 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		AKM_CONFIG_DIR: '/etc/akm',
 		AKM_DATA_DIR: '/opt/akm/data',
 		AKM_STATE_DIR: '/opt/akm/data/state',
-		AKM_AUTO_MEMORY: '0',
-		AKM_AUTO_LEARNING: '0',
 		AKM_REDACT_HIGH_ENTROPY: '1',
 		AKM_REDACT_PII: '1',
 		HOME: '/home/fhold',
 		OPENCODE_CONFIG_DIR: '/etc/opencode',
-		OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
-		OPENCODE_DISABLE_CLAUDE_CODE: 'true',
-		OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
 		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		OPENCODE_API_URL: 'http://127.0.0.1:4096',
 		OPENCODE_PORT: '4096',
@@ -174,7 +169,8 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 	assistant: new Set([
 		'OPENCODE_CONFIG',
 		'TZ',
-		'FH_AUTOMATIC_MEMORY',
+		'AKM_AUTO_MEMORY',
+		'AKM_AUTO_LEARNING',
 		'FH_CODEX_REMOTE',
 		'FH_CODEX_SANDBOX',
 		'FH_CLAUDE_REMOTE',
@@ -420,7 +416,7 @@ function auditCoreEnvironment(
 		}
 		if (!validTimezone(environment.TZ))
 			issues.push('service assistant must set a valid IANA timezone');
-		if (!['0', '1'].includes(String(environment.FH_AUTOMATIC_MEMORY))) {
+		if (!['0', '1'].includes(String(environment.AKM_AUTO_MEMORY))) {
 			issues.push('service assistant automatic memory must be 0 or 1');
 		}
 	}
@@ -703,7 +699,7 @@ export function auditCompose(
 					issues.push('assistant timezone must match StackConfig intent');
 				}
 				if (
-					environment.FH_AUTOMATIC_MEMORY !==
+					environment.AKM_AUTO_MEMORY !==
 					(stackConfig.config.assistant.automaticMemory ? '1' : '0')
 				) {
 					issues.push('assistant automatic memory must match StackConfig intent');

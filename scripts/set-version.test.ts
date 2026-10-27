@@ -22,7 +22,7 @@ describe('release version contract', () => {
   const ordered = ['0.1.2612312359-alpha.1', '0.1.2612312359-alpha.2', '0.1.2612312359-alpha.10', '0.1.2612312359-beta.1', '0.1.2612312359-rc.1', '0.1.2612312359', '0.1.2701010000-alpha.1'];
   for (let i = 1; i < ordered.length; i++) expect(compareVersions(ordered[i - 1], ordered[i])).toBe(-1);
  });
- test('freezes retry identity and refuses collisions or regressed clocks', () => {
+ test('freezes public retry identity and refuses collisions or regressed clocks', () => {
   const input = { version, revision: 'a'.repeat(40), contentSha256: 'b'.repeat(64) };
   const intent = releaseIntent(input);
   expect(releaseIntent({ ...input, existing: intent })).toBe(intent);
@@ -32,6 +32,16 @@ describe('release version contract', () => {
   expect(() => releaseIntent({ ...input, version: '1.0.260900-alpha', previous: version })).toThrow('clock regressed');
   expect(releaseIntent({ ...input, version: '0.1.2610020008-alpha.2', previous: version }).version).toContain('alpha.2');
   expect(() => releaseIntent({ ...input, version: '0.1.2610020008', previous: '0.1.2610020008' })).toThrow('collision');
+ });
+ test('unpublished candidate revisions can share a provisional version with fresh evidence', () => {
+  const input = { version: '0.3.261008-beta', revision: 'a'.repeat(40), contentSha256: 'b'.repeat(64), previous: '0.3.261007-beta' };
+  const first = releaseIntent(input);
+  const rebuilt = releaseIntent({ ...input, revision: 'c'.repeat(40), contentSha256: 'd'.repeat(64) });
+  expect(rebuilt.version).toBe(first.version);
+  expect(rebuilt.revision).not.toBe(first.revision);
+  expect(first.contentSha256).toBe(input.contentSha256);
+  // Once public, the same version must retain the original identity.
+  expect(() => releaseIntent({ ...input, revision: rebuilt.revision, contentSha256: rebuilt.contentSha256, existing: first })).toThrow('Immutable');
  });
  test('accepts the 0.2 boundary and next-day build reset while freezing retry identity', () => {
   const input = { version: '0.2.2610081-beta.1', revision: 'a'.repeat(40), contentSha256: 'b'.repeat(64) };

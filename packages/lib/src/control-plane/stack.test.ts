@@ -25,7 +25,7 @@ describe('release surface', () => {
 		expect(compose.match(/cap_drop: \[ALL\]/g)).toHaveLength(4);
 		expect(compose.match(/no-new-privileges:true/g)).toHaveLength(4);
 		expect(compose.match(/init: true/g)).toHaveLength(4);
-		expect(compose.match(/OPENCODE_DISABLE_PROJECT_CONFIG: "true"/g)).toHaveLength(1);
+		expect(compose).not.toContain('OPENCODE_DISABLE_PROJECT_CONFIG');
 		expect(compose).toContain('${FH_HOME:?}/config/assistant:/home/fhold/.config/opencode');
 		expect(compose).toContain('${FH_HOME:?}/system/assistant:/etc/opencode:ro');
 		expect(compose).not.toContain(':/etc/opencode/opencode.json:ro');
@@ -64,12 +64,10 @@ describe('release surface', () => {
 		expect(full).toContain("Assistant's OpenCode permission configuration");
 	});
 
-	it('ships a restricted unattended profile for durable recurring tasks', () => {
-		const scheduled = asset('packages/skeleton/system/assistant/agents/scheduled.md');
-		expect(scheduled).toContain('action: "*", resource: "*", effect: deny');
-		expect(scheduled).toContain('action: "webfetch", resource: "*", effect: allow');
-		expect(scheduled).toContain('action: "read", resource: "/stash/secrets/*", effect: deny');
-		expect(scheduled).toContain('action: "edit", resource: "/stash/inbox/*", effect: allow');
+	it('uses native task engine and agent selection without a product sandbox', () => {
+		const config = JSON.parse(asset('packages/skeleton/config/akm/config.json'));
+		expect(config.harnesses).toEqual({ opencode: { args: ['run', '--standalone'] } });
+		expect(config.engines).toBeUndefined();
 	});
 
 	it('keeps shared instructions policy-aware without forbidding full remote work', () => {
@@ -78,7 +76,7 @@ describe('release surface', () => {
 		expect(instructions).toContain('The `remote-full` profile may use');
 		expect(instructions).toContain('explicit nonsecret knowledge saves');
 		expect(instructions).toContain('Native tool approvals still apply');
-		expect(instructions).toContain('about automatic capture, not an explicit save');
+		expect(instructions).toContain('native AKM plugins');
 		expect(instructions).not.toContain('not the Guardian MCP endpoint');
 	});
 });

@@ -50,10 +50,7 @@ jobs:
         if: inputs.scope != 'tools'
         run: bun run --cwd packages/claude-desktop pack
       - name: Verify the embedded Skeleton
-        run: |
-          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'system/stack/stack.compose.yml'
-          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'system/assistant/agents/scheduled.md'
-          tar -tzf packages/cli/embedded/skeleton.tar.gz | grep -qx 'config/akm/config.json'
+        run: bun test scripts/packaged-assets.test.ts
       - name: Bundle the optional admin app
         run: bun run --cwd packages/electron bundle
       - name: Qualify the Admin renderer in Chromium
@@ -61,7 +58,7 @@ jobs:
         run: bun run --cwd packages/electron test:providers:browser
       - name: Validate shell entrypoints
         if: inputs.scope != 'tools'
-        run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh containers/assistant/opencode-run.sh containers/guardian/entrypoint.sh
+        run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh containers/guardian/entrypoint.sh
       - name: Validate the materialized Compose project
         if: inputs.scope != 'tools'
         env:

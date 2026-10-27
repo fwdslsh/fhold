@@ -95,14 +95,8 @@ export async function diagnoseStack(
 		),
 		providerAuthCheck(join(state.homeDir, 'knowledge', 'secrets', 'auth.json')),
 		fileCheck(
-			'scheduled task engine',
+			'AKM native configuration',
 			join(state.homeDir, 'config', 'akm', 'config.json'),
-			true,
-			false
-		),
-		fileCheck(
-			'scheduled agent profile',
-			join(state.homeDir, 'system', 'assistant', 'agents', 'scheduled.md'),
 			true,
 			false
 		)

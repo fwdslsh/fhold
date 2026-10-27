@@ -246,6 +246,24 @@ function body(result: { structuredContent?: unknown }): Record<string, unknown> 
 }
 
 describe('full fhold MCP gateway', () => {
+	it('reapplies current automatic-context authority after credential policy changes and on existing sessions', async () => {
+		const assistant = new FakeAssistant();
+		let handle: unknown;
+		for (const policy of ['full', 'read', 'full'] as const) {
+			const { client, server } = await connect({ assistant, handleKey: 'k'.repeat(64), policy, moderate: allow });
+			try {
+				const result = await client.callTool({ name: 'fhold.agent.run', arguments: {
+					message: 'Return the synthetic result', ...(handle ? { session: handle } : {}), waitMs: 0
+				} });
+				expect(result.isError).not.toBe(true);
+				handle = body(result).session;
+				const session = [...assistant.sessions.values()][0];
+				expect(session.metadata?.fholdGuardianKnowledge).toBe(policy === 'full');
+				// Existing sessions from before this integration have no context flag.
+				if (policy === 'read') delete session.metadata?.fholdGuardianKnowledge;
+			} finally { await client.close(); await server.close(); }
+		}
+	});
 	const socketIt = process.env.CI === 'true' || process.env.FH_SOCKET_TESTS === '1' ? it : it.skip;
 	socketIt(
 		'keeps real MCP HTTP streams alive through a quiet tool run without replaying work',

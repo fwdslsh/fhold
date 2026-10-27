@@ -44,7 +44,7 @@ http.createServer(async (req,res) => {
     let input='';for await(const chunk of req)input+=chunk;
     const body=JSON.parse(input);
     const supplied=JSON.stringify(body.messages);
-    const text=supplied.includes('Classify the following untrusted JSON string') ? JSON.stringify({verdict:'block',reason:'Controlled native moderator verdict'}) : supplied.includes('internal memory extraction') ? JSON.stringify({facts:[{fact:'The user prefers jasmine tea.',evidence:'I prefer jasmine tea.',confidence:0.95}]}) : 'FH_READY';
+    const text=supplied.includes('Classify the following untrusted JSON string') ? JSON.stringify({verdict:'block',reason:'Controlled native moderator verdict'}) : 'FH_READY';
     requests.push({path,method:req.method,model:body.model,tools:body.tools?.length||0,stream:body.stream===true});
     const usage={prompt_tokens:1,completion_tokens:1,total_tokens:2};
     if(!body.stream)return json({id:'qa',object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:text},finish_reason:'stop'}],usage});
@@ -314,8 +314,8 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				['system/codex/requirements.toml', '/etc/codex/requirements.toml'],
 				['system/claude/managed-settings.json', '/etc/claude-code/managed-settings.json']
 			]) assert.equal((await execute('docker', ['exec', cid, 'cat', target])).stdout, readFileSync(join(home, source), 'utf8'));
-			await execute('docker', ['exec', cid, 'test', '-s', '/etc/codex/hooks.json']);
-			await execute('docker', ['exec', cid, 'test', '-s', '/etc/claude-code/managed-settings.d/10-fhold.json']);
+			await execute('docker', ['exec', cid, 'test', '!', '-e', '/etc/codex/hooks.json']);
+			await execute('docker', ['exec', cid, 'test', '!', '-e', '/etc/claude-code/managed-settings.d/10-fhold.json']);
 			const effective = await readAssistantConfig(home);
 			assert.deepEqual(effective.permissions, JSON.parse(readFileSync(managedPaths[0], 'utf8')).permissions);
 			const writableConfig = mounts.filter(
@@ -409,20 +409,20 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			);
 			const userConfigBeforeRestart = digest(preferencesPath);
 			const authBeforeRestart = await authIds();
-			// Model the prior release's persisted, operator-owned AKM config.
+			// Current native harness settings belong to the operator. Restart must
+			// preserve them exactly, without a fhold engine conversion/default reset.
 			const akmPath = join(home, 'config/akm/config.json');
-			const oldAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
-			oldAkm.engines.scheduled.args[1] = '--attach';
-			writeFileSync(akmPath, JSON.stringify(oldAkm));
+			const operatorAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+			operatorAkm.harnesses.opencode.agent = 'build';
+			const operatorAkmBytes = JSON.stringify(operatorAkm, null, 2);
+			writeFileSync(akmPath, operatorAkmBytes);
 			await run(['restart']);
 			await waitForAssistant(home);
-			const upgradedAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
-			assert.equal(restartStatus(home).required, false, 'One healthy normal restart applies the converted engine');
-			oldAkm.engines.scheduled.args[1] = '--server';
-			assert.deepEqual(
-				upgradedAkm,
-				oldAkm,
-				'Normal startup upgrades the exact shipped scheduler arguments and preserves all other settings'
+			assert.equal(restartStatus(home).required, false, 'One healthy normal restart applies current native configuration');
+			assert.equal(
+				readFileSync(akmPath, 'utf8'),
+				operatorAkmBytes,
+				'Normal restart preserves operator-owned native harness configuration byte for byte'
 			);
 			await identity('after explicit CLI restart');
 			const afterRestart = await listProviderSettings(home);
@@ -529,7 +529,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 				/FH_READY/
 			);
 			stages.push(
-				'scheduled profile attached to the native server and retained a real task result in AKM history'
+				'native AKM task engine reused OpenCode provider settings and retained a real result in AKM history'
 			);
 			await syncRequests();
 			const finalAuthIds = await authIds();

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createAssistantClient, createNativeClient } from './assistant-client.js';
@@ -142,36 +141,8 @@ export async function verifyNativeGuardian(home: string, baseUrl: string, root: 
 		await stranger.client.close();
 		await stranger.server.close();
 	}
-	const fact = 'The user prefers jasmine tea.';
-	const memoryFile = join(
-		home,
-		'knowledge/memories',
-		`personal-${createHash('sha256').update(fact.toLowerCase()).digest('hex').slice(0, 24)}.md`
-	);
-	assert.equal(
-		existsSync(memoryFile),
-		false,
-		'Remote sessions must not automatically write personal memory'
-	);
-	const trusted = await native.session.create({
-		agent: 'build',
-		location: { directory: '/work' },
-		title: 'Native trusted memory qualification'
-	});
-	try {
-		await native.session.prompt({ sessionID: trusted.id, text: 'I prefer jasmine tea.' });
-		const deadline = Date.now() + 30_000;
-		while (!existsSync(memoryFile)) {
-			assert(
-				Date.now() < deadline,
-				'Trusted native completion must capture the validated memory through AKM'
-			);
-			await Bun.sleep(100);
-		}
-		assert.match(readFileSync(memoryFile, 'utf8'), /The user prefers jasmine tea/);
-	} finally {
-		await assistant.deleteSession(trusted.id, signal());
-	}
+	// Native AKM proposal-based learning is qualified by smoke-native-akm-policy,
+	// not a fhold-specific direct personal-memory file implementation.
 	const moderatorHome = join(root, 'moderator');
 	mkdirSync(join(moderatorHome, '.config/opencode'), { recursive: true });
 	writeFileSync(

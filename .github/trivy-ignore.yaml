@@ -10,3 +10,40 @@ vulnerabilities:
       in Guardian and Portal. Malicious Brotli data may cause memory corruption.
       No upstream package patch or alternate decoder is injected into the images.
       Re-review when Debian publishes a fix or before expiry; see release.md.
+  # Owner approved these exact Assistant findings on 2026-10-26 (October 27 UTC).
+  # Both package/version AND path must match. Raw reports remain unfiltered.
+  - id: CVE-2026-109461
+    paths:
+      - opt/fhold/tools/node_modules/@azure/msal-node/package.json
+    purls:
+      - pkg:npm/%40azure/msal-node@6.0.1
+    expired_at: 2026-11-06
+    statement: >-
+      GHSA-xcx6-jx8p-x3h5: temporary owner-approved Assistant exception for
+      Azure Identity's MSAL 6 chain. Authorization-code parameters may be
+      disclosed; fhold recovery uses managed identity, SAS or connection strings.
+      Remove after a supported Azure chain fix and Blob qualification; issue 57
+      must verify removal, with independent chain ownership retained in issue 63.
+  - id: CVE-2023-54404
+    paths:
+      - opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json
+    purls:
+      - pkg:npm/zod@3.25.76
+    expired_at: 2026-11-06
+    statement: >-
+      GHSA-mrhx-c7xc-m3w5: temporary owner-approved Assistant exception for
+      AKM's Zod 3 chain. Oversized invalid collections can exhaust memory;
+      imported/operator inputs can be hostile. Remove with a supported patched
+      AKM chain and native qualification in issue 57; issue 63 also tracks MCPB.
+  - id: CVE-2026-109869
+    paths:
+      - usr/local/lib/node_modules/npm/node_modules/undici/package.json
+    purls:
+      - pkg:npm/undici@6.29.0
+    expired_at: 2026-11-06
+    statement: >-
+      GHSA-xjj6-f33q-929c: temporary owner-approved Assistant exception for
+      npm's bundled HTTP client. Excessive content-encodings can cause an
+      unhandled-error denial of service. Official npm 12.2.1 and maintained
+      11.21.1 still bundle this version. Remove with a supported patched npm
+      release and npm/npx qualification; issue 57 must verify this separate chain.

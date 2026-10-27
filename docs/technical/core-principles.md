@@ -18,6 +18,17 @@ container gates. Runtime source or runtime dependency-resolution changes require
 a full release. Tooling-only dependency changes may rehoist unchanged packages;
 compare non-tooling consumers' resolved dependencies rather than lockfile paths.
 
+## Primary product rule
+
+fhold is primarily a prebuilt image using AKM and OpenCode for custom, private
+assistants, with minimal repeatable setup and maintenance tooling. Reuse their
+native features before adding code; remove duplicate orchestration and local
+agent/tool/memory policy. Any machinery outside this purpose requires explicit
+product-owner approval to add or retain. Existing code is not approval. fhold
+remains beta; do not add historical configuration converters or compatibility
+frameworks. Preserve operator data/settings and native consent, and maintain
+Guardian\'s actual external credential boundaries.
+
 ## Product and ownership
 
 The wordmark is **f/hold**; plain text, commands and persisted names use lowercase
@@ -97,8 +108,8 @@ native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
 Operator-owned AKM catalogs may omit that source without blocking startup;
 the built-in skills remain available through native harness integrations.
 AKM and fhold plugins are preinstalled in all three native harnesses. Their
-existing handlers are registered as native managed hooks at image build time;
-no personal approval records are fabricated. Agents run as `fhold`, with home `/home/fhold`; the native
+handlers run through one native plugin registration path, with native consent;
+user/project hooks are not suppressed and no approval records are fabricated. Agents run as `fhold`, with home `/home/fhold`; the native
 OpenCode 2 HTTP username is `opencode`. Claude and Codex sign-in guidance preserve native login processes
 across tool calls without implementing token exchange or accepting user consent.
 The image-baked `fhold-admin` skill provides redacted current-container diagnostics
@@ -230,8 +241,8 @@ whole trees. Native system policies belong to that managed allowlist:
 `system/assistant` directory; Codex/Claude use individual file mounts so image-baked
 hook files remain visible. User preferences/account state, AKM task activation and
 custom engines/bundles, Guardian settings and custom Compose stay operator-owned.
-Advanced native policy overrides require deliberate operator-owned mounts and
-separate maintenance. Old config policy files remain inert and untouched without
+Ordinary native user/project policy remains available without custom mounts.
+Explicit system-level policy mounts are operator-owned. Old config policy files remain inert and untouched without
 automatic migration, import or deletion; no refresh-untouched-seeds or startup
 configuration writer is added. New named homes live under `~/fhold/instances/<name>`; Admin's unnamed
 default is `~/fhold/instances/default`. CLI home selection is an explicit
@@ -421,20 +432,14 @@ Guardian's own authentication and request protections remain unchanged.
   native consent may prevent connection but does not silently unset that intent
   or stop OpenCode. Cancelling native sign-in preserves prior startup and sandbox
   intent; cancelling later pairing does not undo an already applied confirmed change.
-- Built-in Codex/Claude hooks use root-owned native managed files. Managed-only
-  settings prevent duplicate execution of their plugin hooks. Codex diagnostics
-  verify the exact build inventory and distinguish managed readiness from user
-  approval. Older unmanaged images retain exact-hash review and version-checked
-  writes. System policy is read-only to agents and supplied before startup;
-  user-home recovery cannot replace it. See [managed configuration](../managed-harness-configuration.md).
-  CLI/Admin verify the selected image's managed-policy capability before
-  activating the new mounts, so an older image pin cannot silently suppress
-  its only hooks. Active updates check compatibility before managed-file writes.
+- Built-in Codex/Claude hooks use one native plugin registration, preserving
+  native trust/consent and operator/project hooks. There is no managed-only
+  exclusion or image task-policy compatibility gate. Actual recovery capability
+  and ownership checks remain. See [native configuration](../managed-harness-configuration.md).
 - Provider setup finishes only after a real no-tool request; it replaces only
   the untouched moderator placeholder with the exact provider/model verified.
-- Scheduled tasks use the restricted `scheduled` profile, treat fetched content
-  as untrusted, retain durable AKM results and write only to `knowledge/inbox/`.
-  Removed sources are preserved; portable/manual restores stage definitions inactive.
+- Scheduled tasks use native AKM engine/agent selection and the operator's
+  unchanged prompt, with no additional fhold tool ceiling. Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
   `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
   Knowledge, native workers and the independent recovery timer remain available.
@@ -450,9 +455,11 @@ Guardian's own authentication and request protections remain unchanged.
   hook observations. Failed status checks and missing signed-in worker coverage
   remain unknown, not proof of idle. This is best-effort signaling,
   not a scale-in veto. See [the runtime contract](../harness-plugins.md).
-- Automatic memory captures validated non-secret facts only from trusted native
-  build/plan sessions through the existing provider and remains configurable.
-  Remote/unattended sessions do not implicitly write personal memory.
+- Native AKM plugins own automatic context, learning and reviewable memory
+  proposals for native/custom agents. fhold does not filter prompts or implement
+  its own extractor. Explicit off choices remain off. Guardian's current
+  chat/read credential ceiling excludes automatic private context/learning;
+  full credentials inherit native behavior.
 - `state/stack.env` contains non-secret derived input. Child processes use
   argument arrays; lifecycle commands never interpolate shell strings.
 - Compiled CLI launches do not automatically read the invoking directory's
@@ -594,8 +601,11 @@ The 0.1 release line uses real UTC `X.Y.yyMMddHHmm` timestamps and explicit
 alpha/beta/rc channels. The historical 0.2 patch format is `yyMMdd<build>`:
 UTC year/month/day plus an unpadded daily build number starting at 1, with the
 same prerelease suffixes. From 0.3 onward use `X.Y.YYMMNN[-alpha|-beta|-rc]`:
-UTC year/month and exactly two counter digits starting at 00. Every new candidate,
+UTC year/month and exactly two counter digits starting at 00. Each public release,
 including channel promotion, consumes a counter; there is no additional serial.
+Development candidates use source SHA/image digest; reserve a version near
+publication. Unpublished candidates and local dry-run receipts do not reserve a
+counter and may change. Published tags, images and downloads remain immutable.
 See the [release runbook](../operations/release.md#monthly-versions-from-03)
 for ordering, UTC reset, immutable retries and refusal after counter 99.
 Historical 0.1/0.2 versions remain valid and immutable. This changes release
@@ -607,5 +617,5 @@ Explicit local builds use the `fhold` namespace without registry pulls. Native
 Linux x64 and ARM64 runners test runtime images and CLI; ARM64 Admin startup
 remains unqualified. Windows/macOS desktop integration is preview-tested on native
 runners; public distribution/signing remains unqualified. No cross-host publishing bridge
-is needed. An existing version/receipt permits identical-byte retries only; changed
-source or content requires a new version, including unpublished candidates.
+is needed. Published versions permit identical-byte retries only; changed public
+content requires a new version. Final changed artifacts must pass qualification.

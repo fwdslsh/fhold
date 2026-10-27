@@ -1418,16 +1418,16 @@ async function run(): Promise<Record<string, unknown>> {
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#remote-recall-status')?.textContent === 'Managed · ready' && document.querySelector('#remote-recall').disabled`,
+			`['Approval needed','Ready'].includes(document.querySelector('#remote-recall-status')?.textContent) && !document.querySelector('#remote-recall').disabled`,
 			'native AKM hook review',
 			60_000,
 			!provider
 		);
 		assert(
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#remote-recall').checked && !document.querySelector('#remote-recall-field').hidden"
+				"!document.querySelector('#remote-recall').disabled && !document.querySelector('#remote-recall-field').hidden"
 			),
-			'Managed recall was not reported as operator-controlled in Codex setup.'
+			'Native recall consent was not left under operator control in Codex setup.'
 		);
 		await assertRenderedFloor(window, 'native remote setup dialog');
 		const nativeRemoteScreenshot = await capture(window, outputDir, '04-native-remote-setup.png');
@@ -1516,19 +1516,15 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Managed · ready'",
+			"!document.querySelector('#remote-recall').disabled && ['Approval needed','Ready'].includes(document.querySelector('#remote-recall-status').textContent)",
 			'standalone native recall review',
 			60_000,
 			!provider
 		);
 		await window.webContents.executeJavaScript(`(async () => {
 			const review = await window.fholdAdmin.codexRecall({action:'review'});
-			if (!review.managed || review.status !== 'ready') throw new Error('Managed recall was not ready.');
-			for (const action of ['approve', 'disable']) {
-				let rejected = false;
-				try { await window.fholdAdmin.codexRecall({action,digest:review.digest,confirmed:true}); } catch { rejected = true; }
-				if (!rejected) throw new Error('Personal approval changed managed hooks.');
-			}
+			if (!['approval-needed','ready'].includes(review.status)) throw new Error('Native recall review failed.');
+			if (review.status !== 'ready') await window.fholdAdmin.codexRecall({action:'approve',digest:review.digest,confirmed:true});
 		})()`);
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
@@ -1554,14 +1550,14 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.querySelector('#remote-recall-disable').hidden && document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Managed · ready' && document.querySelector('#codex-recall-status').textContent === 'Managed · ready'",
-			'explicit native review verifies managed recall persisted after recreation',
+			"!document.querySelector('#remote-recall-disable').hidden && !document.querySelector('#remote-recall').disabled && document.querySelector('#remote-recall-status').textContent === 'Ready' && document.querySelector('#codex-recall-status').textContent === 'Ready'",
+			'explicit native review verifies approved recall persisted after recreation',
 			60_000,
 			!provider
 		);
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
 		progress(
-			'managed AKM recall stayed ready across recreation without personal approval, remote startup or vendor login'
+			'native AKM recall stayed ready across recreation after explicit hook approval, without remote startup or vendor login'
 		);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('#codex-connection').open = false"
@@ -3112,8 +3108,8 @@ async function run(): Promise<Record<string, unknown>> {
 				subscriptionLoginVerified: false
 			},
 			codexRecall: {
-				managedPolicy: true,
-				personalApprovalRejected: true,
+				nativePluginRegistration: true,
+				explicitHookApproval: true,
 				restartPersistence: true,
 				noRemoteStartup: true
 			},

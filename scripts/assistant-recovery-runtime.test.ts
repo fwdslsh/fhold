@@ -55,7 +55,7 @@ if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
   for name in FH_RECOVERY_URL FH_RECOVERY_INCLUDE_FILE FH_RECOVERY_PARENT_PID FH_INSTANCE_ID AZURE_CLIENT_ID IDENTITY_ENDPOINT MSI_ENDPOINT IMDS_ENDPOINT; do
     if printenv "$name" >/dev/null; then printf 'environment-leak\n' >>"$EVENTS"; exit 71; fi
   done
-  test "$FH_AUTOMATIC_MEMORY" = 1
+  test "$AKM_AUTO_MEMORY" != 0
   test -n "$OPENCODE_SERVER_PASSWORD"
   test "$AZURE_OPENAI_API_KEY" = synthetic-provider-value
 fi

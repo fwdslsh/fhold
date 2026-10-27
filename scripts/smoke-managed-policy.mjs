@@ -19,14 +19,12 @@ if (process.argv[2] === '--inside') {
 	for (const file of [
 		'/etc/codex/config.toml',
 		'/etc/codex/requirements.toml',
-		'/etc/codex/hooks.json',
 		'/etc/claude-code/managed-settings.json',
-		'/etc/claude-code/managed-settings.d/10-fhold.json',
 		'/etc/opencode/opencode.json'
 	])
 		assert.throws(() => accessSync(file, constants.W_OK), `Agent must not write ${file}`);
 
-	const { withCodexRecall, reviewRecall } = await import('/usr/local/bin/fhold-codex-recall.mjs');
+	const { withCodexRecall } = await import('/usr/local/bin/fhold-codex-recall.mjs');
 	const config = await withCodexRecall((rpc) =>
 		rpc('config/read', { includeLayers: true, cwd: '/work' })
 	);
@@ -43,7 +41,8 @@ if (process.argv[2] === '--inside') {
 		'never',
 		'Codex requirements constrain a conflicting user default'
 	);
-	assert.equal((await withCodexRecall(reviewRecall)).managed, true);
+	// This fixture deliberately supplies its own native system policy; product
+	// defaults must not add or duplicate its hook handlers.
 	const inventory = await withCodexRecall((rpc) => rpc('hooks/list', { cwds: ['/work'] }));
 	assert.ok(
 		inventory.data[0].hooks.some(
@@ -79,11 +78,11 @@ if (process.argv[2] === '--inside') {
 	await client.integration.list({ location: { directory: '/work' } });
 	assert.ok(
 		(await client.agent.list({ location: { directory: '/work' } })).data.some(
-			(agent) => agent.id === 'scheduled'
+			(agent) => agent.id === 'remote-read'
 		),
-		'Native restricted agent inventory must activate'
+		'Native Guardian credential agent inventory must activate'
 	);
-	for (const agent of ['build', 'remote', 'remote-read', 'scheduled']) {
+	for (const agent of ['build', 'remote', 'remote-read']) {
 		const session = await client.session.create({ agent, location: { directory: '/work' } });
 		const check = async (action, resource, expected) => {
 			const result = await client.permission.create(

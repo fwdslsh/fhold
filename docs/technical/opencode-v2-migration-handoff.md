@@ -1,5 +1,10 @@
 # OpenCode 2 migration: fhold agent handoff
 
+> Historical migration handoff. Its trusted build/plan-only memory, restricted
+> scheduled agent and discovery-disable guidance is withdrawn. The current
+> [primary product rule](core-principles.md#primary-product-rule) and
+> [native integration contract](../managed-harness-configuration.md) take precedence.
+
 Status: implemented on `codex/opencode-v2`; local Linux x64 qualification is
 recorded in the [v2 qualification report](../operations/opencode-v2-qualification.md).
 Updated 2026-10-10. Public publication and native ARM64 gates run separately in

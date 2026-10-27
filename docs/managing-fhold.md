@@ -416,12 +416,12 @@ are documented in [OpenCode configuration](technical/opencode-configuration.md).
 
 Ask the trusted agent to remember facts or schedule work in ordinary language:
 “Every weekday at 8 AM, check my project news and save the result to my inbox.”
-Every run retains durable AKM history; scheduled reports are restricted to
-`knowledge/inbox/`. AKM and automatic memory are enabled for fresh installations;
+Every run retains durable AKM history and uses the operator-selected native
+engine/agent without a fhold tool ceiling. AKM and automatic memory are enabled for fresh installations;
 the scheduler uses the host OS timezone by default. Existing explicit choices
 remain unchanged. Advanced operators can configure these through the CLI/config,
-not Agent settings. Automatic memory is limited to trusted native build/plan
-conversations. Never paste credentials into conversations.
+not Agent settings. Automatic context, learning and memory proposals use the native AKM plugins
+for all native/custom agents, subject to native settings and consent. Never paste credentials into conversations.
 
 ```bash
 fhold task list
@@ -605,8 +605,8 @@ matching v1 image. The native engine performs its own one-time database and
 credential conversion. Do not downgrade against the converted database; restore
 the untouched export with the original image instead.
 
-The default scheduled engine is updated automatically from `--attach` to
-`--server`; custom engine commands need operator review. Existing operator files
+Operator-owned AKM configuration is preserved. Retired scheduled launchers need
+explicit review using the [native harness upgrade instructions](managed-harness-configuration.md#existing-beta-installations). Existing operator files
 remain intact. Review mandatory OpenCode permission denials using the new native
 [resource-policy format](managed-harness-configuration.md#task-permissions).
 Guardian chat/read permissions are reapplied on every turn. MCP symbol search

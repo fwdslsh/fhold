@@ -1,266 +1,151 @@
-# Managed harness configuration
+# Native harness configuration
 
-fhold installs AKM and fhold integrations for OpenCode, Codex and Claude Code
-at image build time. Fresh sessions load the built-in hooks without personal
-hook approval. fhold supplies native system defaults; user preferences and any
-deliberate deployment overrides use each harness's native format. fhold does not
-translate between permission models.
-
-For a normal personal instance, no policy editing is necessary. Use the usual
-provider/remote sign-in flows. Advanced operators can explicitly mount their own
-policy to customize permissions or integrations for a hosted deployment.
+fhold supplies prebuilt AKM/OpenCode tools and minimal setup/maintenance.
+Native platforms own agents, tools, permissions, memory, hooks, skills and MCP.
+fhold adds no local agent-name allowlist, recall prompt filter, restricted
+scheduled agent or duplicate memory extractor.
 
 ## Deployment inputs
 
-These files belong to the release-managed allowlist. Install and update write
-the current release bytes, not seed-once defaults. Managed Compose mounts
-`system/assistant` read-only at `/etc/opencode` and the other files individually:
+Release-owned defaults are image-baked and selected by the managed asset
+allowlist. Install/update refreshes those bytes; operator preferences remain
+writable and are not converted or overwritten.
 
-| Instance file | Container path | Purpose |
-| --- | --- | --- |
-| `system/assistant/opencode.json` | `/etc/opencode/opencode.json` | Native OpenCode permissions and resource policies |
-| `system/codex/config.toml` | `/etc/codex/config.toml` | Codex defaults, including `approval_policy` and plugins |
-| `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | Codex constraints and managed-only hooks |
-| `system/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | Claude managed settings, including `permissions` and managed-only hooks |
+| Host file | Container file | Owner |
+|---|---|---|
+| `system/assistant/opencode.json` | `/etc/opencode/opencode.json` | Product schema declaration, no extra task restrictions |
+| `config/assistant/opencode.json[c]` | `/home/fhold/.config/opencode/opencode.json[c]` | Native operator preferences |
+| `system/codex/config.toml` | `/etc/codex/config.toml` | Native built-in plugin registration |
+| `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | Empty product requirements, no hook/task restriction |
+| `system/claude/managed-settings.json` | `/etc/claude-code/managed-settings.json` | Empty product settings |
+| `data/assistant/.codex/config.toml` | `/home/fhold/.codex/config.toml` | Native operator settings and exact-hash hook approvals |
+| `data/assistant/.claude/settings.json` | `/home/fhold/.claude/settings.json` | Native operator settings |
+| `config/akm/config.json` | `/etc/akm/config.json` | Native operator AKM catalog, harnesses and task activation |
 
-Standalone images bake the same allowlisted policy bytes with one source per
-target. No policy mounts are required for the defaults. Advanced provisioners
-can explicitly replace them with operator-owned read-only files, for example:
+Normal user/project settings and hooks need no custom policy mount.
+For an explicit system-level policy, operators can supply native files through
+their existing Compose overlay. That optional policy is their choice and
+maintenance responsibility, not an extra fhold requirement. Keep credentials
+private, and mount individual system files rather than hiding the installed
+native plugin directories.
 
-```sh
-docker run --env-file ./runtime.env \
-  --mount type=bind,src="$PWD/config/opencode/opencode.json",dst=/etc/opencode/opencode.json,readonly \
-  --mount type=bind,src="$PWD/config/codex/config.toml",dst=/etc/codex/config.toml,readonly \
-  --mount type=bind,src="$PWD/config/codex/requirements.toml",dst=/etc/codex/requirements.toml,readonly \
-  --mount type=bind,src="$PWD/config/claude/managed-settings.json",dst=/etc/claude-code/managed-settings.json,readonly \
-  fwdslsh/fhold-assistant:YOUR_PINNED_RELEASE
-```
-
-`runtime.env` supplies the normal runtime inputs, including the required OpenCode
-server password. Mount individual files so the built-in hook files, managed
-plugins and skills remain visible. Restart the container after changing policy.
-Use copies of the release-managed files as a base to retain built-in settings and marketplace
-declarations. Agents cannot modify these system files. Their normal home and
-account settings remain writable and recoverable.
-
-For a managed instance, create separate operator-owned policy copies under
-`config/` and add explicit individual mounts to `config/stack/custom.compose.yml`.
-For example, an intentional OpenCode replacement is:
-
-```yaml
-services:
-  assistant:
-    volumes:
-      - ${FH_HOME}/config/opencode/opencode.json:/etc/opencode/opencode.json:ro
-```
-
-This is an advanced override, not a default mount. The operator owns its contents,
-native precedence and compatibility with future releases; updates preserve the
-overlay and custom files but cannot refresh a policy that the overlay shadows.
-Never mount whole Codex/Claude system directories: preserve `/etc/codex/hooks.json`
-and `/etc/claude-code/managed-settings.d/10-fhold.json` from the image.
-Run `fhold --name personal-agent restart` (replace the name with your instance name
-or absolute directory). Standalone Docker, Compose, Kubernetes and ephemeral hosts
-use the same image paths: the deployment tool supplies the files and recreates
-the container. No cloud-specific fhold settings or bootstrap script is needed.
-
-`config/assistant/opencode.json` remains the ordinary user/provider configuration.
-Codex/Claude personal settings and sign-in remain under their native home paths.
-`config/akm` remains operator-owned because task activation, custom bundles and
-engines are mutable intent, as do Guardian settings and the custom Compose overlay.
-Do not move provider credentials into system policy files.
-Neither an image rebuild nor a new environment variable is required. You can
-also change into the instance home and run `fhold restart` with `FH_HOME` unset.
-Do not edit `system/` or generated `state/stack.env`; updates own those files.
-
-Old `config/opencode/opencode.json`, `config/codex/{config,requirements}.toml`
-and `config/claude/managed-settings.json` files may remain on disk. The default
-stack no longer mounts or reads them. Unreferenced files do not affect
-pending-restart tracking. They are not migrated, imported, overwritten or deleted automatically.
-Review any desired custom policy and explicitly mount it; there is no transition
-or backward-compatibility layer.
-
-Upgrade the CLI/Admin and Assistant image together. Activation checks the image's
-`dev.fwdslsh.fhold.managed-harness-policy=1` capability label before applying the
-new Compose policy mounts; an old explicit image pin is rejected before replacing
-running containers. Updates that start the stack also check before changing managed
-files. Offline `update --no-start` only stages files; compatibility is checked when
-you next start. Source builds need an image built from the same source, not an
-older published alpha. External deployments must likewise keep image and policy
-inputs together. Older untouched installations retain their personal-hook workflow.
+Existing unused `config/opencode`, `config/codex` and `config/claude` policy
+copies are not mounted by the default stack. They remain untouched; fhold does
+not interpret or convert their historical beta syntax.
 
 ## Task permissions
 
-Managed hooks and task permissions are independent. Defaults preserve the
-existing task behavior; an operator can provision stricter or unattended policies.
+OpenCode, Codex and Claude enforce their own native/operator permissions and
+approval/consent. fhold does not force approval bypasses, impose shell command
+denials or disable project, Claude-compatibility or external-skill discovery.
 
-For Codex, `config.toml` supplies `approval_policy = "on-request"` by default.
-To prohibit users selecting a different policy, add this top-level constraint
-to `requirements.toml`, before `[features]`:
+OpenCode's supported configuration includes native `permissions` and optional
+system resource policies. Use the native documentation for policy precedence;
+fhold adds no policy interpreter or format converter. Native user preferences
+are editable under `config/assistant`; OpenCode's watcher applies ordinary
+changes without a reload service.
 
-```toml
-allowed_approval_policies = ["on-request"]
-```
+Recurring tasks forward the operator's prompt unchanged and use native AKM harness
+selection. `fhold-task create ... --harness <name>` selects an existing harness;
+omitting it leaves selection to AKM. AKM owns scheduling and durable task history.
+Portable imported task definitions remain paused until reviewed; that preservation
+rule does not impose a tool ceiling on an approved native run.
 
-For an explicitly unattended deployment, set `approval_policy = "never"` in
-`config.toml` and `allowed_approval_policies = ["never"]` in `requirements.toml`.
-`never` disables approval prompts; it does not grant filesystem/network access
-outside the selected sandbox. The remote worker retains the isolation selected
-by `FH_CODEX_SANDBOX`/StackConfig. Native requirements can further constrain
-allowed sandbox modes and command rules. User defaults may override system
-defaults; use requirements for enforcement.
-
-Claude uses native `permissions.defaultMode`, `allow`, `ask` and `deny`. For
-example, preserve `allowManagedHooksOnly` and add reviewed command permissions:
-
-```json
-{
-  "allowManagedHooksOnly": true,
-  "permissions": {
-    "defaultMode": "default",
-    "allow": ["Bash(git status *)"],
-    "deny": ["Bash(sudo *)"]
-  }
-}
-```
-
-OpenCode v2 distinguishes permission defaults from enforced resource denials.
-Use native `permissions` for allow/ask/deny defaults, and native
-`experimental.policies` for operator restrictions that must also constrain
-project settings, agent defaults and session approvals:
-
-```json
-{
-  "permissions": [
-    { "action": "shell", "resource": "*", "effect": "ask" },
-    { "action": "shell", "resource": "git status *", "effect": "allow" }
-  ],
-  "experimental": {
-    "policies": [
-      { "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }
-    ]
-  }
-}
-```
-
-The read-only global resource policy has native precedence over conflicting
-user/project/inline resource policies. Ordinary `permissions` are defaults,
-not a managed ceiling; agent/session rules may override them. This differs from
-v1. When deliberately supplying custom policy, review any v1 `permission` rules
-intended as mandatory denials and express them as resource policies. Installed
-OpenCode 2 also normalizes supported v1 syntax; old syntax alone does not identify
-an old binary.
-Native action names include `shell` (formerly `bash`) and `subagent`
-(formerly `task`). Resource policies have allow/deny, not ask.
-
-Scheduled work keeps its restricted `scheduled` agent. Guardian reapplies the
-credential's chat/read ceiling as native session permissions on every turn;
-global defaults cannot grant a credential more access. Native resource denials
-also constrain full access. No custom policy interpreter is added.
-
-The native launchers do not force Codex's approval policy or Claude's permission
-mode on the command line. No new permission store, per-command wrapper or
-startup configuration merge is involved.
+Guardian is a separate authenticated ingress boundary. Its chat/read credential
+ceilings, moderation, ownership and path containment remain enforced. Automatic
+AKM context executes server-side, outside model tool checks, so limited
+credentials do not receive private bundle/workflow/proposal context or write
+learning implicitly. Guardian reapplies the current credential's authority
+before every turn/interaction; full credentials inherit native AKM behavior.
+Local custom agent names and mixed histories never determine eligibility.
 
 ## Hooks and MCP servers
 
-The image derives managed hooks from the pinned plugins' existing definitions:
+AKM and fhold use one native plugin registration path per harness:
 
-- Codex: `/etc/codex/hooks.json`; enforced `[features] hooks = true` and
-  `allow_managed_hooks_only = true` in requirements.
-- Claude: `/etc/claude-code/managed-settings.d/10-fhold.json`;
-  `allowManagedHooksOnly: true` in managed settings.
-- OpenCode: the existing AKM/fhold plugins in `/etc/opencode/plugins`.
+- OpenCode loads the pinned image registrations in `/etc/opencode/plugins`.
+- Claude loads its installed native plugins.
+- Codex loads its installed native plugins and requires native hook trust.
 
-Keep the managed-only settings to prevent the same handlers also executing from
-user plugin caches. **This changes custom-hook behavior on upgrade:** user,
-project and ordinary plugin hooks no longer run. Plugin skills and MCP servers
-remain available through their native installation process; managed-only hooks
-are not an MCP or plugin-installation allowlist.
+There are no duplicate system-managed handler copies and no managed-only
+exclusion. User/project hooks and third-party native plugins remain available.
+MCP configuration uses each platform's normal native settings; fhold does not
+maintain a parallel MCP registry.
 
-To add an operator-reviewed hook without changing the image, explicitly mount an
-operator-owned native policy copy as described above. Codex accepts `[hooks]` tables in
-`config/codex/requirements.toml`. For example, append:
+Use `/hooks` inside native Codex, or fhold's existing review UI/helper, to review
+the exact native plugin commands. Only explicit operator consent writes their
+native trusted hashes. Changed definitions need a fresh review; fhold neither
+manufactures approvals nor approves unrelated hooks. Claude likewise retains
+native plugin/workspace trust and consent.
 
-```toml
-[hooks]
-managed_dir = "/etc/codex"
+AKM owns automatic recall, prompt learning and reviewable transcript proposals.
+Native `AKM_AUTO_MEMORY` and `AKM_AUTO_LEARNING` options apply normally.
+Fresh instances select the native `opencode` harness (`run --standalone`), which reuses
+OpenCode's provider/model/auth. AKM owns its bounded utility agent and recursion
+prevention; fhold adds no extraction subprocess wrapper or model pipeline.
+The pinned Codex plugin has prompt learning but no SessionEnd extractor;
+fhold does not invent unsupported parity.
 
-[[hooks.SessionStart]]
-[[hooks.SessionStart.hooks]]
-type = "command"
-command = "printf 'Operator hook loaded\\n' >&2"
-```
-
-Claude accepts a `hooks` object in `config/claude/managed-settings.json`; merge
-it alongside the existing keys rather than replacing the whole file:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{ "type": "command", "command": "printf 'Operator hook loaded\\n' >&2" }]
-    }]
-  }
-}
-```
-
-Native merging keeps these additional handlers alongside the image's AKM/fhold
-hooks. Use container paths for any referenced scripts, and provision those
-scripts with the deployment or a derived image. Do not copy plugin handlers
-into a new fhold-specific configuration format.
-
-Claude also permits hooks from a reviewed third-party plugin force-enabled in
-managed `enabledPlugins`. Do not force-enable AKM or fhold there while also
-registering their managed handlers, or their hooks can execute twice. Simply
-turning off managed-only settings also permits duplicate built-in hooks.
-
-MCP servers can be configured through Codex's native `mcp_servers` tables and
-OpenCode's native `mcp` object. Claude supports an optional system
-`/etc/claude-code/managed-mcp.json`. In managed Compose, create
-`config/claude/managed-mcp.json` and add this exact read-only mount through the
-existing `config/stack/custom.compose.yml` overlay:
-
-```yaml
-services:
-  assistant:
-    volumes:
-      - ${FH_HOME}/config/claude/managed-mcp.json:/etc/claude-code/managed-mcp.json:ro
-```
-
-That Claude file is an exclusive server inventory: other MCP sources are
-suppressed. It is intentionally absent by default. Claude also offers additive
-managed HTTP/SSE servers; follow its native documentation for that alternative.
-External provisioners own vendor-specific packages, configuration and sign-in;
-the generic fhold image does not bake in third-party service clients.
+The existing instance `assistant.automaticMemory=false` intent maps to both
+native features off in managed Compose. Standalone `FH_AUTOMATIC_MEMORY` intent
+also supplies native defaults; explicitly supplied native AKM options take
+precedence. An operator overlay can set the native features independently.
 
 ## Startup, recovery and verification
 
-System files are present before recovery and native workers start. Recovery
-restores account/user data; current deployment policy comes from the release-managed
-files/image and deliberate operator mounts. Do not include system policy paths in custom recovery inputs.
-Existing personal hook approvals are preserved but do not control managed hooks.
+Native plugin caches/default settings are seeded only when missing or still
+untouched generated defaults. Account state, custom plugins, user settings and
+hook decisions remain operator-owned. Nothing is installed at startup.
+Optional AKM/worker failures report native diagnostics and do not stop the main
+Assistant. Authentication, restore integrity and actual recovery ownership
+remain essential boundaries.
 
-Portable `fhold backup`/`restore` does not transfer release-managed system files
-or custom executable policy to a new instance. The target release supplies system
-defaults. Preserve custom policy separately, review it, then explicitly provision
-it before starting the restored instance. A stopped full-instance export includes
-the whole home, including managed files; it is not a portable policy import. Ephemeral
-recovery likewise depends on the deployment supplying policy on every boot.
+Recovery preserves native account/settings state; it does not grant consent or
+turn disabled native features on. Current image-baked plugin bytes still own
+the built-in integration. Local image capability checks protect actual recovery
+semantics, not a second task-policy compatibility layer.
 
-Codex's `fhold-codex-recall.mjs review` checks the exact built-in managed inventory
-and reports `managed: true` with `status: "ready"`. Admin displays **Managed ·
-ready** and offers no personal approve/disable operation for those hooks. Older
-images retain their existing review flow. Use `opencode debug config` and
-`claude doctor` for native configuration diagnostics.
+Review native recall explicitly:
 
-Account sign-in and native remote-access consent remain vendor flows. Managed
-hook readiness does not imply a signed-in account or a working remote client.
-The offline image smokes exercise real hooks and policy precedence without
-claiming live vendor authentication or model readiness.
+```sh
+fhold-codex-recall.mjs review
+fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
+```
+
+The result reports `approval-needed`, `ready` or `installed`, along with the exact
+native definitions. Native hook approval, account sign-in, worker startup and
+an actual remote request are separate observations.
+
+## Existing beta installations
+
+Updates preserve operator-owned `config/akm/config.json` byte for byte. They do
+not convert an old engine or silently replace an explicit off setting. An
+existing catalog may still select the removed product `scheduled` engine and
+`fhold-opencode-run` launcher. Inspect the catalog inside Assistant with
+`akm config list`. Review native AKM's migration plan before explicitly applying
+it, then select the installed OpenCode harness when appropriate:
+
+```sh
+akm migrate status
+akm migrate apply --dry-run
+akm migrate apply
+akm config set harnesses.opencode '{"args":["run","--standalone"]}'
+```
+
+Review the resulting catalog and task sources that explicitly name `scheduled`;
+remove the obsolete harness and select the intended native harness before
+running them. Native `akm migrate` owns format conversion and backups; fhold
+does not run it automatically. Custom harness choices remain yours.
+Without a usable harness/provider, native AKM reports an actionable error;
+optional learning/tasks do not block the primary Assistant.
+
+Ordinary updates archive removed, unchanged product agents/helpers under private
+`state/retired-managed/<sha256>/` and remove those paths from native autoload.
+Operator-modified or unknown files and archives are preserved with an update
+warning/receipt entry for explicit review. There is no recursive directory
+cleanup, historical agent emulation or configuration migration framework.
 
 References: [Codex hooks](https://learn.chatgpt.com/docs/hooks),
-[Codex configuration and requirements](https://learn.chatgpt.com/docs/config-file/config-reference),
-[Claude managed settings](https://code.claude.com/docs/en/managed-settings),
-[Claude managed MCP](https://code.claude.com/docs/en/managed-mcp), and
+[Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference),
+[Claude hooks](https://code.claude.com/docs/en/hooks),
 [OpenCode configuration](https://opencode.ai/docs/config/).

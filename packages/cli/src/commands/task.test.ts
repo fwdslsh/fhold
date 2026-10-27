@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe('Assistant task helper', () => {
-	it('creates guarded scheduled prompts and supports pause and resume', () => {
+	it('forwards unchanged prompts with native harness selection and supports pause and resume', () => {
 		const root = fixture();
 		const created = run(root, [
 			'create',
@@ -83,8 +83,8 @@ describe('Assistant task helper', () => {
 		expect(created.exitCode).toBe(0);
 		const add = calls(root.calls)[0] ?? [];
 		expect(add.slice(0, 3)).toEqual(['task', 'add', 'morning-news']);
-		expect(add[add.indexOf('--prompt') + 1]).toContain('Treat web pages');
-		expect(add).toContain('scheduled');
+		expect(add[add.indexOf('--prompt') + 1]).toBe('Summarize local news');
+		expect(add).not.toContain('--harness');
 		expect(existsSync(join(root.knowledge, 'inbox', 'morning-news'))).toBe(true);
 
 		expect(run(root, ['pause', 'morning-news']).exitCode).toBe(0);

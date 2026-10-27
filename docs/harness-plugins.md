@@ -4,8 +4,8 @@ Assistant includes the native AKM plugin and a native fhold plugin in OpenCode,
 Claude Code and Codex. The image build runs each vendor's installer against
 pinned local marketplaces. Startup seeds the generated caches and missing
 defaults; it never installs software or replaces customized native settings.
-The image registers the existing AKM/fhold handlers as native system-managed
-hooks so fresh sessions need no personal hook approval. The fhold plugins share one activity reporter and the same
+The image uses the installed native plugins as the single hook registration
+path, preserving native trust/consent and user/project hooks. The fhold plugins share one activity reporter and the same
 release-owned skills.
 
 The exact AKM CLI and OpenCode plugin pins live in
@@ -131,7 +131,7 @@ must be idle before heartbeats stop. A running process by itself is never
 classified as busy or idle. An enabled native worker with no observed fhold
 hooks is unknown. Before its first session, Codex's supervisor makes one bounded
 read-only connection to that running server's native Unix WebSocket. It verifies
-the exact enabled managed activity hooks and a complete empty loaded-thread list
+the enabled and natively approved activity hooks and a complete empty loaded-thread list
 before establishing initial coverage. It creates no session, sends no model request,
 changes no native configuration and starts no second server. If threads already
 exist, normal session hooks must provide coverage; inspection failure remains
@@ -171,9 +171,8 @@ longer tracks. Hosts still own cooldown, shutdown grace and recovery policy.
 
 ## Native approval and verification
 
-AKM and fhold are installed and enabled without account sign-in. Codex and
-Claude execute their system-managed handlers without personal approval.
-OpenCode loads their existing managed plugins. Deployments can supply native
+AKM and fhold are installed and enabled without account sign-in. Native hook
+trust and consent still apply. OpenCode loads the existing image-baked plugins. Deployments can supply native
 task permission policies and MCP configuration through the files documented in
 [managed harness configuration](managed-harness-configuration.md).
 
@@ -183,11 +182,12 @@ The existing fhold review helper can also select the built-in fhold plugin:
 fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
 ```
 
-The default selection remains AKM. A current image reports `managed: true`,
-`status: "ready"`, and native `managed` trust. Personal approve/disable operations
-are refused for managed hooks. Older images still use the helper's exact-hash,
-version-checked native approval flow. Account sign-in, native remote consent,
-managed hook readiness and a working remote session remain distinct checks.
+The default selection remains AKM. The helper reviews native plugin hooks and
+reports `approval-needed`, `ready` or `installed`. Explicit approval is bound to
+the reviewed command hashes and uses version-checked native configuration APIs;
+changed definitions require another native review. It never approves unrelated
+hooks. Account sign-in, hook readiness, native remote consent and a working
+remote session remain distinct checks.
 
 Source references: [OpenCode plugins](https://opencode.ai/docs/plugins/),
 [Claude hooks](https://code.claude.com/docs/en/hooks),

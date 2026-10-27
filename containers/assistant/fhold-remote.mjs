@@ -89,14 +89,14 @@ export function claudePrompt(text) {
 }
 
 // SessionStart is a thread hook, not an app-server startup event. Before the
-// first thread, prove that the running server has the managed activity hooks
+// first thread, prove that the running server has the natively approved activity hooks
 // armed and no loaded sessions. Never infer idle from its PID or missing busy
 // markers, and never create a synthetic session or approve native hooks.
 export async function bootstrapCodexActivity({ env, alive, signal, inspect } = {}) {
 	const { withCodexControl, reviewRecall } = await import('./fhold-codex-recall.mjs');
 	const check = async (rpc) => {
 		const hooks = await reviewRecall(rpc, 'fhold@fhold-plugins');
-		if (hooks.status !== 'ready' || hooks.managed !== true) return false;
+		if (hooks.status !== 'ready') return false;
 		const loaded = await rpc('thread/loaded/list', {});
 		if (!Array.isArray(loaded?.data) || loaded.data.length || loaded.nextCursor !== null) return false;
 		if (!alive()) return false;

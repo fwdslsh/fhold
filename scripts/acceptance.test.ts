@@ -127,7 +127,7 @@ function task(home: string, bin: string, args: string[]) {
 }
 
 describe('fhold deterministic control-plane integration', () => {
-	it('upgrades only the shipped scheduled engine once and preserves custom engines and task activation', () => {
+	it('leaves native engine configuration unchanged while syncing task activation', () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-task-upgrade-'));
 		roots.push(root);
 		const bin = installFakeAkm(root);
@@ -149,8 +149,7 @@ describe('fhold deterministic control-plane integration', () => {
 		expect(task(root, bin, ['list']).exitCode).toBe(0);
 		expect(readFileSync(path, 'utf8')).toBe(before);
 		expect(task(root, bin, ['sync']).exitCode).toBe(0);
-		config.engines.scheduled.args[1] = '--server';
-		expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(config);
+				expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(config);
 		const upgraded = readFileSync(path, 'utf8');
 		expect(task(root, bin, ['sync']).exitCode).toBe(0);
 		expect(readFileSync(path, 'utf8')).toBe(upgraded);

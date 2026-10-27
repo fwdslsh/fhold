@@ -40,16 +40,6 @@ async function guideRecall(
 ): Promise<void> {
 	const state = createFholdState(homeDir);
 	const review = await reviewCodexRecall(state);
-	if (review.managed) {
-		console.log(
-			`Automatic knowledge recall: Managed (${review.status === 'ready' ? 'ready' : 'not fully enabled'}). No personal hook approval is required.`
-		);
-		if (review.status !== 'ready')
-			console.log(
-				'Update this instance to refresh its built-in hook settings. If you supply a custom requirements.toml mount, check that file instead. Personal approval cannot enable managed hooks.'
-			);
-		return;
-	}
 	if (review.status === 'ready') {
 		console.log('Automatic knowledge recall: Ready (previous approval retained).');
 		return;

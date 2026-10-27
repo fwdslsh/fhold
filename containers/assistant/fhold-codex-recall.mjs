@@ -2,52 +2,32 @@
 // Short-lived stdio client of Codex's native hook/config APIs. No model calls,
 // plugin installation, blanket trust, or independent approval store.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { remoteEnvironment } from './fhold-remote.mjs';
 
-export function recallReview(value, plugin = 'akm@akm-plugins', managed = {}) {
+export function recallReview(value, plugin = 'akm@akm-plugins') {
 	if (!['akm@akm-plugins', 'fhold@fhold-plugins'].includes(plugin))
 		throw new Error('Unsupported built-in plugin.');
 	if (!Array.isArray(value)) throw new Error('Invalid Codex hook inventory.');
-	const expected = managed[plugin];
-	const isManaged = Array.isArray(expected) && expected.length > 0;
-	const hooks = isManaged
-		? value.filter(
-				(h) =>
-					h?.isManaged === true &&
-					h.sourcePath === '/etc/codex/hooks.json' &&
-					expected.some((entry) => entry.event === h.eventName && entry.command === h.command)
-			)
-		: value.filter((h) => h?.pluginId === plugin);
-	if (
-		isManaged &&
-		(hooks.length !== expected.length ||
-			expected.some(
-				(entry) =>
-					hooks.filter((h) => h.eventName === entry.event && h.command === entry.command).length !==
-					1
-			))
-	)
-		throw new Error(
-			'Managed hook inventory is incomplete or duplicated. Check the native system policy.'
-		);
+	const hooks = value.filter((h) => h?.pluginId === plugin);
 	if (!hooks.length || hooks.length > 16)
 		throw new Error('Plugin hooks are unavailable. Check the native Codex plugin installation.');
 	const reviewed = hooks
 		.map((h) => {
 			if (
-				(isManaged ? h.isManaged !== true : h.source !== 'plugin' || h.isManaged !== false) ||
+				(h.source !== 'plugin' || h.isManaged !== false) ||
 				h.handlerType !== 'command' ||
 				typeof h.key !== 'string' ||
 				h.key.length > 1024 ||
-				!/^sha256:[a-f0-9]{64}$/.test(h.currentHash) ||
+				// Native plugin hashes may bind both handler and package content.
+				// Preserve that opaque native value instead of reinterpreting it.
+				typeof h.currentHash !== 'string' || !h.currentHash || h.currentHash.length > 512 ||
 				typeof h.command !== 'string' ||
 				h.command.length > 8192 ||
 				typeof h.eventName !== 'string' ||
 				typeof h.sourcePath !== 'string' ||
 				typeof h.enabled !== 'boolean' ||
-				!(isManaged ? ['managed'] : ['trusted', 'untrusted', 'modified']).includes(h.trustStatus)
+				!['trusted', 'untrusted', 'modified'].includes(h.trustStatus)
 			)
 				throw new Error('Unsupported plugin hook definition; native review is required.');
 			return {
@@ -66,10 +46,10 @@ export function recallReview(value, plugin = 'akm@akm-plugins', managed = {}) {
 	const digest = createHash('sha256').update(JSON.stringify(reviewed)).digest('hex');
 	const status = reviewed.every((h) => !h.enabled)
 		? 'installed'
-		: reviewed.every((h) => h.enabled && ['trusted', 'managed'].includes(h.trust))
+		: reviewed.every((h) => h.enabled && h.trust === 'trusted')
 			? 'ready'
 			: 'approval-needed';
-	return { status, digest, hooks: reviewed, ...(isManaged ? { managed: true } : {}) };
+	return { status, digest, hooks: reviewed };
 }
 
 export async function reviewRecall(rpc, plugin = 'akm@akm-plugins') {
@@ -80,9 +60,7 @@ export async function reviewRecall(rpc, plugin = 'akm@akm-plugins') {
 		throw new Error(
 			'Native Codex reported hook configuration errors. Review its configuration first.'
 		);
-	const file = '/opt/fhold/codex-managed-hooks.json';
-	const managed = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
-	return recallReview(result.data[0].hooks, plugin, managed);
+	return recallReview(result.data[0].hooks, plugin);
 }
 
 export async function changeRecall(rpc, action, digest, plugin = 'akm@akm-plugins') {
@@ -93,10 +71,6 @@ export async function changeRecall(rpc, action, digest, plugin = 'akm@akm-plugin
 	if (!layer || typeof layer.version !== 'string')
 		throw new Error('Native Codex user configuration is unavailable.');
 	const review = await reviewRecall(rpc, plugin);
-	if (review.managed)
-		throw new Error(
-			'Hooks are controlled by managed policy. Change the operator system configuration.'
-		);
 	if (digest !== review.digest)
 		throw new Error('Plugin hooks changed since review. Review the current definitions again.');
 	const edits = review.hooks.flatMap((h) => {

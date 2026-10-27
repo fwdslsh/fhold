@@ -1,8 +1,9 @@
 # Contributing to fhold
 
-Read [core-principles.md](../docs/technical/core-principles.md) before changing
-the runtime. fhold accepts complexity only when it is necessary to run,
-secure, integrate, or operate the hosted agent.
+Read the primary product rule in [AGENTS.md](../AGENTS.md) and the supporting
+[core principles](../docs/technical/core-principles.md) before changing the
+runtime. Use native AKM/OpenCode features first; keep fhold's setup and
+maintenance tooling minimal. Machinery outside that intent needs owner approval.
 
 ## Setup
 
@@ -49,13 +50,24 @@ bun run dev:build
 
 ## Required checks
 
-Before merging every PR, review and update dependencies using
+Before merging every PR, review dependency freshness using
 [the dependency and release guide](../docs/operations/updating-dependencies-and-releasing.md).
-Include every workspace, transitive resolutions, container tools/base images,
-AKM's CLI and three harness plugins, CI tools and docs dependencies. Record when
-upstream was checked, old/new versions, selected channels and reasons for any
-compatibility holds in the PR. Qualify the final commit after updates; a previous
-successful run does not cover changed pins or lockfile content.
+Keep focused fixes focused: unrelated upgrades are not a merge requirement.
+Handle urgent security fixes and required compatibility updates promptly; batch
+other updates in explicit dependency work or early release preparation. Record
+the review date/scope, changes, holds and deferred updates. Full release reviews
+cover all workspaces, transitive resolutions, tools/base images, AKM's CLI and
+three plugins, CI tools and docs dependencies. Finish intended updates before
+qualification; do not restart it to chase a newer noncritical release. Changed
+pins or lockfile content still require affected checks on the final commit.
+
+Develop and test candidates using commit SHAs/image digests. Stamp a release
+version near publication. Unpublished builds and dry runs can change without
+consuming another monthly counter; regenerate their evidence and validate the
+final stamped build. Public release tags, versioned registry images and release
+downloads remain immutable, even after partial publication. CI artifacts are
+candidate evidence. During prerelease, beta remains the temporary latest
+recommended release; see the release guide for native channel behavior.
 
 ```bash
 bun run check
@@ -68,7 +80,6 @@ bash -n scripts/dev-setup.sh \
   scripts/smoke-image.sh \
   containers/assistant/entrypoint.sh \
   containers/assistant/healthcheck.sh \
-  containers/assistant/opencode-run.sh \
   containers/guardian/entrypoint.sh
 ```
 

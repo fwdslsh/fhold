@@ -163,9 +163,6 @@ function recalled(file, harness) {
 	const config = join(f.dir, 'opencode');
 	cpSync('/etc/opencode', config, { recursive: true });
 	f.env.OPENCODE_CONFIG_DIR = config;
-	f.env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
-	f.env.OPENCODE_DISABLE_CLAUDE_CODE = 'true';
-	f.env.OPENCODE_DISABLE_EXTERNAL_SKILLS = 'true';
 	const plan = [
 		['akm_search', { query: prompt, source: 'local' }],
 		['akm_show', { ref: expectedRef }],
@@ -366,6 +363,13 @@ function recalled(file, harness) {
 		)
 	);
 	const options = { env: f.env, workdir: f.cwd };
+	// Explicit consent in this disposable fixture uses the same native APIs as
+	// an operator review; image/startup code must never create these approvals.
+	for (const plugin of ['akm@akm-plugins', 'fhold@fhold-plugins']) {
+		const fresh = await withCodexRecall((rpc) => reviewRecall(rpc, plugin), options);
+		assert.equal(fresh.status, 'approval-needed');
+		await withCodexRecall((rpc) => changeRecall(rpc, 'approve', fresh.digest, plugin), options);
+	}
 	// Native SessionStart is thread-scoped. A fresh/restored, unused server
 	// must prove installed hook coverage without a synthetic session or user turn.
 	for (let boot = 0; boot < 2; boot++) {
@@ -400,13 +404,12 @@ function recalled(file, harness) {
 	);
 	const review = await withCodexRecall(reviewRecall, options);
 	assert.equal(review.status, 'ready');
-	assert.equal(review.managed, true);
 	assert.deepEqual(review.hooks.map((h) => h.event).sort(), ['sessionStart', 'userPromptSubmit']);
 	assert.ok(
-		review.hooks.every((h) => h.trust === 'managed'),
-		'Built-in hooks must use native system policy'
+		review.hooks.every((h) => h.trust === 'trusted'),
+		'Explicit native consent must persist'
 	);
-	// Supply an offline provider only in this disposable home; no hook approvals.
+	// Supply an offline provider only in this disposable home.
 	const config = join(f.env.CODEX_HOME, 'config.toml');
 	writeFileSync(
 		config,
@@ -415,31 +418,25 @@ function recalled(file, harness) {
 			'\n[model_providers.offline]\nname="offline"\nbase_url="http://127.0.0.1:9/v1"\n' +
 			'wire_api="responses"\nrequires_openai_auth=false\nrequest_max_retries=0\nstream_max_retries=0\n'
 	);
-	for (const action of ['approve', 'disable'])
-		await assert.rejects(
-			withCodexRecall((rpc) => changeRecall(rpc, action, review.digest), options),
-			/managed policy/
-		);
 	assert.equal(
 		(await withCodexRecall(reviewRecall, options)).status,
 		'ready',
-		'Managed hooks must remain ready in a fresh native process'
+		'Native approved hooks remain ready in a fresh native process'
 	);
 	const inventory = await withCodexRecall((rpc) => rpc('hooks/list', { cwds: ['/work'] }), options);
 	const fholdReview = await withCodexRecall(
 		(rpc) => reviewRecall(rpc, 'fhold@fhold-plugins'),
 		options
 	);
-	assert.equal(fholdReview.managed, true);
 	assert.equal(fholdReview.status, 'ready');
 	assert.equal(fholdReview.hooks.length, 9);
 	assert.ok(
-		inventory.data[0].hooks.every((h) => h.isManaged),
-		'Unmanaged user and plugin hooks must be suppressed'
+		inventory.data[0].hooks.some((h) => !h.isManaged && !h.pluginId),
+		'Operator hooks must coexist with native plugin hooks'
 	);
 	assert.ok(
-		!readFileSync(config, 'utf8').includes('trusted_hash'),
-		'System hooks must not create user approvals'
+		readFileSync(config, 'utf8').includes('trusted_hash'),
+		'Explicit native hook approval must persist its exact hash'
 	);
 	const eventFile = join(f.env.CODEX_HOME, 'plugins/data/akm-akm-plugins/events.jsonl');
 	const { proc, log, close } = launch(f, [
@@ -473,7 +470,7 @@ function recalled(file, harness) {
 		1,
 		'Managed and plugin hooks must not execute the same recall twice'
 	);
-	console.log('codex: managed hooks ready without personal approval; unmanaged hooks suppressed');
+	console.log('codex: native plugin hooks execute once with explicit consent; operator hooks remain available');
 }
 
 assert.ok(

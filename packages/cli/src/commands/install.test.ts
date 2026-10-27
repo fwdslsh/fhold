@@ -127,10 +127,10 @@ describe('install', () => {
 		expect(existsSync(join(process.env.FH_HOME, 'config', 'assistant', 'persona.md'))).toBe(true);
 		expect(
 			JSON.parse(readFileSync(join(process.env.FH_HOME, 'config', 'akm', 'config.json'), 'utf8'))
-		).toMatchObject({ defaults: { engine: 'scheduled' } });
+		).toMatchObject({ harnesses: { opencode: { args: ['run', '--standalone'] } } });
 		expect(
 			existsSync(join(process.env.FH_HOME, 'system', 'assistant', 'agents', 'scheduled.md'))
-		).toBe(true);
+		).toBe(false);
 	});
 
 	it('reconciles named keys and portal bundles to supplied install intent', async () => {

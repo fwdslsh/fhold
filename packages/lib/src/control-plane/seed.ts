@@ -1,9 +1,11 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ensureHomeDirs, writeFileAtomic } from './foundation.js';
-import { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
+import { MANAGED_FILES, RETIRED_MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
+import { assertSafePortablePath } from './provider-files.js';
 export { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 
 let distributionSkeleton: string | undefined;
@@ -36,6 +38,13 @@ export function skeletonRoot(): string {
 
 /** Read-only, whole-manifest validation before the first installation write. */
 export function preflightHomeSeed(homeDir: string): void {
+	for (const path of Object.keys(RETIRED_MANAGED_FILES)) {
+		assertSafePortablePath(homeDir, path, true);
+		const target = join(homeDir, path);
+		if (!lstatSync(target, { throwIfNoEntry: false })?.isFile()) continue;
+		const hash = createHash('sha256').update(readFileSync(target)).digest('hex');
+		assertSafePortablePath(homeDir, `state/retired-managed/${hash}/${path}`, true);
+	}
 	const source = skeletonRoot();
 	for (const path of [...MANAGED_FILES, ...SEEDED_FILES]) {
 		let sourcePath = source;
@@ -111,19 +120,42 @@ function copy(
 
 /**
  * Materialize only the release surface. Managed files are replaced as
- * whole files; user-owned seed files are never overwritten. No stale path is
- * removed automatically, which keeps upgrades from deleting operator data.
+ * whole files; user-owned seed files are never overwritten. Removed product
+ * assets retire only when their bytes match a published product asset exactly.
  */
-export async function applyHomeSeed(homeDir: string): Promise<{ updated: string[] }> {
+export async function applyHomeSeed(homeDir: string): Promise<{ updated: string[]; warnings: string[] }> {
 	preflightHomeSeed(homeDir);
 	ensureHomeDirs(homeDir);
 	const source = skeletonRoot();
 	const updated: string[] = [];
+	const warnings: string[] = [];
+	const warn = (path: string, reason: string) => {
+		const message = `Preserved retired asset ${path}: ${reason}. Review it: files under system/assistant may still be discovered by OpenCode.`;
+		warnings.push(message);
+		console.warn(`fhold: ${message}`);
+	};
+	for (const [path, hashes] of Object.entries(RETIRED_MANAGED_FILES)) {
+		assertSafePortablePath(homeDir, path, true);
+		const target = join(homeDir, path);
+		const stat = lstatSync(target, { throwIfNoEntry: false });
+		if (!stat?.isFile()) continue;
+		const bytes = readFileSync(target);
+		const hash = createHash('sha256').update(bytes).digest('hex');
+		if (!hashes.includes(hash)) { warn(path, 'its bytes differ from published product output'); continue; }
+		// Preserve the exact retired product file outside native autoload paths.
+		const archive = join(homeDir, 'state', 'retired-managed', hash, path);
+		assertSafePortablePath(homeDir, relative(homeDir, archive), true);
+		mkdirSync(dirname(archive), { recursive: true, mode: 0o700 });
+		if (existsSync(archive) && !readFileSync(archive).equals(bytes)) { warn(path, 'an existing retirement archive contains different bytes'); continue; }
+		if (!existsSync(archive)) writeFileAtomic(archive, bytes, 0o600);
+		unlinkSync(target);
+		updated.push(path);
+	}
 	for (const path of MANAGED_FILES) {
 		if (copy(source, homeDir, path, true)) updated.push(path);
 	}
 	for (const path of SEEDED_FILES) {
 		if (copy(source, homeDir, path, false)) updated.push(path);
 	}
-	return { updated };
+	return { updated, warnings };
 }
