@@ -26,8 +26,9 @@ Upstream's `docs/reference/configuration.md`,
 own bounded model work and the `akm-model-work` recursion exclusion.
 
 Dependency freshness was reviewed on October 27, 2026. This is a required AKM
-compatibility update. OpenCode remains2.0.32 under the existing2.1 history
-compatibility hold; unrelated Claude, formatter and desktop packaging updates
+compatibility update. OpenCode remains2.0.32 pending native AKM plugin/SDK/Effect
+alignment and2.1 integration qualification tracked in issue57; the former history
+metadata blocker was removed in003. Unrelated Claude, formatter and desktop packaging updates
 are deferred to an intentional dependency batch.
 
 ## Executable evidence and limits
