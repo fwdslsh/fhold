@@ -112,7 +112,7 @@ describe('release manifest', () => {
 });
 
 describe('release workflows', () => {
-	test('runtime image scans retain raw findings and only the approved, expiring Brotli exception', () => {
+	test('runtime image scans retain raw findings and only approved, scoped expiring exceptions', () => {
 		const exceptions = Bun.YAML.parse(
 			readFileSync(join(ROOT, '.github/trivy-ignore.yaml'), 'utf8')
 		) as { vulnerabilities: Array<Record<string, unknown>> };
@@ -123,6 +123,27 @@ describe('release workflows', () => {
 				purls: ['pkg:deb/debian/libbrotli1@1.1.0-2%2Bb7'],
 				expired_at: '2026-11-06',
 				statement: expect.stringContaining('Malicious Brotli data may cause memory corruption.'),
+			},
+			{
+				id: 'CVE-2026-109461',
+				paths: ['opt/fhold/tools/node_modules/@azure/msal-node/package.json'],
+				purls: ['pkg:npm/%40azure/msal-node@6.0.1'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('GHSA-xcx6-jx8p-x3h5'),
+			},
+			{
+				id: 'CVE-2023-54404',
+				paths: ['opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json'],
+				purls: ['pkg:npm/zod@3.25.76'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('GHSA-mrhx-c7xc-m3w5'),
+			},
+			{
+				id: 'CVE-2026-109869',
+				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
+				purls: ['pkg:npm/undici@6.29.0'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('GHSA-xjj6-f33q-929c'),
 			},
 		]);
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {

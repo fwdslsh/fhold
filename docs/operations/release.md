@@ -265,7 +265,7 @@ data can cause memory corruption; this is not a clean-scan claim.
 version, on either architecture, and expires **November 6, 2026**. Trivy's native
 expiry handling stops applying it after that date. The unfiltered high/critical
 report still includes the finding; all other critical and fixable-high findings
-continue to fail publication. No npm exception is restored and no bundled library
+continue to fail publication unless individually approved below. No bundled library
 is patched or replaced. Remove the entry as soon as Debian provides a supported
 fix, or re-review before expiry. Publication does not update installed instances.
 
@@ -336,11 +336,43 @@ exceptions pending supported upstream fixes. Track removal in
 `bun run audit` excludes only the named advisories; raw `bun audit` still reports
 them. No global major-version override, vendor patch, severity-wide exclusion or
 disabled audit is introduced. Source checks run before the mandatory audit, so
-an advisory cannot hide unrelated test failures. Runtime image scans are unchanged.
+an advisory cannot hide unrelated test failures. The separately approved Assistant
+image scope is documented below.
 Re-review with the next AKM update, before any release, and no later than
 **November 6, 2026**. Remove each exception as soon as its supported dependency
 chain is patched (including the separate MCPB and Azure chains), and qualify AKM
 or Blob behavior when updating those dependencies. This is not a clean-audit claim.
+
+## Temporary Assistant image exceptions (October 26, 2026)
+
+On October 26, 2026 (October 27 UTC), the product owner explicitly approved
+these three identified PR #67 Assistant findings until **November 6, 2026**:
+
+| Trivy ID / exact GitHub alias | Package/version | Exact image package path |
+| --- | --- | --- |
+| CVE-2026-109461 / GHSA-xcx6-jx8p-x3h5 | `@azure/msal-node@6.0.1` | `opt/fhold/tools/node_modules/@azure/msal-node/package.json` |
+| CVE-2023-54404 / GHSA-mrhx-c7xc-m3w5 | `zod@3.25.76` | `opt/fhold/tools/node_modules/akm-cli/node_modules/zod/package.json` |
+| CVE-2026-109869 / GHSA-xjj6-f33q-929c | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
+
+Trivy0.76.1 applies the path and exact package/version PURL together; there are
+no directory globs or severity-wide exclusions. The unfiltered high/critical
+report remains visible. Other critical/fixable-high findings still fail, and
+native expiry stops these entries applying after the deadline. The first two
+retain the exposure and upstream constraints described under #63 above. The
+third permits npm's bundled HTTP client's unhandled-error denial-of-service
+finding from excessive content-encodings. Official npm12.2.1 and maintained
+11.21.1 tarballs both still contain undici6.29.0; no vendor tree is modified.
+
+[Issue #57](https://github.com/fwdslsh/fhold/issues/57) must verify and remove
+all three entries during the next native dependency qualification. AKM updates
+can fix its Zod chain, but do not fix Azure/MSAL or npm independently. Adopt a
+supported Azure chain and qualify Blob behavior, and a supported patched npm
+release and qualify npm/npx, before removing their respective entries. Preserve
+[issue #63](https://github.com/fwdslsh/fhold/issues/63)'s separate Azure and MCPB
+tracking. Re-review before publication, when a supported fix appears, or by
+November 6; remove each exception as soon as its own chain is patched. Approval
+does not authorize disabling scans, major vendor overrides or skipping runtime
+qualification, and green filtered scans are not clean raw scans.
 
 ## Public release gates
 
