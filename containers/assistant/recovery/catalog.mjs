@@ -70,6 +70,7 @@ function defaultExcluded(root, name) {
 const AKM_LOCK_FILES = ['index.db.write.lock', 'index.rebuild.lock', 'akm.lock.lck'];
 const LOCK_COMPANION = /^\.(?:tmp|stale)-[1-9][0-9]*-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 function nativeProcessState(baseRoots) {
+	const claudeBackups = path.join(baseRoots.home, '.claude/backups');
 	const directories = [
 		...['state/locks', 'secret-locks', 'extract-locks', 'workflow-run-locks'].map(
 			(name) => path.join(baseRoots.akmData, name)
@@ -85,6 +86,10 @@ function nativeProcessState(baseRoots) {
 	return {
 		paths: [...directories, ...files],
 		contains: (target) =>
+			// Claude rotates these five configuration copies while it runs. Keep
+			// the actual config, corrupted-config evidence and unrelated files.
+			(path.dirname(target) === claudeBackups &&
+				/^\.claude\.json\.backup\.[0-9]+$/.test(path.basename(target))) ||
 			directories.some((root) => containsPath(root, target)) ||
 			files.some(
 				(file) =>
