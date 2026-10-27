@@ -319,6 +319,16 @@ There is no new app-credential registry, ingress protocol or generic integration
 Configured, running, native startup intent and verified client readiness remain
 distinct. Native workers remain experimental and require native consent.
 
+Admin's Open OpenCode action uses native `POST /api/pair` and opens its single-use
+`/auth/connect/:code` link in the default browser. OpenCode owns expiry, redemption
+and the browser session cookie. The long-lived password stays in the management
+process, not the URL, renderer or clipboard. Local Docker and SSH use the selected
+instance's existing credential and route; SSH keeps its existing session-scoped
+forward. HTTPS-hosted agents use the explicit native connection established in
+Admin, without fetching cloud secrets or assuming Azure login is OpenCode login.
+Passive inspection never creates a pairing code. No proxy, new ingress, runtime
+patch, auth bypass or deployment restart is needed.
+
 Guarded apps present inline Chat only, Read files and Full access choices;
 granting Full access requires explicit confirmation. Normal bot setup hides
 fhold keys entirely and preserves its assigned identity without a credential

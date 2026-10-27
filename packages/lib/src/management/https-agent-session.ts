@@ -167,6 +167,9 @@ export function httpsAgentBindings(
 	const preferenceReason =
 		'Native preferences need an owned file-editing route. This connection provides the OpenCode HTTP API only; use the native agent interface or deployment tools.';
 	const agent: Partial<AgentOperations> = {
+		browserLink: connected(async (_input, context) =>
+			(await bound(context, false)).browserLink({ signal: context.signal })
+		),
 		connect: supportedOperation(
 			async (input, context) => {
 				if (isClosed())

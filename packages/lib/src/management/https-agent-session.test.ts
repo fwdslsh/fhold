@@ -39,6 +39,7 @@ function fixture() {
 			const path = new URL(request.url).pathname;
 			const data = (value: unknown) => Response.json({ data: value });
 			if (path === '/api/info') return Response.json({ version: '2.0.32' });
+			if (path === '/api/pair') return Response.json({ code: 'one-use-code', expires_in: 300 });
 			if (path === '/api/config')
 				return Response.json([{ type: 'document', info: { model: 'example/tool-model' } }]);
 			if (path === '/api/provider') return data([{ id: 'example', name: 'Example' }]);
@@ -91,6 +92,27 @@ function fixture() {
 }
 
 describe('explicit HTTPS agent session', () => {
+	it('uses an explicitly connected HTTPS agent for browser pairing and rejects stale connections', async () => {
+		const current = fixture();
+		await expect(invoke(current.bindings.agent!.browserLink, undefined)).rejects.toThrow('Connect');
+		expect(current.requests).toHaveLength(0);
+		await invoke(current.bindings.agent!.connect, { password: 'synthetic-private-password' });
+		// An explicit browser open may wake the connected revision; stale replica
+		// counts must not gate this behind the account-mutation preflight.
+		current.setReplicas(0);
+		expect(await invoke(current.bindings.agent!.browserLink, undefined)).toEqual({
+			url: 'https://agent.example.test/auth/connect/one-use-code'
+		});
+		expect(JSON.stringify(await current.bindings.inspectApplication!())).not.toContain(
+			'one-use-code'
+		);
+		current.replace();
+		await expect(invoke(current.bindings.agent!.browserLink, undefined)).rejects.toThrow(
+			'runtime changed'
+		);
+		expect(current.requests.filter((request) => request.url.endsWith('/api/pair'))).toHaveLength(1);
+		await current.bindings.close!();
+	});
 	it('passive observations never acquire a route or wake the workload', async () => {
 		const current = fixture();
 		expect((await current.bindings.inspectApplication!()).agent?.access?.state).toBe(

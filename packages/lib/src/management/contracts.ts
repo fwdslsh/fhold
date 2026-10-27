@@ -204,6 +204,8 @@ export type LifecycleOutcome =
 
 /** Stage-one slots are intentionally narrow; later services fill them one at a time. */
 export type AgentOperations = {
+	/** Acquire a native one-use link on the selected browser-reachable route. */
+	browserLink: Operation<void, { url: string }>;
 	/** `sessionBound` means the returned endpoint depends on this open session. */
 	connect: Operation<
 		{ password?: string },

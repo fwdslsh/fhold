@@ -1,7 +1,9 @@
 import type { HostingSnapshot } from '../hosting/types.js';
+import { createNativeAgentService } from '../control-plane/native-agent.js';
 import type { InstanceManagement, ManagedSnapshot, ManagementMethod } from './types.js';
 import {
 	operationDescription,
+	invokeOperation,
 	supportedOperation,
 	unsupportedOperation,
 	type AgentObservations,
@@ -147,6 +149,7 @@ function optionalObservation<T>(value: T | undefined, reason: string): Observati
 export function composeInstanceSession(bindings: InstanceSessionBindings): ComposedInstanceSession {
 	const agentUnavailable = 'Native agent access is not configured for this instance.';
 	const agent: AgentOperations = {
+		browserLink: bindings.agent?.browserLink ?? unsupportedOperation(agentUnavailable),
 		connect: bindings.agent?.connect ?? unsupportedOperation(agentUnavailable),
 		providers: bindings.agent?.providers ?? unsupportedOperation(agentUnavailable),
 		setKey: bindings.agent?.setKey ?? unsupportedOperation(agentUnavailable),
@@ -293,6 +296,7 @@ export function rpcManagementBindings(
 	const credentialPolicyReason =
 		'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.';
 	let acquired: AppConnections | undefined;
+	const lifetime = new AbortController();
 	// An acquired route belongs to the source addresses from which it was
 	// created. If a later passive observation changes them, drop the route.
 	let acquiredSource: string | undefined;
@@ -370,6 +374,24 @@ export function rpcManagementBindings(
 		return manager.call('snapshot');
 	}
 	const agent: AgentOperations = {
+		browserLink: operation('assistantPassword', async (_input, context) => {
+			lifetime.signal.throwIfAborted();
+			// Reuse the route acquisition that owns SSH forwards. Never put the
+			// password in a browser URL or a public snapshot.
+			const route = await invokeOperation(agent.connect, {}, context);
+			lifetime.signal.throwIfAborted();
+			const service = createNativeAgentService(
+				{
+					endpoint: route.endpoint,
+					authorization: async () => {
+						const { password } = await manager.call('assistantPassword');
+						return `Basic ${Buffer.from(`${route.username || 'opencode'}:${password}`).toString('base64')}`;
+					}
+				},
+				{ signal: lifetime.signal }
+			);
+			return service.browserLink({ signal: context.signal });
+		}),
 		connect: operation(
 			'snapshot',
 			async () => {
@@ -622,6 +644,7 @@ export function rpcManagementBindings(
 		},
 		busy: () => manager.busy(),
 		close: () => {
+			lifetime.abort();
 			acquired = undefined;
 			acquiredSource = undefined;
 			return manager.close();
