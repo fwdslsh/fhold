@@ -2,14 +2,14 @@
 
 Use a non-root Linux account with Docker Engine and Compose v2. Download the
 matching x64 or ARM64 CLI or Admin AppImage from the
-[GitHub release](https://github.com/fwdslsh/fhold/releases/tag/0.2.2610134-beta.11).
+[GitHub release](https://github.com/fwdslsh/fhold/releases).
 The release includes checksums and an asset manifest. The CLI is a standalone
 executable; installed releases do not require Bun, Node.js or npm on the host.
 
 For example, on Linux x64:
 
 ```bash
-curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.2.2610134-beta.11/fhold-cli-linux-x64
+curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.3.261008-beta/fhold-cli-linux-x64
 chmod +x fhold
 ./fhold install --name personal-agent
 ./fhold --name personal-agent setup
@@ -83,9 +83,6 @@ as its unnamed default. `~/fhold` itself is not an instance; it may also hold
 backups, docs and other local directories. Custom locations remain supported.
 Existing homes are never moved automatically; continue selecting their original
 location explicitly.
-
-Alpha.3 predates global `--name`/`-n` selection and the cwd fallback. Use
-`FH_HOME` when running that older binary; install alpha.4 or newer to use the commands above.
 
 CLI and Admin derive the same stable per-home Compose
 project. A DNS-safe directory name under the default instances root is also the

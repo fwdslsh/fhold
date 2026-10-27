@@ -8,7 +8,7 @@ This status does not apply to the core fhold agent or Claude Desktop MCPB.
 
 Use matching CLI/Admin and Assistant releases. Guided setup uses the image-baked
 helpers; built-in recall hooks use native plugin registration and consent. Replacing source
-or one frontend does not update a running image. See [upgrading](managing-fhold.md#upgrade-from-alpha3)
+or one frontend does not update a running image. See [upgrading](managing-fhold.md#update-an-existing-installation)
 and [managed configuration](managed-harness-configuration.md).
 
 These options start **separate native coding agents** in the Assistant's
