@@ -409,20 +409,20 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			);
 			const userConfigBeforeRestart = digest(preferencesPath);
 			const authBeforeRestart = await authIds();
-			// Model the prior release's persisted, operator-owned AKM config.
+			// Current native harness settings belong to the operator. Restart must
+			// preserve them exactly, without a fhold engine conversion/default reset.
 			const akmPath = join(home, 'config/akm/config.json');
-			const oldAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
-			oldAkm.engines.scheduled.args[1] = '--attach';
-			writeFileSync(akmPath, JSON.stringify(oldAkm));
+			const operatorAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
+			operatorAkm.harnesses.opencode.agent = 'build';
+			const operatorAkmBytes = JSON.stringify(operatorAkm, null, 2);
+			writeFileSync(akmPath, operatorAkmBytes);
 			await run(['restart']);
 			await waitForAssistant(home);
-			const upgradedAkm = JSON.parse(readFileSync(akmPath, 'utf8'));
-			assert.equal(restartStatus(home).required, false, 'One healthy normal restart applies the converted engine');
-			oldAkm.engines.scheduled.args[1] = '--server';
-			assert.deepEqual(
-				upgradedAkm,
-				oldAkm,
-				'Normal startup upgrades the exact shipped scheduler arguments and preserves all other settings'
+			assert.equal(restartStatus(home).required, false, 'One healthy normal restart applies current native configuration');
+			assert.equal(
+				readFileSync(akmPath, 'utf8'),
+				operatorAkmBytes,
+				'Normal restart preserves operator-owned native harness configuration byte for byte'
 			);
 			await identity('after explicit CLI restart');
 			const afterRestart = await listProviderSettings(home);
