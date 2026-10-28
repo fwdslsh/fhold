@@ -103,6 +103,11 @@ export function nativeEvent(tool, input, root = runtime()) {
 	if (!['claude', 'codex'].includes(tool)) throw Error('Invalid native harness');
 	const session = input.session_id;
 	const mark = (token, busy) => activity(tool, session, token, busy, root);
+	const turn = (busy) => {
+		if (tool === 'codex' && (typeof input.turn_id !== 'string' || !input.turn_id || input.turn_id.length > 1024))
+			throw Error('Invalid native turn identity');
+		mark(tool === 'codex' ? `turn:${input.turn_id}` : 'turn', busy);
+	};
 	const background = () => {
 		if (tool !== 'claude') return;
 		// Missing task metadata cannot prove that background work finished.
@@ -116,10 +121,15 @@ export function nativeEvent(tool, input, root = runtime()) {
 			coverage(tool, true, root);
 			break;
 		case 'UserPromptSubmit':
-			mark('turn', true);
+			turn(true);
 			break;
 		case 'PreToolUse':
-			mark('turn', true);
+			turn(true);
+			// Codex PostToolUse reports successful calls only: cancellation,
+			// permission rejection and tool errors have no balancing hook.
+			// The native turn protects foreground calls and pending input;
+			// separately started subagents retain their own observations.
+			if (tool === 'codex') break;
 			mark(`tool:${input.tool_use_id || 'unknown'}`, true);
 			break;
 		case 'PostToolUse':
@@ -134,20 +144,24 @@ export function nativeEvent(tool, input, root = runtime()) {
 				if (call.tool_use_id) mark(`tool:${call.tool_use_id}`, false);
 			break;
 		case 'SubagentStart':
+			// Codex dispatches this in the child's own session and turn. Child
+			// turns can continue after the parent, or finish without a Stop hook.
+			if (tool === 'codex') { turn(true); break; }
 			mark(`agent:${input.agent_id || 'unknown'}`, true);
 			break;
 		case 'SubagentStop':
+			if (tool === 'codex') { turn(false); break; }
 			if (input.agent_id) mark(`agent:${input.agent_id}`, false);
 			background();
 			break;
 		case 'Stop':
 			background();
-			mark('turn', false);
+			turn(false);
 			break;
 		case 'StopFailure':
 		case 'Interrupt':
-			// Tools/subagents still need their own completion signals.
-			mark('turn', false);
+			// Claude tools and native subagents need their own completion signals.
+			turn(false);
 			break;
 		case 'SessionEnd':
 			endSession(tool, session, root);
@@ -191,25 +205,79 @@ export function keepaliveConfig(env) {
 		(mode === 'opencode' && env.FH_KEEPALIVE_AUTHORIZATION_FILE)
 	)
 		throw Error('Choose FH_KEEPALIVE_AUTH=none|opencode or an authorization file');
+	const password =
+		env.OPENCODE_SERVER_PASSWORD ||
+		(env.OPENCODE_SERVER_PASSWORD_FILE &&
+			readFileSync(env.OPENCODE_SERVER_PASSWORD_FILE, 'utf8').replace(/[\r\n]/g, ''));
+	const opencodeAuthorization = password
+		? `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`
+		: undefined;
+	const opencodePort = Number(env.OPENCODE_PORT || 4096);
+	if (!Number.isInteger(opencodePort) || opencodePort < 1 || opencodePort > 65535)
+		throw Error('Invalid native OpenCode port');
 	let authorization;
 	if (env.FH_KEEPALIVE_AUTHORIZATION_FILE) {
 		authorization = readFileSync(env.FH_KEEPALIVE_AUTHORIZATION_FILE, 'utf8').trim();
 		if (!authorization || /[\r\n]/.test(authorization) || authorization.length > 8192)
 			throw Error('Invalid keep-alive authorization file');
 	} else if (mode === 'opencode') {
-		const password =
-			env.OPENCODE_SERVER_PASSWORD ||
-			(env.OPENCODE_SERVER_PASSWORD_FILE &&
-				readFileSync(env.OPENCODE_SERVER_PASSWORD_FILE, 'utf8').replace(/[\r\n]/g, ''));
 		if (!password) throw Error('OpenCode keep-alive authentication requires its native password');
-		authorization = `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`;
+		authorization = opencodeAuthorization;
 	}
 	return {
 		enabled: true,
 		url: url.href,
 		authorization,
+		opencodeAuthorization,
+		opencodePort,
 		remotes: ['claude', 'codex'].filter((tool) => env[`FH_${tool.toUpperCase()}_REMOTE`] !== '0')
 	};
+}
+
+// A normal idle unload preserves coverage, but its plugin can be disabled
+// before the next load. Confirm every currently loaded location still has its
+// observer before suppressing a heartbeat. The global list does not load a
+// location; inventories are read only for locations already in that list.
+export async function observedActivity(root, config, fetch = globalThis.fetch) {
+	const state = activityStatus(root, config.remotes);
+	if (state !== 'idle') return state;
+	try {
+		if (!config.opencodeAuthorization) return 'unknown';
+		const signal = AbortSignal.timeout(5000);
+		const read = async (path) => {
+			const response = await fetch(`http://127.0.0.1:${config.opencodePort}/api${path}`, {
+				method: 'GET', redirect: 'error', signal,
+				headers: { Authorization: config.opencodeAuthorization }
+			});
+			if (!response.ok) {
+				await response.body?.cancel();
+				throw Error('Native inventory unavailable');
+			}
+			return response.json();
+		};
+		const locations = async () => {
+			const result = await read('/debug/location');
+			if (!Array.isArray(result) || result.length > 100 ||
+				result.some((ref) => typeof ref?.directory !== 'string' || !ref.directory.startsWith('/')))
+				throw Error('Invalid native locations');
+			const directories = result.map((ref) => ref.directory).sort();
+			// Native public refs omit workspaceID. Ambiguous directory identities
+			// cannot prove coverage of every internal workspace context.
+			if (new Set(directories).size !== directories.length) throw Error('Ambiguous native locations');
+			return directories;
+		};
+		const before = await locations();
+		for (const directory of before) {
+			const inventory = await read(`/plugin?${new URLSearchParams({ 'location[directory]': directory })}`);
+			if (!Array.isArray(inventory?.data) || !inventory.data.some((plugin) =>
+				plugin?.id === 'fhold.activity' && plugin.state?.status === 'active')) return 'unknown';
+		}
+		if (JSON.stringify(before) !== JSON.stringify(await locations())) return 'unknown';
+		// Native events or an observation failure may have arrived during I/O.
+		return activityStatus(root, config.remotes);
+	} catch {
+		return 'unknown';
+	}
 }
 
 function publish(file, value) {
@@ -231,10 +299,10 @@ export function initialize(env = process.env, root = runtime()) {
 	return { enabled: config.enabled };
 }
 
-export async function tick({ root = runtime(), fetch = globalThis.fetch } = {}) {
+export async function tick({ root = runtime(), fetch = globalThis.fetch, nativeFetch = fetch } = {}) {
 	const config = JSON.parse(readFileSync(join(root, 'keepalive.json'), 'utf8'));
 	if (!config.enabled) return { enabled: false };
-	const state = activityStatus(root, config.remotes);
+	const state = await observedActivity(root, config, nativeFetch);
 	const result = {
 		enabled: true,
 		activity: state,
@@ -300,7 +368,7 @@ if (invokedDirectly()) {
 				JSON.stringify({
 					...last,
 					enabled: config.enabled,
-					activity: config.enabled ? activityStatus(runtime(), config.remotes) : 'disabled',
+					activity: config.enabled ? await observedActivity(runtime(), config) : 'disabled',
 					degraded: Boolean(degraded)
 				})
 			);

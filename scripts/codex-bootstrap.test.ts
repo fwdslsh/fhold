@@ -2,8 +2,9 @@ import { afterEach, expect, test, spyOn, mock } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { bootstrapCodexActivity } from '../containers/assistant/fhold-remote.mjs';
+import { bootstrapCodexActivity, inspectCodexActivity, retireFinishedCodexTurns } from '../containers/assistant/fhold-remote.mjs';
 import * as recall from '../containers/assistant/fhold-codex-recall.mjs';
+import { activityStatus, coverage, nativeEvent } from '../plugins/fhold/scripts/activity.mjs';
 
 afterEach(() => mock.restore());
 
@@ -70,4 +71,90 @@ test('worker replacement during native inventory cannot establish coverage', asy
 			throw Error('Native inventory unavailable');
 		})
 	})).rejects.toThrow('Native inventory unavailable');
+});
+
+test.each(['failed', 'completed', 'interrupted'])('native %s turn metadata retires only that turn, preserving a newer turn and independent child', async (terminalStatus) => {
+	spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready' });
+	const root = mkdtempSync(join(tmpdir(), 'fhold-codex-failed-'));
+	const event = (name: string, turn = 'failed', extra = {}) => nativeEvent('codex', {
+		session_id: 'thread-a', turn_id: turn, hook_event_name: name, ...extra
+	}, root);
+	const requests: unknown[] = [];
+	const inspect = async (check: (rpc: (method: string, params: unknown) => Promise<unknown>) => Promise<unknown>) => check(async (method, params) => {
+		requests.push({ method, params });
+		if (method === 'thread/read') return { thread: { id: 'thread-a', status: { type: 'active', activeFlags: [] } } };
+		return method === 'thread/loaded/list' ? { data: ['thread-a'], nextCursor: null } : {
+			data: [{ id: 'newer', status: 'inProgress' }, { id: 'failed', status: terminalStatus }], nextCursor: null
+		};
+	});
+	try {
+		coverage('opencode', true, root);
+		event('UserPromptSubmit');
+		expect(activityStatus(root, [])).toBe('busy');
+		const result = await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true });
+		expect(result).toEqual({ known: true, empty: false, idle: false, finished: [{ threadId: 'thread-a', turnId: 'failed' }] });
+		expect(requests).toEqual([
+			{ method: 'thread/loaded/list', params: {} },
+			{ method: 'thread/read', params: { threadId: 'thread-a', includeTurns: false } },
+			{ method: 'thread/turns/list', params: { threadId: 'thread-a', limit: 100, itemsView: 'notLoaded' } }
+		]);
+		// A native failure is terminal even though Codex never emitted Stop.
+		retireFinishedCodexTurns(result.finished, root);
+		expect(activityStatus(root, [])).toBe('idle');
+		event('UserPromptSubmit');
+		nativeEvent('codex', { session_id: 'child', turn_id: 'child-turn', hook_event_name: 'SubagentStart', agent_id: 'child' }, root);
+		event('UserPromptSubmit', 'newer');
+		retireFinishedCodexTurns(result.finished, root);
+		expect(activityStatus(root, [])).toBe('busy');
+		event('Stop', 'newer');
+		expect(activityStatus(root, [])).toBe('busy');
+		nativeEvent('codex', { session_id: 'child', turn_id: 'child-turn', hook_event_name: 'SubagentStop', agent_id: 'child' }, root);
+		expect(activityStatus(root, [])).toBe('idle');
+	} finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('failed-turn inspection refuses malformed observations and a replaced worker', async () => {
+	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready' });
+	let turns: unknown = { data: [{ id: 'a', status: 'failed' }] };
+	let alive = true;
+	const inspect = async (check: (rpc: (method: string) => Promise<unknown>) => Promise<unknown>) => check(async method =>
+		method === 'thread/loaded/list' ? { data: ['thread-a'], nextCursor: null } :
+			method === 'thread/read' ? { thread: { id: 'thread-a', status: { type: 'idle' } } } : turns);
+	for (turns of [{}, { data: null }, { data: [{ id: 'a', status: 'unknown' }] }, { data: [{ status: 'failed' }] }])
+		expect(await inspectCodexActivity({ inspect, alive: () => alive, finishedTurns: true })).toEqual({ known: false });
+	turns = { data: [{ id: 'a', status: 'failed' }] }; alive = false;
+		expect(await inspectCodexActivity({ inspect, alive: () => alive, finishedTurns: true })).toEqual({ known: false });
+	alive = true; review.mockResolvedValue({ status: 'approval-needed' });
+		expect(await inspectCodexActivity({ inspect, alive: () => alive, finishedTurns: true })).toEqual({ known: false });
+});
+
+test('native idle status restores observation coverage for loaded conversations without a new turn', async () => {
+	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready' });
+	let thread: unknown = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
+	let turnStatus = 'completed';
+	const requests: unknown[] = [];
+	const inspect = async (check: (rpc: (method: string, params: unknown) => Promise<unknown>) => Promise<unknown>) => check(async (method, params) => {
+		requests.push({ method, params });
+		if (method === 'thread/loaded/list') return { data: ['thread-a'], nextCursor: null };
+		if (method === 'thread/read') return { thread };
+		return { data: [{ id: 'complete', status: turnStatus }], nextCursor: null };
+	});
+	expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toMatchObject({ known: true, empty: false, idle: true });
+	expect(requests).toContainEqual({ method: 'thread/read', params: { threadId: 'thread-a', includeTurns: false } });
+	thread = { id: 'thread-a', status: { type: 'systemError' }, turns: [] };
+	expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toMatchObject({ known: true, idle: true });
+	turnStatus = 'inProgress';
+	expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toMatchObject({ known: true, idle: false });
+	turnStatus = 'completed';
+	for (const activeFlags of [[], ['waitingOnApproval'], ['waitingOnUserInput']]) {
+		thread = { id: 'thread-a', status: { type: 'active', activeFlags }, turns: [] };
+		expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toMatchObject({ known: true, idle: false });
+	}
+	for (thread of [undefined, {}, { id: 'other', status: { type: 'idle' } },
+		{ id: 'thread-a', status: { type: 'notLoaded' } }, { id: 'thread-a', status: { type: 'unsupported' } },
+		{ id: 'thread-a', status: { type: 'active' } }])
+		expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toEqual({ known: false });
+	thread = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
+	review.mockResolvedValue({ status: 'installed' });
+	expect(await inspectCodexActivity({ inspect, alive: () => true, finishedTurns: true })).toEqual({ known: false });
 });

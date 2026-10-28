@@ -106,7 +106,9 @@ For another HTTP endpoint, omit `FH_KEEPALIVE_AUTH` for an unauthenticated GET,
 or mount a private file and set `FH_KEEPALIVE_AUTHORIZATION_FILE` to its path.
 The file contains the complete Authorization header value, such as a bearer
 credential. Do not combine the file with `FH_KEEPALIVE_AUTH=opencode`. Native
-OpenCode credentials are sent only after that explicit authentication choice.
+OpenCode credentials are sent to the external heartbeat endpoint only after that
+explicit authentication choice. Native observation uses the same credentials
+only against OpenCode on container loopback.
 Redirects are refused, requests have a five-second timeout, response bodies are
 discarded, and diagnostics contain no URL, credential or conversation content.
 Environment configuration is read on boot; restart after changing it.
@@ -126,16 +128,39 @@ expiry: hours of thinking or waiting for approval continue to keep the instance
 awake. Markers contain only hashed identifiers and are reset at container boot,
 outside recovered user state.
 
+Normal OpenCode idle eviction preserves its last valid observation. Before
+reporting idle, the existing keep-alive command reads the native loaded-location
+list and verifies an active `fhold.activity` plugin in every listed location.
+This catches plugin removal even when it happened while the location was
+unloaded. Missing/failed plugins, ambiguous or changing location lists and failed
+inventory reads remain unknown. Inventories have one shared five-second deadline
+and never establish coverage themselves. Empty location lists cause no scoped
+requests; inventory reads do not reset native idle TTL. A location evicted between
+listing and inspection may be reloaded by the native scoped inventory request.
+These are conservative snapshots, not an atomic guarantee against concurrent changes.
+
 Any active work or unknown observation sends a heartbeat. All observed work
 must be idle before heartbeats stop. A running process by itself is never
 classified as busy or idle. An enabled native worker with no observed fhold
-hooks is unknown. Before its first session, Codex's supervisor makes one bounded
-read-only connection to that running server's native Unix WebSocket. It verifies
+hooks is unknown. Codex's existing supervisor makes a bounded read-only check of
+that same running server's native Unix WebSocket every 20 seconds. It verifies
 the enabled and natively approved activity hooks and a complete empty loaded-thread list
 before establishing initial coverage. It creates no session, sends no model request,
 changes no native configuration and starts no second server. If threads already
-exist, normal session hooks must provide coverage; inspection failure remains
-unknown. Before launching a remote worker, its supervisor asks the native CLI for
+exist, normal session hooks must provide coverage. A later native hook approval
+can establish unused coverage without a user turn or a worker restart; lost
+coverage becomes unknown again.
+
+Codex 0.164 does not emit `Stop` when a model request fails. The same check reads
+up to 100 recent turn metadata records per loaded thread, without conversation
+items. A native `failed` status retires only that exact turn's observation.
+Per-turn identifiers prevent an older failure from clearing a newer prompt;
+independent tool and subagent observations remain protected. Missing, malformed,
+unavailable or out-of-window metadata never clears activity. No age timeout,
+synthetic event, native approval or second server is involved. Changed plugin
+definitions still require ordinary native hook review after an update.
+
+Before launching a remote worker, its supervisor asks the native CLI for
 the required subscription-account status. A confirmed missing account reports
 `sign-in-needed` and waits without starting that worker, so a fresh unsigned-in
 instance can become idle normally. Native sign-in is rechecked on the existing
@@ -143,7 +168,7 @@ retry interval; the built-in setup skills can restart that supervisor immediatel
 No new switch, auth file, credential inspection or idle marker is required.
 A failed/unrecognized status check is not proof of inactivity: normal native
 startup continues and missing coverage stays unknown. A stopped worker or a
-worker waiting to retry is not active by itself. Stale markers after crashes, missed completion events, or
+worker waiting to retry is not active by itself. Stale markers after crashes, other missed completion events, or
 unsupported background-task metadata conservatively keep the instance awake;
 they never expire to make scaling appear successful. Session-end events or a
 new container boot clear the corresponding observations.

@@ -96,6 +96,11 @@ transcript or prove that a client reached the intended instance.
    busy-marker counts alone do not prove coverage. For Claude, document any
    native activation step that is required; do not call an activation turn
    "unused idle before any turn."
+   Do not initialize OpenCode's workspace from the test before checking this
+   case. With keepalive enabled, Assistant performs its one ordinary default-
+   workspace initialization at startup; a global health check alone does not
+   load the native activity plugin. Retain cold-boot evidence before any client
+   or location-scoped API request. Failure remains conservative and visible.
 2. **Real client identity and history.** Pair through the actual supported clients.
    Have each client run `hostname` and `pwd` in a harmless request. Compare with
    the intended target; a reply from another running instance is a failure.
@@ -127,7 +132,14 @@ transcript or prove that a client reached the intended instance.
    Verify work remains protected from idle shutdown while input is outstanding.
    Disconnect/reconnect the client while keeping Assistant running. Only the
    operator answers; exercise approve and deny, then verify work completes or
-   cancels and returns to idle. Never replay an approval automatically.
+   cancels and returns to idle. For Codex, also interrupt a pending native
+   `request_user_input` question without answering and cancel a pending command
+   approval: confirm native idle and the interrupted turn, then require three
+   quiet intervals. Also run a harmless failing command and let its turn finish.
+   Codex emits `PostToolUse` only for successful calls; these outcomes must not
+   leave an unbalanced tool observation. Foreground calls remain protected by
+   their turn, and independent native subagents retain their own observations.
+   Never replay an approval automatically.
 6. **Replacement boundary.** Stop/restore is not a promise to resume in-flight
    vendor execution or pending approvals. Document the native outcome for a
    pending question/permission only in the disposable fixture. Confirm no command
@@ -135,22 +147,51 @@ transcript or prove that a client reached the intended instance.
    to continue. Separate supported completed-conversation recovery from unsupported
    active-turn continuation; failure to resume an active turn must not be hidden
    by resubmission or a fabricated history entry.
-7. **Observation failure.** On a separate disposable Codex fixture, copy
-   `system/codex/requirements.toml` to an operator-owned policy file and explicitly
-   mount that file at `/etc/codex/requirements.toml`, following the
-   [custom policy instructions](../managed-harness-configuration.md#deployment-inputs).
-   Set its native `[hooks] managed_dir` to a separate empty directory mounted
-   read-only at startup. Keep managed-only hooks enabled.
-   This deliberately withholds the expected managed inventory;
-   do not change the image or cover `/etc/codex` with a directory mount.
-   Confirm native hook review reports the missing inventory and the enabled running
+7. **Observation failure.** On a separate disposable Codex fixture, use native
+   `/hooks` or the existing hook review helper to review and explicitly disable
+   only `fhold@fhold-plugins` activity hooks. Current images use ordinary native
+   plugin hooks, not the historical managed-only hook policy. Preserve the
+   selected sandbox, account, other plugins and user/project hooks.
+   Confirm native hook review reports disabled hooks and the enabled running
    worker remains `unknown` with fresh successful keepalive requests. Record the
-   policy change privately. If native policy validation prevents the worker from
+   native choice privately. If native policy validation prevents the worker from
    launching, this case is blocked; an inactive worker is not a failed observation
    of a running worker. Do not manually delete ready/busy markers, expire a
    busy marker, force idle or run a second server. Restore the ordinary fixture
-   configuration only through its normal stopped lifecycle after collecting the
-   failure evidence. This deliberate fault is not evidence for the healthy case.
+   hooks through a fresh native review and explicit operator approval after
+   collecting the failure evidence. This deliberate fault is not evidence for
+   the healthy case. With a completed conversation still loaded, re-enable the
+   reviewed hooks without sending another turn or restarting the worker. Require
+   fresh known idle and three quiet intervals. A temporary inspection failure
+   must not leave an otherwise-idle, loaded conversation keeping Assistant awake
+   forever. Native active status, including waiting for approval or user input,
+   must never establish idle coverage.
+8. **Failed turn returns to idle.** In a disposable native conversation, cause a
+   controlled provider failure and require the native client to report a terminal
+   failed turn. The supervisor must retire that exact turn within its next
+   successful observation, then keepalive must stop for three intervals once
+   all other work is idle. Start another quiet turn before an observation and
+   verify that the older failure never clears the newer work. Repeat the failure.
+   Do not treat a pending retry as a terminal failure. The image regression uses
+   a loopback provider with actual Codex binaries and hooks; it does not qualify
+   signed-in vendor connectivity or replace the two-hour foreground case.
+9. **OpenCode native idle unload.** During the two-hour case, leave the otherwise
+   unused OpenCode workspace untouched. Its native idle eviction must not turn
+   healthy observation into permanent unknown. Retain the native eviction log
+   and compare whole-instance activity after Codex finishes. Require three quiet
+   intervals, then start ordinary OpenCode work and verify activity is observed
+   again. Do not poll location-scoped OpenCode endpoints to keep the workspace
+   loaded. The image regression shortens only the documented native idle TTL to
+   exercise the actual unload/reload lifecycle quickly; the live two-hour case
+   retains the native default TTL.
+10. **OpenCode observer removal.** In a disposable instance, disable
+    `fhold.activity` through native plugin configuration while its location is
+    loaded. Run a native user shell command across two heartbeat intervals and
+    require unknown observation with continuing heartbeats. Re-enable the plugin
+    and require quiet idle. Repeat removal after actual native idle eviction,
+    before starting the next shell command. This second case must also remain
+    unknown during work: an old valid idle observation cannot certify a newly
+    loaded location with its observer disabled. Do not edit activity markers.
 
 ## Report and close the gate
 

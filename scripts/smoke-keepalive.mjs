@@ -10,7 +10,7 @@ assert.ok(image, 'Usage: node scripts/smoke-keepalive.mjs IMAGE');
 const name = `fhold-keepalive-smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-keepalive-smoke-only';
 
-function command(args, timeout = 300000) {
+function command(args, timeout = 600000) {
 	return new Promise((resolve, reject) => {
 		const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 		const chunks = [];
@@ -35,9 +35,15 @@ function command(args, timeout = 300000) {
 const probe = `
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFileSync, readdirSync } from 'node:fs';
-import { activityStatus } from '/fhold-plugins/fhold/scripts/activity.mjs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { activityStatus, observedActivity } from '/fhold-plugins/fhold/scripts/activity.mjs';
+import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+const events = new AbortController();
+let eventStream;
+let streamReady = false;
+let streamFailure;
+let unloaded = 0;
 let count = 0;
 const sink = createServer((request, response) => {
   assert.equal(request.url, '/tick');
@@ -48,6 +54,7 @@ const sink = createServer((request, response) => {
 });
 await new Promise(resolve => sink.listen(4100, '127.0.0.1', resolve));
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const observed = () => observedActivity('/tmp/fhold-runtime', JSON.parse(readFileSync('/tmp/fhold-runtime/keepalive.json', 'utf8')));
 async function until(check, seconds = 90) {
   const deadline = Date.now() + seconds * 1000;
   while (!await check()) {
@@ -63,11 +70,23 @@ async function api(path, body) {
     signal: AbortSignal.timeout(body?.command ? 90000 : 3000)
   });
   assert.ok(response.ok, 'Native API request failed: ' + response.status);
-  return response.status === 204 ? undefined : (await response.json()).data;
+  if (response.status === 204) return undefined;
+  const payload = await response.json();
+  return payload.data ?? payload;
 }
 try {
   await until(async () => { try { await api('/info'); return true; } catch { return false; } });
-  await api('/config?location[directory]=/work');
+  const client = OpenCode.make({ baseUrl: 'http://127.0.0.1:4096', headers: { authorization } });
+  eventStream = (async () => {
+    try {
+      for await (const event of client.event.subscribe({ signal: events.signal, onActivity: () => { streamReady = true; } })) {
+        if (event.type === 'location.shutdown' && event.location?.directory === '/work') unloaded++;
+      }
+    } catch (error) { if (!events.signal.aborted) streamFailure = error; }
+  })();
+  await until(() => streamReady, 10);
+  // No location-scoped request before this assertion: startup must establish
+  // coverage without a test client supplying missing initialization behavior.
   await until(() => ['claude', 'codex'].every(tool => {
     try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
     catch { return false; }
@@ -81,6 +100,14 @@ try {
   const quiet = count;
   await pause(22000);
   assert.equal(count, quiet, 'Idle native sessions must not send keep-alive');
+  // Shorten only the documented native idle TTL for this regression. Observe
+  // actual native cleanup before starting work; never write activity markers.
+  await until(() => unloaded > 0, 130);
+  assert.equal(streamFailure, undefined);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'idle', 'Normal native workspace unload must preserve idle');
+  const afterUnload = count;
+  await pause(62000);
+  assert.equal(count, afterUnload, 'Unloaded idle workspace must remain quiet for three intervals');
   const session = await api('/session', {title:'Disposable keep-alive qualification', location:{directory:'/work'}});
   await api('/session/' + session.id + '/synthetic', {resume:false, text:'Append-only history fixture; do not execute.'});
   await pause(500);
@@ -100,8 +127,55 @@ try {
   const cron = readFileSync('/tmp/fhold-crontabs/fhold', 'utf8');
   assert.ok(cron.includes('fhold-keepalive tick'));
   assert.ok(!cron.includes('# akm:task'), 'User scheduling remains disabled');
-  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0}));
-} finally { sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve)); }
+
+  // Plugin deactivation also calls cleanup, but the location can still accept
+  // work. Exercise native config reload and inventory, never activity markers.
+  const registered = async () => (await api('/plugin?location[directory]=/work')).some(plugin => plugin.id === 'fhold.activity' && plugin.state.status === 'active');
+  await until(registered, 15);
+  const configPath = process.env.OPENCODE_CONFIG;
+  const originalConfig = readFileSync(configPath, 'utf8');
+  const config = JSON.parse(originalConfig);
+  writeFileSync(configPath, JSON.stringify({...config, plugins:[...(config.plugins || []), '-fhold.activity']}));
+  await until(async () => !await registered(), 15);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown', 'Plugin removal must invalidate coverage');
+  const disabledRequests = count;
+  const unobserved = api('/session/' + session.id + '/shell', {command:'sleep 45; printf fhold-unobserved-complete'});
+  await pause(1000);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown', 'Work without an observer must remain conservative');
+  await unobserved;
+  assert.ok(count >= disabledRequests + 2, 'Unknown observation must keep sending during real work');
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown');
+  const conservativeRequests = count - disabledRequests;
+  writeFileSync(configPath, originalConfig);
+  await until(registered, 15);
+  await until(async () => await observed() === 'idle', 10);
+  const replaced = count;
+  await pause(22000);
+  assert.equal(count, replaced, 'Replacement observation must restore quiet idle');
+
+  // Removal while no plugin is loaded has no cleanup callback. Preserve the
+  // legitimate idle unload, then require native inventory to catch the loss
+  // of coverage when normal work loads the now-disabled location again.
+  await until(async () => (await api('/debug/location')).length === 0, 130);
+  assert.equal(await observed(), 'idle');
+  writeFileSync(configPath, JSON.stringify({...config, plugins:[...(config.plugins || []), '-fhold.activity']}));
+  const unloadedRequests = count;
+  const reloaded = api('/session/' + session.id + '/shell', {command:'sleep 45; printf fhold-unloaded-disable-complete'});
+  await until(async () => await observed() === 'unknown', 10);
+  await reloaded;
+  assert.ok(count >= unloadedRequests + 2, 'Removal while unloaded must protect subsequent real work');
+  const unloadedConservativeRequests = count - unloadedRequests;
+  writeFileSync(configPath, originalConfig);
+  await until(registered, 15);
+  await until(async () => await observed() === 'idle', 10);
+  const restored = count;
+  await pause(22000);
+  assert.equal(count, restored, 'Re-enabled native observation must return to quiet idle');
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true, nativePluginDisableUnknown:true, conservativeRequests, replacementRestoresIdle:true, removalWhileUnloadedUnknown:true, unloadedConservativeRequests}));
+} finally {
+  events.abort(); await eventStream;
+  sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve));
+}
 `;
 
 try {
@@ -127,7 +201,7 @@ try {
 		'-e',
 		'FH_AUTOMATIC_MEMORY=0',
 		'-e',
-		`OPENCODE_CONFIG_CONTENT=${JSON.stringify({ model: 'openai/gpt-5-nano', provider: { openai: { options: { baseURL: 'http://127.0.0.1:9/v1', apiKey: 'offline-fixture' } } } })}`,
+		`OPENCODE_CONFIG_CONTENT=${JSON.stringify({ experimental: { location_idle_timeout: '1 second' }, model: 'openai/gpt-5-nano', provider: { openai: { options: { baseURL: 'http://127.0.0.1:9/v1', apiKey: 'offline-fixture' } } } })}`,
 		image
 	]);
 	console.log((await command(['exec', name, 'node', '--input-type=module', '-e', probe])).trim());

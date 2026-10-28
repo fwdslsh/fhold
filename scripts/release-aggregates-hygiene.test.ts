@@ -138,6 +138,20 @@ describe('release workflows', () => {
 				expired_at: '2026-11-06',
 				statement: expect.stringContaining('GHSA-xjj6-f33q-929c'),
 			},
+			{
+				id: 'CVE-2026-109383',
+				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
+				purls: ['pkg:npm/undici@6.29.0'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('GHSA-2m5v-pch6-74hx'),
+			},
+			{
+				id: 'CVE-2026-87018',
+				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
+				purls: ['pkg:npm/undici@6.29.0'],
+				expired_at: '2026-11-06',
+				statement: expect.stringContaining('GHSA-qrxm-fqhp-jwvm'),
+			},
 		]);
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: {

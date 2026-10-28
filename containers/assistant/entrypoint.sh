@@ -475,7 +475,7 @@ for tool in codex claude; do
   esac
 done
 
-if [ -n "$recovery_pid" ]; then
+if [ -n "$recovery_pid" ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
   # Do not snapshot SQLite while the native server is opening/migrating it.
   # Ownership renewal is already running; this gates only periodic captures,
   # not the server or optional workers. Shutdown stops this waiter as well.
@@ -485,7 +485,19 @@ if [ -n "$recovery_pid" ]; then
       kill -0 "$assistant_pid" 2>/dev/null || exit 0
       sleep 0.2
     done
-    printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
+    if [ -n "$recovery_pid" ]; then
+      printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
+    fi
+    # OpenCode 2 loads location plugins lazily. Initialize the ordinary default
+    # workspace once so an unused native worker can establish whole-instance
+    # idle without an operator opening OpenCode first. The plugin itself owns
+    # coverage; a failed request must not fabricate readiness. Never repeat this
+    # request as a health check or keep a naturally evicted workspace loaded.
+    if [ "$KEEPALIVE_ENABLED" = 1 ] && ! curl --max-time 30 -sf --get \
+      --data-urlencode 'location[directory]=/work' -u "opencode:$OPENCODE_SERVER_PASSWORD" \
+      "http://127.0.0.1:$OPENCODE_PORT/api/config" >/dev/null; then
+      mark_degraded activity 'Default workspace activity could not initialize. Keep-alive remains conservative; check native OpenCode configuration and open the workspace normally.'
+    fi
   ) &
   writer_pids+=("$!")
 fi
