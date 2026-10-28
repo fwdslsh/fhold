@@ -566,7 +566,8 @@ test.each(['missing', 'failed', 'malformed', 'http', 'network', 'changed', 'ambi
 				expect(init.headers).toEqual({});
 				return new Response(null);
 			}
-			signals.push(init.signal!);
+			if (!(init.signal instanceof AbortSignal)) throw Error('Missing inventory deadline');
+			signals.push(init.signal);
 			if (failure === 'network') throw Error('private-native-path');
 			if (failure === 'http') return new Response('private-native-path', { status: 401 });
 			if (target.pathname === '/api/debug/location') {
