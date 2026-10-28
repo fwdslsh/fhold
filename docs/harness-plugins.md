@@ -106,7 +106,9 @@ For another HTTP endpoint, omit `FH_KEEPALIVE_AUTH` for an unauthenticated GET,
 or mount a private file and set `FH_KEEPALIVE_AUTHORIZATION_FILE` to its path.
 The file contains the complete Authorization header value, such as a bearer
 credential. Do not combine the file with `FH_KEEPALIVE_AUTH=opencode`. Native
-OpenCode credentials are sent only after that explicit authentication choice.
+OpenCode credentials are sent to the external heartbeat endpoint only after that
+explicit authentication choice. Native observation uses the same credentials
+only against OpenCode on container loopback.
 Redirects are refused, requests have a five-second timeout, response bodies are
 discarded, and diagnostics contain no URL, credential or conversation content.
 Environment configuration is read on boot; restart after changing it.
@@ -125,6 +127,17 @@ accounts for background tasks and session wakeups. Activity has no age-based
 expiry: hours of thinking or waiting for approval continue to keep the instance
 awake. Markers contain only hashed identifiers and are reset at container boot,
 outside recovered user state.
+
+Normal OpenCode idle eviction preserves its last valid observation. Before
+reporting idle, the existing keep-alive command reads the native loaded-location
+list and verifies an active `fhold.activity` plugin in every listed location.
+This catches plugin removal even when it happened while the location was
+unloaded. Missing/failed plugins, ambiguous or changing location lists and failed
+inventory reads remain unknown. Inventories have one shared five-second deadline
+and never establish coverage themselves. Empty location lists cause no scoped
+requests; inventory reads do not reset native idle TTL. A location evicted between
+listing and inspection may be reloaded by the native scoped inventory request.
+These are conservative snapshots, not an atomic guarantee against concurrent changes.
 
 Any active work or unknown observation sends a heartbeat. All observed work
 must be idle before heartbeats stop. A running process by itself is never

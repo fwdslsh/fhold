@@ -31,26 +31,33 @@ export default Plugin.define({
 		// Loading occurs before workspace initialization completes. No HTTP callback.
 		report(() => coverage('opencode', true));
 		const abort = new AbortController();
+		let locationClosed = false;
 		void (async () => {
 			try {
 				for await (const event of context.event.subscribe({ signal: abort.signal })) {
 					if (event.location?.directory && event.location.directory !== context.location.directory)
 						continue;
+					if (
+						event.type === 'location.shutdown' &&
+						event.location?.directory === context.location.directory &&
+						event.location.workspaceID === context.location.workspaceID
+					)
+						locationClosed = true;
 					observeOpenCode(event);
 				}
 			} catch {
 				// A failed subscription must not prevent native work.
 			} finally {
-				// An unexpected clean end also loses observation. Only the native
-				// host's explicit cleanup is an intentional end of this observer.
+				// An unexpected clean end also loses observation.
 				if (!abort.signal.aborted) report(() => coverage('opencode', false));
 			}
 		})();
 		return () => {
-			// Native OpenCode unloads an idle location after its normal TTL and
-			// loads its managed plugins before accepting new work there. Cleanup
-			// is not an observation failure. Preserve the last observation and
-			// any outstanding work; never establish coverage or clear work here.
+			// Native location shutdown precedes plugin cleanup. Preserve the last
+			// observation only for that lifecycle; plugin removal/replacement also
+			// calls cleanup, but leaves the location able to accept unobserved work.
+			// A replacement observer establishes its own coverage during setup.
+			if (!locationClosed) report(() => coverage('opencode', false));
 			abort.abort();
 		};
 	}
