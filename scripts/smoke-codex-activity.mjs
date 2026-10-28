@@ -106,6 +106,10 @@ try {
 		const current = await reviewRecall(rpc, 'fhold@fhold-plugins');
 		await changeRecall(rpc, 'disable', current.digest, 'fhold@fhold-plugins');
 		record({ case: 'native hooks disabled', unknownMs: await until(() => !ready(), 'lost native coverage'), serverRunning: server.exitCode === null });
+		const disabled = await reviewRecall(rpc, 'fhold@fhold-plugins');
+		await changeRecall(rpc, 'approve', disabled.digest, 'fhold@fhold-plugins');
+		record({ case: 'loaded idle conversation after restored native consent', readyMs: await until(ready, 'restored loaded idle coverage'), busy: busy() });
+		assert.equal(busy(), 0);
 	}, { env, timeoutMs: 180_000 });
 	assert.equal(server.exitCode, null);
 	console.log(JSON.stringify({ nativeBinary: Bun.spawnSync(['codex', '--version']).stdout.toString().trim(), provider: 'offline controlled fixture', sandbox: 'workspace-write', accountQualification: false, results }));

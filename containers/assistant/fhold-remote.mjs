@@ -103,8 +103,15 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 		if (!Array.isArray(loaded?.data) || loaded.nextCursor !== null || loaded.data.length > 1000 ||
 			loaded.data.some((id) => typeof id !== 'string' || !id || id.length > 1024)) return { known: false };
 		const failed = [];
+		let idle = failedTurns || loaded.data.length === 0;
 		if (failedTurns) for (const threadId of loaded.data) {
-			// Metadata only: never read prompts, tool arguments or conversation bodies.
+			// The native runtime status can re-establish coverage after a transient
+			// inspection failure, even when completed conversations remain loaded.
+			// Do not hydrate turns/items or retain the metadata response.
+			const { thread } = await rpc('thread/read', { threadId, includeTurns: false });
+			if (thread?.id !== threadId || !['idle', 'active'].includes(thread.status?.type) ||
+				(thread.status.type === 'active' && !Array.isArray(thread.status.activeFlags))) return { known: false };
+			if (thread.status.type !== 'idle') idle = false;
 			// A bounded page is enough to retire any failed turns it positively identifies;
 			// omitted/older turns retain their conservative observations.
 			const turns = await rpc('thread/turns/list', { threadId, limit: 100, itemsView: 'notLoaded' });
@@ -116,7 +123,7 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 			}
 		}
 		if (!alive()) return { known: false };
-		return { known: true, empty: loaded.data.length === 0, failed };
+		return { known: true, empty: loaded.data.length === 0, idle, failed };
 	};
 	return inspect ? inspect(check) : withCodexControl(check, { env, signal });
 }
@@ -154,7 +161,7 @@ export async function monitorCodexActivity({ env, alive, signal, root }) {
 				if (!alive()) return;
 				if (!observation.known) throw Error('Native observation unavailable');
 				retireFailedCodexTurns(observation.failed, root);
-				if (observation.empty) writeFileSync(ready, '', { mode: 0o600 });
+				if (observation.idle) writeFileSync(ready, '', { mode: 0o600 });
 			} catch {
 				// Losing native coverage is conservative, even after an earlier success.
 				unknown();

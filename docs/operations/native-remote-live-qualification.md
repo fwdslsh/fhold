@@ -148,7 +148,12 @@ transcript or prove that a client reached the intended instance.
    busy marker, force idle or run a second server. Restore the ordinary fixture
    hooks through a fresh native review and explicit operator approval after
    collecting the failure evidence. This deliberate fault is not evidence for
-   the healthy case.
+   the healthy case. With a completed conversation still loaded, re-enable the
+   reviewed hooks without sending another turn or restarting the worker. Require
+   fresh known idle and three quiet intervals. A temporary inspection failure
+   must not leave an otherwise-idle, loaded conversation keeping Assistant awake
+   forever. Native active status, including waiting for approval or user input,
+   must never establish idle coverage.
 8. **Failed turn returns to idle.** In a disposable native conversation, cause a
    controlled provider failure and require the native client to report a terminal
    failed turn. The supervisor must retire that exact turn within its next

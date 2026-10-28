@@ -82,6 +82,7 @@ test('native failed-turn metadata retires only that turn, preserving a newer tur
 	const requests: unknown[] = [];
 	const inspect = async (check: (rpc: (method: string, params: unknown) => Promise<unknown>) => Promise<unknown>) => check(async (method, params) => {
 		requests.push({ method, params });
+		if (method === 'thread/read') return { thread: { id: 'thread-a', status: { type: 'active', activeFlags: [] } } };
 		return method === 'thread/loaded/list' ? { data: ['thread-a'], nextCursor: null } : {
 			data: [{ id: 'newer', status: 'inProgress' }, { id: 'failed', status: 'failed' }], nextCursor: null
 		};
@@ -91,9 +92,10 @@ test('native failed-turn metadata retires only that turn, preserving a newer tur
 		event('UserPromptSubmit');
 		expect(activityStatus(root, [])).toBe('busy');
 		const result = await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true });
-		expect(result).toEqual({ known: true, empty: false, failed: [{ threadId: 'thread-a', turnId: 'failed' }] });
+		expect(result).toEqual({ known: true, empty: false, idle: false, failed: [{ threadId: 'thread-a', turnId: 'failed' }] });
 		expect(requests).toEqual([
 			{ method: 'thread/loaded/list', params: {} },
+			{ method: 'thread/read', params: { threadId: 'thread-a', includeTurns: false } },
 			{ method: 'thread/turns/list', params: { threadId: 'thread-a', limit: 100, itemsView: 'notLoaded' } }
 		]);
 		// A native failure is terminal even though Codex never emitted Stop.
@@ -116,11 +118,37 @@ test('failed-turn inspection refuses malformed observations and a replaced worke
 	let turns: unknown = { data: [{ id: 'a', status: 'failed' }] };
 	let alive = true;
 	const inspect = async (check: (rpc: (method: string) => Promise<unknown>) => Promise<unknown>) => check(async method =>
-		method === 'thread/loaded/list' ? { data: ['thread-a'], nextCursor: null } : turns);
+		method === 'thread/loaded/list' ? { data: ['thread-a'], nextCursor: null } :
+			method === 'thread/read' ? { thread: { id: 'thread-a', status: { type: 'idle' } } } : turns);
 	for (turns of [{}, { data: null }, { data: [{ id: 'a', status: 'unknown' }] }, { data: [{ status: 'failed' }] }])
 		expect(await inspectCodexActivity({ inspect, alive: () => alive, failedTurns: true })).toEqual({ known: false });
 	turns = { data: [{ id: 'a', status: 'failed' }] }; alive = false;
 		expect(await inspectCodexActivity({ inspect, alive: () => alive, failedTurns: true })).toEqual({ known: false });
 	alive = true; review.mockResolvedValue({ status: 'approval-needed' });
 		expect(await inspectCodexActivity({ inspect, alive: () => alive, failedTurns: true })).toEqual({ known: false });
+});
+
+test('native idle status restores observation coverage for loaded conversations without a new turn', async () => {
+	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready' });
+	let thread: unknown = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
+	const requests: unknown[] = [];
+	const inspect = async (check: (rpc: (method: string, params: unknown) => Promise<unknown>) => Promise<unknown>) => check(async (method, params) => {
+		requests.push({ method, params });
+		if (method === 'thread/loaded/list') return { data: ['thread-a'], nextCursor: null };
+		if (method === 'thread/read') return { thread };
+		return { data: [{ id: 'complete', status: 'completed' }], nextCursor: null };
+	});
+	expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, empty: false, idle: true });
+	expect(requests).toContainEqual({ method: 'thread/read', params: { threadId: 'thread-a', includeTurns: false } });
+	for (const activeFlags of [[], ['waitingOnApproval'], ['waitingOnUserInput']]) {
+		thread = { id: 'thread-a', status: { type: 'active', activeFlags }, turns: [] };
+		expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, idle: false });
+	}
+	for (thread of [undefined, {}, { id: 'other', status: { type: 'idle' } },
+		{ id: 'thread-a', status: { type: 'notLoaded' } }, { id: 'thread-a', status: { type: 'systemError' } },
+		{ id: 'thread-a', status: { type: 'active' } }])
+		expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toEqual({ known: false });
+	thread = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
+	review.mockResolvedValue({ status: 'installed' });
+	expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toEqual({ known: false });
 });
