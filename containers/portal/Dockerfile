@@ -34,7 +34,8 @@ WORKDIR /app
 # Portal needs Node, not a package manager at runtime.
 RUN npm uninstall --global npm \
     && apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl libbrotli1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.1.0-2+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/node_modules ./node_modules

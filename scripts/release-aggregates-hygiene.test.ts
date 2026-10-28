@@ -119,12 +119,6 @@ describe('release workflows', () => {
 		expect(Object.keys(exceptions)).toEqual(['vulnerabilities']);
 		expect(exceptions.vulnerabilities).toEqual([
 			{
-				id: 'CVE-2026-111497',
-				purls: ['pkg:deb/debian/libbrotli1@1.1.0-2%2Bb7'],
-				expired_at: '2026-11-06',
-				statement: expect.stringContaining('Malicious Brotli data may cause memory corruption.'),
-			},
-			{
 				id: 'CVE-2026-109461',
 				paths: ['opt/fhold/tools/node_modules/@azure/msal-node/package.json'],
 				purls: ['pkg:npm/%40azure/msal-node@6.0.1'],

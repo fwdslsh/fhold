@@ -272,7 +272,7 @@ overrides, Actions, Trivy 0.76.1, cosign 3.1.4 and docs renderer/template
 0.11.16/0.5.0 remain current on their selected channels.
 
 The product owner approved a new, narrowly scoped
-[Brotli exception](release.md#temporary-brotli-exception-october-23-2026):
+[Brotli exception](release.md#brotli-security-update-october-28-2026):
 only CVE-2026-111497 in Debian `libbrotli1` 1.1.0-2+b7, expiring November 6.
 The raw report remains visible and other critical/fixable-high findings still
 block publication. The old npm exceptions remain removed. No library is patched,
