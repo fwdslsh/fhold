@@ -37,7 +37,13 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync } from 'node:fs';
 import { activityStatus } from '/fhold-plugins/fhold/scripts/activity.mjs';
+import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+const events = new AbortController();
+let eventStream;
+let streamReady = false;
+let streamFailure;
+let unloaded = 0;
 let count = 0;
 const sink = createServer((request, response) => {
   assert.equal(request.url, '/tick');
@@ -67,6 +73,15 @@ async function api(path, body) {
 }
 try {
   await until(async () => { try { await api('/info'); return true; } catch { return false; } });
+  const client = OpenCode.make({ baseUrl: 'http://127.0.0.1:4096', headers: { authorization } });
+  eventStream = (async () => {
+    try {
+      for await (const event of client.event.subscribe({ signal: events.signal, onActivity: () => { streamReady = true; } })) {
+        if (event.type === 'location.shutdown' && event.location?.directory === '/work') unloaded++;
+      }
+    } catch (error) { if (!events.signal.aborted) streamFailure = error; }
+  })();
+  await until(() => streamReady, 10);
   await api('/config?location[directory]=/work');
   await until(() => ['claude', 'codex'].every(tool => {
     try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
@@ -81,6 +96,14 @@ try {
   const quiet = count;
   await pause(22000);
   assert.equal(count, quiet, 'Idle native sessions must not send keep-alive');
+  // Shorten only the documented native idle TTL for this regression. Observe
+  // actual native cleanup before starting work; never write activity markers.
+  await until(() => unloaded > 0, 130);
+  assert.equal(streamFailure, undefined);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'idle', 'Normal native workspace unload must preserve idle');
+  const afterUnload = count;
+  await pause(62000);
+  assert.equal(count, afterUnload, 'Unloaded idle workspace must remain quiet for three intervals');
   const session = await api('/session', {title:'Disposable keep-alive qualification', location:{directory:'/work'}});
   await api('/session/' + session.id + '/synthetic', {resume:false, text:'Append-only history fixture; do not execute.'});
   await pause(500);
@@ -100,8 +123,11 @@ try {
   const cron = readFileSync('/tmp/fhold-crontabs/fhold', 'utf8');
   assert.ok(cron.includes('fhold-keepalive tick'));
   assert.ok(!cron.includes('# akm:task'), 'User scheduling remains disabled');
-  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0}));
-} finally { sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve)); }
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true}));
+} finally {
+  events.abort(); await eventStream;
+  sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve));
+}
 `;
 
 try {
@@ -127,7 +153,7 @@ try {
 		'-e',
 		'FH_AUTOMATIC_MEMORY=0',
 		'-e',
-		`OPENCODE_CONFIG_CONTENT=${JSON.stringify({ model: 'openai/gpt-5-nano', provider: { openai: { options: { baseURL: 'http://127.0.0.1:9/v1', apiKey: 'offline-fixture' } } } })}`,
+		`OPENCODE_CONFIG_CONTENT=${JSON.stringify({ experimental: { location_idle_timeout: '1 second' }, model: 'openai/gpt-5-nano', provider: { openai: { options: { baseURL: 'http://127.0.0.1:9/v1', apiKey: 'offline-fixture' } } } })}`,
 		image
 	]);
 	console.log((await command(['exec', name, 'node', '--input-type=module', '-e', probe])).trim());

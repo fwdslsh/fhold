@@ -19,7 +19,7 @@ import {
 	nativeEvent,
 	tick
 } from '../plugins/fhold/scripts/activity.mjs';
-import { observeOpenCode } from '../plugins/fhold/opencode.js';
+import openCodePlugin, { observeOpenCode } from '../plugins/fhold/opencode.js';
 
 const roots: string[] = [];
 function fixture() {
@@ -220,16 +220,61 @@ test('a new boot clears old keep-alive failures; status reports failures without
 	expect(() => readFileSync(join(root, 'keepalive-status.json'))).toThrow();
 });
 
-async function withOpenCode(run: (observe: typeof observeOpenCode, root: string) => void) {
+async function withOpenCode(run: (observe: typeof observeOpenCode, root: string) => void | Promise<void>) {
 	const root = fixture();
 	const previous = process.env.FH_RUNTIME_DIR;
 	process.env.FH_RUNTIME_DIR = root;
 	try {
-		run(observeOpenCode, root);
+		await run(observeOpenCode, root);
 	} finally {
 		if (previous === undefined) delete process.env.FH_RUNTIME_DIR;
 		else process.env.FH_RUNTIME_DIR = previous;
 	}
+}
+
+test('normal native OpenCode plugin unload preserves idle and does not retire active work', async () => {
+	await withOpenCode(async (observe, root) => {
+		const setup = () =>
+			openCodePlugin.setup({
+				location: { directory: '/work' },
+				event: {
+					async *subscribe({ signal }: { signal: AbortSignal }) {
+						await new Promise<void>((resolve) =>
+							signal.addEventListener('abort', () => resolve(), { once: true })
+						);
+					}
+				}
+			});
+		const cleanup = setup();
+		cleanup();
+		await Bun.sleep(0);
+		expect(activityStatus(root, [])).toBe('idle');
+		const nextCleanup = setup();
+		observe({ type: 'session.execution.started', data: { sessionID: 'active' } });
+		nextCleanup();
+		await Bun.sleep(0);
+		expect(activityStatus(root, [])).toBe('busy');
+	});
+});
+
+for (const failure of ['end', 'throw']) {
+	test(`an unexpected OpenCode event stream ${failure} remains conservative after cleanup`, async () => {
+		await withOpenCode(async (_observe, root) => {
+			const cleanup = openCodePlugin.setup({
+				location: { directory: '/work' },
+				event: {
+					async *subscribe() {
+						yield { type: 'session.message.created', data: { sessionID: 'idle' } };
+						if (failure === 'throw') throw Error('fixture observation failure');
+					}
+				}
+			});
+			await Bun.sleep(0);
+			expect(activityStatus(root, [])).toBe('unknown');
+			cleanup();
+			expect(activityStatus(root, [])).toBe('unknown');
+		});
+	});
 }
 
 test('an OpenCode observation failure does not reject a native event', async () => {

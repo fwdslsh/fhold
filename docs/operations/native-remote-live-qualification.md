@@ -163,6 +163,15 @@ transcript or prove that a client reached the intended instance.
    Do not treat a pending retry as a terminal failure. The image regression uses
    a loopback provider with actual Codex binaries and hooks; it does not qualify
    signed-in vendor connectivity or replace the two-hour foreground case.
+9. **OpenCode native idle unload.** During the two-hour case, leave the otherwise
+   unused OpenCode workspace untouched. Its native idle eviction must not turn
+   healthy observation into permanent unknown. Retain the native eviction log
+   and compare whole-instance activity after Codex finishes. Require three quiet
+   intervals, then start ordinary OpenCode work and verify activity is observed
+   again. Do not poll location-scoped OpenCode endpoints to keep the workspace
+   loaded. The image regression shortens only the documented native idle TTL to
+   exercise the actual unload/reload lifecycle quickly; the live two-hour case
+   retains the native default TTL.
 
 ## Report and close the gate
 

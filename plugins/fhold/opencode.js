@@ -39,12 +39,19 @@ export default Plugin.define({
 					observeOpenCode(event);
 				}
 			} catch {
+				// A failed subscription must not prevent native work.
+			} finally {
+				// An unexpected clean end also loses observation. Only the native
+				// host's explicit cleanup is an intentional end of this observer.
 				if (!abort.signal.aborted) report(() => coverage('opencode', false));
 			}
 		})();
 		return () => {
+			// Native OpenCode unloads an idle location after its normal TTL and
+			// loads its managed plugins before accepting new work there. Cleanup
+			// is not an observation failure. Preserve the last observation and
+			// any outstanding work; never establish coverage or clear work here.
 			abort.abort();
-			report(() => coverage('opencode', false));
 		};
 	}
 });
