@@ -90,6 +90,7 @@ try {
 		await start('complete'); await terminal('completed');
 		record({ case: 'completed turn', clearMs: await until(() => busy() === 0, 'completed idle') });
 		await start('fail'); await terminal('failed');
+			record({ case: 'native terminal failure status', status: (await rpc('thread/read', { threadId, includeTurns: false })).thread.status });
 		record({ case: 'failed turn', clearMs: await until(() => busy() === 0, 'failed idle') });
 		// A fresh active turn must survive repeated inspections of the previous failure.
 		const turnId = await start('hold');

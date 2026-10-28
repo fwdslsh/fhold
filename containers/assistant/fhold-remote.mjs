@@ -109,9 +109,10 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 			// inspection failure, even when completed conversations remain loaded.
 			// Do not hydrate turns/items or retain the metadata response.
 			const { thread } = await rpc('thread/read', { threadId, includeTurns: false });
-			if (thread?.id !== threadId || !['idle', 'active'].includes(thread.status?.type) ||
+			if (thread?.id !== threadId || !['idle', 'active', 'systemError'].includes(thread.status?.type) ||
 				(thread.status.type === 'active' && !Array.isArray(thread.status.activeFlags))) return { known: false };
-			if (thread.status.type !== 'idle') idle = false;
+			// Native systemError is terminal, without running work or pending input.
+			if (thread.status.type === 'active') idle = false;
 			// A bounded page is enough to retire any failed turns it positively identifies;
 			// omitted/older turns retain their conservative observations.
 			const turns = await rpc('thread/turns/list', { threadId, limit: 100, itemsView: 'notLoaded' });
@@ -119,6 +120,8 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 			for (const turn of turns.data) {
 				if (typeof turn?.id !== 'string' || !turn.id || turn.id.length > 1024 ||
 					!['failed', 'completed', 'interrupted', 'inProgress'].includes(turn.status)) return { known: false };
+				// Prefer positive active evidence if native observations overlap a transition.
+				if (turn.status === 'inProgress') idle = false;
 				if (turn.status === 'failed') failed.push({ threadId, turnId: turn.id });
 			}
 		}

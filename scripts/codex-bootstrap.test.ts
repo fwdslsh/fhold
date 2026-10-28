@@ -131,21 +131,27 @@ test('failed-turn inspection refuses malformed observations and a replaced worke
 test('native idle status restores observation coverage for loaded conversations without a new turn', async () => {
 	const review = spyOn(recall, 'reviewRecall').mockResolvedValue({ status: 'ready' });
 	let thread: unknown = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
+	let turnStatus = 'completed';
 	const requests: unknown[] = [];
 	const inspect = async (check: (rpc: (method: string, params: unknown) => Promise<unknown>) => Promise<unknown>) => check(async (method, params) => {
 		requests.push({ method, params });
 		if (method === 'thread/loaded/list') return { data: ['thread-a'], nextCursor: null };
 		if (method === 'thread/read') return { thread };
-		return { data: [{ id: 'complete', status: 'completed' }], nextCursor: null };
+		return { data: [{ id: 'complete', status: turnStatus }], nextCursor: null };
 	});
 	expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, empty: false, idle: true });
 	expect(requests).toContainEqual({ method: 'thread/read', params: { threadId: 'thread-a', includeTurns: false } });
+	thread = { id: 'thread-a', status: { type: 'systemError' }, turns: [] };
+	expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, idle: true });
+	turnStatus = 'inProgress';
+	expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, idle: false });
+	turnStatus = 'completed';
 	for (const activeFlags of [[], ['waitingOnApproval'], ['waitingOnUserInput']]) {
 		thread = { id: 'thread-a', status: { type: 'active', activeFlags }, turns: [] };
 		expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toMatchObject({ known: true, idle: false });
 	}
 	for (thread of [undefined, {}, { id: 'other', status: { type: 'idle' } },
-		{ id: 'thread-a', status: { type: 'notLoaded' } }, { id: 'thread-a', status: { type: 'systemError' } },
+		{ id: 'thread-a', status: { type: 'notLoaded' } }, { id: 'thread-a', status: { type: 'unsupported' } },
 		{ id: 'thread-a', status: { type: 'active' } }])
 		expect(await inspectCodexActivity({ inspect, alive: () => true, failedTurns: true })).toEqual({ known: false });
 	thread = { id: 'thread-a', status: { type: 'idle' }, turns: [] };
