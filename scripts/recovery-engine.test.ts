@@ -72,6 +72,7 @@ describe('native transient process state recovery boundary', () => {
 	const uuid = '12345678-1234-1234-1234-123456789abc';
 	const locks = [
 		['home', '.claude/bridge-spawn/session-fixture/append-system-prompt.txt'],
+		['home', '.claude/backups/.claude.json.backup.1793143699072'],
 		['akmData', 'index.rebuild.lock'],
 		['akmData', 'index.db.write.lock'],
 		['akmData', 'akm.lock.lck'],
@@ -86,9 +87,15 @@ describe('native transient process state recovery boundary', () => {
 		['akmConfig', `config.json.lck.tmp-123-${uuid}`]
 	];
 	const durable = [
+		['home', '.claude.json'],
 		['home', '.claude/projects/fixture/session.jsonl'],
 		['home', '.claude/.credentials.json'],
 		['home', '.claude/bridge-spawn-notes/append-system-prompt.txt'],
+		['home', '.claude/backups/.claude.json.corrupted.1793143699072'],
+		['home', '.claude/backups/.claude.json.backup.manual'],
+		['home', '.claude/backups/.claude.json.backup.1793143699072.notes'],
+		['home', '.claude/backups/operator-note'],
+		['home', '.claude/backups/subdir/.claude.json.backup.1793143699072'],
 		['akmData', 'akm.lock'],
 		['akmData', 'index.rebuild.lock.notes'],
 		['akmData', 'akm.lock.lck.backup'],
@@ -143,7 +150,7 @@ describe('native transient process state recovery boundary', () => {
 			await replacement.release();
 		});
 
-	for (const variant of ['default', 'exact', 'sqlite', 'alias', 'versioned'])
+	for (const variant of ['default', 'exact', 'claude-backup', 'sqlite', 'alias', 'versioned'])
 		test(`old ${variant} checkpoints omit locks without losing required state`, async () => {
 			const f = await fixture();
 			await writeFile(path.join(f.roots.akmData, 'akm.lock'), 'resolved-bundles');
@@ -156,6 +163,8 @@ describe('native transient process state recovery boundary', () => {
 			const selection =
 				variant === 'exact'
 					? { paths: [path.join(f.roots.akmData, 'index.rebuild.lock')] }
+					: variant === 'claude-backup'
+						? { paths: [path.join(f.roots.home, '.claude/backups/.claude.json.backup.1793143699072')] }
 					: variant === 'sqlite'
 						? { sqlite: [path.join(f.roots.akmData, 'index.rebuild.lock')] }
 						: variant === 'alias'
@@ -260,13 +269,16 @@ describe('native transient process state recovery boundary', () => {
 		});
 });
 
-describe('Claude bridge shutdown capture', () => {
-	test('temporary bridge cleanup cannot prevent saving and restoring the latest completed reply', async () => {
+describe('Claude transient capture', () => {
+	for (const [label, transientPath] of [
+		['temporary bridge', '.claude/bridge-spawn/fixture/append-system-prompt.txt'],
+		['rotating config backup', '.claude/backups/.claude.json.backup.1793143699072']
+	]) test(`${label} cleanup cannot prevent saving and restoring the latest completed reply`, async () => {
 		const f = await fixture();
-		const bridge = path.join(f.roots.home, '.claude/bridge-spawn/fixture/append-system-prompt.txt');
+		const transient = path.join(f.roots.home, transientPath);
 		const history = path.join(f.roots.home, '.claude/projects/fixture/session.jsonl');
 		const control = path.join(f.roots.home, '.claude/aaa-control');
-		for (const file of [bridge, history]) await mkdir(path.dirname(file), { recursive: true });
+		for (const file of [transient, history]) await mkdir(path.dirname(file), { recursive: true });
 		const previous = [{ uuid: 'first', type: 'assistant', message: { content: 'earlier reply' } }];
 		const latest = [
 			...previous,
@@ -276,7 +288,7 @@ describe('Claude bridge shutdown capture', () => {
 				message: { content: 'completed reply immediately before Stop' }
 			}
 		];
-		await writeFile(bridge, 'synthetic per-spawn prompt carrier');
+		await writeFile(transient, 'synthetic native transient state');
 		await writeFile(control, 'before');
 		await writeFile(history, previous.map((message) => JSON.stringify(message)).join('\n'));
 		const store = createDirectoryStore(f.config.url);
@@ -290,7 +302,7 @@ describe('Claude bridge shutdown capture', () => {
 					if (stopping && bytes.toString() === 'after') {
 						// Inventory is complete. Reproduce native cleanup before the next
 						// member read, without changing the engine or weakening ENOENT.
-						await rm(bridge);
+						await rm(transient);
 						removed = true;
 					}
 					return store.createImmutable(key, bytes, owner, options);
@@ -311,14 +323,14 @@ describe('Claude bridge shutdown capture', () => {
 		await engine.release();
 		expect(
 			(await savedManifest(f)).manifest.members.some((member) =>
-				member.path.includes('/bridge-spawn/')
+				member.path === transientPath
 			)
 		).toBe(false);
 		await rename(path.join(f.dir, 'live'), path.join(f.dir, 'retained-live'));
 		const replacement = f.engine();
 		await replacement.acquireRestore();
 		expect((await readFile(history, 'utf8')).split('\n').map((line) => JSON.parse(line))).toEqual(latest);
-		expect(await stat(bridge).catch(() => null)).toBeNull();
+		expect(await stat(transient).catch(() => null)).toBeNull();
 		await replacement.release();
 	});
 });

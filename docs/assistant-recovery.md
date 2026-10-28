@@ -584,7 +584,11 @@ For example, mount it read-only; it contains paths, not authentication keys:
   socket, AKM process locks and Claude's `.claude/bridge-spawn` directory remain
   excluded even when a parent is selected. Claude removes its per-spawn prompt
   files on child exit; they are not durable conversation or account state.
-  These are process coordination, not plugin/account data. Ordinary native control
+  Native `.claude/backups/.claude.json.backup.<numeric-timestamp>` copies are also
+  excluded from capture and old-checkpoint restore: Claude rotates them while it
+  runs. The actual `.claude.json`, corrupted-config evidence and unrelated files
+  in the backup directory remain covered. Missing durable files still fail capture.
+  These exclusions cover transient native state, not plugin/account data. Ordinary native control
   metadata and operator-selected plugin caches remain recoverable; arbitrary links
   elsewhere are still refused, never dereferenced as a shortcut.
   For the image's AKM data/state layout, the reserved transient paths are
