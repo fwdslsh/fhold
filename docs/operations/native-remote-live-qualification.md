@@ -132,7 +132,11 @@ transcript or prove that a client reached the intended instance.
    Verify work remains protected from idle shutdown while input is outstanding.
    Disconnect/reconnect the client while keeping Assistant running. Only the
    operator answers; exercise approve and deny, then verify work completes or
-   cancels and returns to idle. Never replay an approval automatically.
+   cancels and returns to idle. For Codex, also interrupt a pending native
+   `request_user_input` question without answering: confirm native idle and the
+   interrupted turn, then require three quiet intervals. The question must not
+   leave a separate tool observation behind; independent tools/subagents must
+   still remain protected. Never replay an approval automatically.
 6. **Replacement boundary.** Stop/restore is not a promise to resume in-flight
    vendor execution or pending approvals. Document the native outcome for a
    pending question/permission only in the disposable fixture. Confirm no command

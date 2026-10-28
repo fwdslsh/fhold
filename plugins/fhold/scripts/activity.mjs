@@ -125,6 +125,10 @@ export function nativeEvent(tool, input, root = runtime()) {
 			break;
 		case 'PreToolUse':
 			turn(true);
+			// A synchronous Codex question has no work beyond its turn. Native
+			// interruption can cancel it without PostToolUse; the turn already
+			// protects the pending answer and clears on its terminal event.
+			if (tool === 'codex' && input.tool_name === 'request_user_input') break;
 			mark(`tool:${input.tool_use_id || 'unknown'}`, true);
 			break;
 		case 'PostToolUse':

@@ -79,6 +79,29 @@ test('overlapping sessions, tools, subagents and interrupted turns retain indepe
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
+test('canceling a Codex question clears turn-bound input without clearing independent work', () => {
+	const root = fixture();
+	event(root, 'PreToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-1' });
+	expect(activityStatus(root, [])).toBe('busy');
+	// Native cancellation emits Interrupt without PostToolUse for this question.
+	event(root, 'Interrupt');
+	expect(activityStatus(root, [])).toBe('idle');
+
+	event(root, 'PreToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-2' });
+	event(root, 'PreToolUse', { turn_id: 'newer', tool_name: 'Bash', tool_use_id: 'shell' });
+	event(root, 'SubagentStart', { agent_id: 'independent-agent' });
+	event(root, 'Interrupt');
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'PostToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-2' });
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'Stop', { turn_id: 'newer' });
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'PostToolUse', { tool_use_id: 'shell' });
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'SubagentStop', { agent_id: 'independent-agent' });
+	expect(activityStatus(root, [])).toBe('idle');
+});
+
 test('compaction and resume do not erase active work; duplicate notifications are idempotent', () => {
 	const root = fixture();
 	event(root, 'UserPromptSubmit');
