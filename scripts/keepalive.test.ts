@@ -272,13 +272,14 @@ async function withOpenCode(run: (observe: typeof observeOpenCode, root: string)
 	}
 }
 
-test('normal native OpenCode plugin unload preserves idle and does not retire active work', async () => {
+test('native OpenCode location shutdown preserves idle and does not retire active work', async () => {
 	await withOpenCode(async (observe, root) => {
 		const setup = () =>
 			openCodePlugin.setup({
 				location: { directory: '/work' },
 				event: {
 					async *subscribe({ signal }: { signal: AbortSignal }) {
+						yield { type: 'location.shutdown', location: { directory: '/work' } };
 						await new Promise<void>((resolve) =>
 							signal.addEventListener('abort', () => resolve(), { once: true })
 						);
@@ -286,16 +287,58 @@ test('normal native OpenCode plugin unload preserves idle and does not retire ac
 				}
 			});
 		const cleanup = setup();
+		await Bun.sleep(0);
 		cleanup();
 		await Bun.sleep(0);
 		expect(activityStatus(root, [])).toBe('idle');
 		const nextCleanup = setup();
 		observe({ type: 'session.execution.started', data: { sessionID: 'active' } });
+		await Bun.sleep(0);
 		nextCleanup();
 		await Bun.sleep(0);
 		expect(activityStatus(root, [])).toBe('busy');
 	});
 });
+
+for (const location of [
+	undefined,
+	{ directory: '/other' },
+	{ directory: '/work', workspaceID: 'other' }
+]) {
+	test(`OpenCode plugin cleanup without its own location shutdown loses coverage (${JSON.stringify(location)})`, async () => {
+		await withOpenCode(async (_observe, root) => {
+			const cleanup = openCodePlugin.setup({
+				location: { directory: '/work' },
+				event: {
+					async *subscribe({ signal }: { signal: AbortSignal }) {
+						if (location) yield { type: 'location.shutdown', location };
+						await new Promise<void>((resolve) =>
+							signal.addEventListener('abort', () => resolve(), { once: true })
+						);
+					}
+				}
+			});
+			await Bun.sleep(0);
+			expect(activityStatus(root, [])).toBe('idle');
+			cleanup();
+			await Bun.sleep(0);
+			expect(activityStatus(root, [])).toBe('unknown');
+			let requests = 0;
+			expect(
+				(
+					await tick({
+						root,
+						fetch: async () => {
+							requests++;
+							return new Response(null);
+						}
+					})
+				).sent
+			).toBe(true);
+			expect(requests).toBe(1);
+		});
+	});
+}
 
 for (const failure of ['end', 'throw']) {
 	test(`an unexpected OpenCode event stream ${failure} remains conservative after cleanup`, async () => {

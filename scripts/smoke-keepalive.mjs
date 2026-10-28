@@ -10,7 +10,7 @@ assert.ok(image, 'Usage: node scripts/smoke-keepalive.mjs IMAGE');
 const name = `fhold-keepalive-smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-keepalive-smoke-only';
 
-function command(args, timeout = 300000) {
+function command(args, timeout = 420000) {
 	return new Promise((resolve, reject) => {
 		const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 		const chunks = [];
@@ -35,7 +35,7 @@ function command(args, timeout = 300000) {
 const probe = `
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { activityStatus } from '/fhold-plugins/fhold/scripts/activity.mjs';
 import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
@@ -124,7 +124,32 @@ try {
   const cron = readFileSync('/tmp/fhold-crontabs/fhold', 'utf8');
   assert.ok(cron.includes('fhold-keepalive tick'));
   assert.ok(!cron.includes('# akm:task'), 'User scheduling remains disabled');
-  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true}));
+
+  // Plugin deactivation also calls cleanup, but the location can still accept
+  // work. Exercise native config reload and inventory, never activity markers.
+  const registered = async () => (await api('/plugin?location[directory]=/work')).some(plugin => plugin.id === 'fhold.activity' && plugin.state.status === 'active');
+  assert.ok(await registered());
+  const configPath = process.env.OPENCODE_CONFIG;
+  const originalConfig = readFileSync(configPath, 'utf8');
+  const config = JSON.parse(originalConfig);
+  writeFileSync(configPath, JSON.stringify({...config, plugins:[...(config.plugins || []), '-fhold.activity']}));
+  await until(async () => !await registered(), 15);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown', 'Plugin removal must invalidate coverage');
+  const disabledRequests = count;
+  const unobserved = api('/session/' + session.id + '/shell', {command:'sleep 45; printf fhold-unobserved-complete'});
+  await pause(1000);
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown', 'Work without an observer must remain conservative');
+  await unobserved;
+  assert.ok(count >= disabledRequests + 2, 'Unknown observation must keep sending during real work');
+  assert.equal(activityStatus('/tmp/fhold-runtime'), 'unknown');
+  const conservativeRequests = count - disabledRequests;
+  writeFileSync(configPath, originalConfig);
+  await until(registered, 15);
+  await until(() => activityStatus('/tmp/fhold-runtime') === 'idle', 10);
+  const replaced = count;
+  await pause(22000);
+  assert.equal(count, replaced, 'Replacement observation must restore quiet idle');
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true, nativePluginDisableUnknown:true, conservativeRequests, replacementRestoresIdle:true}));
 } finally {
   events.abort(); await eventStream;
   sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve));
