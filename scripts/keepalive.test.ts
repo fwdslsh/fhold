@@ -17,17 +17,23 @@ import {
 	initialize,
 	keepaliveConfig,
 	nativeEvent,
-	tick
+	tick as keepaliveTick
 } from '../plugins/fhold/scripts/activity.mjs';
 import openCodePlugin, { observeOpenCode } from '../plugins/fhold/opencode.js';
 
 const roots: string[] = [];
+// Event/heartbeat tests use an empty native location inventory. The inventory
+// boundary itself is exercised separately below, including real image tests.
+const tick = (options: Parameters<typeof keepaliveTick>[0]) => keepaliveTick({
+	nativeFetch: async () => Response.json([]), ...options
+});
 function fixture() {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-activity-'));
 	roots.push(root);
 	initialize(
 		{
 			FH_KEEPALIVE_URL: 'https://instance.example/api/info',
+			OPENCODE_SERVER_PASSWORD: 'native-fixture',
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0'
 		},
@@ -181,7 +187,7 @@ test('native session end only removes that session; no prompt, tool argument or 
 test('unknown startup, unobserved native workers and consent waits fail awake', async () => {
 	const root = fixture();
 	mkdirSync(join(root, 'remote'));
-	initialize({ FH_KEEPALIVE_URL: 'https://instance.example/', FH_CLAUDE_REMOTE: '0' }, root);
+	initialize({ FH_KEEPALIVE_URL: 'https://instance.example/', FH_CLAUDE_REMOTE: '0', OPENCODE_SERVER_PASSWORD: 'native-fixture' }, root);
 	let requests = 0;
 	const fetch = async () => {
 		requests++;
@@ -203,7 +209,7 @@ test('unknown startup, unobserved native workers and consent waits fail awake', 
 test('unsigned-in remotes are inactive, but observed work and unknown activated coverage stay awake', async () => {
 	const root = fixture();
 	mkdirSync(join(root, 'remote'));
-	initialize({ FH_KEEPALIVE_URL: 'https://instance.example/' }, root);
+	initialize({ FH_KEEPALIVE_URL: 'https://instance.example/', OPENCODE_SERVER_PASSWORD: 'native-fixture' }, root);
 	coverage('opencode', true, root);
 	for (const tool of ['claude', 'codex'])
 		writeFileSync(
@@ -253,7 +259,8 @@ test('a new boot clears old keep-alive failures; status reports failures without
 	const status = JSON.parse(await new Response(child.stdout).text());
 	expect(await child.exited).toBe(1);
 	expect(status.degraded).toBe(true);
-	expect(status.activity).toBe('idle');
+	// A separate CLI process cannot validate the fake native server used above.
+	expect(status.activity).toBe('unknown');
 	expect(status).not.toHaveProperty('url');
 	expect(status).not.toHaveProperty('authorization');
 	initialize({}, root);
@@ -527,4 +534,74 @@ test('failed HTTP responses and network errors are redacted and retried on the n
 	).toBe(false);
 	expect((await tick({ root, fetch: async () => new Response(null) })).sent).toBe(true);
 	expect(readFileSync(join(root, 'keepalive-status.json'), 'utf8')).not.toContain('private');
+});
+
+test('an unloaded native runtime remains quiet without scoped requests or credential forwarding', async () => {
+	const root = fixture();
+	const paths: string[] = [];
+	const result = await keepaliveTick({ root, fetch: async (url: string, init: RequestInit) => {
+		const target = new URL(url);
+		expect(target.origin).toBe('http://127.0.0.1:4096');
+		expect(init.headers).toEqual({ Authorization: `Basic ${Buffer.from('opencode:native-fixture').toString('base64')}` });
+		expect(init.redirect).toBe('error');
+		expect(init.signal).toBeInstanceOf(AbortSignal);
+		paths.push(target.pathname);
+		return Response.json([]);
+	} });
+	expect(paths).toEqual(['/api/debug/location', '/api/debug/location']);
+	expect(result.activity).toBe('idle');
+	expect(result.sent).toBe(false);
+});
+
+test.each(['missing', 'failed', 'malformed', 'http', 'network', 'changed', 'ambiguous'])(
+	'native plugin inventory %s cannot suppress a heartbeat', async (failure) => {
+		const root = fixture();
+		let lists = 0;
+		let heartbeats = 0;
+		const signals: AbortSignal[] = [];
+		const result = await keepaliveTick({ root, fetch: async (url: string, init: RequestInit) => {
+			const target = new URL(url);
+			if (target.hostname === 'instance.example') {
+				heartbeats++;
+				expect(init.headers).toEqual({});
+				return new Response(null);
+			}
+			signals.push(init.signal!);
+			if (failure === 'network') throw Error('private-native-path');
+			if (failure === 'http') return new Response('private-native-path', { status: 401 });
+			if (target.pathname === '/api/debug/location') {
+				lists++;
+				if (failure === 'ambiguous') return Response.json([{ directory: '/work' }, { directory: '/work' }]);
+				if (failure === 'changed' && lists > 1) return Response.json([{ directory: '/new-work' }]);
+				return Response.json([{ directory: '/work' }, { directory: '/second' }]);
+			}
+			// A healthy primary observer cannot hide a missing secondary observer.
+			if (target.searchParams.get('location[directory]') === '/work' || failure === 'changed')
+				return Response.json({ data: [{ id: 'fhold.activity', state: { status: 'active' } }] });
+			if (failure === 'malformed') return Response.json({ data: {} });
+			return Response.json({ data: failure === 'failed'
+				? [{ id: 'fhold.activity', state: { status: 'failed' } }] : [] });
+		} });
+		expect(result.activity).toBe('unknown');
+		expect(result.sent).toBe(true);
+		expect(heartbeats).toBe(1);
+		expect(new Set(signals).size).toBe(1);
+		expect(readFileSync(join(root, 'keepalive-status.json'), 'utf8')).not.toContain('private');
+	}
+);
+
+test.each(['busy', 'unknown', 'idle'])('events during native inventory retain the final %s decision', async (state) => {
+	const root = fixture();
+	let lists = 0;
+	const result = await tick({ root, fetch: async () => new Response(null), nativeFetch: async (url: string) => {
+		if (new URL(url).pathname === '/api/plugin')
+			return Response.json({ data: [{ id: 'fhold.activity', state: { status: 'active' } }] });
+		if (++lists === 2) {
+			if (state === 'busy') event(root, 'UserPromptSubmit');
+			if (state === 'unknown') coverage('opencode', false, root);
+		}
+		return Response.json([{ directory: '/work' }]);
+	} });
+	expect(result.activity).toBe(state);
+	expect(result.sent).toBe(state !== 'idle');
 });

@@ -184,6 +184,14 @@ transcript or prove that a client reached the intended instance.
    loaded. The image regression shortens only the documented native idle TTL to
    exercise the actual unload/reload lifecycle quickly; the live two-hour case
    retains the native default TTL.
+10. **OpenCode observer removal.** In a disposable instance, disable
+    `fhold.activity` through native plugin configuration while its location is
+    loaded. Run a native user shell command across two heartbeat intervals and
+    require unknown observation with continuing heartbeats. Re-enable the plugin
+    and require quiet idle. Repeat removal after actual native idle eviction,
+    before starting the next shell command. This second case must also remain
+    unknown during work: an old valid idle observation cannot certify a newly
+    loaded location with its observer disabled. Do not edit activity markers.
 
 ## Report and close the gate
 

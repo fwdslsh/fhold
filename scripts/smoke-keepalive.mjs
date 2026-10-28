@@ -10,7 +10,7 @@ assert.ok(image, 'Usage: node scripts/smoke-keepalive.mjs IMAGE');
 const name = `fhold-keepalive-smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-keepalive-smoke-only';
 
-function command(args, timeout = 420000) {
+function command(args, timeout = 600000) {
 	return new Promise((resolve, reject) => {
 		const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 		const chunks = [];
@@ -36,7 +36,7 @@ const probe = `
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { activityStatus } from '/fhold-plugins/fhold/scripts/activity.mjs';
+import { activityStatus, observedActivity } from '/fhold-plugins/fhold/scripts/activity.mjs';
 import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
 const events = new AbortController();
@@ -54,6 +54,7 @@ const sink = createServer((request, response) => {
 });
 await new Promise(resolve => sink.listen(4100, '127.0.0.1', resolve));
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const observed = () => observedActivity('/tmp/fhold-runtime', JSON.parse(readFileSync('/tmp/fhold-runtime/keepalive.json', 'utf8')));
 async function until(check, seconds = 90) {
   const deadline = Date.now() + seconds * 1000;
   while (!await check()) {
@@ -69,7 +70,9 @@ async function api(path, body) {
     signal: AbortSignal.timeout(body?.command ? 90000 : 3000)
   });
   assert.ok(response.ok, 'Native API request failed: ' + response.status);
-  return response.status === 204 ? undefined : (await response.json()).data;
+  if (response.status === 204) return undefined;
+  const payload = await response.json();
+  return payload.data ?? payload;
 }
 try {
   await until(async () => { try { await api('/info'); return true; } catch { return false; } });
@@ -128,7 +131,7 @@ try {
   // Plugin deactivation also calls cleanup, but the location can still accept
   // work. Exercise native config reload and inventory, never activity markers.
   const registered = async () => (await api('/plugin?location[directory]=/work')).some(plugin => plugin.id === 'fhold.activity' && plugin.state.status === 'active');
-  assert.ok(await registered());
+  await until(registered, 15);
   const configPath = process.env.OPENCODE_CONFIG;
   const originalConfig = readFileSync(configPath, 'utf8');
   const config = JSON.parse(originalConfig);
@@ -145,11 +148,30 @@ try {
   const conservativeRequests = count - disabledRequests;
   writeFileSync(configPath, originalConfig);
   await until(registered, 15);
-  await until(() => activityStatus('/tmp/fhold-runtime') === 'idle', 10);
+  await until(async () => await observed() === 'idle', 10);
   const replaced = count;
   await pause(22000);
   assert.equal(count, replaced, 'Replacement observation must restore quiet idle');
-  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true, nativePluginDisableUnknown:true, conservativeRequests, replacementRestoresIdle:true}));
+
+  // Removal while no plugin is loaded has no cleanup callback. Preserve the
+  // legitimate idle unload, then require native inventory to catch the loss
+  // of coverage when normal work loads the now-disabled location again.
+  await until(async () => (await api('/debug/location')).length === 0, 130);
+  assert.equal(await observed(), 'idle');
+  writeFileSync(configPath, JSON.stringify({...config, plugins:[...(config.plugins || []), '-fhold.activity']}));
+  const unloadedRequests = count;
+  const reloaded = api('/session/' + session.id + '/shell', {command:'sleep 45; printf fhold-unloaded-disable-complete'});
+  await until(async () => await observed() === 'unknown', 10);
+  await reloaded;
+  assert.ok(count >= unloadedRequests + 2, 'Removal while unloaded must protect subsequent real work');
+  const unloadedConservativeRequests = count - unloadedRequests;
+  writeFileSync(configPath, originalConfig);
+  await until(registered, 15);
+  await until(async () => await observed() === 'idle', 10);
+  const restored = count;
+  await pause(22000);
+  assert.equal(count, restored, 'Re-enabled native observation must return to quiet idle');
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true, nativePluginDisableUnknown:true, conservativeRequests, replacementRestoresIdle:true, removalWhileUnloadedUnknown:true, unloadedConservativeRequests}));
 } finally {
   events.abort(); await eventStream;
   sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve));
