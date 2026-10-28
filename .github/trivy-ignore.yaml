@@ -36,3 +36,29 @@ vulnerabilities:
       unhandled-error denial of service. Official npm 12.2.1 and maintained
       11.21.1 still bundle this version. Remove with a supported patched npm
       release and npm/npx qualification; issue 57 must verify this separate chain.
+  # Owner reaffirmed the upstream-package exception for PR75/76 on 2026-10-28.
+  # These additional findings are in the same exact npm-owned Undici bundle.
+  - id: CVE-2026-109383
+    paths:
+      - usr/local/lib/node_modules/npm/node_modules/undici/package.json
+    purls:
+      - pkg:npm/undici@6.29.0
+    expired_at: 2026-11-06
+    statement: >-
+      GHSA-2m5v-pch6-74hx: owner-approved temporary upstream-package exception
+      for npm's bundled Undici TLS certificate-validation bypass via dropped
+      Agent TLS options. Official npm 12.2.1 still bundles this version.
+      Remove with a supported patched npm release and npm/npx qualification;
+      issue 63 retains remediation and the existing November 6 review deadline.
+  - id: CVE-2026-87018
+    paths:
+      - usr/local/lib/node_modules/npm/node_modules/undici/package.json
+    purls:
+      - pkg:npm/undici@6.29.0
+    expired_at: 2026-11-06
+    statement: >-
+      GHSA-qrxm-fqhp-jwvm: owner-approved temporary upstream-package exception
+      for npm's bundled Undici denial of service during TLS renegotiation with
+      a mismatched certificate. Official npm 12.2.1 still bundles this version.
+      Remove with a supported patched npm release and npm/npx qualification;
+      issue 63 retains remediation and the existing November 6 review deadline.
