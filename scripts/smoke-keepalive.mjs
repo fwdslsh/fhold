@@ -82,7 +82,8 @@ try {
     } catch (error) { if (!events.signal.aborted) streamFailure = error; }
   })();
   await until(() => streamReady, 10);
-  await api('/config?location[directory]=/work');
+  // No location-scoped request before this assertion: startup must establish
+  // coverage without a test client supplying missing initialization behavior.
   await until(() => ['claude', 'codex'].every(tool => {
     try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
     catch { return false; }

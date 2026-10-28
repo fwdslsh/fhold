@@ -96,6 +96,11 @@ transcript or prove that a client reached the intended instance.
    busy-marker counts alone do not prove coverage. For Claude, document any
    native activation step that is required; do not call an activation turn
    "unused idle before any turn."
+   Do not initialize OpenCode's workspace from the test before checking this
+   case. With keepalive enabled, Assistant performs its one ordinary default-
+   workspace initialization at startup; a global health check alone does not
+   load the native activity plugin. Retain cold-boot evidence before any client
+   or location-scoped API request. Failure remains conservative and visible.
 2. **Real client identity and history.** Pair through the actual supported clients.
    Have each client run `hostname` and `pwd` in a harmless request. Compare with
    the intended target; a reply from another running instance is a failure.
