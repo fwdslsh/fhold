@@ -79,11 +79,11 @@ test('overlapping sessions, tools, subagents and interrupted turns retain indepe
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
-test('canceling a Codex question clears turn-bound input without clearing independent work', () => {
+test.each(['request_user_input', 'Bash', 'apply_patch', 'mcp__fixture__tool'])('Codex %s cancellation needs no successful PostToolUse to return idle', (tool_name) => {
 	const root = fixture();
-	event(root, 'PreToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-1' });
+	event(root, 'PreToolUse', { tool_name, tool_use_id: 'call-1' });
 	expect(activityStatus(root, [])).toBe('busy');
-	// Native cancellation emits Interrupt without PostToolUse for this question.
+	// Native cancellation emits Interrupt without successful PostToolUse.
 	event(root, 'Interrupt');
 	expect(activityStatus(root, [])).toBe('idle');
 
@@ -99,6 +99,23 @@ test('canceling a Codex question clears turn-bound input without clearing indepe
 	event(root, 'PostToolUse', { tool_use_id: 'shell' });
 	expect(activityStatus(root, [])).toBe('busy');
 	event(root, 'SubagentStop', { agent_id: 'independent-agent' });
+	expect(activityStatus(root, [])).toBe('idle');
+});
+
+test('a failed Codex tool is protected until its turn finishes without PostToolUse', () => {
+	const root = fixture();
+	event(root, 'PreToolUse', { tool_name: 'Bash', tool_use_id: 'failed' });
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'Stop');
+	expect(activityStatus(root, [])).toBe('idle');
+});
+
+test('Claude tools still require their independent completion after interruption', () => {
+	const root = fixture();
+	event(root, 'PreToolUse', { tool_name: 'Bash', tool_use_id: 'independent' }, 'claude');
+	event(root, 'Interrupt', {}, 'claude');
+	expect(activityStatus(root, [])).toBe('busy');
+	event(root, 'PostToolUseFailure', { tool_use_id: 'independent' }, 'claude');
 	expect(activityStatus(root, [])).toBe('idle');
 });
 

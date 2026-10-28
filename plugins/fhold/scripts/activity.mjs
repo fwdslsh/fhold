@@ -125,10 +125,11 @@ export function nativeEvent(tool, input, root = runtime()) {
 			break;
 		case 'PreToolUse':
 			turn(true);
-			// A synchronous Codex question has no work beyond its turn. Native
-			// interruption can cancel it without PostToolUse; the turn already
-			// protects the pending answer and clears on its terminal event.
-			if (tool === 'codex' && input.tool_name === 'request_user_input') break;
+			// Codex PostToolUse reports successful calls only: cancellation,
+			// permission rejection and tool errors have no balancing hook.
+			// The native turn protects foreground calls and pending input;
+			// separately started subagents retain their own observations.
+			if (tool === 'codex') break;
 			mark(`tool:${input.tool_use_id || 'unknown'}`, true);
 			break;
 		case 'PostToolUse':
@@ -155,7 +156,7 @@ export function nativeEvent(tool, input, root = runtime()) {
 			break;
 		case 'StopFailure':
 		case 'Interrupt':
-			// Tools/subagents still need their own completion signals.
+			// Claude tools and native subagents need their own completion signals.
 			turn(false);
 			break;
 		case 'SessionEnd':
