@@ -94,7 +94,7 @@ export function claudePrompt(text) {
 // first thread, prove that the running server has the natively approved activity hooks
 // armed and no loaded sessions. Never infer idle from its PID or missing busy
 // markers, and never create a synthetic session or approve native hooks.
-export async function inspectCodexActivity({ env, alive, signal, inspect, failedTurns = false } = {}) {
+export async function inspectCodexActivity({ env, alive, signal, inspect, finishedTurns = false } = {}) {
 	const { withCodexControl, reviewRecall } = await import('./fhold-codex-recall.mjs');
 	const check = async (rpc) => {
 		const hooks = await reviewRecall(rpc, 'fhold@fhold-plugins');
@@ -102,9 +102,9 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 		const loaded = await rpc('thread/loaded/list', {});
 		if (!Array.isArray(loaded?.data) || loaded.nextCursor !== null || loaded.data.length > 1000 ||
 			loaded.data.some((id) => typeof id !== 'string' || !id || id.length > 1024)) return { known: false };
-		const failed = [];
-		let idle = failedTurns || loaded.data.length === 0;
-		if (failedTurns) for (const threadId of loaded.data) {
+		const finished = [];
+		let idle = finishedTurns || loaded.data.length === 0;
+		if (finishedTurns) for (const threadId of loaded.data) {
 			// The native runtime status can re-establish coverage after a transient
 			// inspection failure, even when completed conversations remain loaded.
 			// Do not hydrate turns/items or retain the metadata response.
@@ -113,7 +113,7 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 				(thread.status.type === 'active' && !Array.isArray(thread.status.activeFlags))) return { known: false };
 			// Native systemError is terminal, without running work or pending input.
 			if (thread.status.type === 'active') idle = false;
-			// A bounded page is enough to retire any failed turns it positively identifies;
+			// A bounded page retires only terminal turns it positively identifies;
 			// omitted/older turns retain their conservative observations.
 			const turns = await rpc('thread/turns/list', { threadId, limit: 100, itemsView: 'notLoaded' });
 			if (!Array.isArray(turns?.data) || turns.data.length > 100) return { known: false };
@@ -122,11 +122,11 @@ export async function inspectCodexActivity({ env, alive, signal, inspect, failed
 					!['failed', 'completed', 'interrupted', 'inProgress'].includes(turn.status)) return { known: false };
 				// Prefer positive active evidence if native observations overlap a transition.
 				if (turn.status === 'inProgress') idle = false;
-				if (turn.status === 'failed') failed.push({ threadId, turnId: turn.id });
+				if (turn.status !== 'inProgress') finished.push({ threadId, turnId: turn.id });
 			}
 		}
 		if (!alive()) return { known: false };
-		return { known: true, empty: loaded.data.length === 0, idle, failed };
+		return { known: true, empty: loaded.data.length === 0, idle, finished };
 	};
 	return inspect ? inspect(check) : withCodexControl(check, { env, signal });
 }
@@ -136,11 +136,11 @@ export async function bootstrapCodexActivity(options = {}) {
 	return result.known === true && result.empty === true;
 }
 
-export function retireFailedCodexTurns(failed, root) {
+export function retireFinishedCodexTurns(finished, root) {
 	const hash = (value) => createHash('sha256').update(value).digest('hex');
-	for (const { threadId, turnId } of failed) {
-		// The per-turn key prevents an old failure from clearing a newer prompt.
-		// Tools/subagents retain their independent completion observations.
+	for (const { threadId, turnId } of finished) {
+		// The exact native session/turn key cannot clear a newer prompt or an
+		// independently running child, including when no terminal hook fired.
 		try { unlinkSync(join(root, 'activity', `codex-${hash(threadId)}-${hash(`turn:${turnId}`)}`)); }
 		catch (error) { if (error.code !== 'ENOENT') throw error; }
 	}
@@ -160,10 +160,10 @@ export async function monitorCodexActivity({ env, alive, signal, root }) {
 				continue;
 			}
 			try {
-				const observation = await inspectCodexActivity({ env, alive, signal, failedTurns: true });
+				const observation = await inspectCodexActivity({ env, alive, signal, finishedTurns: true });
 				if (!alive()) return;
 				if (!observation.known) throw Error('Native observation unavailable');
-				retireFailedCodexTurns(observation.failed, root);
+				retireFinishedCodexTurns(observation.finished, root);
 				if (observation.idle) writeFileSync(ready, '', { mode: 0o600 });
 			} catch {
 				// Losing native coverage is conservative, even after an earlier success.

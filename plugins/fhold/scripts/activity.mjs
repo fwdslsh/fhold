@@ -144,9 +144,13 @@ export function nativeEvent(tool, input, root = runtime()) {
 				if (call.tool_use_id) mark(`tool:${call.tool_use_id}`, false);
 			break;
 		case 'SubagentStart':
+			// Codex dispatches this in the child's own session and turn. Child
+			// turns can continue after the parent, or finish without a Stop hook.
+			if (tool === 'codex') { turn(true); break; }
 			mark(`agent:${input.agent_id || 'unknown'}`, true);
 			break;
 		case 'SubagentStop':
+			if (tool === 'codex') { turn(false); break; }
 			if (input.agent_id) mark(`agent:${input.agent_id}`, false);
 			background();
 			break;

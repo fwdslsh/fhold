@@ -62,20 +62,20 @@ test('a quiet, observed runtime sends no request; a turn has no time-based expir
 	expect(requests).toBe(3);
 });
 
-test('overlapping sessions, tools, subagents and interrupted turns retain independent activity', () => {
+test('a native Codex child remains active after its parent ends, then clears its own tool turn', () => {
 	const root = fixture();
 	event(root, 'UserPromptSubmit');
-	event(root, 'PreToolUse', { tool_use_id: 'shell-1' });
-	event(root, 'PreToolUse', { tool_use_id: 'shell-2' });
-	event(root, 'SubagentStart', { agent_id: 'agent-1' });
-	event(root, 'UserPromptSubmit', {}, 'codex', 'session-b');
-	event(root, 'Interrupt');
-	event(root, 'PostToolUse', { tool_use_id: 'shell-1' });
-	event(root, 'SubagentStop', { agent_id: 'agent-1' });
+	const child = (name: string) => event(root, name,
+		{ turn_id: 'child-turn', agent_id: 'child', tool_name: 'Bash', tool_use_id: 'shell' },
+		'codex', 'child');
+	child('SubagentStart');
+	child('PreToolUse');
+	event(root, 'Stop');
 	expect(activityStatus(root, [])).toBe('busy');
-	event(root, 'PostToolUse', { tool_use_id: 'shell-2' });
+	child('PostToolUse');
 	expect(activityStatus(root, [])).toBe('busy');
-	event(root, 'Stop', {}, 'codex', 'session-b');
+	// Native children emit SubagentStop, not root Stop, in their own session.
+	child('SubagentStop');
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
@@ -89,7 +89,7 @@ test.each(['request_user_input', 'Bash', 'apply_patch', 'mcp__fixture__tool'])('
 
 	event(root, 'PreToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-2' });
 	event(root, 'PreToolUse', { turn_id: 'newer', tool_name: 'Bash', tool_use_id: 'shell' });
-	event(root, 'SubagentStart', { agent_id: 'independent-agent' });
+	event(root, 'SubagentStart', { agent_id: 'independent-agent', turn_id: 'child-turn' }, 'codex', 'child-session');
 	event(root, 'Interrupt');
 	expect(activityStatus(root, [])).toBe('busy');
 	event(root, 'PostToolUse', { tool_name: 'request_user_input', tool_use_id: 'question-2' });
@@ -98,7 +98,7 @@ test.each(['request_user_input', 'Bash', 'apply_patch', 'mcp__fixture__tool'])('
 	expect(activityStatus(root, [])).toBe('busy');
 	event(root, 'PostToolUse', { tool_use_id: 'shell' });
 	expect(activityStatus(root, [])).toBe('busy');
-	event(root, 'SubagentStop', { agent_id: 'independent-agent' });
+	event(root, 'SubagentStop', { agent_id: 'independent-agent', turn_id: 'child-turn' }, 'codex', 'child-session');
 	expect(activityStatus(root, [])).toBe('idle');
 });
 
