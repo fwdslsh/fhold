@@ -253,21 +253,19 @@ contains `brace-expansion` 5.0.12 and `undici` 6.29.0, which fix all three
 approved findings. The Assistant now pins npm 12.2.1, and those npm exceptions
 have been removed. Releases before the change still contain the npm 12.2.0 bundle.
 
-### Temporary Brotli exception (October 23, 2026)
+### Brotli security update (October 28, 2026)
 
-The product owner approved a temporary beta exception for
-[CVE-2026-111497](https://security-tracker.debian.org/tracker/CVE-2026-111497).
-Guardian and Portal contain Debian `libbrotli1` **1.1.0-2+b7**, which has no
-patched Debian package at the time of this review. Processing malicious Brotli
-data can cause memory corruption; this is not a clean-scan claim.
+The October 23 owner-approved exception for
+[CVE-2026-111497](https://security-tracker.debian.org/tracker/CVE-2026-111497)
+covered Guardian and Portal's Debian `libbrotli1` **1.1.0-2+b7** while no patched
+Debian package was available. Debian now provides **1.1.0-2+deb13u1** for both
+amd64 and arm64 through [DSA-6582-1](https://security-tracker.debian.org/tracker/DSA-6582-1).
 
-`.github/trivy-ignore.yaml` matches only that advisory and exact Debian package
-version, on either architecture, and expires **November 6, 2026**. Trivy's native
-expiry handling stops applying it after that date. The unfiltered high/critical
-report still includes the finding; all other critical and fixable-high findings
-continue to fail publication unless individually approved below. No bundled library
-is patched or replaced. Remove the entry as soon as Debian provides a supported
-fix, or re-review before expiry. Publication does not update installed instances.
+Both images install `libbrotli1` through their existing APT build step and refuse
+a package older than that security update. The exact Brotli scan exception is
+removed. Unfiltered scans and native architecture startup/security checks remain
+required. No bundled library is patched or replaced, and publication does not
+update already installed instances.
 
 ## Scheduler build provenance
 
@@ -280,21 +278,20 @@ runtime configuration are patched, and no scan exception is added.
 See [Supercronic's releases](https://github.com/aptible/supercronic/releases/tag/v0.2.49)
 and the [Go release history](https://go.dev/doc/devel/release#go1.26.0).
 
-## Reviewed build-tool advisory
+## MCPB build-tool security update (October 28, 2026)
 
-Raw `bun audit` continues to report `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 is
-an unpatched high-severity transitive dependency of the MCPB developer packer.
-The [official advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv) concerns
-RSA signature verification and lists no patched version as of 2026-10-04.
+The root lockfile now resolves `node-forge` **1.4.2**, within MCPB 2.1.2's existing
+`^1.3.2` dependency range. The
+[maintainer advisory](https://github.com/digitalbazaar/forge/security/advisories/GHSA-2g46-22mc-6gwp)
+identifies CVE-2026-85393 (also tracked as GHSA-86w9-cpqp-85rv) as fixed in 1.4.1.
+Version 1.4.2 retains that RSA verification fix and corrects a PEM Buffer-input
+regression from 1.4.1. The obsolete node-forge audit ignore is removed.
 
-The reviewed exception is limited to the standard **unsigned** MCPB pack path:
-the packer eagerly imports signing code, but this path performs no certificate,
-ASN.1 or signature processing. `node-forge` is absent from the three runtime
-images and delivered stdio bridge. The quality gate may use
-`bun audit --ignore GHSA-86w9-cpqp-85rv` with that explicit scope; this is not a
-clean-audit claim or a blanket exclusion. Re-review before signing, certificate
-processing, changing the packer path, or when an upstream patch becomes available.
-Keep the useful bridge; do not introduce a custom crypto fork or packer.
+The standard unsigned MCPB pack and validation remain required qualification.
+`node-forge` is absent from the three runtime images and delivered stdio bridge.
+No dependency override, custom crypto fork or packer is introduced. The separate
+MSAL and MCPB Zod exceptions below remain; filtered audit success is not a claim
+of a clean raw audit.
 
 ## Reviewed proxy-logger advisory
 

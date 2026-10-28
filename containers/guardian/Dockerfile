@@ -21,7 +21,8 @@ ENV HOME=/home/fhold \
 
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl ripgrep \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl libbrotli1 ripgrep \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.1.0-2+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dependencies /repo/node_modules /opt/fhold/node_modules

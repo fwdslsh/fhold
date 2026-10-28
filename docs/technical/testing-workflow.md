@@ -13,8 +13,8 @@ bun install --frozen-lockfile
 bun run check
 FH_SOCKET_TESTS=1 bun run test
 bun run lint
-bun audit # Raw report; the MCPB developer-tool advisory is still reported.
-bun run audit # Narrow reviewed unsigned-pack exception; not a clean-audit claim.
+bun audit # Raw report; the MSAL and MCPB Zod advisories remain.
+bun run audit # Exact reviewed MSAL/Zod exceptions; not a clean-audit claim.
 bun run --cwd packages/cli build
 bun run --cwd packages/electron bundle
 bun test scripts/packaged-assets.test.ts
