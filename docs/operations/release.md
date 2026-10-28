@@ -347,20 +347,29 @@ or Blob behavior when updating those dependencies. This is not a clean-audit cla
 
 On October 26, 2026 (October 27 UTC), the product owner explicitly approved
 three identified PR #67 Assistant findings until **November 6, 2026**. The AKM
-Zod entry was removed with CLI 0.10.261016-beta; these two entries remain:
+Zod entry was removed with CLI 0.10.261016-beta. On October 28, the owner
+reaffirmed the upstream-package exceptions for PR #75/#76, including the two
+additional findings in the same npm-owned Undici bundle. These entries retain
+the existing **November 6, 2026** expiry:
 
 | Trivy ID / exact GitHub alias | Package/version | Exact image package path |
 | --- | --- | --- |
 | CVE-2026-109461 / GHSA-xcx6-jx8p-x3h5 | `@azure/msal-node@6.0.1` | `opt/fhold/tools/node_modules/@azure/msal-node/package.json` |
 | CVE-2026-109869 / GHSA-xjj6-f33q-929c | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
+| CVE-2026-109383 / GHSA-2m5v-pch6-74hx | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
+| CVE-2026-87018 / GHSA-qrxm-fqhp-jwvm | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 
 Trivy0.76.1 applies the path and exact package/version PURL together; there are
 no directory globs or severity-wide exclusions. The unfiltered high/critical
 report remains visible. Other critical/fixable-high findings still fail, and
 native expiry stops these entries applying after the deadline. MSAL retains
 the exposure and upstream constraints described under #63 above. The npm
-entry permits its bundled HTTP client's unhandled-error denial-of-service
-finding from excessive content-encodings. Official npm12.2.1 and maintained
+entries permit its bundled HTTP client's unhandled-error denial of service
+from excessive content-encodings, TLS certificate-validation bypass via dropped
+Agent TLS options, and denial of service during TLS renegotiation with a
+mismatched certificate. These accepted findings do not block otherwise-verified
+PR merges while the exceptions apply; they remain unresolved upstream defects.
+Official npm12.2.1 and maintained
 11.21.1 tarballs both still contain undici6.29.0; no vendor tree is modified.
 
 [Issue #63](https://github.com/fwdslsh/fhold/issues/63) tracks removal of the
