@@ -72,7 +72,7 @@ jobs:
         run: bun run --cwd packages/electron test:providers:browser
       - name: Validate shell entrypoints
         if: inputs.scope != 'tools'
-        run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/healthcheck.sh containers/guardian/entrypoint.sh
+        run: bash -n scripts/dev-setup.sh scripts/smoke-image.sh containers/assistant/entrypoint.sh containers/assistant/crontab.sh containers/assistant/healthcheck.sh containers/guardian/entrypoint.sh
       - name: Validate the materialized Compose project
         if: inputs.scope != 'tools'
         env:

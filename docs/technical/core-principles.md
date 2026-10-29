@@ -102,7 +102,10 @@ credential format, scheduler service or plugin platform is added. Image-baked
 Codex/Claude workers remain experimental and vendor-native. Both supervisors
 default on. Native sign-in/consent is never inferred and
 explicit off settings remain off.
-No software is installed at container startup.
+No software is downloaded at container startup. The pinned native plugin managers
+may refresh image-owned local plugin selections while preserving operator settings
+and native consent. After recovery, AKM's native migrator runs before agents and
+task writers; AKM owns conversion and backups. fhold adds no format converter.
 Built-in skills are ordinary image-baked managed assets, shared through the
 native fhold plugins and the root-owned read-only `/fhold-bundle` AKM source.
 Operator-owned AKM catalogs may omit that source without blocking startup;

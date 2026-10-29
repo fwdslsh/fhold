@@ -400,7 +400,8 @@ must be reviewed explicitly rather than advertised as a perfect home clone.
 Restore validates identity, supported checkpoint format, member hashes, SQLite
 integrity and path containment before admitting writers. Package versions remain
 provenance in the descriptor, manifest and receipt, not an upgrade gate.
-Native tools migrate their own schemas when they start; recovery does not
+After restore, Assistant invokes AKM's native backed-up migrator before agents
+and task writers. Other native tools migrate their schemas when they start; recovery does not
 implement a dependency-version compatibility matrix. An empty replacement layout
 restores members selected by the current configuration. A surviving receipt
 matching the accepted generation permits missing selected members to be restored,

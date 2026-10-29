@@ -25,7 +25,7 @@ curl --max-time 5 -sf -u "opencode:$password" \
 # A usable authenticated agent is live even when optional work is degraded.
 # Docker retains this output in its health log; CLI/Admin display the warnings.
 warning() { printf 'fhold: degraded: %s\n' "$1"; }
-for feature in configuration environment scheduler keepalive codex claude native-defaults knowledge memory activity akm-index-cache; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration knowledge memory activity akm-index-cache; do
   if [ -s "$runtime/degraded-$feature" ]; then
     warning "$(cat "$runtime/degraded-$feature")"
   fi
