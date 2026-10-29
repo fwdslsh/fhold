@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.261011-beta — native environment upgrades
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Assistant startup now runs AKM's native, backed-up migrations after
+recovery and before agent/task writers. A blocked or stalled optional migration
+reports degraded status while the core remains available.
+
+Refresh selected built-in Claude and Codex plugins from the pinned local image
+marketplaces through their native managers. Preserve custom plugins/marketplaces,
+settings, explicit disabled choices, account state and hook consent. Install the
+existing cron adapter on the ordinary executable path so native agents can inspect
+and synchronize their scheduled tasks. The administration skill reports current
+migration status and native selected plugin versions, with focused guidance for
+read-only sources, obsolete custom launchers and failed task history.
+
+Dependencies remain at the reviewed 0.3.261010-beta versions. AKM's known
+[cached-plugin health advisory defect](https://github.com/itlackey/akm/issues/1286)
+does not block these upgrades; the diagnostic correction will follow upstream.
+Release publication now promotes the exact verified candidate images/downloads,
+and merging a PR no longer starts a duplicate container matrix.
+
+Publishing or updating Admin/CLI does not upgrade an existing instance.
+
 ## 0.3.261010-beta — reliable native idle and recovery, stable AKM
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
