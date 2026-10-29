@@ -270,7 +270,9 @@ try {
 	report.checks.transportConformance = true;
 	if (!live) {
 		const renewal = await readFile(new URL('./fixtures/blob-renewal.mjs', import.meta.url), 'utf8');
-		report.renewal = JSON.parse(await imageScript('renewal', renewal, 90000, 'node'));
+		report.renewal = Object.fromEntries(await Promise.all(['node', 'bun'].map(async (runtime) => [
+			runtime, JSON.parse(await imageScript(`renewal-${runtime}`, renewal, 90000, runtime))
+		])));
 		report.checks.boundedNativeLeaseRetry = true;
 	}
 	const smoke = join(dirname(fileURLToPath(import.meta.url)), 'smoke-recovery.mjs');

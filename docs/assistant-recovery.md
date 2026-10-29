@@ -188,7 +188,10 @@ Keep deployment-specific lifecycle scripts outside the fhold runtime.
 Blob uses a 60-second descriptor lease, renewed every 10 seconds with a conservative
 45-second local safety window. Azure's native retry policy retries transient
 renewal failures only within the remaining existing window; claims, publication
-and release keep their separate single-attempt request bounds. Only a positively
+and release keep their separate single-attempt request bounds. An unresponsive
+renewal attempt is canceled at the existing request timeout and retried with the
+same lease ID within that unchanged window; a server-side timeout hint alone
+does not bound a stalled connection. Only a positively
 confirmed renewal before the old deadline extends authority. Definitive lease
 conflicts fail immediately; a sustained outage stops writers at the safety
 deadline, and a late response cannot revive ownership. A persistent owner nonce remains after lease expiry:
@@ -770,10 +773,11 @@ SDK 12.34.0 requests REST 2026-10-06, newer than that emulator's accepted versio
 Do not apply that workaround to a cloud endpoint or interpret it as cloud API
 compatibility qualification.
 
-Emulator qualification also injects a single delayed renewal, a server-accepted
-renewal whose response is lost, a definitive lease conflict, a response arriving
-after the safety deadline, and a sustained service outage. It exercises the
-shipped Azure retry policy and adapter with real monotonic timing. The real
+Emulator qualification also injects a single delayed renewal, an unresponsive
+connection, a server-accepted renewal whose response is lost, a definitive lease
+conflict, responses arriving after the safety deadline, and sustained service or
+connection outages. It exercises the shipped Azure retry policy and adapter under
+both Node and Bun with real monotonic timing. The real
 recovery wrapper must signal its synthetic writer parent by the original safety
 deadline, retain the last accepted checkpoint and refuse automatic takeover.
 Both native CI architectures run this fixture and the full Blob replacement
