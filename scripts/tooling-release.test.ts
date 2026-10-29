@@ -256,12 +256,10 @@ test('tooling workflow skips image gates and publication without skipping artifa
 	).toContain('scripts/management-architecture.test.ts');
 	const qualified =
 		"always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))";
-	expect(release.jobs.images?.if).toBe(`${qualified} && needs.validate.outputs.scope == 'full'`);
-	expect(release.jobs['claude-extension']?.if).toBe(
-		`${qualified} && needs.validate.outputs.scope == 'full'`
-	);
-	expect(release.jobs.cli?.if).toBe(qualified);
-	expect(release.jobs.admin?.if).toBe(qualified);
+	expect(release.jobs.candidates?.if).toBe(qualified);
+	expect(release.jobs.images?.if).toBe("needs.validate.outputs.scope == 'full'");
+	expect(gates.jobs.cli?.if).toBe('inputs.candidate');
+	expect(gates.jobs.admin?.if).toBe('inputs.candidate');
 	expect(release.jobs.gates?.if).toBe("needs.validate.outputs.qualified != 'true'");
 	expect(
 		release.jobs.release?.steps?.find(

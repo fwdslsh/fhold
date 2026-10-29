@@ -178,10 +178,12 @@ and exercise upgrade/recovery from the previously published runtime using
 private copies. Use disposable accounts/data and explicit free ports.
 Materialize an isolated home with `install --no-start` and validate Compose
 with all three profiles: `gateway`, `discord`, `slack`.
-Run the local native provider regression before freezing source for full CI. It
-checks normalized API fields, live editing, restart preservation, provider
-disable/re-enable, Guardian and scheduled execution; a successful hook smoke alone
-does not cover those compatibility boundaries.
+Use focused local regressions while developing; do not automatically repeat the
+complete native matrix locally and in CI. Before freezing the candidate, map the
+required checks to eligible evidence. The native provider case checks normalized
+API fields, live editing, restart preservation, provider disable/re-enable,
+Guardian and scheduled execution; a successful hook smoke alone does not cover
+those boundaries. Canonical candidate CI supplies the shared native gate evidence.
 
 The reusable [.github/workflows/gates.yml](../../.github/workflows/gates.yml)
 is the full gate inventory, including raw/reviewed image scans, native x64 and
@@ -217,8 +219,9 @@ bun install --lockfile-only
 
 Review every manifest and Compose default listed in
 [.github/release-manifest.json](../../.github/release-manifest.json), the
-lockfile, changelog and download instructions. Rebuild embedded/staged assets
-and rerun the affected gates after stamping. An unpublished candidate can change
+lockfile, changelog and download instructions. Stamp once before the final
+candidate build: it rebuilds embedded/staged assets and runs the affected gates.
+An unpublished candidate can change
 under the same provisional version; discard stale local output or regenerate its
 checksums and manifest, and qualify the changed build. A candidate receipt is
 evidence for its recorded SHA/digests, not a permanent version reservation.
@@ -229,23 +232,52 @@ evidence identified by SHA/digest; they do not reserve counters. Native data-sch
 not the product release number.
 
 Submit the reviewed change through a PR and retain its validation evidence.
-After the stamped candidate reaches the intended release branch, wait for that
+Push the stamped candidate to a canonical `release/*` branch and wait for that
 exact commit's GitHub CI to pass. Release validation can reuse this canonical
-push run for 24 hours, checking the SHA, workflow, successful quality job
-and all six native image jobs. Those images require successful quality and run
+push run for 24 hours, checking the SHA, workflow, successful quality job,
+all six native image jobs, final CLI/Admin jobs and complete candidate artifacts.
+Those images require successful quality and run
 under the same full-scope condition as the source tests. Their complete success
 also proves full scope when GitHub omits reusable-job step metadata. Tooling
-reuse still needs explicit tooling-test step evidence. Fork/PR runs, different commits, stale runs,
-missing jobs or failed checks cannot qualify a release. If no qualifying run is
-available, the release workflow runs the same gates itself.
-Publication builds also import the native CI image caches, avoiding expensive
-recompilation under ARM64 emulation. These caches save build work; successful
-CI evidence, rather than cache contents, authorizes skipping repeated tests.
+reuse needs explicit tooling-test evidence, or a complete full candidate with
+the successful Admin renderer check; version-only root stamps commonly select
+that full candidate. Fork/PR runs, different commits, stale runs,
+missing jobs/artifacts or failed checks cannot qualify a release. If exact-commit
+CI is still running, publication waits for it instead of starting duplicate gates.
+An unavailable lookup fails without starting another build. If no eligible
+candidate exists, the release workflow prepares one with the shared gates.
+
+Use one stamped `release/*` candidate for the release PR and publication. A
+same-repository release PR reuses its successful exact-head candidate instead of
+starting another native matrix or Linux AppImage preview. This requires that the
+PR's current base commit is already in its head; a changed base, base retarget,
+fork, failed candidate or missing artifacts retains normal PR validation. Native
+Windows/macOS previews remain separate because Linux release packaging does not
+cover them. Ordinary `main` CI still validates the actual merge result, without
+release packaging; a different merge SHA cannot reuse candidate artifacts.
+
+Candidate mode retains final-version OCI archives with SBOM/provenance and the
+actual final CLI/Admin/MCPB files. Native tests run the image from the same build;
+its OCI graph and rootfs are checked before qualification. Publication downloads
+immutable artifact IDs from the selected run/attempt, verifies receipts/hashes,
+copies the exact OCI manifests and attestations, and signs the combined index.
+It uploads the retained binaries without rebuilding. Ordinary PR checks keep
+their existing fast image path. Ordinary `main` pushes do not retain release
+archives or build final CLI/Admin packages; only explicit `release/*` candidate
+pushes and release-workflow fallback gates pay that cost. Partial component CI
+cannot qualify a full release.
+Caches only accelerate builds and never substitute for qualified artifacts.
+
+Keep development regression, final candidate qualification and publication
+integrity checks distinct. Reuse eligible successful evidence unless relevant
+inputs changed or a concrete failure requires a rerun; preserve owner-approved
+coverage exclusions. Once the published-artifact checklist below passes, finish
+and report. Optional diagnostics do not add blockers or prolong release closeout.
 
 A separate nonpublishing run is optional when artifact inspection is needed:
 
 ```sh
-gh workflow run release.yml --repo fwdslsh/fhold --ref main \
+gh workflow run release.yml --repo fwdslsh/fhold --ref release/your-candidate \
   -f version="$VERSION" -f scope=full -f dry_run=true
 gh run list --repo fwdslsh/fhold --workflow release.yml --limit 5
 ```

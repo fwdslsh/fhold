@@ -3,6 +3,9 @@ name: stack gates
 on:
   workflow_call:
     inputs:
+      candidate:
+        type: boolean
+        default: false
       scope:
         type: string
         default: full
@@ -18,11 +21,17 @@ jobs:
     name: stack quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.4
+      - id: version
+        run: |
+          version=$(bun -p 'require("./package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install the single locked workspace
         run: bun install --frozen-lockfile
       - name: Type check active packages
@@ -44,10 +53,11 @@ jobs:
           bun run lib:test
           bun run cli:test
           bun run --cwd packages/electron test
-          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/ci-scope.test.ts scripts/smoke-assistant-ci.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/management-architecture.test.ts
+          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/ci-scope.test.ts scripts/smoke-assistant-ci.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/release-candidate.test.ts scripts/management-architecture.test.ts
       - name: Lint
         run: bun run lint
       - name: Build the standalone CLI
+        if: inputs.candidate != true
         run: bun run --cwd packages/cli build
       - name: Build and validate the optional Claude Desktop extension
         if: inputs.scope != 'tools'
@@ -55,9 +65,10 @@ jobs:
       - name: Verify the embedded Skeleton
         run: bun test scripts/packaged-assets.test.ts
       - name: Bundle the optional admin app
+        if: inputs.candidate != true
         run: bun run --cwd packages/electron bundle
       - name: Qualify the Admin renderer in Chromium
-        if: inputs.scope == 'tools'
+        if: inputs.candidate || inputs.scope == 'tools'
         run: bun run --cwd packages/electron test:providers:browser
       - name: Validate shell entrypoints
         if: inputs.scope != 'tools'
@@ -81,6 +92,22 @@ jobs:
         # Audit remains mandatory, but new advisories must not hide source-test failures.
         # Exact reviewed exceptions are documented in docs/operations/release.md.
         run: bun run audit
+
+      - name: Retain the qualified extension candidate
+        if: inputs.candidate && inputs.scope != 'tools'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/extension-candidate"
+          cp "packages/claude-desktop/artifacts/fhold-claude-desktop-${VERSION}.mcpb" "${RUNNER_TEMP}/extension-candidate/"
+          bun scripts/release-candidate.mjs seal "${RUNNER_TEMP}/extension-candidate" mcpb
+      - uses: actions/upload-artifact@v7.0.2
+        if: inputs.candidate && inputs.scope != 'tools'
+        with:
+          name: candidate-${{ github.run_attempt }}-mcpb
+          path: ${{ runner.temp }}/extension-candidate
+          if-no-files-found: error
+          retention-days: 2
 
   images:
     if: inputs.scope != 'tools'
@@ -109,6 +136,15 @@ jobs:
             linux/arm64) test "$(uname -m)" = aarch64 ;;
             *) exit 1 ;;
           esac
+      - name: Prepare candidate export
+        if: inputs.candidate
+        run: mkdir -p "${RUNNER_TEMP}/candidate"
+      - name: Enable the upstream attestation-capable image store for candidates
+        if: inputs.candidate
+        uses: docker/setup-docker-action@v5.6.0
+        with:
+          version: v29.9.2
+          daemon-config: '{"features":{"containerd-snapshotter":true}}'
       - uses: docker/setup-buildx-action@v4.4.1
       - uses: docker/build-push-action@v7.4.0
         with:
@@ -118,9 +154,20 @@ jobs:
           load: true
           push: false
           tags: fhold/${{ matrix.image }}:ci
-          build-args: ${{ matrix.image == 'guardian' && 'GUARDIAN_VERSION=ci' || 'PLATFORM_VERSION=ci' }}
+          build-args: ${{ format('{0}={1}', matrix.image == 'guardian' && 'GUARDIAN_VERSION' || 'PLATFORM_VERSION', inputs.candidate && needs.quality.outputs.version || 'ci') }}
+          labels: ${{ inputs.candidate && format('org.opencontainers.image.revision={0}', github.sha) || '' }}
+          provenance: ${{ inputs.candidate && 'mode=max' || 'false' }}
+          sbom: ${{ inputs.candidate }}
+          outputs: ${{ inputs.candidate && format('type=oci,dest={0}/candidate/image.tar', runner.temp) || '' }}
           cache-from: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
           cache-to: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }},mode=max
+      - name: Bind the OCI candidate to the tested image
+        if: inputs.candidate
+        env:
+          VERSION: ${{ needs.quality.outputs.version }}
+          COMPONENT: ${{ matrix.image }}
+          PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release-candidate.mjs image "${RUNNER_TEMP}/candidate" "${COMPONENT}" "${PLATFORM}"
       - name: Assert a non-root runtime user
         env:
           IMAGE: ${{ matrix.image }}
@@ -184,3 +231,108 @@ jobs:
           path: ${{ runner.temp }}/assistant-smokes
           if-no-files-found: warn
           retention-days: 7
+      - name: Seal the successfully qualified image candidate
+        if: inputs.candidate
+        env:
+          VERSION: ${{ needs.quality.outputs.version }}
+          COMPONENT: ${{ matrix.image }}
+          PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release-candidate.mjs seal "${RUNNER_TEMP}/candidate" "image-${COMPONENT}-${PLATFORM#linux/}"
+      - uses: actions/upload-artifact@v7.0.2
+        if: inputs.candidate
+        with:
+          name: candidate-${{ github.run_attempt }}-image-${{ matrix.image }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: ${{ runner.temp }}/candidate
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 2
+
+  cli:
+    if: inputs.candidate
+    name: Build CLI ${{ matrix.asset }}
+    needs: quality
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: build:linux-x64
+            asset: fhold-cli-linux-x64
+          - os: ubuntu-24.04-arm
+            script: build:linux-arm64
+            asset: fhold-cli-linux-arm64
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/cli ${{ matrix.script }}
+      - name: Smoke the fresh native CLI artifact
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+          VERSION: ${{ needs.quality.outputs.version }}
+        run: |
+          arch="$(node -p 'process.arch')"
+          case "${ASSET}" in
+            "fhold-cli-linux-${arch}") ;;
+            *) echo 'CLI artifact does not match its native runner' >&2; exit 1 ;;
+          esac
+          actual="$("./packages/cli/dist/${ASSET}" --version)"
+          test "${actual}" = "${VERSION}"
+          "./packages/cli/dist/${ASSET}" --help
+      - name: Execute the native management helper and verify its embedded Skeleton
+        run: node scripts/smoke-management-helper.mjs
+      - name: Seal the qualified CLI candidate
+        env:
+          VERSION: ${{ needs.quality.outputs.version }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/cli-candidate"
+          cp "packages/cli/dist/${ASSET}" "${RUNNER_TEMP}/cli-candidate/"
+          bun scripts/release-candidate.mjs seal "${RUNNER_TEMP}/cli-candidate" "cli-${ASSET#fhold-cli-linux-}"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: candidate-${{ github.run_attempt }}-cli-${{ matrix.asset == 'fhold-cli-linux-x64' && 'x64' || 'arm64' }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/cli-candidate
+          retention-days: 2
+
+  admin:
+    if: inputs.candidate
+    name: Build optional admin for ${{ matrix.platform }}
+    needs: quality
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            script: build:linux
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/electron ${{ matrix.script }}
+      - name: Smoke the fresh native Admin package
+        env:
+          VERSION: ${{ needs.quality.outputs.version }}
+        run: node scripts/smoke-admin-artifact.mjs
+      - name: Seal the qualified Admin candidate
+        env:
+          VERSION: ${{ needs.quality.outputs.version }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/admin-candidate"
+          cp packages/electron/dist/packages/*.AppImage packages/electron/dist/packages/latest-linux*.yml "${RUNNER_TEMP}/admin-candidate/"
+          bun scripts/release-candidate.mjs seal "${RUNNER_TEMP}/admin-candidate" admin
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: candidate-${{ github.run_attempt }}-admin
+          if-no-files-found: error
+          path: ${{ runner.temp }}/admin-candidate
+          retention-days: 2

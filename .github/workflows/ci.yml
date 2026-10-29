@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   # An irrelevant edit must not cancel the current commit's real verification.
@@ -38,6 +39,7 @@ jobs:
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
       images: ${{ steps.scope.outputs.images }}
+      reused: ${{ steps.candidate.outputs.reused }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -50,11 +52,19 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
         run: bun scripts/ci-scope.mjs
+      - id: candidate
+        name: Reuse a qualified release candidate for its exact PR head
+        if: github.event_name == 'pull_request' && steps.scope.outputs.scope != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ steps.scope.outputs.scope }}
+        run: bun scripts/release-qualification.mjs --pull-request
   # CI and release call the same reusable stack gate.
   gates:
     needs: scope
-    if: needs.scope.outputs.scope != 'none'
+    if: needs.scope.outputs.scope != 'none' && needs.scope.outputs.reused != 'true'
     uses: ./.github/workflows/gates.yml
     with:
+      candidate: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && (needs.scope.outputs.scope == 'tools' || needs.scope.outputs.images == '["assistant","guardian","portal"]') }}
       scope: ${{ needs.scope.outputs.scope }}
       images: ${{ needs.scope.outputs.images }}

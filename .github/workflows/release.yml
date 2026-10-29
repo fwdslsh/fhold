@@ -35,6 +35,8 @@ jobs:
       channel: ${{ steps.version.outputs.channel }}
       scope: ${{ steps.version.outputs.scope }}
       qualified: ${{ steps.qualification.outputs.reused }}
+      candidate_run: ${{ steps.qualification.outputs.run_id }}
+      candidate_attempt: ${{ steps.qualification.outputs.attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -99,75 +101,66 @@ jobs:
     uses: ./.github/workflows/gates.yml
     with:
       scope: ${{ needs.validate.outputs.scope }}
+      candidate: true
+
+  candidates:
+    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))
+    needs: [validate, gates]
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ needs.validate.outputs.candidate_run || github.run_id }}
+      attempt: ${{ needs.validate.outputs.candidate_attempt || github.run_attempt }}
+      assistant_ids: ${{ steps.select.outputs.assistant_ids }}
+      guardian_ids: ${{ steps.select.outputs.guardian_ids }}
+      portal_ids: ${{ steps.select.outputs.portal_ids }}
+      assets_ids: ${{ steps.select.outputs.assets_ids }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ needs.validate.outputs.scope }}
+          CANDIDATE_RUN_ID: ${{ needs.validate.outputs.candidate_run || github.run_id }}
+          CANDIDATE_ATTEMPT: ${{ needs.validate.outputs.candidate_attempt || github.run_attempt }}
+        run: node scripts/release-qualification.mjs --select-artifacts
 
   images:
-    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true')) && needs.validate.outputs.scope == 'full'
+    if: needs.validate.outputs.scope == 'full'
     name: Publish ${{ matrix.image }} image
-    needs: [validate, gates]
+    needs: [validate, candidates]
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       id-token: write
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - image: assistant
-            file: containers/assistant/Dockerfile
-            build_args: PLATFORM_VERSION=${{ needs.validate.outputs.version }}
-          - image: guardian
-            file: containers/guardian/Dockerfile
-            build_args: GUARDIAN_VERSION=${{ needs.validate.outputs.version }}
-          - image: portal
-            file: containers/portal/Dockerfile
-            build_args: PLATFORM_VERSION=${{ needs.validate.outputs.version }}
+        image: [assistant, guardian, portal]
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: docker/setup-qemu-action@v4.4.0
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          artifact-ids: ${{ needs.candidates.outputs[format('{0}_ids', matrix.image)] }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.candidates.outputs.run_id }}
+          path: candidate
+          digest-mismatch: error
       - uses: docker/setup-buildx-action@v4.4.1
       - uses: docker/login-action@v4.7.0
         if: inputs.dry_run != true
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - id: existing
-        name: Reuse only an immutable image from this commit
-        if: inputs.dry_run != true
+      - id: promote
+        name: Promote the exact native-tested OCI images
         env:
-          IMAGE: fwdslsh/fhold-${{ matrix.image }}:${{ needs.validate.outputs.version }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: |
-          if docker buildx imagetools inspect "${IMAGE}" > image-manifest.txt 2> image-error.txt; then
-            docker pull --platform linux/amd64 "${IMAGE}"
-            revision="$(docker image inspect "${IMAGE}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
-            test "${revision}" = "${RELEASE_SHA}" || { echo 'Image tag belongs to another commit; use a new version'; exit 1; }
-            digest="$(docker buildx imagetools inspect "${IMAGE}" --format '{{.Manifest.Digest}}')"
-            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-          elif ! grep -qiE 'manifest unknown|not found' image-error.txt; then
-            echo 'Cannot determine image tag availability; refusing to overwrite'
-            exit 1
-          fi
-      - id: build
-        if: steps.existing.outputs.digest == ''
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ inputs.dry_run != true }}
-          tags: fwdslsh/fhold-${{ matrix.image }}:${{ needs.validate.outputs.version }}
-          build-args: ${{ matrix.build_args }}
-          labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=https://github.com/fwdslsh/fhold
-            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
-          provenance: mode=max
-          sbom: true
-          cache-from: |
-            type=gha,scope=release-${{ matrix.image }}
-            type=gha,scope=fhold-${{ matrix.image }}-linux/amd64
-            type=gha,scope=fhold-${{ matrix.image }}-linux/arm64
-          cache-to: type=gha,scope=release-${{ matrix.image }},mode=max
+          VERSION: ${{ needs.validate.outputs.version }}
+          COMPONENT: ${{ matrix.image }}
+          CANDIDATE_RUN_ID: ${{ needs.candidates.outputs.run_id }}
+          CANDIDATE_ATTEMPT: ${{ needs.candidates.outputs.attempt }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node scripts/release-candidate.mjs promote candidate "${COMPONENT}"
       - uses: sigstore/cosign-installer@v4.1.2
         if: inputs.dry_run != true
         with:
@@ -175,112 +168,19 @@ jobs:
       - name: Sign the immutable manifest
         if: inputs.dry_run != true
         env:
-          DIGEST: ${{ steps.existing.outputs.digest || steps.build.outputs.digest }}
-        run: cosign sign --yes "fwdslsh/fhold-${{ matrix.image }}@${DIGEST}"
-
-  cli:
-    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))
-    name: Build CLI ${{ matrix.asset }}
-    needs: [validate, gates]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            script: build:linux-x64
-            asset: fhold-cli-linux-x64
-          - os: ubuntu-24.04-arm
-            script: build:linux-arm64
-            asset: fhold-cli-linux-arm64
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: oven-sh/setup-bun@v2.2.0
-        with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/cli ${{ matrix.script }}
-      - name: Smoke the fresh native CLI artifact
-        shell: bash
-        env:
-          ASSET: ${{ matrix.asset }}
-          VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          arch="$(node -p 'process.arch')"
-          case "${ASSET}" in
-            "fhold-cli-linux-${arch}") ;;
-            *) echo 'CLI artifact does not match its native runner' >&2; exit 1 ;;
-          esac
-          actual="$("./packages/cli/dist/${ASSET}" --version)"
-          test "${actual}" = "${VERSION}"
-          "./packages/cli/dist/${ASSET}" --help
-      - name: Execute the native management helper and verify its embedded Skeleton
-        run: node scripts/smoke-management-helper.mjs
-      - uses: actions/upload-artifact@v7.0.2
-        with:
-          name: ${{ matrix.asset }}
-          if-no-files-found: error
-          path: packages/cli/dist/${{ matrix.asset }}
-
-  admin:
-    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))
-    name: Build optional admin for ${{ matrix.platform }}
-    needs: [validate, gates]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            script: build:linux
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: oven-sh/setup-bun@v2.2.0
-        with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/electron ${{ matrix.script }}
-      - name: Smoke the fresh native Admin package
-        env:
-          VERSION: ${{ needs.validate.outputs.version }}
-        run: node scripts/smoke-admin-artifact.mjs
-      - uses: actions/upload-artifact@v7.0.2
-        with:
-          name: fhold-admin-${{ matrix.platform }}
-          if-no-files-found: error
-          path: |
-            packages/electron/dist/packages/*.AppImage
-            packages/electron/dist/packages/latest-linux*.yml
-
-  claude-extension:
-    if: always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true')) && needs.validate.outputs.scope == 'full'
-    name: Build optional Claude Desktop extension
-    needs: [validate, gates]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: oven-sh/setup-bun@v2.2.0
-        with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/claude-desktop pack
-      - uses: actions/upload-artifact@v7.0.2
-        with:
-          name: fhold-claude-desktop
-          if-no-files-found: error
-          path: packages/claude-desktop/artifacts/fhold-claude-desktop-${{ needs.validate.outputs.version }}.mcpb
+          COMPONENT: ${{ matrix.image }}
+          DIGEST: ${{ steps.promote.outputs.digest }}
+        run: cosign sign --yes "fwdslsh/fhold-${COMPONENT}@${DIGEST}"
 
   release:
     if: >-
-      always() && needs.validate.result == 'success' && needs.cli.result == 'success' &&
-      needs.admin.result == 'success' &&
-      (needs.images.result == 'success' || needs.images.result == 'skipped') &&
-      (needs.claude-extension.result == 'success' || needs.claude-extension.result == 'skipped')
-    needs: [validate, images, cli, admin, claude-extension]
+      always() && needs.validate.result == 'success' && needs.candidates.result == 'success' &&
+      (needs.images.result == 'success' || (needs.images.result == 'skipped' && needs.validate.outputs.scope == 'tools'))
+    needs: [validate, candidates, images]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: oven-sh/setup-bun@v2.2.0
@@ -288,9 +188,18 @@ jobs:
           bun-version: 1.4.4
       - uses: actions/download-artifact@v8.0.2
         with:
-          pattern: fhold-*
-          path: dist
-          merge-multiple: true
+          artifact-ids: ${{ needs.candidates.outputs.assets_ids }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.candidates.outputs.run_id }}
+          path: candidate
+          digest-mismatch: error
+      - name: Verify and assemble the exact final artifact bytes
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          SCOPE: ${{ needs.validate.outputs.scope }}
+          CANDIDATE_RUN_ID: ${{ needs.candidates.outputs.run_id }}
+          CANDIDATE_ATTEMPT: ${{ needs.candidates.outputs.attempt }}
+        run: node scripts/release-candidate.mjs assemble candidate dist
       - name: Verify the Claude Desktop extension is present
         if: needs.validate.outputs.scope == 'full'
         env:

@@ -184,8 +184,10 @@ describe('release workflows', () => {
 			permissions: Record<string, string>;
 			jobs: { gates: { if?: string; uses: string; secrets?: unknown } };
 		};
-		expect(ci.permissions).toEqual({ contents: 'read' });
-		expect(ci.jobs.gates.if).toBe("needs.scope.outputs.scope != 'none'");
+		expect(ci.permissions).toEqual({ contents: 'read', actions: 'read' });
+		expect(ci.jobs.gates.if).toBe(
+			"needs.scope.outputs.scope != 'none' && needs.scope.outputs.reused != 'true'"
+		);
 		expect(ci.jobs.gates.secrets).toBeUndefined();
 		expect(ci.jobs.gates.uses).toBe('./.github/workflows/gates.yml');
 	});
@@ -223,7 +225,7 @@ describe('release workflows', () => {
 			expect(workflow.on.pull_request.types).toContain(event);
 		expect(workflow.on.pull_request.paths).toBeUndefined();
 		expect(workflow.on.pull_request['paths-ignore']).toBeUndefined();
-		expect(workflow.permissions).toEqual({ contents: 'read' });
+		expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' });
 		expect(workflow.concurrency.group).toContain('github.event.number');
 		expect(workflow.concurrency['cancel-in-progress']).toBe(true);
 		expect(Object.keys(workflow.jobs)).toEqual(['scope', 'appimage']);
@@ -281,7 +283,7 @@ describe('release workflows', () => {
 			'docker/build-push-action@v7.4.0',
 			'docker/login-action@v4.7.0',
 			'docker/setup-buildx-action@v4.4.1',
-			'docker/setup-qemu-action@v4.4.0',
+			'docker/setup-docker-action@v5.6.0',
 			'oven-sh/setup-bun@v2.2.0',
 			'sigstore/cosign-installer@v4.1.2'
 		]);
@@ -422,7 +424,14 @@ describe('release completeness gate', () => {
 		const gates = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
 		const steps = gates.jobs.quality.steps;
 		const auditIndex = steps.findIndex((step: { run?: string }) => step.run === 'bun run audit');
-		expect(auditIndex).toBe(steps.length - 1);
+		expect(auditIndex).toBeGreaterThan(
+			steps.findIndex((step: { run?: string }) => step.run === 'bun run lint')
+		);
+		expect(auditIndex).toBeLessThan(
+			steps.findIndex(
+				(step: { name?: string }) => step.name === 'Retain the qualified extension candidate'
+			)
+		);
 		expect(steps[auditIndex]['continue-on-error']).not.toBe(true);
 		expect(steps[auditIndex].if).toBeUndefined();
 		expect(gates.jobs.images.needs).toBe('quality');
@@ -441,7 +450,7 @@ describe('release completeness gate', () => {
 		});
 		expect(builder).toContain('artifactName: fhold-admin-${version}-${arch}-${os}.${ext}');
 		// Native preview packaging is allowed; public distribution remains Linux-only.
-		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8'));
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
 		expect(workflow.jobs.admin.strategy.matrix.include).toEqual([
 			{ os: 'ubuntu-latest', platform: 'linux', script: 'build:linux' }
 		]);
@@ -458,7 +467,7 @@ describe('release completeness gate', () => {
 	});
 
 	test('the cli job matrix and CLI_BINARIES stay in lockstep', () => {
-		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8')) as {
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: { cli: { strategy: { matrix: { include: Array<{ asset: string }> } } } };
 		};
 		const matrixAssets = workflow.jobs.cli.strategy.matrix.include.map((entry) => entry.asset);
@@ -470,7 +479,7 @@ describe('release completeness gate', () => {
 	});
 
 	test('both CLI release artifacts are smoked on their native Linux runners', () => {
-		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8')) as {
+		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: {
 				cli: {
 					strategy: { matrix: { include: Array<{ os: string; asset: string }> } };
@@ -496,26 +505,33 @@ describe('release completeness gate', () => {
 		expect(smoke?.run).toContain('"./packages/cli/dist/${ASSET}" --help');
 	});
 
-	test('release assembly downloads every fhold artifact and creates checksums', () => {
+	test('release assembly downloads immutable candidate IDs and creates checksums', () => {
 		const release = readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8');
-		expect(release).toContain('pattern: fhold-*');
+		expect(release).toContain('artifact-ids: ${{ needs.candidates.outputs.assets_ids }}');
+		expect(release).toContain('digest-mismatch: error');
+		expect(release).not.toContain('pattern: fhold-*');
 		expect(release).toContain('sha256sum -- * > checksums-sha256.txt');
 		expect(release).toContain('node scripts/validate-release-assets.mjs --write-manifest');
 	});
 
-	test('the MCPB job is a required release dependency', () => {
+	test('the MCPB candidate is retained only after successful source qualification', () => {
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8')) as {
 			jobs: {
-				'claude-extension': { steps: Array<{ run?: string }> };
 				release: { needs: string[] };
 			};
 		};
-		expect(workflow.jobs.release.needs).toContain('claude-extension');
+		expect(workflow.jobs.release.needs).toContain('candidates');
+		const gates = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
 		expect(
-			workflow.jobs['claude-extension'].steps.some(
-				(step) => step.run === 'bun run --cwd packages/claude-desktop pack'
+			gates.jobs.quality.steps.some(
+				(step: { run?: string }) => step.run === 'bun run --cwd packages/claude-desktop pack'
 			)
 		).toBe(true);
+		expect(
+			gates.jobs.quality.steps.find(
+				(step: { name?: string }) => step.name === 'Retain the qualified extension candidate'
+			).if
+		).toBe("inputs.candidate && inputs.scope != 'tools'");
 	});
 
 	test('release calls the shared gates workflow', () => {

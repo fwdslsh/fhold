@@ -245,13 +245,17 @@ test('base retarget runs scope checks; title/body edits neither build nor cancel
 		['admin-desktop-native', 'desktop']
 	]) {
 		expect(workflow(name).jobs[job].needs).toBe('scope');
-		expect(workflow(name).jobs[job].if).toBe("needs.scope.outputs.admin == 'true'");
+		expect(workflow(name).jobs[job].if).toBe(
+			name === 'pr-admin'
+				? "needs.scope.outputs.admin == 'true' && needs.scope.outputs.reused != 'true'"
+				: "needs.scope.outputs.admin == 'true'"
+		);
 		expect(workflow(name).jobs[job].name).toContain(
 			"github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit"
 		);
 	}
 	expect(workflow('pr-admin').jobs.appimage.name).toBe(
-		"${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || 'Download Linux AppImage (x86_64)' }}"
+		"${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || (needs.scope.outputs.reused == 'true' && 'Qualified candidate Admin reused' || 'Download Linux AppImage (x86_64)') }}"
 	);
 	expect(workflow('admin-desktop-native').jobs.desktop.name).toBe(
 		"${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (desktop)' || format('{0} installer and desktop integration', matrix.platform) }}"

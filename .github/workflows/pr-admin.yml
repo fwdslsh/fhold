@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: pr-admin-${{ github.event.number }}-${{ github.event.action == 'edited' && !github.event.changes.base && github.run_id || 'checks' }}
@@ -20,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       admin: ${{ steps.scope.outputs.admin }}
+      reused: ${{ steps.candidate.outputs.reused }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -34,10 +36,17 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/ci-scope.mjs
+      - id: candidate
+        name: Reuse the qualified final Admin for this release candidate
+        if: steps.scope.outputs.admin == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ steps.scope.outputs.scope }}
+        run: bun scripts/release-qualification.mjs --pull-request
   appimage:
     needs: scope
-    if: needs.scope.outputs.admin == 'true'
-    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || 'Download Linux AppImage (x86_64)' }}
+    if: needs.scope.outputs.admin == 'true' && needs.scope.outputs.reused != 'true'
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || (needs.scope.outputs.reused == 'true' && 'Qualified candidate Admin reused' || 'Download Linux AppImage (x86_64)') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

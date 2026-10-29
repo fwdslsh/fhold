@@ -11,6 +11,8 @@ const NATIVE_CI_INPUTS = new Set([
 	'.github/workflows/release.yml',
 	'scripts/ci-scope.mjs',
 	'scripts/release-qualification.mjs',
+	'scripts/release-candidate.mjs',
+	'scripts/release-candidate.test.ts',
 	'scripts/smoke-assistant-ci.mjs',
 	'scripts/smoke-assistant-ci.test.ts',
 	'scripts/ci-scope.test.ts',

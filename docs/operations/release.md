@@ -390,15 +390,31 @@ qualification, and green filtered scans are not clean raw scans.
 ## Public release gates
 
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux
-targets. Release validation reuses a successful canonical push CI run for the
+targets. Release validation reuses a successful canonical `release/*` push CI run for the
 exact SHA and scope only while it is less than 24 hours old. It verifies
-the successful quality job and all six native image jobs for a full release.
+the successful quality job, all six native image jobs and final native CLI/Admin
+artifact jobs for a full release, plus the complete immutable candidate artifact set.
+Same-repository release PRs reuse that exact-head candidate for native checks and
+Linux Admin packaging only when their current base is already in the head.
+Base retargets and divergent bases retain PR merge-result validation. Main pushes
+keep ordinary validation without retaining release archives or final packages.
 Their shared workflow conditions prove full source testing even when GitHub
-omits reusable-job step metadata; tooling reuse needs explicit step evidence.
+omits reusable-job step metadata. Tooling reuse needs explicit tooling-test evidence,
+or a complete full candidate with successful Admin renderer evidence.
 Partial image matrices, skipped docs/lock-only CI and PR runs cannot qualify a
-full release. Absent or invalid evidence
-runs the shared gates again. Artifact builds, startup tests, signing and download
-verification still run on each release. A separate dry run is optional.
+full release. Exact-commit CI in progress is awaited instead of duplicated;
+lookup failure stops publication. Absent or invalid candidate evidence runs the
+shared gates in candidate mode. Candidate images include the final version,
+revision, SBOM and provenance, and their OCI graph/rootfs must match the native
+tested image. Final CLI/Admin startup checks run before those files are retained.
+Publication selects exact run/attempt artifact IDs, verifies receipts and hashes,
+promotes unchanged OCI manifests/attestations, signs the combined index and uploads
+the qualified final binaries. It does not rebuild images or application artifacts.
+Checksum, feed, signature and download verification remain publication checks.
+A separate dry run is optional. Stamp once before final candidate qualification;
+changed stamped bytes require new evidence, while successful eligible checks are
+reused. Preserve owner-approved coverage exclusions and close the release as soon
+as the bounded public-artifact checklist passes, without adding optional probes.
 Read-only CI also runs in contributor forks. Release publishing requires
 the exact repository/origin and stamped versions, and refuses live publication
 unless explicitly configured. The workflows retain immutable image/tag
