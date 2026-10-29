@@ -53,10 +53,11 @@ test('release publishing includes and verifies feeds but PR previews never publi
 	const workflow = Bun.YAML.parse(
 		readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
 	);
+	const gates = Bun.YAML.parse(
+		readFileSync(new URL('../.github/workflows/gates.yml', import.meta.url), 'utf8')
+	);
 	expect(
-		workflow.jobs.admin.steps.some((step: { with?: { path?: string } }) =>
-			step.with?.path?.includes('latest-linux*.yml')
-		)
+		gates.jobs.admin.steps.some((step: { run?: string }) => step.run?.includes('latest-linux*.yml'))
 	).toBe(true);
 	expect(
 		workflow.jobs.release.steps.filter((step: { run?: string }) =>

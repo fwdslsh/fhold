@@ -1,6 +1,34 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { qualifies } from './release-qualification.mjs';
+import { pullRequestCandidate, qualifies, waitForCanonicalRuns } from './release-qualification.mjs';
+
+test('only a same-repository release PR containing the current base can reuse exact head evidence', () => {
+	const repo = { full_name: 'fwdslsh/fhold' };
+	const head = { sha: 'a'.repeat(40), ref: 'release/beta', repo };
+	const base = { sha: 'b'.repeat(40), ref: 'main', repo };
+	const event = { action: 'opened', repository: repo, pull_request: { head, base } };
+	const checked: string[][] = [];
+	for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review'])
+		expect(
+			pullRequestCandidate({ ...event, action }, (ancestor: string, descendant: string) => {
+				checked.push([ancestor, descendant]);
+				return true;
+			})
+		).toBe(head.sha);
+	expect(checked).toEqual(Array(4).fill([base.sha, head.sha]));
+	for (const changed of [
+		{ action: 'edited', changes: { base: {} } },
+		{ action: 'edited', changes: { title: {} } },
+		{ repository: { full_name: 'fork/fhold' } },
+		{ pull_request: { head: { ...head, repo: { full_name: 'fork/fhold' } }, base } },
+		{ pull_request: { head: { ...head, ref: 'feature' }, base } },
+		{ pull_request: { head: { ...head, sha: '--unsafe' }, base } },
+		{ pull_request: { head, base: { ...base, ref: 'other' } } },
+		{ pull_request: { head, base: { ...base, sha: '' } } }
+	])
+		expect(pullRequestCandidate({ ...event, ...changed }, () => true)).toBeNull();
+	expect(pullRequestCandidate(event, () => false)).toBeNull();
+});
 
 const now = Date.now();
 const run = {
@@ -26,6 +54,58 @@ const images = ['assistant', 'guardian', 'portal'].flatMap((image) =>
 	}))
 );
 const jobs = [quality, ...images];
+
+test('an in-progress exact candidate is awaited; API failure and timeout cannot launch duplicate gates', async () => {
+	let requests = 0;
+	const waits: number[] = [];
+	const result = await waitForCanonicalRuns(
+		'abc',
+		async () => ({
+			workflow_runs: [
+				{
+					...run,
+					head_branch: 'release/beta',
+					id: 7,
+					status: ++requests < 3 ? 'in_progress' : 'completed'
+				}
+			]
+		}),
+		async (ms: number) => {
+			waits.push(ms);
+		},
+		() => now
+	);
+	expect(requests).toBe(3);
+	expect(waits).toEqual([30000, 30000]);
+	expect(result[0].status).toBe('completed');
+	await expect(
+		waitForCanonicalRuns('abc', async () => {
+			throw new Error('API unavailable');
+		})
+	).rejects.toThrow('API unavailable');
+	let clockReads = 0;
+	await expect(
+		waitForCanonicalRuns(
+			'abc',
+			async () => ({ workflow_runs: [{ ...run, head_branch: 'release/beta', status: 'queued' }] }),
+			async () => {
+				throw new Error('Must not wait after deadline');
+			},
+			() => (clockReads++ ? now + 2400001 : now)
+		)
+	).rejects.toThrow('still running');
+	expect(await waitForCanonicalRuns('abc', async () => ({ workflow_runs: [] }))).toEqual([]);
+	const mainRun = { ...run, status: 'in_progress' };
+	expect(
+		await waitForCanonicalRuns(
+			'abc',
+			async () => ({ workflow_runs: [mainRun] }),
+			async () => {
+				throw new Error('Ordinary main CI does not produce candidate artifacts');
+			}
+		)
+	).toEqual([mainRun]);
+});
 
 test('reuse requires exact canonical push, recent full native qualification', () => {
 	expect(qualifies(run, jobs, 'abc', 'full', now)).toBe(true);

@@ -183,6 +183,15 @@ SHA and artifacts; reusing a version never makes earlier checks cover changed
 content. During prerelease, retain the temporary beta-as-latest recommendation;
 do not invent stable releases or change native updater consent/channel choices.
 
+Before final candidate qualification, identify the required checks and the eligible
+evidence that satisfies each. Separate development regression, final candidate
+qualification and publication integrity checks; satisfy each requirement once.
+Reuse successful eligible evidence unless relevant inputs changed or a concrete
+failure requires another run. Preserve owner-approved coverage exclusions; do
+not invent extra release blockers. After the bounded published-artifact checklist
+passes, finish and report immediately. Optional investigation does not delay
+release closeout or become a new acceptance gate.
+
 Docs and website-only changes use the documentation workflow rather than the
 full container matrix. Lockfile-only changes also skip product CI. Keep this
 separation when editing CI; root manifests and runtime Markdown skills/prompts
