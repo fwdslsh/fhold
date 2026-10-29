@@ -7,6 +7,10 @@ on:
         description: 'Stamped publication version, chosen after functional validation (for example 0.3.261000-beta)'
         required: true
         type: string
+      candidate_sha:
+        description: 'Optional full SHA of an already-qualified candidate; never rebuilds if supplied'
+        required: false
+        type: string
       dry_run:
         description: 'Build and validate without publishing'
         required: false
@@ -30,6 +34,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       channel: ${{ steps.version.outputs.channel }}
@@ -38,8 +43,18 @@ jobs:
       candidate_run: ${{ steps.qualification.outputs.run_id }}
       candidate_attempt: ${{ steps.qualification.outputs.attempt }}
     steps:
+      - id: source
+        name: Select the immutable publication source
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          source_sha="${CANDIDATE_SHA:-$GITHUB_SHA}"
+          [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]] || { echo 'Expected a full candidate commit SHA' >&2; exit 1; }
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "Publication source: $source_sha; workflow revision: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2.2.0
         with:
@@ -93,7 +108,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SCOPE: ${{ steps.version.outputs.scope }}
-        run: bun scripts/release-qualification.mjs
+          RELEASE_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        # These existing helpers use GITHUB_SHA as the artifact identity. Bind
+        # only the child command to its checked-out source; the workflow keeps
+        # its real revision and may be newer after a publication-only repair.
+        run: GITHUB_SHA="$RELEASE_SOURCE_SHA" bun scripts/release-qualification.mjs
+      - name: Require retained qualification for an explicitly selected source
+        if: inputs.candidate_sha != '' && steps.qualification.outputs.reused != 'true'
+        run: |
+          echo 'The selected source has no eligible qualified artifacts; no rebuild was started.' >&2
+          exit 1
 
   gates:
     if: needs.validate.outputs.qualified != 'true'
@@ -116,6 +140,8 @@ jobs:
       assets_ids: ${{ steps.select.outputs.assets_ids }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - id: select
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,7 +151,9 @@ jobs:
         run: node scripts/release-qualification.mjs --select-artifacts
 
   images:
-    if: needs.validate.outputs.scope == 'full'
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.candidates.result == 'success' &&
+      needs.validate.outputs.scope == 'full' }}
     name: Publish ${{ matrix.image }} image
     needs: [validate, candidates]
     runs-on: ubuntu-latest
@@ -139,6 +167,8 @@ jobs:
         image: [assistant, guardian, portal]
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.candidates.outputs[format('{0}_ids', matrix.image)] }}
@@ -160,7 +190,8 @@ jobs:
           CANDIDATE_RUN_ID: ${{ needs.candidates.outputs.run_id }}
           CANDIDATE_ATTEMPT: ${{ needs.candidates.outputs.attempt }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: node scripts/release-candidate.mjs promote candidate "${COMPONENT}"
+          RELEASE_SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: GITHUB_SHA="$RELEASE_SOURCE_SHA" node scripts/release-candidate.mjs promote candidate "${COMPONENT}"
       - uses: sigstore/cosign-installer@v4.1.2
         if: inputs.dry_run != true
         with:
@@ -183,6 +214,8 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.4
@@ -199,7 +232,8 @@ jobs:
           SCOPE: ${{ needs.validate.outputs.scope }}
           CANDIDATE_RUN_ID: ${{ needs.candidates.outputs.run_id }}
           CANDIDATE_ATTEMPT: ${{ needs.candidates.outputs.attempt }}
-        run: node scripts/release-candidate.mjs assemble candidate dist
+          RELEASE_SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: GITHUB_SHA="$RELEASE_SOURCE_SHA" node scripts/release-candidate.mjs assemble candidate dist
       - name: Verify the Claude Desktop extension is present
         if: needs.validate.outputs.scope == 'full'
         env:
@@ -243,7 +277,7 @@ jobs:
         if: inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ needs.validate.outputs.source_sha }}
           VERSION: ${{ needs.validate.outputs.version }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
           SCOPE: ${{ needs.validate.outputs.scope }}
