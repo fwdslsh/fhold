@@ -5,6 +5,29 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const TOOLING_WORKSPACES = new Set(['packages/lib', 'packages/cli', 'packages/electron']);
+const NATIVE_CI_INPUTS = new Set([
+	'.github/workflows/ci.yml',
+	'.github/workflows/gates.yml',
+	'.github/workflows/release.yml',
+	'scripts/ci-scope.mjs',
+	'scripts/release-qualification.mjs',
+	'scripts/smoke-assistant-ci.mjs',
+	'scripts/smoke-assistant-ci.test.ts',
+	'scripts/ci-scope.test.ts',
+	'scripts/smoke-image.sh'
+]);
+const ALL_IMAGES = ['assistant', 'guardian', 'portal'];
+const portalInput = (path) =>
+	path.startsWith('packages/portal/src/') || path === 'containers/portal/Dockerfile';
+const documentation = (path) =>
+	/^(?:docs\/|website\/)/.test(path) ||
+	[
+		'README.md',
+		'CHANGELOG.md',
+		'AGENTS.md',
+		'LICENSE',
+		'.github/workflows/deploy-docs.yml'
+	].includes(path);
 
 // Compare what non-tooling consumers actually resolve, not Bun's hoisting paths.
 // An Admin-only addition may rehoist YAML without changing any runtime dependency.
@@ -101,25 +124,7 @@ export function changeScope(files, readBefore, readAfter) {
 	for (const path of files) {
 		if (path === 'bun.lock') {
 			try {
-				const normalize = (text) => {
-					const lock = Bun.JSONC.parse(text);
-					for (const workspace of ['packages/lib', 'packages/cli', 'packages/electron'])
-						if (lock.workspaces?.[workspace]) {
-							for (const key of [
-								'version',
-								'dependencies',
-								'devDependencies',
-								'optionalDependencies'
-							])
-								delete lock.workspaces[workspace][key];
-						}
-					return JSON.stringify(lock);
-				};
-				if (
-					normalize(readBefore(path)) === normalize(readAfter(path)) ||
-					toolingLockChange(readBefore(path), readAfter(path))
-				)
-					continue;
+				if (toolingLockChange(readBefore(path), readAfter(path))) continue;
 			} catch {
 				/* Changed package resolutions or unreadable lock need runtime qualification. */
 			}
@@ -144,6 +149,9 @@ export function changeScope(files, readBefore, readAfter) {
 			return 'full';
 		}
 		if (path === 'packages/lib/src/control-plane/seed-manifest.ts') return 'full';
+		// Qualification code changes require exercising CI, but do not change
+		// published runtime bytes. validationPlan owns that separate decision.
+		if (NATIVE_CI_INPUTS.has(path)) continue;
 		if (/^(?:packages\/(?:lib|cli|electron)\/|docs\/|website\/)/.test(path)) continue;
 		if (/^(?:README|CHANGELOG|AGENTS|LICENSE)(?:\.md)?$/.test(path)) continue;
 		if (
@@ -174,23 +182,87 @@ export function changeScope(files, readBefore, readAfter) {
 	return 'tools';
 }
 
-export function gitScope(base, head = 'HEAD') {
-	const git = (args) => execFileSync('git', args, { encoding: 'utf8' });
+/** Select verification, independently of which component versions to publish. */
+export function validationPlan(files, readBefore, readAfter) {
+	// Explicit repository policy: docs/site/lock-only changes use docs checks.
+	// A runtime release still compares all inputs to its published runtime tag.
+	if (files.length && files.every((path) => documentation(path) || path === 'bun.lock'))
+		return { scope: 'none', images: [], admin: false };
+	const nativeCiChanged = files.some((path) => NATIVE_CI_INPUTS.has(path));
+	const scope =
+		!files.length || nativeCiChanged || files.includes('package.json')
+			? 'full'
+			: changeScope(files, readBefore, readAfter);
+	const admin =
+		!files.length ||
+		files.some((path) => {
+			if (documentation(path)) return false;
+			if (/^packages\/(?:electron|cli|lib|skeleton)\//.test(path)) return true;
+			if (
+				[
+					'package.json',
+					'bun.lock',
+					'.github/release-manifest.json',
+					'.github/workflows/pr-admin.yml',
+					'.github/workflows/admin-desktop-native.yml',
+					'scripts/smoke-admin-artifact.mjs',
+					'scripts/ci-scope.mjs'
+				].includes(path)
+			)
+				return true;
+			if (/^(?:containers\/|plugins\/|packages\/(?:guardian|portal|claude-desktop)\/)/.test(path))
+				return false;
+			// Unknown build/configuration inputs must not silently lose desktop checks.
+			return true;
+		});
+	// Portal source and Dockerfile belong only to Portal. No other image imports them.
+	// Manifests, lock changes, shared inputs and unknown files retain all images.
+	const portalOnly =
+		files.some(portalInput) && files.every((path) => documentation(path) || portalInput(path));
+	return { scope, images: scope === 'tools' ? [] : portalOnly ? ['portal'] : ALL_IMAGES, admin };
+}
+
+function gitInputs(base, head, mergeBase = false) {
+	const git = (args) =>
+		execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+	// Resolve before interpolating revision:path and refuse missing/ambiguous refs.
+	base = git(['rev-parse', '--verify', `${base}^{commit}`]).trim();
+	head = git(['rev-parse', '--verify', `${head}^{commit}`]).trim();
+	if (mergeBase) base = git(['merge-base', base, head]).trim();
 	const files = git(['diff', '--name-only', '-z', '--no-renames', base, head, '--'])
 		.split('\0')
 		.filter(Boolean);
-	return changeScope(
+	return [
 		files,
 		(path) => git(['show', `${base}:${path}`]),
 		(path) => git(['show', `${head}:${path}`])
-	);
+	];
+}
+
+export function gitScope(base, head = 'HEAD') {
+	return changeScope(...gitInputs(base, head));
+}
+
+export function gitValidationPlan(base, head = 'HEAD', mergeBase = false) {
+	try {
+		if (!base || /^0+$/.test(base)) throw new Error('Missing diff base');
+		return validationPlan(...gitInputs(base, head, mergeBase));
+	} catch (error) {
+		console.error(`Cannot prove a reduced CI scope: ${error.message}; running all checks`);
+		return { scope: 'full', images: ALL_IMAGES, admin: true };
+	}
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	const scope =
-		!process.env.BASE_SHA || /^0+$/.test(process.env.BASE_SHA)
-			? 'full'
-			: gitScope(process.env.BASE_SHA, process.env.HEAD_SHA || 'HEAD');
-	console.log(scope);
-	if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `scope=${scope}\n`);
+	const plan = gitValidationPlan(
+		process.env.BASE_SHA,
+		process.env.HEAD_SHA || 'HEAD',
+		process.env.GITHUB_EVENT_NAME === 'pull_request'
+	);
+	console.log(JSON.stringify(plan));
+	if (process.env.GITHUB_OUTPUT)
+		appendFileSync(
+			process.env.GITHUB_OUTPUT,
+			`scope=${plan.scope}\nimages=${JSON.stringify(plan.images)}\nadmin=${plan.admin}\n`
+		);
 }

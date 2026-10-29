@@ -27,12 +27,42 @@ all-profile Compose validation, native architecture image builds, vulnerability
 gates and startup/security smoke. GitHub is the canonical CI host; record actual
 workflow results before claiming a candidate passed GitHub gates.
 
+`scripts/ci-scope.mjs` selects verification from the PR merge-base (pushes use
+their before/after commits). Missing or unreadable diffs select all checks.
+
+| Changed inputs | Source checks | Native container checks | Admin packages |
+| --- | --- | --- | --- |
+| Docs/site or lockfile only | Separate docs workflow where applicable | None (repository policy) | None |
+| Admin, CLI or shared management library | Tooling checks | None, except runtime seed-manifest changes | Linux preview and Windows/macOS desktop checks |
+| Portal source/Dockerfile only, optionally docs | Full source checks | Portal on amd64 and arm64 | None |
+| Runtime/shared dependency, Skeleton, root manifest, security/harness/orchestration or unknown inputs | Full source checks | All three images on both native architectures | When Admin or shared/unknown build inputs change |
+
+Mixed lock changes use the dependency graph, including workspace, peer, optional
+and integrity edges; runtime changes select all images. CI validation scope is
+separate from publication scope: editing orchestration exercises the native gates
+without requiring publication of unchanged container bytes. A full release still
+requires all six native image jobs on its exact final SHA. Partial or skipped CI
+cannot qualify it; the release workflow runs missing full qualification itself.
+
+Assistant verification uses two lanes with separate disposable fixtures. Startup,
+security and native harness coverage runs once, with additional small explicit-on
+and explicit-off startup assertions. Keepalive and quiet-work observation periods
+are unchanged. The remaining workload, policy, history, provider/Guardian/scheduler,
+directory/Blob recovery and both upgrade cases remain required. Each suite gets a
+log and timing; failures wait for the other lane and make the job fail. Cancellation
+terminates the process groups; GitHub disposes the isolated runner and its Docker
+fixtures. Failed/cancelled jobs never qualify a release. Local runs should use a
+disposable Docker host if interruption could prevent suite cleanup.
+
 ## Download a PR's Admin for manual testing
 
-Every PR targeting `main` gets an independent **PR Admin AppImage** workflow,
-including draft and documentation-only PRs. Opening, reopening, updating commits
-or retargeting a PR to `main` builds a fresh Linux x86_64 AppImage from its exact
-head commit. New updates cancel an older build still in progress for that PR.
+PRs targeting `main` with affected Admin inputs get an independent **PR Admin
+AppImage** build, including drafts. Admin inputs include its shared library, CLI
+management helpers, embedded Skeleton and build/install configuration. Docs and
+unrelated Portal source changes skip the build. Opening, reopening, updating
+commits or retargeting a PR recomputes that scope; title/body edits do not rebuild
+or cancel the current build. The preview uses the exact head commit. New commits
+cancel an older build still in progress for that PR.
 
 On the PR, open **Checks → Download Linux AppImage (x86_64) → Details**. The run's
 summary has a **Download the Linux x86_64 AppImage** link; the same file is listed

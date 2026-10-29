@@ -48,7 +48,8 @@ CLI, Admin and release-helper checks and native artifact smokes. They do not bui
 scan, sign or publish containers, build the unchanged extension, or move Docker
 channel tags. Release notes disclose the retained runtime version.
 
-PR CI uses the same input classification. Changes to runtime sources, Skeleton,
+PR CI shares the publication classifier, with a separate affected-check plan.
+Changes to runtime sources, Skeleton,
 plugins, seed inputs or dependency resolution select full gates; unknown inputs
 also select full gates. Tooling workspace version/dependency declarations can
 reuse already locked packages without full gates. Tooling-only package additions
@@ -56,6 +57,12 @@ and rehoisting also use tooling gates when every non-tooling consumer's resolved
 dependency graph (including peer/optional edges and integrity) is unchanged.
 Runtime resolution changes, unexplained changed lock records and unknown lock
 formats still select full qualification.
+As required by repository policy, docs/site and lockfile-only changes skip product
+CI. This does not waive publication's runtime diff or final release qualification.
+Portal source/Dockerfile changes run full source tests and the two native Portal jobs;
+shared inputs and uncertain changes retain all six image jobs. CI orchestration
+changes exercise native gates even when published runtime bytes are unchanged.
+See the [check selection table](../technical/testing-workflow.md).
 Publication compares runtime inputs with the pinned runtime release tag so a
 tooling release cannot accidentally omit pending container changes. A full release
 still uses the default `SCOPE=full` stamping and the complete existing gates.
@@ -384,11 +391,12 @@ qualification, and green filtered scans are not clean raw scans.
 
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux
 targets. Release validation reuses a successful canonical push CI run for the
-exact SHA and scope only while it is less than 24 hours old. It verifies source
+exact SHA and scope only while it is less than 24 hours old. It verifies
 the successful quality job and all six native image jobs for a full release.
 Their shared workflow conditions prove full source testing even when GitHub
 omits reusable-job step metadata; tooling reuse needs explicit step evidence.
-Absent or invalid evidence
+Partial image matrices, skipped docs/lock-only CI and PR runs cannot qualify a
+full release. Absent or invalid evidence
 runs the shared gates again. Artifact builds, startup tests, signing and download
 verification still run on each release. A separate dry run is optional.
 Read-only CI also runs in contributor forks. Release publishing requires

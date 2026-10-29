@@ -66,6 +66,17 @@ and evidence remain under the printed temporary path. This qualifies the shipped
 native API/SDK and compatible HTTP transport, not vendor entitlement or actual
 Ollama, LM Studio or llama.cpp engines. It is disabled in the ordinary source suite.
 
+## Assistant CI lanes
+
+`node scripts/smoke-assistant-ci.mjs fhold/assistant:<candidate>` runs the existing
+native suites in two bounded lanes after preparing the CLI and local image alias.
+Each suite owns separate disposable fixtures; no native observation window is
+shortened. `FH_CI_LOG_DIR` selects the private log/timing directory. A lane failure
+stops that lane, waits for the other, and fails the run. Only a complete passing
+inventory produces a passing timing report. GitHub uploads logs even on failure.
+Cancellation terminates both process groups; use a disposable Docker host because
+forced cancellation can interrupt a suite's normal container cleanup.
+
 ## Real-provider acceptance
 
 Build runtime images with the version from the root `package.json`, then run

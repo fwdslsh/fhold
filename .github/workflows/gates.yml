@@ -6,6 +6,9 @@ on:
       scope:
         type: string
         default: full
+      images:
+        type: string
+        default: '["assistant","guardian","portal"]'
 
 permissions:
   contents: read
@@ -41,7 +44,7 @@ jobs:
           bun run lib:test
           bun run cli:test
           bun run --cwd packages/electron test
-          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/management-architecture.test.ts
+          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/ci-scope.test.ts scripts/smoke-assistant-ci.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/management-architecture.test.ts
       - name: Lint
         run: bun run lint
       - name: Build the standalone CLI
@@ -89,21 +92,12 @@ jobs:
       fail-fast: false
       matrix:
         platform: [linux/amd64, linux/arm64]
-        image: [assistant, guardian, portal]
+        image: ${{ fromJSON(inputs.images) }}
         include:
           - platform: linux/amd64
             runner: ubuntu-latest
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
-          - image: assistant
-            file: containers/assistant/Dockerfile
-            build_args: PLATFORM_VERSION=ci
-          - image: guardian
-            file: containers/guardian/Dockerfile
-            build_args: GUARDIAN_VERSION=ci
-          - image: portal
-            file: containers/portal/Dockerfile
-            build_args: PLATFORM_VERSION=ci
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Assert native architecture for runtime tests
@@ -119,12 +113,12 @@ jobs:
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
-          file: ${{ matrix.file }}
+          file: containers/${{ matrix.image }}/Dockerfile
           platforms: ${{ matrix.platform }}
           load: true
           push: false
           tags: fhold/${{ matrix.image }}:ci
-          build-args: ${{ matrix.build_args }}
+          build-args: ${{ matrix.image == 'guardian' && 'GUARDIAN_VERSION=ci' || 'PLATFORM_VERSION=ci' }}
           cache-from: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
           cache-to: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }},mode=max
       - name: Assert a non-root runtime user
@@ -166,23 +160,10 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Run image startup and security smoke
+        if: matrix.image != 'assistant'
         env:
           IMAGE: ${{ matrix.image }}
         run: bash scripts/smoke-image.sh "fhold/${IMAGE}:ci" "${IMAGE}"
-      - name: Verify native remote failures do not interrupt Assistant
-        if: matrix.image == 'assistant'
-        env:
-          FH_SMOKE_REMOTE: '1'
-        run: bash scripts/smoke-image.sh fhold/assistant:ci assistant
-      - name: Verify native work drives conditional keep-alive
-        if: matrix.image == 'assistant'
-        run: node scripts/smoke-keepalive.mjs fhold/assistant:ci
-      - name: Verify scoped workload aliases through native OpenCode tools
-        if: matrix.image == 'assistant'
-        run: node scripts/smoke-workload-environment.mjs fhold/assistant:ci
-      - name: Verify operator-supplied native task permissions
-        if: matrix.image == 'assistant'
-        run: node scripts/smoke-managed-policy.mjs fhold/assistant:ci
       - uses: oven-sh/setup-bun@v2.2.0
         if: matrix.image == 'assistant'
         with:
@@ -190,42 +171,16 @@ jobs:
       - name: Install locked workspace for native history verification
         if: matrix.image == 'assistant'
         run: bun install --frozen-lockfile
-      - name: Verify native history recovery with the built Assistant engine
+      - name: Verify all native Assistant suites in two isolated lanes
         if: matrix.image == 'assistant'
         env:
-          FH_NATIVE_TEST_IMAGE: fhold/fhold-assistant:ci
-          FH_HISTORY_SOURCE_IMAGE: fwdslsh/fhold-assistant:0.1.2610081904-beta.2
-          FH_HISTORY_V2_SOURCE_IMAGE: fwdslsh/fhold-assistant:0.3.261006-beta
-        run: |
-          docker tag fhold/assistant:ci fhold/fhold-assistant:ci
-          docker pull "$FH_HISTORY_SOURCE_IMAGE"
-          docker pull "$FH_HISTORY_V2_SOURCE_IMAGE"
-          bun test scripts/native-transfer.test.ts
-      - name: Verify native settings, Guardian interactions and scheduled execution
-        if: matrix.image == 'assistant'
-        env:
-          FH_NATIVE_PROVIDER_TESTS: '1'
-          FH_NATIVE_PROVIDER_CLI: ${{ github.workspace }}/packages/cli/dist/fhold-cli
-          FH_NATIVE_PROVIDER_IMAGE: fhold/fhold-assistant:ci
-        run: |
-          bun run --cwd packages/cli build
-          bun test scripts/provider-settings-native.test.ts
-      - name: Verify runtime recovery with real independent directory mounts
-        if: matrix.image == 'assistant'
-        env:
-          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
-        run: node scripts/smoke-recovery.mjs
-      - name: Verify Blob recovery and bounded native lease renewal with Azurite
-        if: matrix.image == 'assistant'
-        env:
-          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
-        run: node scripts/smoke-blob-recovery.mjs
-      - name: Verify published-image upgrades with empty storage and surviving receipts
-        if: matrix.image == 'assistant'
-        env:
-          FH_RECOVERY_TEST_IMAGE: fhold/assistant:ci
-          FH_RECOVERY_UPGRADE_FROM_IMAGE: fwdslsh/fhold-assistant:0.3.261006-beta
-        run: |
-          docker pull "$FH_RECOVERY_UPGRADE_FROM_IMAGE"
-          node scripts/smoke-recovery.mjs
-          FH_RECOVERY_TEST_SURVIVING_HOME=1 node scripts/smoke-recovery.mjs
+          FH_CI_LOG_DIR: ${{ runner.temp }}/assistant-smokes
+        run: node scripts/smoke-assistant-ci.mjs fhold/assistant:ci
+      - name: Retain Assistant suite logs and timings
+        if: always() && matrix.image == 'assistant'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: assistant-smokes-${{ runner.arch }}
+          path: ${{ runner.temp }}/assistant-smokes
+          if-no-files-found: warn
+          retention-days: 7
