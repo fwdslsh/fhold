@@ -253,8 +253,9 @@ starting another native matrix or Linux AppImage preview. This requires that the
 PR's current base commit is already in its head; a changed base, base retarget,
 fork, failed candidate or missing artifacts retains normal PR validation. Native
 Windows/macOS previews remain separate because Linux release packaging does not
-cover them. Ordinary `main` CI still validates the actual merge result, without
-release packaging; a different merge SHA cannot reuse candidate artifacts.
+cover them. Product CI does not run again after merging to `main`. Direct `main`
+pushes also do not trigger product CI; use a PR for pre-merge checks. Publication
+of a different merge SHA still requires its own exact-SHA candidate qualification.
 
 Candidate mode retains final-version OCI archives with SBOM/provenance and the
 actual final CLI/Admin/MCPB files. Native tests run the image from the same build;
@@ -262,8 +263,7 @@ its OCI graph and rootfs are checked before qualification. Publication downloads
 immutable artifact IDs from the selected run/attempt, verifies receipts/hashes,
 copies the exact OCI manifests and attestations, and signs the combined index.
 It uploads the retained binaries without rebuilding. Ordinary PR checks keep
-their existing fast image path. Ordinary `main` pushes do not retain release
-archives or build final CLI/Admin packages; only explicit `release/*` candidate
+their existing fast image path. Only explicit `release/*` candidate
 pushes and release-workflow fallback gates pay that cost. Partial component CI
 cannot qualify a full release.
 Caches only accelerate builds and never substitute for qualified artifacts.

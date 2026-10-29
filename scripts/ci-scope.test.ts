@@ -200,7 +200,7 @@ test('PR merge-base, deletions, renames and missing bases select conservative re
 });
 
 type Workflow = {
-	on: Record<string, { types?: string[] }>;
+	on: Record<string, { types?: string[]; branches?: string[] }>;
 	concurrency: { group: string };
 	jobs: Record<
 		string,
@@ -222,6 +222,20 @@ type Workflow = {
 };
 const workflow = (name: string) =>
 	Bun.YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8')) as Workflow;
+test('product CI runs before merge and for release candidates, never on a main push', () => {
+	const yaml = workflow('ci');
+	expect(yaml.on.pull_request.types).toEqual([
+		'opened',
+		'synchronize',
+		'reopened',
+		'ready_for_review',
+		'edited'
+	]);
+	expect(yaml.on.push.branches).toEqual(['release/**']);
+	// Publication without reusable evidence still runs the shared full gate.
+	expect(workflow('release').jobs.gates.with?.candidate).toBe(true);
+	expect(workflow('release').jobs.gates.with?.images).toBeUndefined();
+});
 test('base retarget runs scope checks; title/body edits neither build nor cancel real checks', () => {
 	for (const name of ['ci', 'pr-admin', 'admin-desktop-native']) {
 		const yaml = workflow(name);

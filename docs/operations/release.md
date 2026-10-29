@@ -396,8 +396,10 @@ the successful quality job, all six native image jobs and final native CLI/Admin
 artifact jobs for a full release, plus the complete immutable candidate artifact set.
 Same-repository release PRs reuse that exact-head candidate for native checks and
 Linux Admin packaging only when their current base is already in the head.
-Base retargets and divergent bases retain PR merge-result validation. Main pushes
-keep ordinary validation without retaining release archives or final packages.
+Base retargets and divergent bases retain PR merge-result validation. Product CI
+runs on PRs and `release/*` pushes, not on `main` pushes after merge. Direct pushes
+to `main` also do not run product CI; use a PR for pre-merge checks. Publication
+still requires exact-SHA candidate qualification, including for a new merge SHA.
 Their shared workflow conditions prove full source testing even when GitHub
 omits reusable-job step metadata. Tooling reuse needs explicit tooling-test evidence,
 or a complete full candidate with successful Admin renderer evidence.
