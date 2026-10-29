@@ -12,8 +12,9 @@ on:
       - 'bun.lock'
       - '.github/workflows/deploy-docs.yml'
   push:
+    # PRs supply pre-merge checks; merging must not start another image matrix.
+    # Release candidates still need canonical push evidence for publication.
     branches:
-      - main
       - 'release/**'
     paths-ignore:
       - 'docs/**'
