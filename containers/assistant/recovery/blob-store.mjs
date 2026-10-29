@@ -256,7 +256,23 @@ export async function createBlobStore(
 		// arriving after the previous safety deadline must never revive this owner.
 		const remaining = Math.max(1, Math.floor(current.safeUntil - began));
 		current.renewing = request(
-			(abortSignal) => current.renewalLease.renewLease({ abortSignal }),
+			async (abortSignal) => {
+				while (true) {
+					// A connected but unresponsive socket never reaches the SDK retry
+					// policy. Bound that attempt separately from the ownership window.
+					const attemptDeadline = AbortSignal.timeout(operationTimeoutMs);
+					try {
+						return await current.renewalLease.renewLease({
+							abortSignal: AbortSignal.any([abortSignal, attemptDeadline])
+						});
+					} catch (error) {
+						// Only our own per-attempt cancellation permits another same-ID
+						// renewal. Definitive failure and the old safety deadline win.
+						if (error?.name !== 'AbortError' || !attemptDeadline.aborted || abortSignal.aborted)
+							throw error;
+					}
+				}
+			},
 			undefined,
 			remaining
 		)

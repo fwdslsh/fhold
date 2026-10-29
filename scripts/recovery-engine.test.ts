@@ -1781,11 +1781,13 @@ describe('Blob ownership fault regressions (no-network unit evidence)', () => {
 			await expect(store.createImmutable(`objects/${hash}`, bytes, owner, { signal: AbortSignal.timeout(5) })).rejects.toThrow();
 			expect(Date.now() - began).toBeLessThan(500);
 			expect(fixture.renewals()).toBe(0);
-			// Essential renewal now has the remaining ownership safety budget,
-			// rather than the optional transfer's short per-request deadline.
+			// Essential renewal retries its own bounded attempts within the
+			// remaining ownership window, independent of the optional transfer.
 			now = 44_900;
+			const renewalBegan = Date.now();
 			await expect(store.renew(owner)).rejects.toThrow();
-			expect(fixture.renewals()).toBe(1);
+			expect(fixture.renewals()).toBeGreaterThan(1);
+			expect(Date.now() - renewalBegan).toBeLessThan(500);
 			await expect(store.compareAndSwap(String(head.token), { ...head.value, generation: 'unsafe' }, owner)).rejects.toThrow('ownership lost');
 			expect(fixture.value().generation).toBeNull();
 		} finally { monotonic.mockRestore(); fixture.restore(); }
