@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.261010-beta — reliable native idle and recovery, stable AKM
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Native workers now establish and recover idle observation, allowing an
+unused worker to stop keepalive while protecting foreground work and pending
+questions or permissions. Observation failures remain conservative.
+
+Recovery excludes Claude's temporary launch files and rotating configuration
+backups while retaining durable native history. Optional AKM cache capture no
+longer ties ownership renewal to the checkpoint deadline. Unresponsive Blob
+renewal attempts are bounded and retried within the existing ownership window;
+sustained failures still fence writers safely. AKM cache recovery remains
+experimental, with capture and restore independently off by default.
+
+Update AKM CLI to **0.10.261019 stable**, all three AKM plugins to **0.10.261017
+stable**, OpenCode to **2.2.1**, Codex to **0.165.0**, Claude Code to **2.1.312**,
+and Assistant/Portal Node to **26.13.0 LTS**. Admin now uses **Electron 45.1.0**,
+with native packaged renderer/bridge and sandboxed startup checks. Include the
+available node-forge and Debian Brotli security fixes. Remaining approved MSAL,
+MCPB Zod and npm-bundled Undici exceptions retain their existing scopes and
+November 6 review/expiry; no exception is added or widened.
+
+CI selects affected components and runs independent Assistant suites in two
+lanes. Full release qualification and final artifact checks remain required.
+See the [dependency review](docs/operations/dependency-refresh-2026-10-29.md)
+and [CI measurements](https://github.com/fwdslsh/fhold/pull/81).
+Publishing or updating Admin/CLI does not upgrade an existing instance.
+
 ## 0.3.261009-beta — AKM refresh and Admin browser sign-in
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
