@@ -39,7 +39,7 @@ node --version
 bun install --frozen-lockfile
 bun outdated --recursive
 npm view akm-cli dist-tags --json
-npm view akm-cli@next version engines --json
+npm view akm-cli@latest version engines --json
 npm view akm-opencode-v2@latest version dependencies peerDependencies --json
 npm view @opencode/cli@latest version engines --json
 npm view @opencode/client@latest version --json
@@ -50,9 +50,9 @@ npm view @openai/codex@latest version engines --json
 
 Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
-The OpenCode 2 integration currently needs AKM 0.10's prerelease channel;
-`akm-cli@latest` still selects 0.9. Resolve the plugin's required CLI version
-before choosing that pin. Compare actual release provenance and published tags,
+AKM 0.10 and its OpenCode 2, Claude and Codex plugins now use the stable channel.
+Resolve the plugin's required CLI version before choosing that pin.
+Compare actual release provenance and published tags,
 not just numeric patches: upstream AKM has changed its prerelease naming.
 Write exact resolved versions into runtime manifests, never moving dist-tags.
 

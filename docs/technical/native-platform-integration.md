@@ -17,13 +17,15 @@ Fresh fhold configuration uses the supported `harnesses.opencode` configuration
 with `args: ["run", "--standalone"]`, reusing the installed OpenCode and its
 native settings/authentication without a fhold launcher or first-use download.
 
-The current plugin is `akm-opencode-v2@0.10.261013-beta`, whose exact CLI015
-dependency matches the installed command without a version override. Its native
-Claude and Codex marketplace is baked from the same immutable release. OpenCode
-CLI/client/plugin SDK are aligned at **2.1.4**, with the required **Effect 4.0.1**.
+The current stable plugin is `akm-opencode-v2@0.10.261017`, whose exact
+`akm-cli@0.10.261019` dependency matches the installed command without an override.
+Its native Claude and Codex marketplace is baked from the same immutable release.
+OpenCode CLI/client/plugin SDK are aligned at **2.2.1**, with the required
+**Effect 4.0.1**. The upstream AKM plugin still declares SDK 2.1.4 as its peer;
+the actual native harness checks qualify it against the selected runtime.
 No vendor source is patched. Published package integrity is recorded in `bun.lock`.
 
-CLI015 acquires native runtime pieces outside its npm dependency tree. The image
+AKM acquires native runtime pieces outside its npm dependency tree. The image
 build uses AKM's own acquisition code to populate its ordinary cache with its
 pinned OpenCode runtime. Native `akm setup --yes --embedding local` also prepares
 the ONNX binding and model on Linux x64. Only the cache is copied into the image;
@@ -40,12 +42,12 @@ Upstream's `docs/reference/configuration.md`,
 `dist/integrations/harnesses/opencode/agent-builder.js` and native session reader
 own bounded model work and the `akm-model-work` recursion exclusion.
 
-Dependency freshness was reviewed on October 27, 2026. The OpenCode 2.1
-compatibility hold is removed; the former history metadata blocker was removed
-in003. See [the upgrade record](../operations/dependency-refresh-2026-10-27.md)
-for native continuation qualification and the unresolved upstream advisory
-chains. Unrelated Claude, formatter and desktop packaging updates are deferred
-to an intentional dependency batch.
+Dependency freshness was reviewed on October 29, 2026. The former history
+metadata blocker was removed in003. See the
+[October 27 upgrade record](../operations/dependency-refresh-2026-10-27.md)
+for the original continuation qualification, and the
+[current dependency review](../operations/dependency-refresh-2026-10-29.md)
+for the stable AKM selection, native-client updates and compatibility decisions.
 
 ## Executable evidence and limits
 

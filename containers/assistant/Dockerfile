@@ -1,7 +1,7 @@
-FROM node:24.22.1-bookworm-slim AS node-runtime
+FROM node:26.13.0-bookworm-slim AS node-runtime
 ARG NPM_VERSION=12.2.1
 # Use npm's supported self-upgrade at build time, without altering its bundle.
-# This upgrade fixes several bundled advisories; remaining findings still block CI.
+# Keep npm's upstream bundle intact and retain the reviewed advisory scopes.
 RUN npm install --global "npm@${NPM_VERSION}" \
     && test "$(npm --version)" = "${NPM_VERSION}"
 
@@ -59,17 +59,20 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:acb84dccf756820b5735b3174234f3aaa6640fff42abc3539f582f126f2f38b3 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/01052177a4fa78662015a76cef1807e3ce98d2d1 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:b26462cb0a0f172ab05de3a1f69e7707fec98f01199ed1e597eafe9a20ec3786 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/4793b763cb309a145987050cf1b2c1c037f04205 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-01052177a4fa78662015a76cef1807e3ce98d2d1/claude \
+    && plugin_root=akm-plugins-4793b763cb309a145987050cf1b2c1c037f04205/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-01052177a4fa78662015a76cef1807e3ce98d2d1/.agents/plugins/marketplace.json \
-      akm-plugins-01052177a4fa78662015a76cef1807e3ce98d2d1/.claude-plugin/marketplace.json \
-      akm-plugins-01052177a4fa78662015a76cef1807e3ce98d2d1/LICENSE
+      akm-plugins-4793b763cb309a145987050cf1b2c1c037f04205/.agents/plugins/marketplace.json \
+      akm-plugins-4793b763cb309a145987050cf1b2c1c037f04205/.claude-plugin/marketplace.json \
+      akm-plugins-4793b763cb309a145987050cf1b2c1c037f04205/LICENSE
+# Node's official Linux binaries require libatomic on both native architectures.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/repo/node_modules/.bin:${PATH}"
 # AKM owns acquisition and integrity verification. Bake its native runtime into
@@ -102,7 +105,7 @@ FROM ubuntu:24.04
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git libnss-wrapper tzdata tini tree util-linux \
+      bash ca-certificates curl git libatomic1 libnss-wrapper tzdata tini tree util-linux \
       ripgrep jq python3 python3-venv python3-pip sqlite3 zip unzip \
       poppler-utils file less procps \
     && rm -rf /var/lib/apt/lists/*
