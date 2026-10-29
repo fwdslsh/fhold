@@ -25,7 +25,7 @@
     },
     "packages/claude-desktop": {
       "name": "@fhold/claude-desktop",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@modelcontextprotocol/server": "2.4.0",
@@ -38,7 +38,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.6",
@@ -50,7 +50,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "dependencies": {
         "electron-updater": "6.8.11",
       },
@@ -65,7 +65,7 @@
     },
     "packages/guardian": {
       "name": "@fhold/guardian",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "dependencies": {
         "@modelcontextprotocol/server": "2.4.0",
         "@opencode/client": "2.2.1",
@@ -81,7 +81,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "dependencies": {
         "jsonc-parser": "^3.3.1",
         "tar": "^7.5.22",
@@ -93,7 +93,7 @@
     },
     "packages/portal": {
       "name": "@fhold/portal",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@slack/bolt": "5.1.0",
@@ -106,7 +106,7 @@
     },
     "packages/skeleton": {
       "name": "@fhold/skeleton",
-      "version": "0.3.261009-beta",
+      "version": "0.3.261010-beta",
     },
     "plugins/fhold": {
       "name": "@fhold/harness-hooks",
