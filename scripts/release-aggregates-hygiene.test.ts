@@ -123,29 +123,29 @@ describe('release workflows', () => {
 				paths: ['opt/fhold/tools/node_modules/@azure/msal-node/package.json'],
 				purls: ['pkg:npm/%40azure/msal-node@6.0.1'],
 				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-xcx6-jx8p-x3h5'),
+				statement: expect.stringContaining('GHSA-xcx6-jx8p-x3h5')
 			},
 			{
 				id: 'CVE-2026-109869',
 				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
 				purls: ['pkg:npm/undici@6.29.0'],
 				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-xjj6-f33q-929c'),
+				statement: expect.stringContaining('GHSA-xjj6-f33q-929c')
 			},
 			{
 				id: 'CVE-2026-109383',
 				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
 				purls: ['pkg:npm/undici@6.29.0'],
 				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-2m5v-pch6-74hx'),
+				statement: expect.stringContaining('GHSA-2m5v-pch6-74hx')
 			},
 			{
 				id: 'CVE-2026-87018',
 				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
 				purls: ['pkg:npm/undici@6.29.0'],
 				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-qrxm-fqhp-jwvm'),
-			},
+				statement: expect.stringContaining('GHSA-qrxm-fqhp-jwvm')
+			}
 		]);
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
 			jobs: {
@@ -170,12 +170,12 @@ describe('release workflows', () => {
 		expect(scans[1]?.with).toMatchObject({
 			severity: 'CRITICAL',
 			'ignore-unfixed': false,
-			'exit-code': '1',
+			'exit-code': '1'
 		});
 		expect(scans[2]?.with).toMatchObject({
 			severity: 'HIGH',
 			'ignore-unfixed': true,
-			'exit-code': '1',
+			'exit-code': '1'
 		});
 	});
 
@@ -185,7 +185,7 @@ describe('release workflows', () => {
 			jobs: { gates: { if?: string; uses: string; secrets?: unknown } };
 		};
 		expect(ci.permissions).toEqual({ contents: 'read' });
-		expect(ci.jobs.gates.if).toBeUndefined();
+		expect(ci.jobs.gates.if).toBe("needs.scope.outputs.scope != 'none'");
 		expect(ci.jobs.gates.secrets).toBeUndefined();
 		expect(ci.jobs.gates.uses).toBe('./.github/workflows/gates.yml');
 	});
@@ -196,7 +196,7 @@ describe('release workflows', () => {
 		}
 	});
 
-	test('main-target PRs get an independent, unprivileged, smoke-tested Admin download', () => {
+	test('affected main-target PRs get an independent, unprivileged, smoke-tested Admin download', () => {
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'pr-admin.yml'), 'utf8')) as {
 			on: Record<
 				string,
@@ -226,9 +226,9 @@ describe('release workflows', () => {
 		expect(workflow.permissions).toEqual({ contents: 'read' });
 		expect(workflow.concurrency.group).toContain('github.event.number');
 		expect(workflow.concurrency['cancel-in-progress']).toBe(true);
-		expect(Object.keys(workflow.jobs)).toEqual(['appimage']);
+		expect(Object.keys(workflow.jobs)).toEqual(['scope', 'appimage']);
 		const job = workflow.jobs.appimage;
-		expect(job.needs).toBeUndefined();
+		expect(job.needs).toBe('scope');
 		const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
 		expect(checkout?.with?.ref).toBe('${{ github.event.pull_request.head.sha }}');
 		expect(checkout?.with?.['persist-credentials']).toBe(false);
@@ -289,13 +289,14 @@ describe('release workflows', () => {
 
 	test('every runtime image is built, scanned, and smoked on both supported architectures', () => {
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8')) as {
+			on: { workflow_call: { inputs: { images: { default: string } } } };
 			jobs: {
 				images: {
 					'runs-on': string;
 					strategy: {
 						matrix: {
 							platform: string[];
-							image: string[];
+							image: string;
 							include: Array<{ image?: string; file?: string; platform?: string; runner?: string }>;
 						};
 					};
@@ -310,13 +311,18 @@ describe('release workflows', () => {
 		};
 		const images = workflow.jobs.images;
 		expect(images.strategy.matrix.platform).toEqual(['linux/amd64', 'linux/arm64']);
-		expect(images.strategy.matrix.image).toEqual(['assistant', 'guardian', 'portal']);
+		expect(images.strategy.matrix.image).toBe('${{ fromJSON(inputs.images) }}');
+		expect(JSON.parse(workflow.on.workflow_call.inputs.images.default)).toEqual([
+			'assistant',
+			'guardian',
+			'portal'
+		]);
 		expect(
 			images.strategy.matrix.include
 				.map((entry) => entry.image)
 				.filter(Boolean)
 				.sort()
-		).toEqual(['assistant', 'guardian', 'portal']);
+		).toEqual([]);
 		expect(images['runs-on']).toBe('${{ matrix.runner }}');
 		expect(images.strategy.matrix.include).toContainEqual({
 			platform: 'linux/arm64',
@@ -428,14 +434,20 @@ describe('release completeness gate', () => {
 
 	test('Admin artifacts have standard GitHub update metadata and dash-safe names', () => {
 		const builder = readFileSync(join(ROOT, 'packages/electron/electron-builder.yml'), 'utf8');
-		expect(Bun.YAML.parse(builder).publish).toEqual({ provider: 'github', owner: 'fwdslsh', repo: 'fhold' });
+		expect(Bun.YAML.parse(builder).publish).toEqual({
+			provider: 'github',
+			owner: 'fwdslsh',
+			repo: 'fhold'
+		});
 		expect(builder).toContain('artifactName: fhold-admin-${version}-${arch}-${os}.${ext}');
 		// Native preview packaging is allowed; public distribution remains Linux-only.
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'release.yml'), 'utf8'));
 		expect(workflow.jobs.admin.strategy.matrix.include).toEqual([
 			{ os: 'ubuntu-latest', platform: 'linux', script: 'build:linux' }
 		]);
-		expect(readJson('packages/electron/package.json').scripts?.['build:linux']).toContain('--linux');
+		expect(readJson('packages/electron/package.json').scripts?.['build:linux']).toContain(
+			'--linux'
+		);
 		for (const scope of ['full', 'tools']) {
 			const assets = requiredReleaseAssets('0.3.261006-beta', productName, scope);
 			expect(assets.filter((asset: string) => asset.endsWith('.AppImage'))).toHaveLength(2);
@@ -598,7 +610,10 @@ describe('release completeness gate', () => {
 		expect(required).toContain(expectedClaudeExtensionAsset('0.1.2610020008-beta.1'));
 		expect(required.some((name) => /mac\.zip|\.exe$/.test(name))).toBe(false);
 		expect(required).toContain('checksums-sha256.txt');
-		expect(required.filter((name) => name.endsWith('.yml'))).toEqual(['latest-linux.yml', 'latest-linux-arm64.yml']);
+		expect(required.filter((name) => name.endsWith('.yml'))).toEqual([
+			'latest-linux.yml',
+			'latest-linux-arm64.yml'
+		]);
 	});
 
 	test('checksumFor treats the release filename as opaque, including spaces', () => {
@@ -661,9 +676,13 @@ describe('release completeness gate', () => {
 			const required = writeCompleteDist(dir, version);
 			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
 			writeFileSync(join(dir, CLI_BINARIES[0]), 'different retry bytes');
-			expect(validateReleaseAssets(dir, version, productName)).toContain(`Manifest checksum mismatch for ${CLI_BINARIES[0]}`);
+			expect(validateReleaseAssets(dir, version, productName)).toContain(
+				`Manifest checksum mismatch for ${CLI_BINARIES[0]}`
+			);
 			expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
-			expect(validateReleaseAssets(dir, version, productName)).toContain(`Checksum mismatch for ${CLI_BINARIES[0]}`);
+			expect(validateReleaseAssets(dir, version, productName)).toContain(
+				`Checksum mismatch for ${CLI_BINARIES[0]}`
+			);
 			writeChecksums(dir, required);
 			writeReleaseAssetManifest(dir, version, productName);
 			expect(validateReleaseAssets(dir, version, productName)).toEqual([]);

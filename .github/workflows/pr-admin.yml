@@ -10,12 +10,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-admin-${{ github.event.number }}
+  group: pr-admin-${{ github.event.number }}-${{ github.event.action == 'edited' && !github.event.changes.base && github.run_id || 'checks' }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit' || 'scope' }}
+    if: github.event.action != 'edited' || github.event.changes.base != null
+    runs-on: ubuntu-latest
+    outputs:
+      admin: ${{ steps.scope.outputs.admin }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
+      - id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun scripts/ci-scope.mjs
   appimage:
-    name: Download Linux AppImage (x86_64)
+    needs: scope
+    if: needs.scope.outputs.admin == 'true'
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || 'Download Linux AppImage (x86_64)' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

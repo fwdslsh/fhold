@@ -71,6 +71,18 @@ test('tooling checks cannot qualify a full runtime release', () => {
 	expect(qualifies(run, tools, 'abc', 'tools', now)).toBe(true);
 	expect(qualifies(run, tools, 'abc', 'full', now)).toBe(false);
 	expect(qualifies(run, jobs, 'abc', 'unexpected', now)).toBe(false);
+	// Docs/lock-only CI and a Portal-only native matrix never qualify a full release.
+	expect(qualifies(run, [], 'abc', 'full', now)).toBe(false);
+	expect(qualifies(run, [], 'abc', 'none', now)).toBe(false);
+	expect(
+		qualifies(
+			run,
+			[quality, ...images.filter((job) => job.name.includes('portal'))],
+			'abc',
+			'full',
+			now
+		)
+	).toBe(false);
 });
 
 test('sparse reusable-job steps require the complete native full-scope evidence', () => {

@@ -8,7 +8,7 @@ import {
 	FH_RUNTIME_VERSION
 } from '../packages/lib/src/control-plane/release.js';
 import { defaultStackConfig } from '../packages/lib/src/control-plane/stack-config.js';
-import { changeScope } from './ci-scope.mjs';
+import { changeScope, validationPlan } from './ci-scope.mjs';
 import {
 	requiredReleaseAssets,
 	validateReleaseAssets,
@@ -49,7 +49,15 @@ test('tooling changes do not require container qualification', () => {
 		).toBe('full');
 });
 test('tooling declarations can reuse locked packages; changed resolutions still require runtime qualification', () => {
-	const lock = { workspaces: { 'packages/lib': { version: 'old' } }, packages: { dep: '1' } };
+	const lock = {
+		lockfileVersion: 1,
+		configVersion: 1,
+		workspaces: {
+			'': { name: 'root', dependencies: { dep: '1', tar: '^7.5.22' } },
+			'packages/lib': { name: '@fhold/lib', version: 'old', dependencies: { dep: '1' } }
+		},
+		packages: { dep: ['dep@1', '', {}, 'dep-hash'], tar: ['tar@7.5.22', '', {}, 'tar-hash'] }
+	};
 	const next = structuredClone(lock);
 	next.workspaces['packages/lib'].version = 'new';
 	expect(
@@ -62,6 +70,7 @@ test('tooling declarations can reuse locked packages; changed resolutions still 
 	const declaration = {
 		...next,
 		workspaces: {
+			...next.workspaces,
 			'packages/lib': { ...next.workspaces['packages/lib'], dependencies: { tar: '^7.5.22' } }
 		}
 	};
@@ -72,7 +81,16 @@ test('tooling declarations can reuse locked packages; changed resolutions still 
 			() => JSON.stringify(declaration)
 		)
 	).toBe('tools');
-	next.packages.dep = '2';
+	next.packages.dep = ['dep@2', '', {}, 'dep-hash-2'];
+	// Repository policy can skip lock-only product CI, but publication must still
+	// detect that runtime consumers changed and refuse a tooling-only release.
+	expect(
+		validationPlan(
+			['bun.lock'],
+			() => JSON.stringify(lock),
+			() => JSON.stringify(next)
+		).scope
+	).toBe('none');
 	expect(
 		changeScope(
 			['bun.lock'],

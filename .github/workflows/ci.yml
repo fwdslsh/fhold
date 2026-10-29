@@ -2,12 +2,14 @@ name: GitHub CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     # Docs/site changes have their own strict Unify verification workflow.
     # Do not ignore all Markdown: runtime skills and prompts also use .md.
     paths-ignore:
       - 'docs/**'
       - 'website/**'
       - 'README.md'
+      - 'bun.lock'
       - '.github/workflows/deploy-docs.yml'
   push:
     branches:
@@ -17,20 +19,25 @@ on:
       - 'docs/**'
       - 'website/**'
       - 'README.md'
+      - 'bun.lock'
       - '.github/workflows/deploy-docs.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # An irrelevant edit must not cancel the current commit's real verification.
+  group: ci-${{ github.ref }}-${{ github.event.action == 'edited' && !github.event.changes.base && github.run_id || 'checks' }}
   cancel-in-progress: true
 
 jobs:
   scope:
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit' || 'scope' }}
+    if: github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-latest
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
+      images: ${{ steps.scope.outputs.images }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -46,6 +53,8 @@ jobs:
   # CI and release call the same reusable stack gate.
   gates:
     needs: scope
+    if: needs.scope.outputs.scope != 'none'
     uses: ./.github/workflows/gates.yml
     with:
       scope: ${{ needs.scope.outputs.scope }}
+      images: ${{ needs.scope.outputs.images }}

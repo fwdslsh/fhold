@@ -46,6 +46,42 @@ wait_for_health() {
 	return 1
 }
 
+verify_remote_state() {
+	local expected=$1 tool deadline
+	for tool in codex claude; do
+		deadline=$((SECONDS + 45))
+		while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *"$expected"* ]]; do
+			if ((SECONDS >= deadline)); then echo "$tool did not reach $expected" >&2; exit 1; fi
+			sleep 1
+		done
+	done
+	docker exec "$container" fhold-healthcheck
+	local logs
+	logs=$(docker logs "$container" 2>&1)
+	if [[ "$logs" =~ (claude\.(ai|com)/code|pairingCode|manualPairingCode) ]]; then
+		echo 'Native pairing output reached Docker logs' >&2; exit 1
+	fi
+}
+
+verify_explicit_remote_modes() {
+	# Only enablement differs from the default-on fixture already qualified.
+	# Do not repeat browser, AKM, lifecycle, history or quiet-work qualification.
+	local mode expected
+	for mode in 1 0; do
+		docker rm -f "$container" >/dev/null
+		docker run -d --name "$container" --network none \
+			--init --cap-drop=ALL --security-opt no-new-privileges:true \
+			-e OPENCODE_SERVER_PASSWORD=assistant-explicit-remotes-fixture \
+			-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE="$mode" -e FH_CLAUDE_REMOTE="$mode" \
+			"$image" >/dev/null
+		wait_for_health
+		expected=sign-in-needed
+		if [ "$mode" = 0 ]; then expected=not-started; fi
+		verify_remote_state "$expected"
+		printf 'Explicit native remote mode %s: %s, healthy Assistant\n' "$mode" "$expected"
+	done
+}
+
 verify_runtime_versions() {
 	test "$(docker exec "$container" bun --version)" = "$expected_bun"
 	if [ "$kind" = assistant ]; then
@@ -350,23 +386,9 @@ assistant)
 		# unsigned-in workers or pretending their activity hooks have run.
 		docker exec "$container" test ! -e /home/fhold/.codex/app-server-control/app-server-control.sock
 		docker exec "$container" test ! -e /home/fhold/.codex/packages/app-server-daemon
-		for tool in codex claude; do
-			deadline=$((SECONDS + 45))
-			while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *sign-in-needed* ]]; do
-				if ((SECONDS >= deadline)); then echo "$tool did not wait for native sign-in" >&2; exit 1; fi
-				sleep 1
-			done
-			docker exec "$container" fhold-remote "$tool" status
-		done
-		docker exec "$container" fhold-healthcheck
-		logs=$(docker logs "$container" 2>&1)
-		if [[ "$logs" =~ (claude\.(ai|com)/code|pairingCode|manualPairingCode) ]]; then
-			echo 'Native pairing output reached Docker logs' >&2; exit 1
-		fi
+		verify_remote_state sign-in-needed
 	else
-		for tool in codex claude; do
-			[[ "$(docker exec "$container" fhold-remote "$tool" status)" == *not-started* ]]
-		done
+		verify_remote_state not-started
 	fi
 	# An older operator-owned AKM catalog may not include the optional skills
 	# source. It must remain byte-for-byte intact and must not break startup.
@@ -385,6 +407,7 @@ CONFIG
 	verify_builtin_skills without-catalog
 	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
 	verify_optional_failure_isolation
+	verify_explicit_remote_modes
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"
