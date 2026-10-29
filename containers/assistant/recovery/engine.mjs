@@ -248,7 +248,7 @@ export function createEngine(config, options = {}) {
 	});
 	let akmIndexReference;
 	let mountBoundary;
-	async function checkMounts() {
+	async function checkMounts({ operation = true } = {}) {
 		const reviewed = await inspectMounts(catalog, await (options.readMounts ?? readMountInfo)());
 		if (mountBoundary && mountBoundary.fingerprint !== reviewed.fingerprint)
 			throw new Error('recovery mount topology changed; stop writers and review mounts');
@@ -259,7 +259,7 @@ export function createEngine(config, options = {}) {
 			});
 			mountBoundary = reviewed;
 		}
-		checkDeadline();
+		if (operation) checkDeadline();
 		return reviewed;
 	}
 	if (serialize(catalog.selection).length > limits.maxManifestBytes)
@@ -404,6 +404,7 @@ export function createEngine(config, options = {}) {
 		);
 	}
 	async function optionalCache(task) {
+		checkDeadline();
 		const started = performance.now();
 		let result = null;
 		try {
@@ -988,7 +989,11 @@ export function createEngine(config, options = {}) {
 		},
 		async renew() {
 			try {
-				await owned(true);
+				// Work budgets reject checkpoint/restore work, not valid ownership.
+				// Optional work has a separate budget while renewal must keep running.
+				await checkMounts({ operation: false });
+				if (!ownership) throw new Error('recovery not owned');
+				await store.renew(ownership);
 			} catch (error) {
 				ready = false;
 				failure = sanitizeRecoveryError(error);

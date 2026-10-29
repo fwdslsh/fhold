@@ -1624,6 +1624,36 @@ describe('same-instance local recovery engine', () => {
 		expect(engine.status().checkpointFailure).toBeNull();
 		await engine.release();
 	});
+	test('essential capture timeout rejects publication without poisoning valid renewal', async () => {
+		const f = await fixture();
+		await writeFile(path.join(f.roots.work, 'note'), 'essential state');
+		const store = createDirectoryStore(f.config.url);
+		let renewalError: unknown;
+		const engine = createEngine(f.config, {
+			...f.options,
+			limits: { operationTimeoutMs: 1_500 },
+			store: {
+				...store,
+				async createImmutable(...args) {
+					await Bun.sleep(1_600);
+					try {
+						await engine.renew();
+					} catch (error) {
+						renewalError = error;
+					}
+					return store.createImmutable(...args);
+				}
+			}
+		});
+		await engine.initialize();
+		await engine.acquireRestore();
+		await expect(engine.checkpoint()).rejects.toThrow('recovery operation deadline exceeded');
+		expect(renewalError).toBeUndefined();
+		expect(engine.status().ready).toBe(true);
+		expect(engine.status().generation).toBeNull();
+		expect((await store.readDescriptor()).value.generation).toBeNull();
+		await engine.release();
+	});
 	test('bounded SQLite subprocess rejects a busy source without publishing', async () => {
 		const f = await fixture();
 		const db = new Database(path.join(f.roots.akmData, 'state.db'));
