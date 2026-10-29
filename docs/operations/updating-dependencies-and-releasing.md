@@ -248,7 +248,10 @@ An unavailable lookup fails without starting another build. If no eligible
 candidate exists, the release workflow prepares one with the shared gates.
 
 Use one stamped `release/*` candidate for the release PR and publication. A
-same-repository release PR reuses its successful exact-head candidate instead of
+release-authorized fix should receive its final stamp before final PR qualification;
+do not qualify and merge the fix, then create a version-only PR that repeats the
+entire native matrix. Complete functional validation first, then qualify once.
+A same-repository release PR reuses its successful exact-head candidate instead of
 starting another native matrix or Linux AppImage preview. This requires that the
 PR's current base commit is already in its head; a changed base, base retarget,
 fork, failed candidate or missing artifacts retains normal PR validation. Native
@@ -297,6 +300,13 @@ credentials and `FH_PUBLICATION_CONFIGURED=true`. With publication authorized:
 gh workflow run release.yml --repo fwdslsh/fhold --ref main \
   -f version="$VERSION" -f scope=full -f dry_run=false
 ```
+
+For a publication-only workflow repair, dispatch the reviewed workflow with
+`-f candidate_sha=<full-qualified-SHA>`. This selects the existing source and
+artifacts while retaining the actual workflow revision in the run record. An
+explicit source requires eligible retained qualification and fails instead of
+starting a fallback build. Receipts, OCI labels and the release tag remain bound
+to that source SHA.
 
 Verify the exact successful run, GitHub release/download inventory, uploaded
 checksums, versioned asset manifest, signed image digests and appropriate channel

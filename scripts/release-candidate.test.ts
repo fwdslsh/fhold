@@ -345,3 +345,44 @@ test('publication only promotes exact candidate IDs; ordinary PR gates do not ex
 		expect(download.with['digest-mismatch']).toBe('error');
 	}
 });
+
+test('publication continues after reused gates are skipped but refuses failed prerequisites', () => {
+	const release = Bun.YAML.parse(readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')) as any;
+	const expression = release.jobs.images.if.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
+	// GitHub implicitly adds success() unless an explicit status function exists.
+	const canPublish = (validate: string, candidates: string, scope: string, cancelled = false) => {
+		if (!/\b(?:always|cancelled|success|failure)\(/.test(expression)) return false; // skipped ancestor
+		return Function('needs', 'cancelled', `return (${expression})`)(
+			{ validate: { result: validate, outputs: { scope } }, candidates: { result: candidates } },
+			() => cancelled
+		);
+	};
+	expect(canPublish('success', 'success', 'full')).toBe(true);
+	for (const result of ['failure', 'cancelled', 'skipped']) {
+		expect(canPublish(result, 'success', 'full')).toBe(false);
+		expect(canPublish('success', result, 'full')).toBe(false);
+	}
+	expect(canPublish('success', 'success', 'tools')).toBe(false);
+	expect(canPublish('success', 'success', 'full', true)).toBe(false);
+	const steps = release.jobs.validate.steps;
+	const source = steps.find((step: any) => step.id === 'source');
+	for (const selected of ['', 'b'.repeat(40)]) {
+		const output = join(temporary(), 'source-output');
+		execFileSync('bash', ['-e', '-c', source.run], { env: { ...process.env, CANDIDATE_SHA: selected, GITHUB_SHA: 'a'.repeat(40), GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: join(temporary(), 'summary') } });
+		expect(readFileSync(output, 'utf8')).toBe(`sha=${selected || 'a'.repeat(40)}\n`);
+	}
+	for (const invalid of ['main', 'abc', 'a'.repeat(41), 'A'.repeat(40)])
+		expect(() => execFileSync('bash', ['-e', '-c', source.run], { env: { ...process.env, CANDIDATE_SHA: invalid }, stdio: 'pipe' })).toThrow();
+	const guard = steps.find((step: any) => step.name === 'Require retained qualification for an explicitly selected source');
+	expect(guard.if).toBe("inputs.candidate_sha != '' && steps.qualification.outputs.reused != 'true'");
+	expect(guard.run).toContain('exit 1');
+	expect(release.jobs.validate.outputs.source_sha).toBe('${{ steps.source.outputs.sha }}');
+	for (const name of ['candidates', 'images', 'release'])
+		expect(release.jobs[name].steps[0].with.ref).toBe('${{ needs.validate.outputs.source_sha }}');
+	for (const name of ['images', 'release']) {
+		const command = release.jobs[name].steps.find((step: any) => step.run?.includes('scripts/release-candidate.mjs'));
+		expect(command.run).toStartWith('GITHUB_SHA="$RELEASE_SOURCE_SHA" ');
+		expect(command.env.RELEASE_SOURCE_SHA).toBe('${{ needs.validate.outputs.source_sha }}');
+	}
+	expect(release.jobs.release.steps.find((step: any) => step.name === 'Publish the verified GitHub release').env.RELEASE_SHA).toBe('${{ needs.validate.outputs.source_sha }}');
+});
