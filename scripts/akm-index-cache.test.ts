@@ -309,6 +309,56 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		}
 	});
 
+	for (const outcome of ['captured', 'optional-failure', 'owner-lost'])
+		test(`renewal during optional work beyond the essential wall deadline: ${outcome}`, async () => {
+			const f = await fixture();
+			const store = createDirectoryStore(f.recovery.url);
+			const createImmutable = store.createImmutable.bind(store);
+			let renewalError: unknown;
+			let optionalUploads = 0;
+			let optionalAborted: boolean | undefined;
+			let engine: ReturnType<typeof createEngine>;
+			store.createImmutable = async (key, bytes, owner, options) => {
+				if (options?.signal) {
+					optionalUploads++;
+					await Bun.sleep(1_600);
+					optionalAborted = options.signal.aborted;
+					if (outcome === 'owner-lost') {
+						await store.release(owner);
+						await store.acquire();
+					}
+					try {
+						await engine.renew();
+					} catch (error) {
+						renewalError = error;
+					}
+					if (outcome === 'optional-failure') throw new Error('synthetic optional transfer failure');
+				}
+				return createImmutable(key, bytes, owner, options);
+			};
+			engine = f.engine({}, { store, limits: { operationTimeoutMs: 1_500 } });
+			await engine.initialize();
+			await engine.acquireRestore();
+			if (outcome === 'owner-lost') {
+				await expect(engine.checkpoint()).rejects.toThrow('ownership lost');
+				expect(String(renewalError)).toContain('ownership lost');
+				expect(engine.status().ready).toBe(false);
+				expect((await store.readDescriptor()).value.generation).toBeNull();
+			} else {
+				await engine.checkpoint();
+				expect(renewalError).toBeUndefined();
+				expect(engine.status().ready).toBe(true);
+				expect(engine.status().failure).toBeNull();
+				expect(engine.status().lastCheckpointTick).not.toBeNull();
+				const reference = (await f.saved()).manifest.akmIndexCache;
+				if (outcome === 'captured') expect(reference).toBeDefined();
+				else expect(reference).toBeUndefined();
+				await engine.release();
+			}
+			expect(optionalUploads).toBe(1);
+			expect(optionalAborted).toBe(false);
+		}, 10_000);
+
 	test('missing source and unsupported inherited/network source policies omit cache', async () => {
 		const f = await fixture();
 		await fs.writeFile(

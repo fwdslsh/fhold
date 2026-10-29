@@ -518,6 +518,9 @@ switches do not repair, replace or erase them.
 Experimental limits are 64 MiB for each SQLite input including its WAL/SHM and
 for each artifact, and a separate five-second normal-operation budget per cache
 capture/admission attempt. Essential work keeps its configured operation allowance.
+Ownership renewal checks the actual owner and mount topology independently of
+that work budget. A checkpoint timeout fails the checkpoint; it cannot by itself
+turn valid ownership into an Assistant shutdown during optional cache work.
 Capture-enabled managed shutdown therefore adds ten seconds to the existing
 derived termination grace, covering an in-flight and a final capture. Standalone
 hosts must do the same. These limits bound accepted data and subprocess work,
