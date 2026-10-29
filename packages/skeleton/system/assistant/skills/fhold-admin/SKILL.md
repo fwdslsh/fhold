@@ -56,6 +56,31 @@ Keep pairing links/codes private; never store them or account output in AKM.
 
 ## Tasks, knowledge and persistence
 
+After an image upgrade, the status script reports current migration status and
+the native selected built-in plugin versions. Cached directories alone do not
+establish which plugin is selected or whether it is enabled. Startup invokes
+AKM's backed-up native migrations and refreshes enabled image-owned integrations;
+it never approves changed hooks or replaces operator-selected marketplaces.
+An explicitly disabled Codex plugin refreshes on a later enabled boot.
+
+For a requested environment audit, use `akm migrate status`, `akm health --no-probe`
+and `akm task history --limit 10 --format json`. Inspect a failed task's native
+history before diagnosing its cause; a historical failure rate does not prove
+that an upgrade broke it or that it has recovered. Keep private paths, task
+output and credentials out of shared reports. Report the affected feature and
+the native corrective action, preserving a working core.
+
+Read-only external assets must be corrected in their source bundle and synced;
+do not make their caches writable or delete entries to hide warnings. Migration
+does not replace an operator-selected executable. If a harness still names the
+removed `fhold-opencode-run`, inspect `akm config list` and the affected task's
+`harness` selection. For an authorized repair, use native `akm config` commands
+to select the intended installed harness and update the writable task source;
+do not recreate the retired wrapper or guess a replacement for custom harnesses.
+AKM 0.10.261019's Claude plugin advisory can read a superseded cache entry:
+compare native `claude plugin list --json` before calling a plugin inactive
+([upstream issue](https://github.com/itlackey/akm/issues/1286)).
+
 Use AKM's existing search/show/remember commands for nonsecret knowledge.
 Use `fhold-task` for requested recurring work. If the report says scheduling
 is disabled, do not promise automatic execution; the external operator must

@@ -93,9 +93,20 @@ precedence. An operator overlay can set the native features independently.
 
 ## Startup, recovery and verification
 
-Native plugin caches/default settings are seeded only when missing or still
-untouched generated defaults. Account state, custom plugins, user settings and
-hook decisions remain operator-owned. Nothing is installed at startup.
+Native plugin caches/default settings are seeded only when missing. Native
+plugin commands refresh selected built-in plugins from the pinned image's local
+marketplaces without replacing whole settings files. Operator-selected
+marketplaces, account state, custom plugins, user settings and hook decisions
+remain operator-owned. Codex's add command enables a plugin, so explicitly
+disabled Codex plugins are left alone until an enabled boot. No packages or
+marketplaces are downloaded at startup.
+After recovery and filesystem seeding, before native agents and task writers,
+startup invokes `akm migrate apply`. AKM owns conversion, eligibility, backups
+and idempotency. A blocked external asset reports degraded migration status
+without stopping an otherwise usable Assistant. The combined native result and
+stderr remain private in the runtime directory. `akm migrate status` reports
+the current state after any manual repairs; the administration skill also
+reports native selected plugin versions.
 Optional AKM/worker failures report native diagnostics and do not stop the main
 Assistant. Authentication, restore integrity and actual recovery ownership
 remain essential boundaries.
@@ -118,12 +129,13 @@ an actual remote request are separate observations.
 
 ## Existing beta installations
 
-Updates preserve operator-owned `config/akm/config.json` byte for byte. They do
-not convert an old engine or silently replace an explicit off setting. An
+Host file updates preserve operator-owned `config/akm/config.json`. On startup,
+AKM migrates its format with native backups, preserving supported operator
+settings. fhold does not translate an old engine or replace an explicit off setting. An
 existing catalog may still select the removed product `scheduled` engine and
 `fhold-opencode-run` launcher. Inspect the catalog inside Assistant with
-`akm config list`. Review native AKM's migration plan before explicitly applying
-it, then select the installed OpenCode harness when appropriate:
+`akm config list`. Inspect remaining native migration blockers, then select the
+installed OpenCode harness when appropriate:
 
 ```sh
 akm migrate status
@@ -134,8 +146,8 @@ akm config set harnesses.opencode '{"args":["run","--standalone"]}'
 
 Review the resulting catalog and task sources that explicitly name `scheduled`;
 remove the obsolete harness and select the intended native harness before
-running them. Native `akm migrate` owns format conversion and backups; fhold
-does not run it automatically. Custom harness choices remain yours.
+running them. Native `akm migrate` owns format conversion and backups; it cannot
+choose replacements for custom executable paths. Custom harness choices remain yours.
 Without a usable harness/provider, native AKM reports an actionable error;
 optional learning/tasks do not block the primary Assistant.
 

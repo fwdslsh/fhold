@@ -3,7 +3,6 @@ set -euo pipefail
 
 readonly OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 readonly TASK_SPOOL_DIR=/tmp/fhold-crontabs
-readonly TASK_BIN_DIR=/tmp/fhold-bin
 readonly TASK_CRONTAB="$TASK_SPOOL_DIR/fhold"
 readonly RUNTIME_DIR="${FH_RUNTIME_DIR:-/tmp/fhold-runtime}"
 if [[ "$RUNTIME_DIR" != /* ]] || [ "$RUNTIME_DIR" = / ] || [[ "$RUNTIME_DIR" =~ (^|/)\.{1,2}(/|$) ]] || [[ "$RUNTIME_DIR" == *//* ]]; then
@@ -297,15 +296,37 @@ prepare_native_defaults() {
   cp -R -n /native-defaults/codex/plugins/cache/. /home/fhold/.codex/plugins/cache/ || return
   cp -R -n /native-defaults/claude/plugins/cache/. /home/fhold/.claude/plugins/cache/ || return
   for file in claude/settings.json claude/plugins/installed_plugins.json claude/plugins/known_marketplaces.json codex/config.toml; do
-    local source="/native-defaults/$file" target="/home/fhold/.$file" previous="/home/fhold/.fhold-native-defaults/$file"
-    # Refresh only untouched generated defaults. Native user settings, installed
-    # plugins, authentication and hook trust always take precedence.
-    if [ ! -e "$target" ] || { [ -f "$previous" ] && cmp -s "$target" "$previous"; }; then
+    local source="/native-defaults/$file" target="/home/fhold/.$file"
+    # Seed missing native metadata only. Native plugin commands own refresh;
+    # never replace a whole registry/settings file to update one plugin.
+    if [ ! -e "$target" ]; then
       cp "$source" "$target" || return
-      mkdir -p "$(dirname "$previous")" || return
-      cp "$source" "$previous" || return
     fi
   done
+}
+
+refresh_native_plugins() {
+  local claude_plugins claude_marketplaces codex_plugins name marketplace root version failed=0
+  claude_plugins=$(env "${writer_env[@]}" timeout 30 claude plugin list --json) || return
+  claude_marketplaces=$(env "${writer_env[@]}" timeout 30 claude plugin marketplace list --json) || return
+  codex_plugins=$(env "${writer_env[@]}" timeout 30 codex plugin list --json) || return
+  for name in akm fhold; do
+    marketplace="$name-plugins"
+    if [ "$name" = akm ]; then root=/akm-marketplace; else root=/fhold-plugins; fi
+    version=$(jq -er --arg id "$name@$marketplace" '.plugins[$id][0].version' /native-defaults/claude/plugins/installed_plugins.json) || return
+    # Operator-selected marketplaces are not ours to update. Local image
+    # sources never need a Git refresh, download or an updater channel.
+    if jq -e --arg market "$marketplace" --arg root "$root" 'any(.[]; .name == $market and .source == "directory" and .path == $root)' <<<"$claude_marketplaces" >/dev/null &&
+       jq -e --arg id "$name@$marketplace" --arg version "$version" 'any(.[]; .id == $id and .scope == "user" and .version != $version)' <<<"$claude_plugins" >/dev/null; then
+      env "${writer_env[@]}" timeout 30 claude plugin update "$name@$marketplace" --scope user --json || failed=1
+    fi
+    # Codex add selects the current local artifact but also enables it. Leave
+    # an explicitly disabled plugin alone; refresh it on a later enabled boot.
+    if jq -e --arg id "$name@$marketplace" --arg root "$root" --arg version "$version" 'any(.installed[]; .pluginId == $id and .enabled == true and .marketplaceSource.sourceType == "local" and .marketplaceSource.source == $root and .version != $version)' <<<"$codex_plugins" >/dev/null; then
+      env "${writer_env[@]}" timeout 30 codex plugin add "$name@$marketplace" --json || failed=1
+    fi
+  done
+  return "$failed"
 }
 
 load_opencode_password() {
@@ -318,25 +339,6 @@ load_opencode_password() {
     echo 'assistant: refusing to start without an OpenCode server password' >&2
     exit 1
   fi
-}
-
-install_crontab_shim() {
-  mkdir -p "$TASK_SPOOL_DIR" "$TASK_BIN_DIR" || return
-  local shim="$TASK_BIN_DIR/crontab"
-  cat >"$shim" <<'SHIM' || return
-#!/usr/bin/env sh
-set -eu
-file="/tmp/fhold-crontabs/fhold"
-case "${1:--}" in
-  -l) cat "$file" 2>/dev/null ;;
-  -r) rm -f "$file" ;;
-  -) cat >"$file" ;;
-  -*) echo "crontab: unsupported option: $1" >&2; exit 1 ;;
-  *) cat "$1" >"$file" ;;
-esac
-SHIM
-  [ -f "$shim" ] && chmod 0755 "$shim" || return
-  export PATH="$TASK_BIN_DIR:$PATH"
 }
 
 write_cron_environment() {
@@ -367,7 +369,7 @@ sync_tasks() {
 }
 
 start_scheduler() {
-  install_crontab_shim || return
+  mkdir -p "$TASK_SPOOL_DIR" || return
   write_cron_environment || return
   export -f sync_tasks
   export RUNTIME_DIR
@@ -402,7 +404,7 @@ mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
 rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults akm-assets akm-index-cache; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration akm-assets akm-index-cache; do
   rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
 done
 if [ "$configuration_degraded" = 1 ]; then
@@ -430,6 +432,16 @@ if [ -n "${FH_RECOVERY_URL:-}" ]; then
 fi
 prepare_filesystem
 load_opencode_password
+prepare_opencode_environment
+# Restore and seed first; let AKM perform its own backed-up migrations before
+# any native agent or task writer starts. Blocked external assets are optional
+# degradation, not a reason to restart an otherwise usable Assistant.
+if ! env "${writer_env[@]}" timeout --kill-after=5s 60s akm migrate apply --format json >"$RUNTIME_DIR/akm-migration.json" 2>"$RUNTIME_DIR/akm-migration.log"; then
+  mark_degraded akm-migration 'AKM migration needs attention. Run akm migrate status for remaining blockers; native backups and private startup diagnostics are retained.'
+fi
+if ! refresh_native_plugins >"$RUNTIME_DIR/native-plugins.log" 2>&1; then
+  mark_degraded native-plugins 'Built-in native plugin refresh needs attention. Inspect native plugin lists and private startup diagnostics; account state and hook consent remain unchanged.'
+fi
 KEEPALIVE_ENABLED=0
 if fhold-keepalive init >/dev/null; then
   if [ -n "${FH_KEEPALIVE_URL:-}" ]; then KEEPALIVE_ENABLED=1; fi
@@ -442,7 +454,6 @@ if [ "$SCHEDULER_ENABLED" = 1 ] && { ! command -v akm >/dev/null || ! command -v
 fi
 
 cd /work
-prepare_opencode_environment
 (
   # Remove export attributes rather than mutating shell variables (including
   # readonly environment imports); exec receives only the resulting environment.

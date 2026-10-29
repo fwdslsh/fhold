@@ -35,7 +35,14 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 			'readonly TASK_SPOOL_DIR=/tmp/fhold-crontabs',
 			`readonly TASK_SPOOL_DIR="${root}/crontabs"`
 		)
-		.replace('readonly TASK_BIN_DIR=/tmp/fhold-bin', `readonly TASK_BIN_DIR="${root}/cronbin"`);
+		.replace('if ! refresh_native_plugins >', 'if ! true >');
+	if (extra.FIXTURE_MIGRATE_HANG === '1') {
+		// Exercise the real timeout/kill path with a shorter fixture deadline.
+		isolated = isolated.replace(
+			'timeout --kill-after=5s 60s akm',
+			'timeout --kill-after=0.1s 0.1s akm'
+		);
+	}
 	if (extra.FIXTURE_PROC_EXIT_RACE === '1') {
 		// Exit a real writer descendant after its /proc readability check,
 		// before the production read. Its owning writer reaps it normally.
@@ -65,7 +72,9 @@ fi
 		const check = ['akm', 'fhold-task', 'supercronic', 'opencode', 'fhold-remote'].includes(name)
 			? writerCheck
 			: '';
-		const mapCheck = !['opencode', 'supercronic', 'fhold-task', 'fhold-remote'].includes(name)
+		const mapCheck = !['akm', 'opencode', 'supercronic', 'fhold-task', 'fhold-remote'].includes(
+			name
+		)
 			? ''
 			: `
 if [ "\${FIXTURE_MAP_CHECK:-0}" = 1 ]; then
@@ -93,7 +102,12 @@ fi
 	};
 	stub(
 		'akm',
-		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
+		`test "$1 $2" = 'migrate apply'
+printf 'migrate\\n' >>"$EVENTS"
+if [ "\${FIXTURE_MIGRATE_HANG:-0}" = 1 ]; then trap '' TERM; sleep 10; fi
+printf '{"status":"current"}\\n'
+if [ "\${FIXTURE_MIGRATE_EXIT:-0}" != 0 ]; then printf 'private migration detail\\n' >&2; fi
+exit "\${FIXTURE_MIGRATE_EXIT:-0}"`
 	);
 	stub(
 		'fhold-task',
@@ -213,6 +227,41 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
+	it('bounds a stuck optional native migration before starting the core', async () => {
+		const run = fixture({ FIXTURE_MIGRATE_HANG: '1' });
+		try {
+			await until(() => run.events().includes('native'));
+			expect(run.child.exitCode).toBeNull();
+			expect(run.stderr()).toContain('AKM migration needs attention');
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	it('runs native migration after restore and before agent/task writers, retaining optional failures privately', async () => {
+		const run = fixture({
+			FH_RECOVERY_URL: 'file:///synthetic',
+			FH_SCHEDULER_ENABLED: '1',
+			FIXTURE_MIGRATE_EXIT: '1'
+		});
+		try {
+			await until(() => run.events().includes('native') && run.events().includes('sync'));
+			const events = run.events();
+			expect(events.indexOf('migrate')).toBeGreaterThan(events.indexOf('restored'));
+			expect(events.indexOf('migrate')).toBeLessThan(events.indexOf('native'));
+			expect(events.indexOf('migrate')).toBeLessThan(events.indexOf('sync'));
+			expect(run.child.exitCode).toBeNull();
+			expect(run.stderr()).toContain('AKM migration needs attention');
+			expect(run.stderr()).not.toContain('private migration detail');
+			expect(readFileSync(join(run.root, 'runtime/akm-migration.log'), 'utf8')).toContain(
+				'private migration detail'
+			);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+
 	it('maps exact capability names only into OpenCode and its normal subprocesses', async () => {
 		const header = 'synthetic value with spaces\nand $literal; not shell code';
 		const run = fixture({
@@ -229,6 +278,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() =>
 				[
+					'clean-akm-environment',
 					'opencode-aliases-and-child-inheritance',
 					'clean-supercronic-environment',
 					'clean-fhold-task-environment',

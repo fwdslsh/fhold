@@ -9,6 +9,7 @@ Only a small script surface remains active.
 | `set-version.mjs` | Stamp package/Compose versions using the shared release contract |
 | `bump-release.mjs` | Stamp the complete product release |
 | `smoke-image.sh` | Assert image startup and runtime security boundaries |
+| `smoke-environment-upgrade.mjs` | Image-internal populated-home migration, native plugin refresh and scheduled-command regression; invoked by `smoke-image.sh` |
 | `smoke-akm-harnesses.mjs` | Image-internal real-harness AKM hook and recall checks, without vendor credentials |
 | `smoke-native-akm-policy.mjs` | Native custom/default/subagent context, Guardian confidentiality and native proposal extraction against a controlled model |
 | `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |

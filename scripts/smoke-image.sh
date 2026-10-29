@@ -82,6 +82,20 @@ verify_explicit_remote_modes() {
 	done
 }
 
+verify_environment_upgrade() {
+	docker rm -f "$container" >/dev/null
+	docker run -d --name "$container" --network none \
+		--init --cap-drop=ALL --security-opt no-new-privileges:true \
+		-e OPENCODE_SERVER_PASSWORD=environment-upgrade-fixture \
+		-e FH_CODEX_REMOTE=0 -e FH_CLAUDE_REMOTE=0 "$image" >/dev/null
+	wait_for_health
+	docker cp scripts/smoke-environment-upgrade.mjs "$container:/tmp/smoke-environment-upgrade.mjs"
+	docker exec "$container" bun /tmp/smoke-environment-upgrade.mjs prepare
+	docker restart "$container" >/dev/null
+	wait_for_health
+	docker exec "$container" bun /tmp/smoke-environment-upgrade.mjs verify
+}
+
 verify_runtime_versions() {
 	test "$(docker exec "$container" bun --version)" = "$expected_bun"
 	if [ "$kind" = assistant ]; then
@@ -355,30 +369,6 @@ assistant)
 	docker exec "$container" bun /tmp/smoke-codex-activity.mjs
 	docker cp scripts/smoke-native-akm-policy.mjs "$container:/tmp/smoke-native-akm-policy.mjs"
 	docker exec "$container" bun /tmp/smoke-native-akm-policy.mjs
-	# An image upgrade refreshes only untouched native installer output. A native
-	# user's settings and hook-trust state must survive without merging formats.
-	docker exec "$container" bun -e '
-		const {readFileSync, writeFileSync, cpSync} = await import("node:fs");
-		const home = "/home/fhold";
-		const registry = `${home}/.claude/plugins/installed_plugins.json`;
-		const previous = `${home}/.fhold-native-defaults/claude/plugins/installed_plugins.json`;
-		const installed = JSON.parse(readFileSync(registry, "utf8"));
-		installed.plugins["akm@akm-plugins"][0].version = "0.0.0";
-		writeFileSync(registry, JSON.stringify(installed)); cpSync(registry, previous);
-		const settings = `${home}/.claude/settings.json`;
-		const value = JSON.parse(readFileSync(settings, "utf8")); value.language = "English";
-		writeFileSync(settings, JSON.stringify(value));
-		const config = `${home}/.codex/config.toml`;
-		writeFileSync(config, `${readFileSync(config, "utf8")}\n# user hook-trust preferences retained\n`);
-		writeFileSync("/tmp/native-user-settings.json", JSON.stringify([readFileSync(settings,"utf8"), readFileSync(config,"utf8")]));'
-	docker restart "$container" >/dev/null
-	wait_for_health
-	docker exec "$container" bun -e '
-		const {readFileSync} = await import("node:fs");
-		const home = "/home/fhold";
-		const [claude, codex] = JSON.parse(readFileSync("/tmp/native-user-settings.json", "utf8"));
-		if (claude !== readFileSync(`${home}/.claude/settings.json`, "utf8") || codex !== readFileSync(`${home}/.codex/config.toml`, "utf8")) throw Error("Native user settings overwritten");
-		if (readFileSync(`${home}/.claude/plugins/installed_plugins.json`, "utf8") !== readFileSync("/native-defaults/claude/plugins/installed_plugins.json", "utf8")) throw Error("Untouched native plugin defaults did not refresh");'
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
 	if [ "$remote" != 0 ]; then
@@ -408,6 +398,7 @@ CONFIG
 	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
 	verify_optional_failure_isolation
 	verify_explicit_remote_modes
+	verify_environment_upgrade
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"

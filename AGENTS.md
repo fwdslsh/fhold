@@ -121,8 +121,10 @@ integration belongs under `system/`, not seed-once `config/`; this ownership
 does not authorize fhold to impose additional agent policy. Native user settings,
 AKM activation/custom engines, Guardian and custom Compose remain operator-owned.
 Do not require custom policy mounts to regain ordinary native behavior. This
-ownership contract needs no historical configuration converter, merger or
-startup writer.
+ownership contract needs no fhold historical configuration converter or merger.
+After recovery and before native agent/task writers, Assistant invokes AKM's
+native backed-up migrator. Native plugin commands refresh image-owned local
+selections while preserving explicit off choices, custom marketplaces and consent.
 Backup restore requires fhold's own verified manifest. Native history recovery
 is separate, offline and explicitly mapped. Restored task definitions remain
 inactive until reviewed for portable-content restore. Full-instance export/import

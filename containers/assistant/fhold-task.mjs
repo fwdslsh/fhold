@@ -26,9 +26,6 @@ if (!process.env.OPENCODE_SERVER_PASSWORD && passwordFile && existsSync(password
 	if (password) process.env.OPENCODE_SERVER_PASSWORD = password;
 }
 process.env.OPENCODE_SERVER_USERNAME ||= 'opencode';
-if (existsSync('/tmp/fhold-bin/crontab')) {
-	process.env.PATH = `/tmp/fhold-bin:${process.env.PATH ?? ''}`;
-}
 
 function fail(message) {
 	console.error(`fhold-task: ${message}`);

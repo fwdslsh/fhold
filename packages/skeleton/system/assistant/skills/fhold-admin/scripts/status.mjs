@@ -12,7 +12,40 @@ function run(args, env = remoteEnvironment(process.env)) {
 		stderr: 'pipe',
 		timeout: 10_000
 	});
-	return { ok: result.exitCode === 0, output: result.stdout.toString() + result.stderr.toString() };
+	return {
+		ok: result.exitCode === 0,
+		stdout: result.stdout.toString(),
+		output: result.stdout.toString() + result.stderr.toString()
+	};
+}
+function migration() {
+	try {
+		const result = JSON.parse(run(['akm', 'migrate', 'status', '--format', 'json', '-q']).stdout);
+		return {
+			status: result.status ?? 'unavailable',
+			blockedTasks: result.taskFiles?.blocked ?? 0,
+			pendingTasks: result.taskFiles?.changed ?? 0,
+			failedSteps: result.failedSteps?.map((step) => step.step) ?? []
+		};
+	} catch {
+		return { status: 'unavailable' };
+	}
+}
+function plugins(tool) {
+	try {
+		const result = JSON.parse(run([tool, 'plugin', 'list', '--json']).stdout);
+		return (tool === 'codex' ? result.installed : result)
+			.filter((plugin) =>
+				['akm@akm-plugins', 'fhold@fhold-plugins'].includes(plugin.pluginId ?? plugin.id)
+			)
+			.map((plugin) => ({
+				id: plugin.pluginId ?? plugin.id,
+				version: plugin.version,
+				enabled: plugin.enabled
+			}));
+	} catch {
+		return { status: 'unavailable' };
+	}
 }
 function worker(tool) {
 	try {
@@ -76,13 +109,15 @@ console.log(
 				)
 			],
 			schedulerEnabled: (process.env.FH_SCHEDULER_ENABLED ?? '1') === '1',
+			akmMigration: migration(),
 			recovery: recovery(),
 			codex: {
 				...worker('codex'),
+				plugins: plugins('codex'),
 				sandbox: process.env.FH_CODEX_SANDBOX || 'workspace-write',
 				signedIn: codexAccount.ok && /Logged in using ChatGPT/i.test(codexAccount.output)
 			},
-			claude: { ...worker('claude'), ...claudeAccount() },
+			claude: { ...worker('claude'), ...claudeAccount(), plugins: plugins('claude') },
 			note: 'Account, local worker and pairing are prerequisites; verify a real native-client tool request separately.'
 		},
 		null,

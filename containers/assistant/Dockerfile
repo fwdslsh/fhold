@@ -130,6 +130,7 @@ COPY containers/assistant/tools/package.json /opt/fhold/tools/package.json
 COPY containers/assistant/entrypoint.sh /usr/local/bin/fhold-assistant
 COPY containers/assistant/healthcheck.sh /usr/local/bin/fhold-healthcheck
 COPY containers/assistant/fhold-task.mjs /usr/local/bin/fhold-task
+COPY --chmod=0555 containers/assistant/crontab.sh /usr/local/bin/crontab
 COPY containers/assistant/fhold-recovery.mjs /usr/local/bin/fhold-recovery
 COPY containers/assistant/recovery /usr/local/bin/recovery
 COPY --from=tools /assistant-defaults /assistant-defaults
