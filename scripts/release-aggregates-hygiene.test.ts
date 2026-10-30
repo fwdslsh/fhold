@@ -119,13 +119,6 @@ describe('release workflows', () => {
 		expect(Object.keys(exceptions)).toEqual(['vulnerabilities']);
 		expect(exceptions.vulnerabilities).toEqual([
 			{
-				id: 'CVE-2026-109461',
-				paths: ['opt/fhold/tools/node_modules/@azure/msal-node/package.json'],
-				purls: ['pkg:npm/%40azure/msal-node@6.0.1'],
-				expired_at: '2026-11-06',
-				statement: expect.stringContaining('GHSA-xcx6-jx8p-x3h5')
-			},
-			{
 				id: 'CVE-2026-109869',
 				paths: ['usr/local/lib/node_modules/npm/node_modules/undici/package.json'],
 				purls: ['pkg:npm/undici@6.29.0'],

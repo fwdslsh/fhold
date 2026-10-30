@@ -17,8 +17,8 @@ Fresh fhold configuration uses the supported `harnesses.opencode` configuration
 with `args: ["run", "--standalone"]`, reusing the installed OpenCode and its
 native settings/authentication without a fhold launcher or first-use download.
 
-The current plugin is `akm-opencode-v2@0.10.261018-beta`, whose exact
-`akm-cli@0.10.261020-beta` dependency matches the installed command without an override.
+The current stable plugin is `akm-opencode-v2@0.10.261019`, whose exact
+`akm-cli@0.10.261021` dependency matches the installed command without an override.
 Its native Claude and Codex marketplace is baked from the same immutable release.
 OpenCode CLI/client/plugin SDK are aligned at **2.2.1**, with the required
 **Effect 4.0.1**. The upstream AKM plugin still declares SDK 2.1.4 as its peer;
@@ -49,7 +49,7 @@ for the original continuation qualification, and the
 [October 29 dependency review](../operations/dependency-refresh-2026-10-29.md)
 for the native-client updates, and the
 [current AKM review](../operations/dependency-refresh-2026-10-30.md)
-for the beta selection and Admin UI investigation.
+for the stable selection and Admin UI investigation.
 
 ## Executable evidence and limits
 

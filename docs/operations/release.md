@@ -297,7 +297,7 @@ regression from 1.4.1. The obsolete node-forge audit ignore is removed.
 The standard unsigned MCPB pack and validation remain required qualification.
 `node-forge` is absent from the three runtime images and delivered stdio bridge.
 No dependency override, custom crypto fork or packer is introduced. The separate
-MSAL and MCPB Zod exceptions below remain; filtered audit success is not a claim
+MCPB Zod exception below remains; filtered audit success is not a claim
 of a clean raw audit.
 
 ## Reviewed proxy-logger advisory
@@ -317,19 +317,17 @@ resolved workspace. The other individually reviewed
 exceptions below remain. Runtime image scans and all other release gates remain
 enabled.
 
-## Temporary upstream MSAL and Zod exceptions
+## Upstream MSAL fix and remaining Zod exception
 
 On October 23, 2026 (October 24 UTC), the product owner approved these two exact
 exceptions pending supported upstream fixes. Track removal in
 [issue #63](https://github.com/fwdslsh/fhold/issues/63):
 
 - [GHSA-xcx6-jx8p-x3h5](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5): MSAL Node
-  authentication-code parameter disclosure, fixed in 7.1.0. Azure Identity 4.14.0
-  still requests MSAL Node `^6.0.0`; latest 6.x is 6.0.1. Blob recovery uses
-  `ManagedIdentityCredential`, SAS or connection-string credentials, not
-  `AuthorizationCodeCredential`/`acquireTokenByCode`. That limits observed exposure;
-  it does not make the dependency patched. This chain needs an Azure upstream fix
-  independently of AKM.
+  authentication-code parameter disclosure, fixed in 7.1.0. On October 30,
+  Azure Identity 4.14.1 supplied the supported `^7.1.0` dependency range; this
+  release resolves MSAL Node 7.1.2. The source and image exceptions are removed.
+  Blob recovery qualification remains required for this dependency update.
 - [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5): Zod memory
   exhaustion from oversized invalid collections, fixed in 4.6.6. Direct fhold Zod
   and AKM CLI 0.10.261016-beta now resolve patched Zod 4.6.7. The AKM image
@@ -337,8 +335,8 @@ exceptions pending supported upstream fixes. Track removal in
   (latest 3.25.76), so its source-audit exception remains. MCPB packs
   repository-owned manifests; do not describe this remaining exposure as patched.
 
-`bun run audit` excludes only the named advisories; raw `bun audit` still reports
-them. No global major-version override, vendor patch, severity-wide exclusion or
+`bun run audit` excludes only the remaining Zod advisory; raw `bun audit` still
+reports it. No global major-version override, vendor patch, severity-wide exclusion or
 disabled audit is introduced. Source checks run before the mandatory audit, so
 an advisory cannot hide unrelated test failures. The separately approved Assistant
 image scope is documented below.
@@ -351,14 +349,14 @@ or Blob behavior when updating those dependencies. This is not a clean-audit cla
 
 On October 26, 2026 (October 27 UTC), the product owner explicitly approved
 three identified PR #67 Assistant findings until **November 6, 2026**. The AKM
-Zod entry was removed with CLI 0.10.261016-beta. On October 28, the owner
+Zod entry was removed with CLI 0.10.261016-beta; the MSAL entry was removed with
+Azure Identity 4.14.1 on October 30. On October 28, the owner
 reaffirmed the upstream-package exceptions for PR #75/#76, including the two
 additional findings in the same npm-owned Undici bundle. These entries retain
 the existing **November 6, 2026** expiry:
 
 | Trivy ID / exact GitHub alias | Package/version | Exact image package path |
 | --- | --- | --- |
-| CVE-2026-109461 / GHSA-xcx6-jx8p-x3h5 | `@azure/msal-node@6.0.1` | `opt/fhold/tools/node_modules/@azure/msal-node/package.json` |
 | CVE-2026-109869 / GHSA-xjj6-f33q-929c | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 | CVE-2026-109383 / GHSA-2m5v-pch6-74hx | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 | CVE-2026-87018 / GHSA-qrxm-fqhp-jwvm | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
@@ -366,8 +364,7 @@ the existing **November 6, 2026** expiry:
 Trivy0.76.1 applies the path and exact package/version PURL together; there are
 no directory globs or severity-wide exclusions. The unfiltered high/critical
 report remains visible. Other critical/fixable-high findings still fail, and
-native expiry stops these entries applying after the deadline. MSAL retains
-the exposure and upstream constraints described under #63 above. The npm
+native expiry stops these entries applying after the deadline. The npm
 entries permit its bundled HTTP client's unhandled-error denial of service
 from excessive content-encodings, TLS certificate-validation bypass via dropped
 Agent TLS options, and denial of service during TLS renegotiation with a
@@ -378,10 +375,10 @@ Official npm12.2.1 and maintained
 
 [Issue #63](https://github.com/fwdslsh/fhold/issues/63) tracks removal of the
 remaining entries. The supported AKM upgrade fixes its Zod chain independently
-of Azure/MSAL, MCPB and npm. Adopt a
-supported Azure chain and qualify Blob behavior, and a supported patched npm
-release and qualify npm/npx, before removing their respective entries. Preserve
-[issue #63](https://github.com/fwdslsh/fhold/issues/63)'s separate Azure and MCPB
+of Azure/MSAL, MCPB and npm. The supported Azure chain is now selected; qualify
+Blob behavior with it. Adopt a supported patched npm release and qualify npm/npx
+before removing its entries. Preserve
+[issue #63](https://github.com/fwdslsh/fhold/issues/63)'s separate MCPB and npm
 tracking. Re-review before publication, when a supported fix appears, or by
 November 6; remove each exception as soon as its own chain is patched. Approval
 does not authorize disabling scans, major vendor overrides or skipping runtime

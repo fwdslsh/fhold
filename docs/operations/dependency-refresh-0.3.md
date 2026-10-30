@@ -310,7 +310,7 @@ qualification, not silently shipped in a tools-only candidate. Their known-good
 lock records were retained and frozen installation reverified.
 
 The owner approved the two precise temporary MSAL/Zod exceptions described in
-the [release runbook](release.md#temporary-upstream-msal-and-zod-exceptions),
+the [release runbook](release.md#upstream-msal-fix-and-remaining-zod-exception),
 tracked by [#63](https://github.com/fwdslsh/fhold/issues/63). Azure Identity still
 requires MSAL 6; AKM and MCPB still require Zod 3. Re-review on the next AKM update,
 before release and by November 6; remove each exception when its supported chain
