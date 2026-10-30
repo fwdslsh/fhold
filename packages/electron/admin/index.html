@@ -318,6 +318,10 @@
             <svg class="icon" aria-hidden="true"><use href="#icon-agent"/></svg>
             <span>Agent settings</span>
           </button>
+          <button class="nav-item" type="button" data-view="knowledge" aria-controls="view-knowledge">
+            <svg class="icon" aria-hidden="true"><use href="#icon-apps"/></svg>
+            <span>Knowledge</span>
+          </button>
           <button class="nav-item" type="button" data-view="connections" aria-controls="view-connections">
             <svg class="icon" aria-hidden="true"><use href="#icon-apps"/></svg>
             <span>Apps</span>
@@ -555,6 +559,18 @@
                 <details class="disclosure technical-disclosure"><summary>Import details</summary><textarea id="data-result" class="technical-output" readonly spellcheck="false" aria-label="Import technical details">No import operation has run.</textarea></details>
               </div>
             </details>
+          </section>
+
+          <section id="view-knowledge" class="view-panel ready-only" data-view-panel="knowledge" hidden aria-labelledby="view-title">
+            <section class="panel" aria-labelledby="knowledge-heading">
+              <h2 id="knowledge-heading">Your assistant’s knowledge</h2>
+              <p>Open AKM’s interface for this instance to browse bundles, search knowledge, and manage its content.</p>
+              <p class="help-text">Opens in your default browser. Keep Admin open and this instance selected while you use it.</p>
+              <p id="knowledge-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="knowledge-fields" class="capability-fields" data-instance-feature="data.knowledgeUi" aria-describedby="knowledge-fields-unavailable" aria-label="Knowledge browser">
+                <button id="open-knowledge" class="primary" type="button">Open AKM UI <svg class="icon" aria-hidden="true"><use href="#icon-external"/></svg></button>
+              </fieldset>
+            </section>
           </section>
 
           <section id="view-connections" class="view-panel ready-only disclosure-inventory" data-view-panel="connections" hidden aria-labelledby="view-title">

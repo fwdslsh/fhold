@@ -214,6 +214,22 @@ installation details, recent logs, advanced connection-key rotation, import/expo
 then ephemeral container support. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
+### Knowledge
+
+Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
+Assistant's native AKM interface in your default browser, using that instance's
+bundles, configuration and index. Keep Admin open with that instance selected;
+switching instances or closing Admin ends this temporary UI session. Opening it
+does not restart the Assistant, change its configuration or publish another port.
+
+Local Linux Docker and SSH connections to a Linux Docker host are supported when
+the host can reach its container bridge. SSH uses a private loopback forward and
+requires native OpenSSH multiplexing on the Admin computer (Linux/macOS).
+Docker Desktop, host-network containers, ACA and direct HTTPS agent connections
+do not provide this route. AKM's native token and request checks remain enabled;
+keep its launch link private. If the selected SSH port is occupied, Admin reports
+a connection failure instead of opening an unrelated service.
+
 ### App permissions
 
 Choose what an app can do inside **Apps**, alongside its setup.

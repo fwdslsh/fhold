@@ -47,6 +47,7 @@ export class SshInstanceManagement implements InstanceManagement {
 	private closing = false;
 	private imports = new Map<string, { root: string; source: string }>();
 	private tunnel?: SshTunnel;
+	private knowledgeTunnel?: SshTunnel;
 	constructor(
 		readonly connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
 		readonly homeDir: string,
@@ -194,6 +195,19 @@ export class SshInstanceManagement implements InstanceManagement {
 		...args: ManagementRequestArgs<M>
 	): Promise<ManagementRequestMap[M]['result']>;
 	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
+		if (method === 'knowledgeUi') {
+			const result = await this.rpc('knowledgeUi');
+			const url = new URL(result.url);
+			if (url.protocol !== 'http:' || isIP(url.hostname) !== 4 || !url.port || url.username || url.password)
+				throw new Error('The selected Assistant returned an invalid AKM UI address.');
+			this.knowledgeTunnel ??= new SshTunnel(this.connection);
+			// AKM validates Host against its native listening port. Keep that port
+			// on loopback rather than rewriting headers or bypassing native guards.
+			await this.knowledgeTunnel.ensure([{ bind: url.hostname, port: Number(url.port), localPort: Number(url.port) }]);
+			if (this.closing) { await this.knowledgeTunnel.close(); throw new Error('This instance connection is closed.'); }
+			url.hostname = '127.0.0.1';
+			return { url: url.href };
+		}
 		if (method === 'backup') {
 			if (
 				!value ||
@@ -328,6 +342,7 @@ export class SshInstanceManagement implements InstanceManagement {
 	async close(): Promise<void> {
 		this.closing = true;
 		await this.tunnel?.close();
+		await this.knowledgeTunnel?.close();
 		const child = this.child;
 		if (!child) return;
 		await new Promise<void>((resolve) => {

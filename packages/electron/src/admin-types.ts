@@ -110,6 +110,7 @@ export type AdminApi = {
 	readiness(value?: { provider?: string; model?: string }): Promise<AssistantReadiness>;
 	connectAgent(value?: { password?: string }): Promise<{ endpoint: string; username?: string }>;
 	openOpenCode(): Promise<void>;
+	openKnowledge(): Promise<void>;
 	assistantPassword(): Promise<{ password: string }>;
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
@@ -212,6 +213,7 @@ export const ADMIN_CHANNELS = {
 	readiness: 'admin:readiness',
 	connectAgent: 'admin:connect-agent',
 	openOpenCode: 'admin:open-opencode',
+	openKnowledge: 'admin:open-knowledge',
 	assistantPassword: 'admin:assistant-password',
 	copyText: 'admin:copy-text',
 	openExternal: 'admin:open-external',

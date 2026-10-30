@@ -31,6 +31,14 @@ function dockerBin(): string {
 	return process.env.FH_DOCKER_BIN?.trim() || 'docker';
 }
 
+/** An attached native command, using the same verified Docker endpoint as bounded calls. */
+export async function spawnDocker(args: string[]) {
+	return spawn(dockerBin(), args, {
+		env: await dockerEnvironment(process.env),
+		stdio: 'pipe'
+	});
+}
+
 const dockerOutput = new AsyncLocalStorage<'stderr'>();
 /** Machine requests reserve stdout for their JSON response. */
 export function withDockerMachineOutput<T>(operation: () => Promise<T>): Promise<T> {
