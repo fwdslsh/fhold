@@ -1654,7 +1654,8 @@ async function run(): Promise<Record<string, unknown>> {
 			const authenticated = await fetch(meta, { headers: { 'X-Akm-Ui-Token': knowledge.searchParams.get('token')! } });
 			assert(authenticated.status === 200, 'The selected Assistant’s native AKM UI was unreachable.');
 			await authenticated.body?.cancel();
-			assert(await window.webContents.executeJavaScript(`!document.documentElement.outerHTML.includes(${JSON.stringify(knowledge.searchParams.get('token'))})`), 'The native AKM token entered the Admin renderer.');
+			const adminHtml = await window.webContents.executeJavaScript('document.documentElement.outerHTML');
+			assert(!adminHtml.includes(knowledge.searchParams.get('token')!), 'The native AKM token entered the Admin renderer.');
 			await capture(window, outputDir, '05a-knowledge-browser.png');
 			await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
 			await window.webContents.executeJavaScript(
