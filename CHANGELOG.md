@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.261013-beta — open your assistant’s AKM UI
+
+Admin now includes **Knowledge → Open AKM UI**. Open AKM’s native browser
+interface with the selected Assistant’s own bundles, configuration and index.
+Local Linux Docker and SSH connections use a private, on-demand connection;
+closing Admin or switching instances ends the UI session. Native authentication
+and browser protections remain in place.
+
+This tooling-only beta publishes Linux Admin and its companion CLI. Assistant,
+Guardian, Portal and the Claude Desktop extension remain at **0.3.261012-beta**;
+no container update is required. Docker Desktop, host networking, ACA/direct
+HTTPS and Windows-hosted SSH forwarding are not supported by this UI route.
+Keep Admin open with the instance selected while using its knowledge interface.
+
 ## 0.3.261012-beta — stable AKM fixes and native diagnostics
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
