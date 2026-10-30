@@ -65,7 +65,6 @@ describe('operational command wiring', () => {
 		const root = fixture();
 		const home = await install(root);
 		markInstalled(home);
-		writeFileSync(join(home, 'knowledge/secrets/auth.json'), '{"fixture":{"type":"api","key":"synthetic-test-key"}}');
 		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n');
 		const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
 		if (!resolved.ok) throw new Error(resolved.stderr);
@@ -74,7 +73,7 @@ describe('operational command wiring', () => {
 		process.env.FH_DOCKER_BIN = binary;
 		const diagnosis = await diagnoseStack();
 		expect(diagnosis.ok).toBe(true);
-		expect(diagnosis.checks.filter((check) => !check.ok)).toEqual([{
+		expect(diagnosis.checks.filter((check) => !check.ok && check.status !== 'not-checked')).toEqual([{
 			name: 'managed Compose recommendations', ok: false, advisory: true,
 			detail: 'service assistant has unsupported environment key OPERATOR_SETTING'
 		}]);

@@ -410,6 +410,22 @@ managed settings are read-only here; no operator policy is silently overwritten.
 
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
+Plain `fhold doctor` reads OpenCode's native provider state and runs bounded,
+read-only `akm info`, `akm migrate status`, and `akm task doctor` inside the running
+Assistant. It reports optional degradation as warnings, native off choices as
+`OFF`, and unavailable checks as `NOT CHECKED`. It does not start a stopped
+Assistant, run an agent/task, apply migrations or write proposals. Legacy
+`knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
+connected endpoints can also work without credentials.
+
+AKM configuration and executable availability do not prove successful agent
+execution. Use the [documented native harness repair](managed-harness-configuration.md#existing-beta-installations)
+when an old operator-selected invocation no longer works. Proposal write-target
+readiness and aggregate extraction success remain explicitly not checked pending
+[AKM #1289](https://github.com/itlackey/akm/issues/1289) and
+[AKM #1290](https://github.com/itlackey/akm/issues/1290). No successful learning is
+inferred from configuration, file presence or a running process.
+
 Native v2 credentials persist in the OpenCode database under
 `data/assistant/.local/share/opencode/`. Advanced native settings
 are documented in [OpenCode configuration](technical/opencode-configuration.md).
