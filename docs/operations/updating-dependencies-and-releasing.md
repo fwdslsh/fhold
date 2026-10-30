@@ -305,7 +305,10 @@ gh workflow run release.yml --repo fwdslsh/fhold --ref main \
 
 For a publication-only workflow repair, dispatch the reviewed workflow with
 `-f candidate_sha=<full-qualified-SHA>`. This selects the existing source and
-artifacts while retaining the actual workflow revision in the run record. An
+artifacts while retaining the actual workflow revision in the run record. Image
+promotion executes the reviewed workflow revision's publisher so its tooling can
+be repaired independently; receipt, revision, digest and immutable-tag checks
+remain bound to the selected source. Asset assembly uses the selected source. An
 explicit source requires eligible retained qualification and fails instead of
 starting a fallback build. Receipts, OCI labels and the release tag remain bound
 to that source SHA.

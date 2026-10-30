@@ -377,8 +377,11 @@ test('publication continues after reused gates are skipped but refuses failed pr
 	expect(guard.if).toBe("inputs.candidate_sha != '' && steps.qualification.outputs.reused != 'true'");
 	expect(guard.run).toContain('exit 1');
 	expect(release.jobs.validate.outputs.source_sha).toBe('${{ steps.source.outputs.sha }}');
-	for (const name of ['candidates', 'images', 'release'])
+	for (const name of ['candidates', 'release'])
 		expect(release.jobs[name].steps[0].with.ref).toBe('${{ needs.validate.outputs.source_sha }}');
+	// A publisher dependency can be repaired without rebuilding qualified bytes.
+	// Only the publisher code follows the trusted workflow revision.
+	expect(release.jobs.images.steps[0].with.ref).toBe('${{ github.sha }}');
 	for (const name of ['images', 'release']) {
 		const command = release.jobs[name].steps.find((step: any) => step.run?.includes('scripts/release-candidate.mjs'));
 		expect(command.run).toStartWith('GITHUB_SHA="$RELEASE_SOURCE_SHA" ');

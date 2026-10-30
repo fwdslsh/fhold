@@ -166,9 +166,11 @@ jobs:
       matrix:
         image: [assistant, guardian, portal]
     steps:
+      # Publication tools may need repair after qualification. Execute the
+      # reviewed workflow revision; receipts and image identity still use source_sha.
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.source_sha }}
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.candidates.outputs[format('{0}_ids', matrix.image)] }}
