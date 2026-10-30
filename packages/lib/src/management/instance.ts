@@ -58,6 +58,7 @@ import type { LocalManagementHostPort } from './contracts.js';
 import { LocalAgentServices } from './agent-services.js';
 import { readCredentialKey } from '../control-plane/credential-store.js';
 import { assertInstallInstanceName } from '../control-plane/install.js';
+import { KnowledgeUi } from './knowledge-ui.js';
 
 /** The same target-bound domain operations run locally or in the owning SSH host CLI. */
 export function localInstanceManagement(
@@ -80,6 +81,7 @@ export function localInstanceManagement(
 		(readiness) => completeInstanceSetup(homeDir, readiness)
 	);
 	const transfers = new Set<string>();
+	const knowledgeUi = new KnowledgeUi(homeDir);
 	function state() {
 		const value = managedState();
 		requireInstall(value.homeDir);
@@ -276,6 +278,7 @@ export function localInstanceManagement(
 		providerOAuthFinish: (value) => agent.oauthFinish(value),
 		readiness: (value) => agent.readiness(value),
 		assistantPassword: () => agent.password(),
+		knowledgeUi: () => knowledgeUi.open(),
 		credential: async (value) => {
 			const current = state();
 			if (value.action === 'create')
@@ -422,6 +425,7 @@ export function localInstanceManagement(
 			closed = true;
 			lifetime.abort();
 			agent.close();
+			await knowledgeUi.close();
 			activeRemote?.session.cancel();
 			await activeRemote?.session.done;
 			for (const directory of transfers) rmSync(directory, { recursive: true, force: true });

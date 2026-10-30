@@ -89,6 +89,11 @@ export const viewMeta = {
 		title: 'Apps',
 		description: 'Choose the app you want to use with your agent.'
 	},
+	knowledge: {
+		kicker: 'KNOWLEDGE',
+		title: 'Knowledge',
+		description: 'Browse and manage your assistant’s knowledge with AKM.'
+	},
 	system: {
 		kicker: 'SYSTEM',
 		title: 'System',

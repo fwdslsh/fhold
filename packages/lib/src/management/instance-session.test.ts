@@ -30,6 +30,28 @@ const hosting: HostingSnapshot = {
 	warnings: []
 };
 
+test('knowledge opens only through the selected manager and stays out of snapshots', async () => {
+	const calls: string[] = [];
+	const manager: InstanceManagement = {
+		call: (async (method: string) => {
+			calls.push(method);
+			if (method === 'knowledgeUi') return { url: 'http://127.0.0.1:43210/?token=synthetic-private' };
+			throw new Error('Unexpected operation');
+		}) as InstanceManagement['call'],
+		busy: () => false,
+		close: async () => { calls.push('close'); }
+	};
+	const bindings = rpcManagementBindings(manager);
+	expect(calls).toEqual([]);
+	const operation = bindings.data!.knowledgeUi;
+	if (operation.support !== 'supported') throw new Error('Missing Knowledge operation');
+	expect(await operation.invoke(undefined, {})).toEqual({ url: 'http://127.0.0.1:43210/?token=synthetic-private' });
+	expect(calls).toEqual(['knowledgeUi']);
+	await bindings.close!();
+	await expect(operation.invoke(undefined, {})).rejects.toThrow();
+	expect(calls).toEqual(['knowledgeUi', 'close']);
+});
+
 test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 	'local and SSH browser links use the selected acquired route and private credential',
 	async () => {

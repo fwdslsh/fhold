@@ -97,6 +97,7 @@ export const MANAGEMENT_METHODS = [
 	'providerOAuthFinish',
 	'readiness',
 	'assistantPassword',
+	'knowledgeUi',
 	'credential',
 	'credentialKey',
 	'mapPortalUser',
@@ -161,6 +162,7 @@ export type ManagementRequestMap = {
 		extra: [];
 	};
 	assistantPassword: { input: undefined; result: { password: string }; extra: [] };
+	knowledgeUi: { input: undefined; result: { url: string }; extra: [] };
 	credential: {
 		input:
 			| ({ action: 'create' } & CredentialCreateRequest)

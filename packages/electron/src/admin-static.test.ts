@@ -355,7 +355,7 @@ beforeEach(() => {
 	selectors = new Map();
 	selector(
 		'[data-view-panel]',
-		...['overview', 'provider', 'connections', 'system'].map((name) => {
+		...['overview', 'provider', 'knowledge', 'connections', 'system'].map((name) => {
 			const panel = control(`view-${name}`);
 			panel.dataset.viewPanel = name;
 			return panel;
@@ -471,6 +471,22 @@ describe('Admin static security boundary', () => {
 		expect(html).toContain('id="direct-username">Not reported</code>');
 		expect(observationValue(known('known value'))).toBe('known value');
 		expect(observationValue({ state: 'unavailable', reason: 'Offline' })).toBeUndefined();
+	});
+	it('shows Knowledge and opens native AKM without taking a URL or token through the renderer', async () => {
+		const snapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
+		state.currentSnapshot = snapshot;
+		let opened = 0;
+		state.api = { openKnowledge: async (...args) => { expect(args).toEqual([]); opened++; } };
+		bindConnectionsEvents();
+		renderInstanceCapabilities(snapshot);
+		showView('knowledge');
+		expect(control('view-knowledge').hidden).toBe(false);
+		expect(control('knowledge-fields').disabled).toBe(false);
+		await control('open-knowledge').listeners.get('click')?.();
+		expect(opened).toBe(1);
+		renderInstanceCapabilities(normalizedSnapshot());
+		expect(control('knowledge-fields').disabled).toBe(true);
+		expect(control('knowledge-fields-unavailable').hidden).toBe(false);
 	});
 	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({
@@ -2578,6 +2594,7 @@ describe('Admin renderer behavior', () => {
 		expect([...html.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1])).toEqual([
 			'overview',
 			'provider',
+			'knowledge',
 			'connections',
 			'system'
 		]);

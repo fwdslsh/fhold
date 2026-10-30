@@ -1645,6 +1645,19 @@ async function run(): Promise<Record<string, unknown>> {
 			assert(openedUrls.length === count, 'OpenCode link did not dispatch to the browser.');
 		};
 		try {
+			await window.webContents.executeJavaScript("document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()");
+			await waitForBrowserOpen(1);
+			const knowledge = new URL(openedUrls.pop()!);
+			assert(knowledge.searchParams.has('token'), 'AKM did not provide its native browser token.');
+			const meta = new URL('/api/meta', knowledge);
+			assert((await fetch(meta)).status === 401, 'AKM knowledge was exposed without native authentication.');
+			const authenticated = await fetch(meta, { headers: { 'X-Akm-Ui-Token': knowledge.searchParams.get('token')! } });
+			assert(authenticated.status === 200, 'The selected Assistant’s native AKM UI was unreachable.');
+			await authenticated.body?.cancel();
+			const adminHtml = await window.webContents.executeJavaScript('document.documentElement.outerHTML');
+			assert(!adminHtml.includes(knowledge.searchParams.get('token')!), 'The native AKM token entered the Admin renderer.');
+			await capture(window, outputDir, '05a-knowledge-browser.png');
+			await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#assistant-url-detail').focus()"
 			);

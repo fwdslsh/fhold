@@ -30,6 +30,7 @@ const parsers: WireParsers = {
 	providers: () => [],
 	logs: () => [],
 	assistantPassword: () => [],
+	knowledgeUi: () => [],
 	transferCreate: () => [],
 	directory: (value) => [value === undefined ? undefined : string(value)],
 	transferRelease: (value) => [string(value)],

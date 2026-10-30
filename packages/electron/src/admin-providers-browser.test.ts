@@ -474,7 +474,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			);
 			await capture(`system-${section}-desktop.png`);
 		}
-		for (const view of ['overview', 'provider', 'connections', 'system']) {
+		for (const view of ['overview', 'provider', 'knowledge', 'connections', 'system']) {
 			await evaluate(`import('./ui.js').then(({showView})=>showView(${JSON.stringify(view)}))`);
 			for (const width of [320, 360, 375, 414, 480, 640, 768, 1024, 1280, 1440]) {
 				await command('Emulation.setDeviceMetricsOverride', {
@@ -926,7 +926,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				docker:{...window.overviewQa.docker,homeDir:'/opt/stacks/agent',configPath:'/opt/stacks/agent/state/stack.json'}
 			});
 		})()`);
-		for (const view of ['overview', 'provider', 'connections', 'system']) {
+		for (const view of ['overview', 'provider', 'knowledge', 'connections', 'system']) {
 			await pointerClick(`[data-view="${view}"]`);
 			await capture(`ssh-${view}-desktop.png`);
 		}
@@ -996,7 +996,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate("document.querySelector('#runtime-status-detail').textContent")
 		).toContain('readiness remains unverified');
 		await capture('aca-overview-desktop.png');
-		const expectedNavigation = ['overview', 'provider', 'connections', 'system'];
+		const expectedNavigation = ['overview', 'provider', 'knowledge', 'connections', 'system'];
 		expect(
 			await evaluate(
 				"[...document.querySelectorAll('[data-view]')].map(button=>button.dataset.view)"
@@ -1009,11 +1009,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			system:[...document.querySelector('#view-system').children].map(section=>section.id)
 		})`)
 		).toEqual(managementStructure);
-		for (const view of ['provider', 'connections', 'system']) {
+		for (const view of ['provider', 'knowledge', 'connections', 'system']) {
 			await pointerClick(`[data-view="${view}"]`);
 			expect(await evaluate(`!document.querySelector('#view-${view}').hidden`)).toBe(true);
 			await capture(`aca-${view}-desktop.png`);
 		}
+		expect(
+			await evaluate(
+				"document.querySelector('#open-knowledge').matches(':disabled') && !document.querySelector('#knowledge-fields-unavailable').hidden"
+			)
+		).toBe(true);
 		await evaluate("document.querySelector('#import-export').open=true");
 		await value('#log-source', 'console');
 		await click('#load-logs');
@@ -1062,7 +1067,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				deviceScaleFactor: 1,
 				mobile: false
 			});
-			for (const view of ['overview', 'provider', 'connections', 'system']) {
+			for (const view of ['overview', 'provider', 'knowledge', 'connections', 'system']) {
 				await evaluate(`import('./ui.js').then(({showView})=>showView('${view}'))`);
 				expect(
 					await evaluate(

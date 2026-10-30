@@ -185,6 +185,7 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 		}
 	};
 	const data: DataOperations = bindings.data ?? {
+		knowledgeUi: unsupportedOperation('AKM UI requires a local or SSH Linux Docker instance.'),
 		backup: unsupportedOperation('Data export is not configured for this instance.'),
 		restoreData: unsupportedOperation('Data restore is not configured for this instance.'),
 		restoreInstance: unsupportedOperation(
@@ -497,6 +498,12 @@ export function rpcManagementBindings(
 			}
 		},
 		data: {
+			knowledgeUi: operation('knowledgeUi', async () => {
+				lifetime.signal.throwIfAborted();
+				const result = await manager.call('knowledgeUi');
+				lifetime.signal.throwIfAborted();
+				return result;
+			}),
 			backup: operation('backup', async (input, context) =>
 				manager.call('backup', {
 					...input,

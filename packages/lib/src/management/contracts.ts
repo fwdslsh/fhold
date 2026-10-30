@@ -295,6 +295,8 @@ export type RestoreRequest = {
 	includeOAuth?: boolean;
 };
 export type DataOperations = {
+	/** Private native launch URL, retained only by the host opening the browser. */
+	knowledgeUi: Operation<void, { url: string }>;
 	backup: Operation<BackupRequest, BackupManifest | InstanceBackupManifest>;
 	restoreData: Operation<RestoreRequest, RestorePlan>;
 	restoreInstance: Operation<RestoreRequest, InstanceRestorePlan>;
