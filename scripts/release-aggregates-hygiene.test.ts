@@ -557,7 +557,7 @@ describe('release completeness gate', () => {
 		expect(publish?.env).toEqual({
 			SCOPE: '${{ needs.validate.outputs.scope }}',
 			GH_TOKEN: '${{ github.token }}',
-			RELEASE_SHA: '${{ github.sha }}',
+			RELEASE_SHA: '${{ needs.validate.outputs.source_sha }}',
 			VERSION: '${{ needs.validate.outputs.version }}',
 			PRERELEASE: '${{ needs.validate.outputs.prerelease }}'
 		});

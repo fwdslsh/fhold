@@ -1,6 +1,5 @@
 import { defineCommand } from 'citty';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
 import {
 	auditCompose,
 	buildComposeOptions,
@@ -9,6 +8,8 @@ import {
 	createFholdState,
 	credentialKeyFile,
 	credentialRegistryFile,
+	diagnoseNativeRuntime,
+	type DiagnosticCheck,
 	ensureDockerReady,
 	oauthConfigFile,
 	oauthIdentityMapFile,
@@ -17,12 +18,12 @@ import {
 	readStackConfig,
 	requireInstall,
 	stateSecretFile,
-	testAssistantReadiness
+	unavailableNativeDiagnostics
 } from '@fhold/lib';
 
 import { defineAction } from '../lib/action.js';
 
-type Check = { name: string; ok: boolean; detail: string; advisory?: boolean };
+type Check = DiagnosticCheck;
 
 function fileCheck(
 	name: string,
@@ -41,25 +42,6 @@ function fileCheck(
 	};
 }
 
-function providerAuthCheck(path: string): Check {
-	if (!existsSync(path)) return { name: 'provider sign-in', ok: false, detail: `missing: ${path}` };
-	try {
-		const value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-		const count =
-			value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).length : 0;
-		return {
-			name: 'provider sign-in',
-			ok: count > 0,
-			detail:
-				count > 0
-					? `${count} provider credential(s) configured`
-					: 'no provider credential configured'
-		};
-	} catch {
-		return { name: 'provider sign-in', ok: false, detail: 'provider credential file is invalid' };
-	}
-}
-
 export async function diagnoseStack(
 	options: { readiness?: boolean } = {}
 ): Promise<{ ok: boolean; checks: Check[] }> {
@@ -71,7 +53,7 @@ export async function diagnoseStack(
 		ok: classifyInstall(state.homeDir) === 'installed',
 		detail:
 			classifyInstall(state.homeDir) === 'installed'
-				? 'provider readiness was verified'
+				? 'setup completed; current model readiness is checked only with --readiness'
 				: 'incomplete; run `fhold setup` or `fhold provider test`'
 	});
 	const config = readStackConfig(state.homeDir);
@@ -87,19 +69,7 @@ export async function diagnoseStack(
 		fileCheck('OpenCode password', stateSecretFile(state.homeDir, 'fhold_opencode_password')),
 		fileCheck('Guardian handle key', stateSecretFile(state.homeDir, 'fhold_guardian_handle_key')),
 		fileCheck('Guardian OAuth config', oauthConfigFile(state.homeDir)),
-		fileCheck('Guardian OAuth identity map', oauthIdentityMapFile(state.homeDir)),
-		fileCheck(
-			'provider credentials',
-			join(state.homeDir, 'knowledge', 'secrets', 'auth.json'),
-			false
-		),
-		providerAuthCheck(join(state.homeDir, 'knowledge', 'secrets', 'auth.json')),
-		fileCheck(
-			'AKM native configuration',
-			join(state.homeDir, 'config', 'akm', 'config.json'),
-			true,
-			false
-		)
+		fileCheck('Guardian OAuth identity map', oauthIdentityMapFile(state.homeDir))
 	);
 	if (config.ok) {
 		checks.push(fileCheck('credential registry', credentialRegistryFile(state.homeDir)));
@@ -142,16 +112,11 @@ export async function diagnoseStack(
 				detail: issues.length === 0 ? 'valid' : issues.join('; ')
 			});
 		}
-		if (options.readiness) {
-			const readiness = await testAssistantReadiness(state.homeDir, { timeoutMs: 120_000 });
-			checks.push({
-				name: 'live provider readiness',
-				ok: readiness.ok,
-				detail: readiness.ok
-					? `${readiness.provider ?? 'provider'}${readiness.model ? `/${readiness.model}` : ''} responded`
-					: readiness.error
-			});
-		}
+		checks.push(...(compose.ok
+			? await diagnoseNativeRuntime(state.homeDir, buildComposeOptions(state), options)
+			: unavailableNativeDiagnostics('Compose configuration is invalid; native checks were not run.')));
+	} else {
+		checks.push(...unavailableNativeDiagnostics('Docker is unavailable; native checks were not run.'));
 	}
 	return { ok: checks.every((check) => check.ok || check.advisory), checks };
 }
@@ -172,7 +137,7 @@ export default defineCommand({
 			console.log(JSON.stringify(result, null, 2));
 		} else {
 			for (const check of result.checks) {
-				console.log(`${check.ok ? 'ok' : check.advisory ? 'WARN' : 'FAIL'}  ${check.name}: ${check.detail}`);
+				console.log(`${check.status === 'not-checked' ? 'NOT CHECKED' : check.status === 'off' ? 'OFF' : check.ok ? 'ok' : check.advisory ? 'WARN' : 'FAIL'}  ${check.name}: ${check.detail}`);
 			}
 		}
 		if (!result.ok) throw new Error('One or more checks failed.');

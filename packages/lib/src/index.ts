@@ -205,6 +205,7 @@ export {
 	runComposeStreaming
 } from './control-plane/docker.js';
 export { auditCompose } from './control-plane/secret-audit.js';
+export { diagnoseNativeRuntime, unavailableNativeDiagnostics, type DiagnosticCheck } from './control-plane/native-diagnostics.js';
 export {
 	beginRemoteEnable,
 	disableRemote,
