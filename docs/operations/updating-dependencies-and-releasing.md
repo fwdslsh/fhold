@@ -50,7 +50,9 @@ npm view @openai/codex@latest version engines --json
 
 Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
-AKM 0.10 and its OpenCode 2, Claude and Codex plugins now use the stable channel.
+AKM's npm `latest` is stable; `next` carries newer prereleases. The current pins
+deliberately use the matching beta pair for the native plugin-health fix; see the
+[October 30 review](dependency-refresh-2026-10-30.md). Select channels explicitly.
 Resolve the plugin's required CLI version before choosing that pin.
 Compare actual release provenance and published tags,
 not just numeric patches: upstream AKM has changed its prerelease naming.
