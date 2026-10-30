@@ -43,6 +43,7 @@ export class SshTunnel {
 	private ports: number[] = [];
 	private controlDirectory?: string;
 	private pending?: Promise<number[]>;
+	private generation = 0;
 	constructor(
 		private connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
 		private native: { spawn?: typeof spawn; run?: HostingProcess } = {}
@@ -50,8 +51,9 @@ export class SshTunnel {
 	async ensure(
 		targets: Array<{ bind: string; port: number; localPort?: number }>
 	): Promise<number[]> {
+		const generation = this.generation;
 		const pending = (this.pending?.catch(() => []) ?? Promise.resolve()).then(() =>
-			this.open(targets)
+			this.open(targets, generation)
 		);
 		this.pending = pending;
 		try {
@@ -61,12 +63,15 @@ export class SshTunnel {
 		}
 	}
 	private async open(
-		targets: Array<{ bind: string; port: number; localPort?: number }>
+		targets: Array<{ bind: string; port: number; localPort?: number }>,
+		generation: number
 	): Promise<number[]> {
+		if (generation !== this.generation) throw new Error('The SSH connection was closed.');
 		const signature = JSON.stringify(targets);
 		if (this.child && signature === this.signature) return this.ports;
-		await this.close();
+		await this.stop();
 		const ports = await Promise.all(targets.map((target) => target.localPort ?? availablePort()));
+		if (generation !== this.generation) throw new Error('The SSH connection was closed.');
 		const native = sshArgs(this.connection);
 		// A fixed port may already belong to another process. Only native SSH's
 		// forwarding acknowledgement can establish ownership before sending a token.
@@ -131,6 +136,7 @@ export class SshTunnel {
 					}
 				} else ready = (await Promise.all(ports.map(listening))).every(Boolean);
 				if (ready) {
+					if (this.child !== child) throw new Error('The SSH connection was closed.');
 					if (control) {
 						await (this.native.run ?? runHostingProcess)(
 							'ssh',
@@ -155,12 +161,20 @@ export class SshTunnel {
 			}
 			throw Error('The SSH forward did not open. Check this host connection and retry.');
 		} catch (error) {
-			await this.close();
+			await this.stop();
 			throw error;
 		}
 	}
 	async close(): Promise<void> {
+		this.generation++;
+		const pending = this.pending;
+		await this.stop();
+		await pending?.catch(() => {});
+	}
+	private async stop(): Promise<void> {
 		const child = this.child;
+		const directory = this.controlDirectory;
+		this.controlDirectory = undefined;
 		this.child = undefined;
 		this.signature = '';
 		this.ports = [];
@@ -169,7 +183,6 @@ export class SshTunnel {
 				child.once('close', () => resolve());
 				child.kill('SIGTERM');
 			});
-		if (this.controlDirectory) rmSync(this.controlDirectory, { recursive: true, force: true });
-		this.controlDirectory = undefined;
+		if (directory) rmSync(directory, { recursive: true, force: true });
 	}
 }

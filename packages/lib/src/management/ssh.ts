@@ -197,6 +197,7 @@ export class SshInstanceManagement implements InstanceManagement {
 	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
 		if (method === 'knowledgeUi') {
 			const result = await this.rpc('knowledgeUi');
+			if (this.closing) throw new Error('This instance connection is closed.');
 			const url = new URL(result.url);
 			if (url.protocol !== 'http:' || isIP(url.hostname) !== 4 || !url.port || url.username || url.password)
 				throw new Error('The selected Assistant returned an invalid AKM UI address.');
