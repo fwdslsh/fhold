@@ -4,14 +4,14 @@
 	"license": "MIT",
 	"dependencies": {
 		"@azure/storage-blob": "12.34.0",
-		"@azure/identity": "4.14.0",
+		"@azure/identity": "4.14.1",
 		"@openai/codex": "0.165.0",
 		"@anthropic-ai/claude-code": "2.1.312",
-		"akm-opencode-v2": "0.10.261017",
+		"akm-opencode-v2": "0.10.261019",
 		"@opencode/cli": "2.2.1",
 		"@opencode/client": "2.2.1",
 		"@opencode/plugin": "2.2.1",
-		"akm-cli": "0.10.261019",
+		"akm-cli": "0.10.261021",
 		"playwright": "1.64.1"
 	}
 }

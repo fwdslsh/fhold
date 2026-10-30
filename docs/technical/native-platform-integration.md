@@ -17,8 +17,8 @@ Fresh fhold configuration uses the supported `harnesses.opencode` configuration
 with `args: ["run", "--standalone"]`, reusing the installed OpenCode and its
 native settings/authentication without a fhold launcher or first-use download.
 
-The current stable plugin is `akm-opencode-v2@0.10.261017`, whose exact
-`akm-cli@0.10.261019` dependency matches the installed command without an override.
+The current stable plugin is `akm-opencode-v2@0.10.261019`, whose exact
+`akm-cli@0.10.261021` dependency matches the installed command without an override.
 Its native Claude and Codex marketplace is baked from the same immutable release.
 OpenCode CLI/client/plugin SDK are aligned at **2.2.1**, with the required
 **Effect 4.0.1**. The upstream AKM plugin still declares SDK 2.1.4 as its peer;
@@ -42,12 +42,14 @@ Upstream's `docs/reference/configuration.md`,
 `dist/integrations/harnesses/opencode/agent-builder.js` and native session reader
 own bounded model work and the `akm-model-work` recursion exclusion.
 
-Dependency freshness was reviewed on October 29, 2026. The former history
+AKM dependency freshness was reviewed on October 30, 2026. The former history
 metadata blocker was removed in003. See the
 [October 27 upgrade record](../operations/dependency-refresh-2026-10-27.md)
 for the original continuation qualification, and the
-[current dependency review](../operations/dependency-refresh-2026-10-29.md)
-for the stable AKM selection, native-client updates and compatibility decisions.
+[October 29 dependency review](../operations/dependency-refresh-2026-10-29.md)
+for the native-client updates, and the
+[current AKM review](../operations/dependency-refresh-2026-10-30.md)
+for the stable selection and Admin UI investigation.
 
 ## Executable evidence and limits
 

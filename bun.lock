@@ -12,20 +12,20 @@
       "name": "@fhold/assistant-tools",
       "dependencies": {
         "@anthropic-ai/claude-code": "2.1.312",
-        "@azure/identity": "4.14.0",
+        "@azure/identity": "4.14.1",
         "@azure/storage-blob": "12.34.0",
         "@openai/codex": "0.165.0",
         "@opencode/cli": "2.2.1",
         "@opencode/client": "2.2.1",
         "@opencode/plugin": "2.2.1",
-        "akm-cli": "0.10.261019",
-        "akm-opencode-v2": "0.10.261017",
+        "akm-cli": "0.10.261021",
+        "akm-opencode-v2": "0.10.261019",
         "playwright": "1.64.1",
       },
     },
     "packages/claude-desktop": {
       "name": "@fhold/claude-desktop",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@modelcontextprotocol/server": "2.4.0",
@@ -38,7 +38,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.6",
@@ -50,7 +50,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "dependencies": {
         "electron-updater": "6.8.11",
       },
@@ -65,7 +65,7 @@
     },
     "packages/guardian": {
       "name": "@fhold/guardian",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "dependencies": {
         "@modelcontextprotocol/server": "2.4.0",
         "@opencode/client": "2.2.1",
@@ -81,7 +81,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "dependencies": {
         "jsonc-parser": "^3.3.1",
         "tar": "^7.5.22",
@@ -93,7 +93,7 @@
     },
     "packages/portal": {
       "name": "@fhold/portal",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@slack/bolt": "5.1.0",
@@ -106,13 +106,13 @@
     },
     "packages/skeleton": {
       "name": "@fhold/skeleton",
-      "version": "0.3.261011-beta",
+      "version": "0.3.261012-beta",
     },
     "plugins/fhold": {
       "name": "@fhold/harness-hooks",
       "dependencies": {
         "@opencode/plugin": "2.2.1",
-        "akm-opencode-v2": "0.10.261017",
+        "akm-opencode-v2": "0.10.261019",
         "effect": "4.0.1",
       },
     },
@@ -225,7 +225,7 @@
 
     "@azure/core-xml": ["@azure/core-xml@1.6.0", "", { "dependencies": { "fast-xml-parser": "^5.5.9", "tslib": "^2.8.1" } }, "sha512-e7lX/dk//F6Qf7BB6PTY4+p2yuOQtyOeHGyapYHNwqSp2OnYpwQt49A/Nin2XmKBQ69pwagR4k/lQBq8lbHQkA=="],
 
-    "@azure/identity": ["@azure/identity@4.14.0", "", { "dependencies": { "@azure/abort-controller": "^2.0.0", "@azure/core-auth": "^1.9.0", "@azure/core-client": "^1.9.2", "@azure/core-process": "^1.0.0", "@azure/core-rest-pipeline": "^1.17.0", "@azure/core-tracing": "^1.0.0", "@azure/core-util": "^1.11.0", "@azure/logger": "^1.0.0", "@azure/msal-browser": "^5.5.0", "@azure/msal-node": "^6.0.0", "open": "^11.0.0", "tslib": "^2.2.0" } }, "sha512-8utCLdTZn14CiAe0HW4JbtzUMsc0mdDwnjUvStFMrR4IxQP8S2eL9zVAdplpfORVJGYmidZElpeXRYjJQ4UyUw=="],
+    "@azure/identity": ["@azure/identity@4.14.1", "", { "dependencies": { "@azure/abort-controller": "^2.0.0", "@azure/core-auth": "^1.9.0", "@azure/core-client": "^1.9.2", "@azure/core-process": "^1.0.0", "@azure/core-rest-pipeline": "^1.17.0", "@azure/core-tracing": "^1.0.0", "@azure/core-util": "^1.11.0", "@azure/logger": "^1.0.0", "@azure/msal-browser": "^5.5.0", "@azure/msal-node": "^7.1.0", "open": "^11.0.0", "tslib": "^2.2.0" } }, "sha512-HHuuFrmN1uuF9D5A6aAo5eHzNFNX4Q+P4SksZqDKse5YaJFFy/zDLG3wXHEV2FVGgetZ3QM8jGURNBtnQYf1NQ=="],
 
     "@azure/logger": ["@azure/logger@1.4.0", "", { "dependencies": { "@typespec/ts-http-runtime": "^0.3.0", "tslib": "^2.6.2" } }, "sha512-rbAE25KUfjU/s3XHUdJgceoCP5dEOpMx85J04kF+QMdta73XkuG9JGHHinch+XIoKpBdqljin+KqURpJriSzLA=="],
 
@@ -233,7 +233,7 @@
 
     "@azure/msal-common": ["@azure/msal-common@16.15.0", "", {}, "sha512-lwdLb1B9Q5nEhPLVIKe78XH5wFMN15fCiDkY7ylPDSWZuWcD93G3jpJajrKhO3CQld8SLKz0sHiOi24mxdvtsg=="],
 
-    "@azure/msal-node": ["@azure/msal-node@6.0.1", "", { "dependencies": { "@azure/msal-common": "16.14.1", "jsonwebtoken": "^9.0.0" } }, "sha512-ixSO1Y/kCVRthRs+hSx/5qkwaunX1/RAePhlMN0wIpIQ4WEZ6AREGGnGd1AP0qspHVsAwzWQKGubpjh50JyJIQ=="],
+    "@azure/msal-node": ["@azure/msal-node@7.1.2", "", { "dependencies": { "@azure/msal-common": "16.15.0", "jsonwebtoken": "^9.0.0" } }, "sha512-52hKQLGpEQzwNufIXG1SPVU+wQ3RIe7Rp2+g+VdAmZojCAZ6yCdGEffzQEQ6RnBZGBEs40nl14rWBmfJpCoHsg=="],
 
     "@azure/storage-blob": ["@azure/storage-blob@12.34.0", "", { "dependencies": { "@azure/abort-controller": "^2.1.2", "@azure/core-auth": "^1.9.0", "@azure/core-client": "^1.9.3", "@azure/core-http-compat": "^2.2.0", "@azure/core-lro": "^2.2.0", "@azure/core-paging": "^1.6.2", "@azure/core-rest-pipeline": "^1.19.1", "@azure/core-tracing": "^1.2.0", "@azure/core-util": "^1.11.0", "@azure/core-xml": "^1.4.5", "@azure/logger": "^1.1.4", "@azure/storage-common": "^12.5.0", "apache-arrow": "^21.1.0", "events": "^3.0.0", "tslib": "^2.8.1" } }, "sha512-cXDTCAMwDx8Ng9yUe82kOOd2kPnZ8AQqe4FkLMcpaQ3Mvr3/PXVdvRhyP0FtY5/U5Oh6JGk3EcEibaFOymRLFw=="],
 
@@ -663,9 +663,9 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.10.261019", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-sjo37YwTV9zRxVPWV6kpKGkYaZKeAMWjyf3b9Btab/CszIy+ItM3IyEraDF2Ox364Gc+zQsl7ZyCiSg/g0uP5w=="],
+    "akm-cli": ["akm-cli@0.10.261021", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-+oBzhzjJSbfETxbALQdWiNZRcHhN27/92s43h/I7qRlVSdsQlu94AQYPt06cb5zqWJqM6Z0yhngdXZsXiyIg5w=="],
 
-    "akm-opencode-v2": ["akm-opencode-v2@0.10.261017", "", { "dependencies": { "akm-cli": "0.10.261019" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-r+0qYpQBKZb8+2nUJkX2RbPn8a9C5J6PNzXEj3YrQIi0+z38y/FSpaLyuO54eWLO/mxPYlay90mo/QOWVkuuQg=="],
+    "akm-opencode-v2": ["akm-opencode-v2@0.10.261019", "", { "dependencies": { "akm-cli": "0.10.261021" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-rkK6jRG7n5dzuvv8VWpr75H2ll8VrqiB4SWnjSiL+hif+IaMEeT2T2oF01+bjM87X63PWaS1gauq3bN6pKjkPQ=="],
 
     "ansi-escapes": ["ansi-escapes@4.3.2", "", { "dependencies": { "type-fest": "^0.21.3" } }, "sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ=="],
 
@@ -1389,6 +1389,8 @@
 
     "smart-buffer": ["smart-buffer@4.2.0", "", {}, "sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg=="],
 
+    "smol-toml": ["smol-toml@1.9.1", "", {}, "sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ=="],
+
     "socks": ["socks@2.8.10", "", { "dependencies": { "ip-address": "^10.1.1", "smart-buffer": "^4.2.0" } }, "sha512-e0VyvkVTwVYViNovRkZ9aodhxVlyoMn7eJhVUPxZ+eK9P/7CBkxvvsBOHqFPEH416726W8tLXXXjKwqgTErrCQ=="],
 
     "socks-proxy-agent": ["socks-proxy-agent@8.0.5", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "^4.3.4", "socks": "^2.8.3" } }, "sha512-HehCEsotFqbPW9sJ8WVYB6UbmIMv7kUUORIF2Nncq4VQvBfNBLibW9YZR5dlYCSUhwcD628pRllm7n+E+YTzJw=="],
@@ -1544,8 +1546,6 @@
     "@aws-crypto/sha256-browser/@smithy/util-utf8": ["@smithy/util-utf8@2.3.0", "", { "dependencies": { "@smithy/util-buffer-from": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A=="],
 
     "@aws-crypto/util/@smithy/util-utf8": ["@smithy/util-utf8@2.3.0", "", { "dependencies": { "@smithy/util-buffer-from": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A=="],
-
-    "@azure/msal-node/@azure/msal-common": ["@azure/msal-common@16.14.1", "", {}, "sha512-Or6xhPNyi4zHW25158yxBoyxuCqNSPa5YBVqfF1J5Ks4MJWBo/USXdp05DQIPu1Zli00YZu6t0+h6KvHJealxQ=="],
 
     "@discordjs/rest/@discordjs/collection": ["@discordjs/collection@2.1.1", "", {}, "sha512-LiSusze9Tc7qF03sLCujF5iZp7K+vRNEDBZ86FT9aQAv3vxMLihUvKvpsCWiQ2DJq1tVckopKm1rxomgNUc9hg=="],
 

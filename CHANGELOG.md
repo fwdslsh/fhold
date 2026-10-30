@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.261012-beta — stable AKM fixes and native diagnostics
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Update AKM CLI to **0.10.261021 stable** and the OpenCode, Claude and
+Codex plugins to **0.10.261019 stable**. This fixes stale-cache plugin health
+warnings and includes upstream transport, bundle, path-redaction and metrics
+corrections. Native environment upgrades retain operator settings and consent.
+
+`fhold doctor` now inspects native AKM configuration, harnesses, migrations
+and task bindings alongside OpenCode's live provider API. Stopped or unavailable
+checks are reported honestly; passive diagnostics do not run agents or mutate
+the environment. Read-only proposal persistence readiness remains unavailable.
+
+Azure Identity **4.14.1** resolves patched MSAL Node **7.1.2** through its supported
+dependency range. Remove the obsolete MSAL source/image exception; approved
+MCPB Zod and npm Undici exceptions retain their existing scopes and November 6
+deadline. See the [dependency review](docs/operations/dependency-refresh-2026-10-30.md).
+
+The AKM browser UI investigation is recorded separately; this release adds no
+Knowledge tab or exposed UI port. Publishing or updating Admin/CLI does not
+upgrade an existing instance.
+
 ## 0.3.261011-beta — native environment upgrades
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
@@ -126,7 +148,7 @@ helper-build test budgets without weakening behavior assertions.
 Disclose the owner-approved temporary MSAL Node **GHSA-xcx6-jx8p-x3h5** and
 transitive Zod 3 **GHSA-mrhx-c7xc-m3w5** audit exceptions pending supported upstream
 fixes. Direct fhold Zod is already patched; the AKM/MCPB and Azure dependency
-chains are not. See the [scope and removal conditions](docs/operations/release.md#temporary-upstream-msal-and-zod-exceptions)
+chains are not. See the [scope and removal conditions](docs/operations/release.md#upstream-msal-fix-and-remaining-zod-exception)
 and [dependency review](docs/operations/dependency-refresh-0.3.md#tooling-only-03261007-beta-review).
 The retained runtime's previously disclosed Brotli exception is unchanged.
 

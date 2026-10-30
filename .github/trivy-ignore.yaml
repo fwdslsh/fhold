@@ -2,18 +2,6 @@
 vulnerabilities:
   # Owner approved these exact Assistant findings on 2026-10-26 (October 27 UTC).
   # Both package/version AND path must match. Raw reports remain unfiltered.
-  - id: CVE-2026-109461
-    paths:
-      - opt/fhold/tools/node_modules/@azure/msal-node/package.json
-    purls:
-      - pkg:npm/%40azure/msal-node@6.0.1
-    expired_at: 2026-11-06
-    statement: >-
-      GHSA-xcx6-jx8p-x3h5: temporary owner-approved Assistant exception for
-      Azure Identity's MSAL 6 chain. Authorization-code parameters may be
-      disclosed; fhold recovery uses managed identity, SAS or connection strings.
-      Remove after a supported Azure chain fix and Blob qualification; issue 57
-      must verify removal, with independent chain ownership retained in issue 63.
   - id: CVE-2026-109869
     paths:
       - usr/local/lib/node_modules/npm/node_modules/undici/package.json
