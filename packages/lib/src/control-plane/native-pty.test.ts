@@ -67,6 +67,22 @@ const access = {
 };
 
 describe('native private terminal transport', () => {
+	it('preserves UTF-8 preferences split across binary frames and cursor metadata', async () => {
+		const f = fixture(true, 0),
+			chunks: string[] = [];
+		const session = await startNativePty(access, 'process.stdin.resume();', {
+			...f.options,
+			output: (text) => chunks.push(text)
+		});
+		const expected = JSON.stringify({ label: '東京 café 🐢' }) + '\r\n';
+		for (const byte of new TextEncoder().encode(expected)) {
+			f.socket.message(new Uint8Array([byte]).buffer);
+			f.socket.message(new Uint8Array([0, ...new TextEncoder().encode('{"cursor":1}')]).buffer);
+		}
+		f.socket.end();
+		expect(await session.done).toEqual({ output: expected, exitCode: 0 });
+		expect(chunks.join('')).toBe(expected);
+	});
 	it('uses the same native API on a newer patch without a version gate', async () => {
 		const f = fixture(true, 0);
 		f.socket.onSend = () =>

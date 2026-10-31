@@ -60,7 +60,14 @@ export function azureDeploymentPatch(
 	const patch = parseDeploymentPatch(input),
 		properties = azureObject(document.properties);
 	const template = structuredClone(azureObject(properties.template));
-	const selected = selectedAzureContainer({ properties: { template } }, patch.container);
+	const target = { properties: { template } };
+	// Image/resource selection does not retarget Assistant preferences to a sidecar.
+	const selected =
+		patch.image || patch.cpu !== undefined || patch.memory
+			? selectedAzureContainer(target, patch.container)
+			: undefined;
+	const assistant =
+		patch.environment || patch.recovery ? selectedAzureContainer(target) : undefined;
 	let configuration: Record<string, unknown> | undefined;
 	if (patch.recovery) {
 		if (!secrets)
@@ -70,10 +77,10 @@ export function azureDeploymentPatch(
 		delete env.FH_RECOVERY_STATE_DIR; // Preserve the native receipt placement, not a Docker-host path.
 		if (settings.authentication === 'connection-string') delete env.FH_RECOVERY_CREDENTIAL_FILE;
 		const volumes = (Array.isArray(template.volumes) ? template.volumes : []).map(azureObject);
-		const mounts = (Array.isArray(selected.volumeMounts) ? selected.volumeMounts : []).map(
+		const mounts = (Array.isArray(assistant!.volumeMounts) ? assistant!.volumeMounts : []).map(
 			azureObject
 		);
-		const oldPath = azureEnvironment(selected).FH_RECOVERY_INCLUDE_FILE;
+		const oldPath = azureEnvironment(assistant!).FH_RECOVERY_INCLUDE_FILE;
 		const oldMount = mounts.find((item) => oldPath?.startsWith(`${item.mountPath}/`));
 		const oldVolume = volumes.find(
 			(item) => item.name === oldMount?.volumeName && item.storageType === 'Secret'
@@ -82,7 +89,7 @@ export function azureDeploymentPatch(
 			.map(azureObject)
 			.find((item) => oldPath === `${oldMount?.mountPath}/${item.path}`);
 		const others = azureContainers({ properties: { template } }).filter(
-			(item) => item.name !== selected.name
+			(item) => item.name !== assistant!.name
 		);
 		const shared =
 			others.some((item) =>
@@ -133,7 +140,7 @@ export function azureDeploymentPatch(
 						secrets: [{ secretRef: secretName, path: policyFile }]
 					}
 				];
-		selected.volumeMounts = reusable ? mounts : [...mounts, { volumeName, mountPath }];
+		assistant!.volumeMounts = reusable ? mounts : [...mounts, { volumeName, mountPath }];
 		configuration = {
 			secrets: [
 				...secrets.filter((item) => item.name !== secretName),
@@ -141,10 +148,10 @@ export function azureDeploymentPatch(
 			]
 		};
 	}
-	if (patch.image) selected.image = patch.image;
+	if (patch.image) selected!.image = patch.image;
 	if (patch.cpu !== undefined || patch.memory !== undefined)
-		selected.resources = {
-			...(selected.resources ? azureObject(selected.resources) : {}),
+		selected!.resources = {
+			...(selected!.resources ? azureObject(selected!.resources) : {}),
 			...(patch.cpu !== undefined ? { cpu: patch.cpu } : {}),
 			...(patch.memory ? { memory: patch.memory } : {})
 		};
@@ -156,8 +163,8 @@ export function azureDeploymentPatch(
 				value
 			])
 		);
-		const entries = (Array.isArray(selected.env) ? selected.env : []).map(azureObject);
-		selected.env = [
+		const entries = (Array.isArray(assistant!.env) ? assistant!.env : []).map(azureObject);
+		assistant!.env = [
 			...entries.filter((item) => !Object.hasOwn(environment, String(item.name))),
 			...Object.entries(environment)
 				.filter(([, value]) => value !== null)
@@ -186,6 +193,7 @@ export function azureDeploymentOperations(
 		const template = azureObject(properties.template),
 			scale = template.scale ? azureObject(template.scale) : {};
 		let environment: Record<string, string> = {};
+		let unavailable: Record<string, string> | undefined;
 		try {
 			environment = Object.fromEntries(
 				Object.entries(azureEnvironment(selectedAzureContainer(document)))
@@ -193,7 +201,12 @@ export function azureDeploymentOperations(
 					.filter(([key]) => DEPLOYMENT_ENVIRONMENT.has(key!))
 			);
 		} catch {
-			/* Explicit container selection is available for multi-container apps. */
+			unavailable = Object.fromEntries(
+				[...DEPLOYMENT_ENVIRONMENT].map((key) => [
+					key,
+					'Assistant container is ambiguous. Identify one container as assistant or use a fhold-assistant image to edit these settings.'
+				])
+			);
 		}
 		const saved = store.deployment(ref);
 		return {
@@ -202,6 +215,7 @@ export function azureDeploymentOperations(
 				image: String(item.image)
 			})),
 			environment,
+			unavailable,
 			...(typeof scale.minReplicas === 'number'
 				? { availability: scale.minReplicas === 0 ? ('on-demand' as const) : ('always' as const) }
 				: {}),
@@ -341,6 +355,13 @@ export function azureDeploymentOperations(
 		const priorStep = saved.operation?.step;
 		const finishing = priorStep === 'start' || priorStep === 'stop-updated';
 		if (saved.resumeAfterUpdate && priorStep !== 'update' && !finishing) {
+			// Validate before Stop, but don't revalidate an already applied change
+			// while continuing its final Start/Stop operation.
+			azureDeploymentPatch(
+				current,
+				saved.draft!,
+				saved.draft?.recovery ? await sdk.secrets(name) : undefined
+			);
 			const stopped = await lifecycle('stop');
 			if (stopped.state !== 'completed') return stopped;
 		}
@@ -387,6 +408,7 @@ export function azureDeploymentOperations(
 			)
 				throw new Error('Continue the outstanding native operation before editing this draft.');
 			store.saveDeployment(ref, {
+				resumeAfterUpdate: saved.resumeAfterUpdate,
 				draft: {
 					...saved.draft,
 					...patch,
@@ -404,7 +426,19 @@ export function azureDeploymentOperations(
 				['submitted', 'in-progress', 'unknown'].includes(saved.operation.state)
 			)
 				throw new Error('A submitted Azure operation cannot be discarded as a local draft.');
-			store.saveDeployment(ref, {});
+			store.saveDeployment(
+				ref,
+				saved.resumeAfterUpdate !== undefined
+					? {
+							operation: {
+								state: 'failed',
+								step: 'draft-discarded',
+								message:
+									'Draft discarded after an interrupted apply. Changes already applied are not undone. The instance may still be stopped; use Start when ready.'
+							}
+						}
+					: {}
+			);
 		}),
 		apply: {
 			...supportedOperation(async (_input: void, context) => {
@@ -417,24 +451,24 @@ export function azureDeploymentOperations(
 		update: supportedOperation(async (input, context) => {
 			if (!context.confirmed) throw new Error('Confirm image update and interruption.');
 			const saved = store.deployment(ref);
-			if (!saved.draft) {
-				const document = await (await management()).get(ref.resourceId),
-					selected = selectedAzureContainer(document, input.container);
-				const existing = String(selected.image);
-				if (
-					!input.image &&
-					!/^(?:docker\.io\/)?fwdslsh\/fhold-assistant:\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/.test(
-						existing
-					)
+			if (saved.draft)
+				throw new Error('Apply or discard the deployment draft before updating the instance.');
+			const document = await (await management()).get(ref.resourceId),
+				selected = selectedAzureContainer(document, input.container);
+			const existing = String(selected.image);
+			if (
+				!input.image &&
+				!/^(?:docker\.io\/)?fwdslsh\/fhold-assistant:\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/.test(
+					existing
 				)
-					throw new Error('This is a custom image pin. Choose its new image reference explicitly.');
-				store.saveDeployment(ref, {
-					draft: parseDeploymentPatch({
-						container: String(selected.name),
-						image: input.image ?? `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`
-					})
-				});
-			}
+			)
+				throw new Error('This is a custom image pin. Choose its new image reference explicitly.');
+			store.saveDeployment(ref, {
+				draft: parseDeploymentPatch({
+					container: String(selected.name),
+					image: input.image ?? `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`
+				})
+			});
 			return apply();
 		})
 	};

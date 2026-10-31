@@ -2755,6 +2755,41 @@ describe('Admin runtime recovery controls', () => {
 });
 
 describe('Admin renderer behavior', () => {
+	it('keeps ambiguous Assistant fields disabled while allowing an explicit sidecar image change', async () => {
+		const snapshot = normalizedSnapshot({ config: defaultStackConfig() });
+		for (const name of ['inspect', 'prepare', 'apply', 'discard'])
+			snapshot.operations[`host.deployment.${name}`] = supported();
+		state.currentSnapshot = snapshot;
+		const reason = 'Assistant container is ambiguous.';
+		const settings = {
+			containers: [{ name: 'sidecar', image: 'custom/sidecar:old' }],
+			environment: {},
+			unavailable: Object.fromEntries(
+				['FH_TIMEZONE', 'FH_SCHEDULER_ENABLED', 'FH_CLAUDE_REMOTE', 'FH_CODEX_REMOTE'].map(
+					(key) => [key, reason]
+				)
+			)
+		};
+		const calls: unknown[] = [];
+		state.api = {
+			deploymentSettings: async () => settings,
+			prepareDeployment: async (patch) => {
+				calls.push(parseDeploymentPatch(patch));
+				return { ...settings, pending: patch };
+			},
+			snapshot: async () => snapshot
+		};
+		await loadDeploymentSettings();
+		for (const field of ['timezone', 'schedule', 'claude', 'codex'])
+			expect(control(`deployment-${field}`).disabled).toBe(true);
+		expect(control('deployment-timezone-help').textContent).toBe(reason);
+		control('deployment-timezone').value = 'UTC'; // An old DOM value is never submitted while disabled.
+		control('deployment-container').value = 'sidecar';
+		control('deployment-image').value = 'custom/sidecar:new';
+		bindConfigurationEvents();
+		await control('deployment-edit-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls).toEqual([{ container: 'sidecar', image: 'custom/sidecar:new' }]);
+	});
 	for (const kind of ['local-docker', 'ssh-docker', 'azure-container-apps']) {
 		it(`uses the same deployment form and native API keys for ${kind}`, async () => {
 			const snapshot = normalizedSnapshot({ config: defaultStackConfig() });

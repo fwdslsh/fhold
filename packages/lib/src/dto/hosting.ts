@@ -73,6 +73,7 @@ export type DeploymentOutcome = {
 };
 /** A narrow user-requested patch, never a replacement cloud template. No secrets. */
 export type DeploymentPatch = {
+	/** Image/resources target only; native preferences and recovery always address the Assistant. */
 	container?: string;
 	image?: string;
 	availability?: 'always' | 'on-demand';

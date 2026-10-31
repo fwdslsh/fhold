@@ -171,19 +171,25 @@ export function azureRecovery(
 				throw new Error(
 					'Offline initialization requires an existing reusable user-assigned identity or native storage credential file. A system-assigned app identity cannot be reused by a job; it was not changed.'
 				);
-			const mounts = (Array.isArray(assistant.volumeMounts) ? assistant.volumeMounts : [])
-				.map(azureObject)
-				.filter((mount) =>
-					[env.FH_RECOVERY_CREDENTIAL_FILE, env.FH_RECOVERY_INCLUDE_FILE].some((path) =>
-						path?.startsWith(`${mount.mountPath}/`)
-					)
-				);
-			const volumes = (
+			const allVolumes = (
 				Array.isArray(azureObject(props.template).volumes)
 					? (azureObject(props.template).volumes as unknown[])
 					: []
-			)
+			).map(azureObject);
+			const mounts = (Array.isArray(assistant.volumeMounts) ? assistant.volumeMounts : [])
 				.map(azureObject)
+				.filter(
+					(mount) =>
+						allVolumes.some(
+							(volume) =>
+								volume.name === mount.volumeName &&
+								(volume.storageType === 'AzureFile' || volume.storageType === 'NfsAzureFile')
+						) ||
+						[env.FH_RECOVERY_CREDENTIAL_FILE, env.FH_RECOVERY_INCLUDE_FILE].some((path) =>
+							path?.startsWith(`${mount.mountPath}/`)
+						)
+				);
+			const volumes = allVolumes
 				.filter((volume) => mounts.some((mount) => mount.volumeName === volume.name))
 				.map((volume) =>
 					volume.storageType !== 'Secret'
@@ -275,6 +281,9 @@ export function azureRecovery(
 						...(jobIdentity ? { identity: jobIdentity } : {}),
 						properties: {
 							environmentId: props.environmentId ?? props.managedEnvironmentId,
+							...(props.workloadProfileName
+								? { workloadProfileName: props.workloadProfileName }
+								: {}),
 							configuration: {
 								triggerType: 'Manual',
 								replicaTimeout: 3600,

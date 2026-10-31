@@ -207,6 +207,21 @@ installation disables user scheduling. Outbound Claude/Codex connections cannot
 wake a zero-replica app. Changing availability later does not silently change the
 scheduling preference.
 
+Deployment settings keep image selection separate from Assistant preferences:
+timezone, scheduling, native workers and recovery always affect the Assistant,
+not a selected sidecar image. If the Assistant cannot be identified uniquely,
+those fields remain disabled; explicit image updates still work. An Update
+request does not silently apply a saved draft: apply or discard it first.
+Correcting a failed apply retains the original running/stopped intent. Discard
+does not undo an already applied update or restart an interrupted instance;
+use **Start** explicitly when ready.
+
+Initialization Jobs attach the Assistant's independent Files mounts so the
+runtime sees the same required mount policy. Native API credentials and
+unrelated service secrets are not included. Reused environments use Azure's
+default workload placement rather than assuming a named profile exists; this
+also supports legacy consumption-only environments.
+
 The CLI uses the same typed connection-level workflow:
 
 ```bash

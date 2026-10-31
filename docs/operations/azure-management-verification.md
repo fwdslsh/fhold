@@ -1,5 +1,34 @@
 # Azure management qualification
 
+## October 31, 2026 — PR #97 Terra review follow-up
+
+A separate `gpt-6.1-terra` reviewer examined the PR and re-reviewed the fixes.
+The parent verified the reported paths against source and synthetic regressions:
+
+- Correcting a failed apply preserves whether the instance was originally running,
+  including after reopening the tool. Discard retains explicit manual-Start guidance
+  and never silently restarts or rolls back a deployment.
+- An image Update with a pending draft requires apply/discard first; it no longer
+  reports an update while silently applying only the unrelated draft.
+- Selecting a sidecar image does not redirect Assistant environment/recovery edits.
+  Ambiguous Assistant controls stay disabled, and invalid targeting is caught before
+  Stop. Explicit image updates remain available.
+- Reused environments omit the optional named workload pin, accommodating legacy
+  consumption-only environments. The reviewer’s broader dedicated-only claim was
+  narrowed after checking [Microsoft’s workload-profile documentation](https://learn.microsoft.com/en-us/azure/container-apps/structure):
+  workload-profile environments include a default Consumption profile.
+- Fresh and offline initialization Jobs carry the Assistant’s Files mounts required
+  by its recovery policy. Offline jobs preserve the app’s workload-profile selection;
+  unrelated service secrets and native API credentials remain excluded.
+- Native PTY output uses streaming UTF-8 decoding, tested with multibyte characters
+  split byte-by-byte across binary frames interleaved with cursor metadata.
+
+Focused regressions: 160 passed. The real Chromium workflow passed 360 assertions;
+CLI/Admin builds, all six typechecks, lint gate and documentation checks passed.
+The full-suite result is recorded in the PR follow-up. Changes remain tooling-only,
+with no container/runtime pins changed. These checks and the review do not qualify
+live Azure behavior; no Azure or lab instance was mutated.
+
 ## October 31, 2026 — ACA parity implementation
 
 Branch `codex/aca-management` extends the existing-app provider with provisioning,

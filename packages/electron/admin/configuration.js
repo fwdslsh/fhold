@@ -46,6 +46,8 @@ export async function loadDeploymentSettings() {
 	byId('deployment-image-help').textContent =
 		settings.imageHelp || 'Use a full image reference. Unrelated containers are unchanged.';
 	byId('deployment-timezone').value = settings.pending?.environment?.FH_TIMEZONE || '';
+	byId('deployment-timezone').disabled = Boolean(settings.unavailable?.FH_TIMEZONE);
+	byId('deployment-timezone-help').textContent = settings.unavailable?.FH_TIMEZONE || '';
 	for (const [field, name] of [
 		['schedule', 'FH_SCHEDULER_ENABLED'],
 		['claude', 'FH_CLAUDE_REMOTE'],
@@ -100,7 +102,7 @@ export function bindConfigurationEvents() {
 			patch.container = byId('deployment-container').value;
 		}
 		const environment = {};
-		if (byId('deployment-timezone').value.trim())
+		if (!byId('deployment-timezone').disabled && byId('deployment-timezone').value.trim())
 			environment.FH_TIMEZONE = byId('deployment-timezone').value.trim();
 		for (const [field, name] of [
 			['schedule', 'FH_SCHEDULER_ENABLED'],
@@ -129,7 +131,7 @@ export function bindConfigurationEvents() {
 		if (state.operationInFlight || !instanceCapability('host.deployment.discard').supported) return;
 		if (
 			!window.confirm(
-				'Discard this deployment draft? This does not undo changes already saved to the instance or change running resources.'
+				'Discard this deployment draft? This does not undo changes already saved to the instance or change running resources. If an earlier apply stopped the instance, use Start to bring it back online.'
 			)
 		)
 			return;

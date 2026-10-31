@@ -264,6 +264,123 @@ test('known native rejection and Failed/Canceled permit corrected drafts, while 
 	expect(resumes).toBe(1);
 	expect(readFileSync(f.store.path, 'utf8')).not.toContain('connection lost');
 });
+test('correcting a failed apply preserves the original running intent across process reopening', async () => {
+	for (const failedStep of ['update', 'start'] as const) {
+		const f = fixture();
+		const patch = f.sdk.patch,
+			lifecycle = f.sdk.lifecycle;
+		if (failedStep === 'update')
+			f.sdk.patch = () =>
+				poller(
+					'update',
+					() => {
+						throw new Error('rejected');
+					},
+					'failed'
+				);
+		else
+			f.sdk.lifecycle = (name, action, saved) =>
+				action === 'start'
+					? poller(
+							'start',
+							() => {
+								throw new Error('rejected');
+							},
+							'failed'
+						)
+					: lifecycle(name, action, saved);
+		await invokeOperation(f.deployment.operations.prepare, { image: 'custom/image:bad' });
+		expect((await invokeOperation(f.deployment.operations.apply, undefined, confirm)).state).toBe(
+			'failed'
+		);
+		expect(azureObject(f.current().properties).runningStatus).toBe('Stopped');
+		f.sdk.patch = patch;
+		f.sdk.lifecycle = lifecycle;
+		const reopened = azureDeploymentOperations(
+			ref,
+			async () => f.sdk,
+			new HostingPreferencesStore(f.store.path)
+		);
+		await invokeOperation(reopened.operations.prepare, { image: 'custom/image:corrected' });
+		expect(f.store.deployment(ref).resumeAfterUpdate).toBe(true);
+		expect((await invokeOperation(reopened.operations.apply, undefined, confirm)).state).toBe(
+			'completed'
+		);
+		expect(azureObject(f.current().properties).runningStatus).toBe('Running');
+	}
+});
+test('discard after a failed apply preserves an actionable stopped-state explanation without restarting', async () => {
+	const f = fixture();
+	f.sdk.patch = () =>
+		poller(
+			'update',
+			() => {
+				throw new Error('rejected');
+			},
+			'failed'
+		);
+	await invokeOperation(f.deployment.operations.prepare, { image: 'custom/image:bad' });
+	await invokeOperation(f.deployment.operations.apply, undefined, confirm);
+	await invokeOperation(f.deployment.operations.discard, undefined);
+	expect(f.calls).toEqual(['stop']);
+	expect(f.store.deployment(ref).draft).toBeUndefined();
+	expect((await f.deployment.inspect()).operation?.message).toContain('use Start');
+});
+test('Update cannot silently apply an unrelated draft instead of the requested image', async () => {
+	const f = fixture();
+	await invokeOperation(f.deployment.operations.prepare, { environment: { FH_TIMEZONE: 'UTC' } });
+	await expect(
+		invokeOperation(f.deployment.operations.update, { image: 'custom/image:new' }, confirm)
+	).rejects.toThrow('Apply or discard');
+	expect(f.calls).toEqual([]);
+	expect(f.store.deployment(ref).draft).toEqual({ environment: { FH_TIMEZONE: 'UTC' } });
+});
+test('image selection never redirects Assistant preferences or recovery to a sidecar', () => {
+	const current = document();
+	const settings = {
+		...defaultRecoverySettings('example'),
+		enabled: true,
+		destination: 'azblob://storage123/fhold-example'
+	};
+	const patch = azureDeploymentPatch(
+		current,
+		{
+			container: 'other',
+			image: 'custom/sidecar:new',
+			environment: { FH_TIMEZONE: 'Asia/Tokyo' },
+			recovery: { settings, selection: { paths: [], sqlite: [] } }
+		},
+		[]
+	);
+	const containers = azureObject(patch.template).containers as Record<string, unknown>[];
+	expect(containers[0]!.image).toBe('custom/image:one');
+	expect(containers[0]!.env).toContainEqual({ name: 'TZ', value: 'Asia/Tokyo' });
+	expect(containers[0]!.env).toContainEqual({
+		name: 'FH_RECOVERY_URL',
+		value: settings.destination
+	});
+	expect(containers[1]!.image).toBe('custom/sidecar:new');
+	expect(containers[1]!.env).toEqual(current.properties.template.containers[1]!.env);
+});
+test('ambiguous Assistant settings are disabled and rejected before Stop while explicit image edits still work', async () => {
+	const f = fixture();
+	const template = azureObject(azureObject(f.current().properties).template);
+	azureObject((template.containers as unknown[])[0]).name = 'custom-agent';
+	expect((await f.deployment.inspect()).unavailable?.FH_TIMEZONE).toContain('ambiguous');
+	await invokeOperation(f.deployment.operations.prepare, { environment: { FH_TIMEZONE: 'UTC' } });
+	await expect(invokeOperation(f.deployment.operations.apply, undefined, confirm)).rejects.toThrow(
+		'exact assistant'
+	);
+	expect(f.calls).toEqual([]);
+	await invokeOperation(f.deployment.operations.discard, undefined);
+	await invokeOperation(f.deployment.operations.prepare, {
+		container: 'other',
+		image: 'custom/sidecar:new'
+	});
+	expect((await invokeOperation(f.deployment.operations.apply, undefined, confirm)).state).toBe(
+		'completed'
+	);
+});
 test('official historical prereleases normalize to bundled image; custom or digest pins need explicit choice', async () => {
 	for (const image of [
 		'fwdslsh/fhold-assistant:0.4.1-beta.1',
@@ -386,6 +503,32 @@ test('templates use published runtime contract, secure parameters, private probe
 			mounts: [{ storageName: 'assets', mountPath: '/custom/assets' }]
 		})
 	).toMatchObject({ cpu: 33, mounts: [{ mountPath: '/custom/assets' }] });
+});
+test('fresh initialization job includes the Files mounts required by its recovery policy, but no native auth', () => {
+	const request = { ...input, mounts: [{ storageName: 'assets', mountPath: '/work/assets' }] };
+	const infrastructure = azureInfrastructureTemplate(connection, request);
+	const job = (infrastructure.resources as Record<string, unknown>[]).find(
+		(r) => r.type === 'Microsoft.App/jobs'
+	)!;
+	const template = azureObject(azureObject(job.properties).template);
+	expect(template.volumes).toContainEqual({
+		name: 'files-0',
+		storageType: 'AzureFile',
+		storageName: 'assets'
+	});
+	expect(azureObject((template.containers as unknown[])[0]).volumeMounts).toContainEqual({
+		volumeName: 'files-0',
+		mountPath: '/work/assets'
+	});
+	expect(JSON.stringify(job)).not.toContain('native-auth');
+	expect(JSON.stringify(job)).not.toContain('opencode-password');
+	const reused = azureApplicationTemplate(connection, {
+		...input,
+		environment: { ...input.environment, create: false }
+	});
+	expect(
+		azureObject((reused.resources as Record<string, unknown>[])[0]!.properties).workloadProfileName
+	).toBeUndefined();
 });
 
 function provisioningFixture() {
@@ -589,6 +732,7 @@ test('offline initialization propagates only required recovery inputs, not unrel
 		props = azureObject(current.properties),
 		template = azureObject(props.template),
 		selected = azureObject((template.containers as unknown[])[0]);
+	props.workloadProfileName = 'existing-profile';
 	current.identity = {
 		type: 'SystemAssigned, UserAssigned',
 		userAssignedIdentities: {
@@ -604,7 +748,8 @@ test('offline initialization propagates only required recovery inputs, not unrel
 	];
 	selected.volumeMounts = [
 		{ volumeName: 'shared', mountPath: '/run/shared' },
-		{ volumeName: 'independent', mountPath: '/data' }
+		{ volumeName: 'independent', mountPath: '/data' },
+		{ volumeName: 'nfs', mountPath: '/work/nfs' }
 	];
 	template.volumes = [
 		{
@@ -615,7 +760,8 @@ test('offline initialization propagates only required recovery inputs, not unrel
 				{ secretRef: 'other', path: 'password' }
 			]
 		},
-		{ name: 'independent', storageType: 'AzureFile', storageName: 'user-files' }
+		{ name: 'independent', storageType: 'AzureFile', storageName: 'user-files' },
+		{ name: 'nfs', storageType: 'NfsAzureFile', storageName: 'nfs-files' }
 	];
 	f.sdk.secrets = async () => [
 		{ name: 'policy', value: 'private-policy' },
@@ -647,7 +793,22 @@ test('offline initialization propagates only required recovery inputs, not unrel
 	);
 	expect(JSON.stringify(deployed)).not.toContain('other-service-secret');
 	expect(JSON.stringify(deployed)).not.toContain('password');
-	expect(JSON.stringify(deployed)).not.toContain('user-files');
+	const jobProps = azureObject((deployed.resources as Record<string, unknown>[])[0]!.properties);
+	expect(jobProps.workloadProfileName).toBe('existing-profile');
+	const jobTemplate = azureObject(jobProps.template);
+	expect(jobTemplate.volumes).toContainEqual({
+		name: 'independent',
+		storageType: 'AzureFile',
+		storageName: 'user-files'
+	});
+	expect(jobTemplate.volumes).toContainEqual({
+		name: 'nfs',
+		storageType: 'NfsAzureFile',
+		storageName: 'nfs-files'
+	});
+	expect(azureObject((jobTemplate.containers as unknown[])[0]).volumeMounts).toEqual(
+		selected.volumeMounts
+	);
 	expect(JSON.stringify(deployed)).not.toContain('private-policy');
 	expect(parameters).toEqual({ secret0: { value: 'private-policy' } });
 	expect(deployed.parameters).toEqual({ secret0: { type: 'secureString' } });

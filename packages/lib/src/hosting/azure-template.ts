@@ -164,13 +164,13 @@ export function azureInfrastructureTemplate(
 							...container,
 							env: container.env.filter((item) => item.name !== 'OPENCODE_SERVER_PASSWORD_FILE'),
 							volumeMounts: container.volumeMounts.filter(
-								(mount) => mount.volumeName === 'recovery-policy'
+								(mount) => mount.volumeName !== 'native-auth'
 							),
 							command: ['/usr/local/bin/fhold-recovery'],
 							args: ['init', '--confirm-new-instance']
 						}
 					],
-					volumes: volumes.filter((volume) => volume.name === 'recovery-policy')
+					volumes: volumes.filter((volume) => volume.name !== 'native-auth')
 				}
 			}
 		}
@@ -201,7 +201,8 @@ export function azureApplicationTemplate(
 				identity,
 				properties: {
 					environmentId: names.environment,
-					workloadProfileName: 'Consumption',
+					// Reused environments may be legacy consumption-only (no named profiles).
+					...(request.environment.create ? { workloadProfileName: 'Consumption' } : {}),
 					configuration: {
 						activeRevisionsMode: 'Single',
 						ingress: { external: true, targetPort: 4096, transport: 'http', allowInsecure: false },

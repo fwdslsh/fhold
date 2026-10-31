@@ -57,6 +57,7 @@ export async function startNativePty(
 	let ready = false;
 	let buffer = '';
 	let output = '';
+	const decoder = new TextDecoder();
 	let resolveReady!: () => void;
 	let rejectReady!: (error: Error) => void;
 	const handshake = new Promise<void>((resolve, reject) => {
@@ -114,6 +115,31 @@ export async function startNativePty(
 				'Native setup was interrupted. Its input was not replayed; reconnect and start again.'
 			)
 		);
+	const receive = (text: string) => {
+		if (finished) return;
+		if (!ready) {
+			buffer += text;
+			if (buffer.length > 4_096) {
+				abort();
+				return;
+			}
+			const marker = 'FH_PRIVATE_INPUT_READY\r\n';
+			const plain = 'FH_PRIVATE_INPUT_READY\n';
+			const found = buffer.indexOf(marker) >= 0 ? marker : plain;
+			const index = buffer.indexOf(found);
+			if (index < 0) return;
+			ready = true;
+			buffer = buffer.slice(index + found.length);
+			resolveReady();
+		} else buffer = text;
+		output += buffer;
+		if (Buffer.byteLength(output) > (options.maxResponseBytes ?? 2 * 1024 * 1024)) {
+			abort();
+			return;
+		}
+		options.output?.(buffer);
+		buffer = '';
+	};
 	try {
 		const token = await request(path + '/connect-token' + query, {
 			method: 'POST',
@@ -134,35 +160,18 @@ export async function startNativePty(
 				typeof event.data === 'string' ? undefined : new Uint8Array(event.data as ArrayBuffer);
 			// OpenCode's documented NUL + JSON frame is cursor metadata, not output.
 			if (bytes?.[0] === 0) return;
-			const text = typeof event.data === 'string' ? event.data : new TextDecoder().decode(bytes);
-			if (!ready) {
-				buffer += text;
-				if (buffer.length > 4_096) {
-					abort();
-					return;
-				}
-				const marker = 'FH_PRIVATE_INPUT_READY\r\n';
-				const plain = 'FH_PRIVATE_INPUT_READY\n';
-				const found = buffer.indexOf(marker) >= 0 ? marker : plain;
-				const index = buffer.indexOf(found);
-				if (index < 0) return;
-				ready = true;
-				buffer = buffer.slice(index + found.length);
-				resolveReady();
-			} else buffer = text;
-			output += buffer;
-			if (Buffer.byteLength(output) > (options.maxResponseBytes ?? 2 * 1024 * 1024)) {
-				abort();
-				return;
-			}
-			options.output?.(buffer);
-			buffer = '';
+			receive(
+				typeof event.data === 'string'
+					? decoder.decode() + event.data
+					: decoder.decode(bytes, { stream: true })
+			);
 		});
 		socket.addEventListener('error', abort, { once: true });
 		socket.addEventListener(
 			'close',
 			() => {
 				if (finished) return;
+				receive(decoder.decode());
 				void request(path + query)
 					.then((value) => {
 						const info = (value as { data?: { status?: unknown; exitCode?: unknown } })?.data;
