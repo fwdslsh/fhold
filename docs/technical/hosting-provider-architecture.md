@@ -10,6 +10,10 @@ contracts and migration decisions. The [hosting guide](../hosting.md) describes
 the user workflow. See the [verification record](../operations/hosting-agent-management-verification.md)
 for what was tested and the ACA execution limitation.
 
+The [Azure management implementation plan](aca-management-implementation-plan.md)
+describes the planned extension to provisioning, updates and native agent parity.
+It does not change the shipped capabilities documented below.
+
 ## Composition and dependency direction
 
 ```text
