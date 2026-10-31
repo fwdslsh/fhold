@@ -38,7 +38,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.4.1001",
+      "version": "0.4.1002",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.6",
@@ -50,7 +50,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.4.1001",
+      "version": "0.4.1002",
       "dependencies": {
         "electron-updater": "6.8.11",
       },
@@ -81,7 +81,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.4.1001",
+      "version": "0.4.1002",
       "dependencies": {
         "@azure/arm-appcontainers": "4.0.0",
         "@azure/arm-resources": "8.0.0",

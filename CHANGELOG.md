@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1002 — experimental Azure instance management
+
+Tooling-only release for Linux Admin and the companion CLI. Assistant, Guardian,
+Portal and the Claude Desktop extension remain at **0.4.1001**. No container
+update is required, and publishing or updating the tools does not upgrade an
+existing instance.
+
+Expand the experimental Azure Container Apps provider with instance installation,
+environment and storage selection, managed-identity recovery, optional Azure Files
+mounts, and deferred deployment settings in the shared CLI/Admin workflow.
+Improve deployment progress, retry/resume handling, native terminal input and
+case-insensitive Azure resource matching.
+
+Manual Azure verification covered new and reused infrastructure, stopped-instance
+updates, settings application, Blob recovery and natural scale-to-zero/wake with
+files and OpenCode sessions preserved. Vendor sign-in/pairing, private networks
+and private registries remain unverified; Azure support stays **experimental**.
+See the [verification record](docs/operations/azure-management-verification.md)
+for the tested scope and remaining limitations.
+
 ## 0.4.1001 — first stable release
 
 First stable Linux release for Assistant, Guardian, Portal, CLI/Admin and the
