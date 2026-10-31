@@ -40,8 +40,14 @@ export function hostOperations(session: InstanceSession): {
 						observed.capabilities[action].reason ?? 'This lifecycle operation is unavailable.'
 					);
 				const result = await session.operate(action, true, input || undefined);
+				if (result.operation?.state === 'unknown' || result.operation?.state === 'failed')
+					return {
+						state: result.operation.state,
+						scope: 'request-accepted',
+						reason: result.operation.message ?? `Azure ${result.operation.step} did not complete.`
+					};
 				return result.pending
-					? { state: 'accepted', scope: 'request-accepted' }
+					? { state: 'accepted', scope: 'request-accepted', reference: result.operation?.reference }
 					: { state: 'completed', scope: 'deployment-reconciled', result };
 			}
 		};
@@ -49,6 +55,13 @@ export function hostOperations(session: InstanceSession): {
 	return {
 		inspectHost,
 		host: {
+			deployment: session.deployment ?? {
+				inspect: unsupportedOperation('Deployment settings are unavailable.'),
+				prepare: unsupportedOperation('Use this Docker instance’s settings to stage changes.'),
+				apply: unsupportedOperation('Use restart to apply this instance’s settings.'),
+				discard: unsupportedOperation('No deployment draft is available.'),
+				update: unsupportedOperation('Image updates are unavailable.')
+			},
 			inspect: supportedOperation(inspectHost),
 			start: lifecycle('start'),
 			stop: lifecycle('stop'),

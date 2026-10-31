@@ -1,6 +1,7 @@
 import { parseStackConfig, type GuardianPolicy } from '../control-plane/stack-config.js';
 import { parseRecoverySettings } from '../control-plane/recovery-config.js';
 import { normalizeSelection } from '../../../../containers/assistant/recovery/selection.mjs';
+import { parseDeploymentPatch } from '../control-plane/provisioning-input.js';
 import type {
 	AgentOperations,
 	AppOperations,
@@ -22,6 +23,8 @@ type OperationInputOf<T> = T extends {
 
 /** Input shapes accepted by named normalized session operations. */
 export type OperationInputMap = {
+	'host.deployment.prepare': OperationInputOf<HostOperations['deployment']['prepare']>;
+	'host.deployment.update': OperationInputOf<HostOperations['deployment']['update']>;
 	'host.logs': OperationInputOf<HostOperations['logs']>;
 	'host.restart': OperationInputOf<HostOperations['restart']>;
 	'host.console': OperationInputOf<HostOperations['console']>;
@@ -221,6 +224,13 @@ const parsers: OperationInputParsers = {
 		if (value === undefined) return undefined;
 		const revision = optionalText(input(value, 'host.restart')!.revision, 'Invalid revision.', 256);
 		return revision === undefined ? {} : { revision };
+	},
+	'host.deployment.prepare': parseDeploymentPatch,
+	'host.deployment.update': (value) => {
+		const source = input(value, 'host.deployment.update') ?? {};
+		const patch = parseDeploymentPatch({ image: source.image, container: source.container });
+		const pull = optionalBoolean(source.pull, 'Update pull selection must be true or false.');
+		return { image: patch.image, container: patch.container, pull };
 	},
 	'host.console': (value) =>
 		value === undefined ? undefined : target(input(value, 'host.console')!),

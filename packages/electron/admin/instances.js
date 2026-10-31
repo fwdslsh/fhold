@@ -4,6 +4,7 @@ import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText
 import { showHostingChooser, targetKey, targetLocation } from './hosting.js';
 import { chooseManagedDirectory } from './directories.js';
 import { resetProviderState } from './providers.js';
+import { renderInstallPlacement } from './provisioning.js';
 
 function instanceName(target) {
 	const parts = targetLocation(target)?.split(/[\\/]/).filter(Boolean) || [];
@@ -68,6 +69,8 @@ function suggestInstanceHome() {
 
 export function renderInstallationReadiness(readiness) {
 	state.installationReadiness = readiness;
+	byId('install-cloud-retry').hidden =
+		state.installOptions?.kind !== 'azure-container-apps' || readiness?.ok === true;
 	for (const location of all('[data-setup-location]')) {
 		location.hidden = !state.installConnection || state.installConnection.id === 'local';
 		location.textContent = `On ${state.installConnection?.label || 'this computer'}`;
@@ -78,14 +81,18 @@ export function renderInstallationReadiness(readiness) {
 		requirements.hidden = ready;
 		requirements.className = `install-requirements${failed ? ' warning' : ''}`;
 		requirements.setAttribute('role', failed ? 'alert' : 'status');
+		const cloud = state.installOptions?.kind === 'azure-container-apps';
 		requirements.querySelector('[data-requirement-title]').hidden = !failed;
-		requirements.querySelector('[data-requirement-guidance]').hidden = !failed;
+		requirements.querySelector('[data-requirement-title]').textContent = cloud
+			? 'Hosting connection needs attention'
+			: 'Docker needs attention';
+		requirements.querySelector('[data-requirement-guidance]').hidden = !failed || cloud;
 		requirements.querySelector('[data-requirement-message]').textContent = ready
 			? ''
 			: readiness?.message || 'Checking installation requirements…';
 		requirements.querySelector('[data-check-prerequisites]').hidden = !readiness || ready;
 	}
-	byId('install').disabled = state.operationInFlight || !ready;
+	byId('install').disabled = state.operationInFlight || !ready || !!state.installContinuation;
 	byId('preview-instance-restore').disabled = state.operationInFlight || !ready;
 	byId('apply-instance-restore').disabled =
 		state.operationInFlight || !ready || !state.instanceRestorePreview;
@@ -113,6 +120,7 @@ export function showNewInstanceSetup() {
 	state.currentSnapshot = null;
 	state.currentConfig = null;
 	resetProviderState();
+	renderInstallPlacement();
 	suggestInstanceHome();
 	byId('instance-welcome').hidden = true;
 	byId('instance-import-section').hidden = true;
@@ -248,6 +256,9 @@ export async function showInstances() {
 export function bindInstanceEvents() {
 	byId('begin-new-instance').addEventListener('click', () => {
 		state.installConnection = undefined;
+		state.installOptions = null;
+		state.installPreview = null;
+		state.installContinuation = null;
 		state.installationReadiness = undefined;
 		showNewInstanceSetup();
 	});

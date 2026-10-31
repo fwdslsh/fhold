@@ -4,16 +4,57 @@ import { composeProcessEnvironment, runDocker } from './docker.js';
 import { createFholdState } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
-	listProviders,
-	readAssistantConfig,
-	readAssistantGlobalConfig,
-	removeProviderAuth,
-	setProviderApiKey,
-	updateAssistantGlobalConfig,
+	listProviders as localListProviders,
+	readAssistantConfig as localReadConfig,
+	readAssistantGlobalConfig as localReadPreferences,
+	removeProviderAuth as localRemoveAuth,
+	setProviderApiKey as localSetKey,
+	updateAssistantGlobalConfig as localUpdatePreferences,
 	type ProviderSummary,
 	type NativeAgentRequestOptions
 } from './opencode.js';
 import { readNativePreferences, type NativeSettingsWriteResult } from './provider-files.js';
+import type { NativeAgentService } from './native-agent.js';
+
+/** Agent-owned settings, independent of a Docker home or a hosting provider. */
+export type NativeProviderSettingsPort = {
+	agent: NativeAgentService;
+	readPreferences(): Promise<Record<string, unknown>>;
+	readPolicy(): Promise<Record<string, unknown>>;
+	writePreferences(patch: Record<string, unknown>): Promise<NativeSettingsWriteResult>;
+	withLock<T>(run: () => Promise<T>): Promise<T>;
+	discoverModels(input: { url: string; key?: string }): Promise<string[]>;
+};
+type SettingsTarget = string | NativeProviderSettingsPort;
+const listProviders = (target: SettingsTarget, options: Options) =>
+	typeof target === 'string'
+		? localListProviders(target, options)
+		: target.agent.listProviders(options);
+const readAssistantConfig = (target: SettingsTarget, options: Options) =>
+	typeof target === 'string' ? localReadConfig(target, options) : target.agent.readConfig(options);
+const readAssistantGlobalConfig = (target: SettingsTarget, options: Options) =>
+	typeof target === 'string' ? localReadPreferences(target, options) : target.readPreferences();
+const updateAssistantGlobalConfig = (
+	target: SettingsTarget,
+	patch: Record<string, unknown>,
+	options: Options
+) =>
+	typeof target === 'string'
+		? localUpdatePreferences(target, patch, options)
+		: target.writePreferences(patch);
+const setProviderApiKey = (
+	target: SettingsTarget,
+	provider: string,
+	key: string,
+	options: Options
+) =>
+	typeof target === 'string'
+		? localSetKey(target, provider, key, options)
+		: target.agent.setProviderApiKey(provider, key, options);
+const removeProviderAuth = (target: SettingsTarget, provider: string, options: Options) =>
+	typeof target === 'string'
+		? localRemoveAuth(target, provider, options)
+		: target.agent.removeProviderAuth(provider, options);
 
 export type ProviderSettings = {
 	providers: ProviderSummary[];
@@ -85,8 +126,16 @@ function endpointUrl(value: string): string {
 		throw new Error('Use an HTTP or HTTPS server URL without credentials, query or fragment.');
 	return url.href.replace(/\/+$/, '');
 }
-function configurations(home: string): { users: ConfigFile[]; policy: ConfigFile } {
-	return { users: [readNativePreferences(home)], policy: readNativePreferences(home, POLICY_FILE) };
+async function configurations(
+	home: SettingsTarget
+): Promise<{ users: ConfigFile[]; policy: ConfigFile }> {
+	if (typeof home === 'string')
+		return {
+			users: [readNativePreferences(home)],
+			policy: readNativePreferences(home, POLICY_FILE)
+		};
+	const [value, policy] = await Promise.all([home.readPreferences(), home.readPolicy()]);
+	return { users: [{ value }], policy: { value: policy } };
 }
 function definition(file: ConfigFile, provider: string): Record<string, unknown> | undefined {
 	return (
@@ -109,7 +158,7 @@ function editableEndpoint(value: Record<string, unknown> | undefined, managed: b
 
 /** Saved sign-ins, resolved native model and operator config; never a connection test. */
 export async function listProviderSettings(
-	home: string,
+	home: SettingsTarget,
 	options: Options = {}
 ): Promise<ProviderSettings> {
 	const [providers, resolved] = await Promise.all([
@@ -119,7 +168,7 @@ export async function listProviderSettings(
 	const disabled = new Map(providerPolicies(resolved).map((rule) => [rule.resource, rule.effect]));
 	let configurationIssue: string | undefined;
 	try {
-		const { users, policy } = configurations(home);
+		const { users, policy } = await configurations(home);
 		for (const file of [...users, policy]) {
 			for (const [provider, raw] of Object.entries({
 				...record(file.value.provider),
@@ -237,7 +286,8 @@ function activation(
 	];
 	return legacy ? { experimental: { policies: next } } : { policies: next };
 }
-async function withSettingsLock<T>(home: string, run: () => Promise<T>): Promise<T> {
+async function withSettingsLock<T>(home: SettingsTarget, run: () => Promise<T>): Promise<T> {
+	if (typeof home !== 'string') return home.withLock(run);
 	const lock = acquireStackLock(join(home, 'data'));
 	if (!lock) throw new Error('Another instance operation is running. Try again when it finishes.');
 	try {
@@ -247,7 +297,7 @@ async function withSettingsLock<T>(home: string, run: () => Promise<T>): Promise
 	}
 }
 async function applyConfigChange(
-	home: string,
+	home: SettingsTarget,
 	patch: Record<string, unknown>,
 	options: Options,
 	matches: (value: Record<string, unknown>) => boolean
@@ -278,7 +328,7 @@ async function applyConfigChange(
 }
 
 async function settingsAfterWrite(
-	home: string,
+	home: SettingsTarget,
 	options: Options,
 	write: NonNullable<ProviderSettings['write']>
 ): Promise<ProviderSettings> {
@@ -297,7 +347,7 @@ async function settingsAfterWrite(
 
 /** Edit watched native user preferences, never managed policy. */
 export async function saveProviderEndpoint(
-	home: string,
+	home: SettingsTarget,
 	input: ProviderEndpointInput,
 	options: Options = {}
 ): Promise<ProviderSettings> {
@@ -312,7 +362,7 @@ export async function saveProviderEndpoint(
 	)
 		throw new Error('Enter a valid one-line API key, or leave it blank.');
 	return withSettingsLock(home, async () => {
-		const { users, policy } = configurations(home);
+		const { users, policy } = await configurations(home);
 		if (definition(policy, provider))
 			throw new Error(
 				'This service is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
@@ -381,7 +431,7 @@ export async function saveProviderEndpoint(
 }
 
 export async function useProviderModel(
-	home: string,
+	home: SettingsTarget,
 	providerId: string,
 	selectedModel: string,
 	options: Options = {}
@@ -392,7 +442,7 @@ export async function useProviderModel(
 		const native = (await listProviders(home, options)).find((item) => item.id === provider);
 		if (!native?.models?.some((item) => item.id === model))
 			throw new Error('Choose an available model that supports text and agent tools.');
-		const { policy } = configurations(home);
+		const { policy } = await configurations(home);
 		const selection = `${provider}/${model}`;
 		const managedModel = record(policy.value.model);
 		if (
@@ -416,7 +466,7 @@ export async function useProviderModel(
 }
 
 export async function removeProviderSetup(
-	home: string,
+	home: SettingsTarget,
 	providerId: string,
 	options: Options & { endpoint?: boolean } = {}
 ): Promise<ProviderSettings> {
@@ -427,7 +477,7 @@ export async function removeProviderSetup(
 			throw new Error('Choose another model for your agent before removing this setup.');
 		let write: NativeSettingsWriteResult | undefined;
 		if (options.endpoint) {
-			const { users, policy } = configurations(home);
+			const { users, policy } = await configurations(home);
 			if (definition(policy, provider))
 				throw new Error(
 					'This endpoint is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
@@ -457,7 +507,7 @@ export async function removeProviderSetup(
 
 // Run model discovery in the same network namespace as inference. This is an
 // ordinary one-shot Node request, not a installed runtime script or new service.
-const DISCOVER_MODELS = `import { readFileSync } from 'node:fs';
+export const DISCOVER_MODELS = `import { readFileSync } from 'node:fs';
 const {url,key}=JSON.parse(readFileSync(0,'utf8'));
 try {
  const response=await fetch(url+'/models',{headers:key?{authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(8000),redirect:'error'});
@@ -470,13 +520,15 @@ try {
 } catch { console.log(JSON.stringify({error:'The agent could not read models from this server. Check its address, network access and OpenAI-compatible /models API, or enter a model ID manually.'}));process.exit(1); }`;
 
 export async function discoverProviderModels(
-	home: string,
+	home: SettingsTarget,
 	input: { url: string; key?: string },
 	options: { run?: typeof runDocker } = {}
 ): Promise<string[]> {
 	const url = endpointUrl(input.url);
 	if (input.key !== undefined && (input.key.length > 16_384 || /[\r\n]/.test(input.key)))
 		throw new Error('Invalid API key.');
+	if (typeof home !== 'string')
+		return home.discoverModels({ url, ...(input.key ? { key: input.key } : {}) });
 	const state = createFholdState(home);
 	const result = await (options.run ?? runDocker)(
 		[

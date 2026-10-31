@@ -29,7 +29,7 @@ import type { AdminSnapshot } from './admin-types.js';
 
 async function adminSnapshot(): Promise<AdminSnapshot> {
 	const snapshot = await readAdminSnapshot();
-	if (snapshot.lifecycle.state === 'known' && snapshot.lifecycle.value === 'externally-managed')
+	if (snapshot.lifecycle.state === 'known' && snapshot.lifecycle.value === 'deployed')
 		throw new Error('The local installer fixture selected an externally managed instance.');
 	return snapshot;
 }

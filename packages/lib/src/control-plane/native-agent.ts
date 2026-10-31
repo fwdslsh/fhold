@@ -61,6 +61,7 @@ export type NativeAgentService = {
 export type HttpsNativeAgentServiceOptions = {
 	endpoint: string;
 	password: string;
+	username?: string;
 	fetch?: typeof fetch;
 	timeoutMs?: number;
 	signal?: AbortSignal;
@@ -69,6 +70,16 @@ export type HttpsNativeAgentServiceOptions = {
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 16 * 1024 * 1024;
 const READY_TOKEN = 'FH_READY';
+
+export class NativeAgentHttpError extends Error {
+	constructor(readonly status: number) {
+		super(
+			status === 401 || status === 403
+				? 'Native OpenCode authentication was rejected. Check the username and password.'
+				: `OpenCode returned HTTP ${status}`
+		);
+	}
+}
 
 function record(value: unknown): Record<string, unknown> | undefined {
 	return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -202,12 +213,12 @@ function eligibleModel(model: Record<string, unknown>): boolean {
 }
 
 /** Create native API operations over a host-supplied, private authenticated route. */
-export function createNativeAgentService(
+export function createNativeAgentRequest(
 	access: NativeAgentAccess,
 	defaults: NativeAgentRequestOptions = {}
-): NativeAgentService {
+) {
 	const endpoint = validateEndpoint(access.endpoint, false);
-	async function request(
+	return async function request(
 		path: string,
 		init: RequestInit = {},
 		options: NativeAgentRequestOptions = {}
@@ -231,6 +242,10 @@ export function createNativeAgentService(
 			redirect: 'error',
 			signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals)
 		});
+		if (response.status === 401 || response.status === 403) {
+			await response.body?.cancel().catch(() => {});
+			throw new NativeAgentHttpError(response.status);
+		}
 		const maximum = options.maxResponseBytes ?? defaults.maxResponseBytes ?? MAX_RESPONSE_BYTES;
 		if (Number(response.headers.get('content-length') ?? 0) > maximum)
 			throw new Error('OpenCode response exceeded the size limit');
@@ -263,7 +278,15 @@ export function createNativeAgentService(
 			);
 		}
 		return body;
-	}
+	};
+}
+
+export function createNativeAgentService(
+	access: NativeAgentAccess,
+	defaults: NativeAgentRequestOptions = {}
+): NativeAgentService {
+	const endpoint = validateEndpoint(access.endpoint, false);
+	const request = createNativeAgentRequest(access, defaults);
 	async function integrationId(
 		provider: string,
 		options: NativeAgentRequestOptions
@@ -342,6 +365,7 @@ export function createNativeAgentService(
 				return;
 			} catch (failure) {
 				throwIfSessionAborted(options);
+				if (failure instanceof NativeAgentHttpError) throw failure;
 				error = failure instanceof Error ? failure.message : String(failure);
 			}
 			throwIfSessionAborted(options);
@@ -519,12 +543,21 @@ export function createNativeAgentService(
 export function createHttpsNativeAgentService(
 	options: HttpsNativeAgentServiceOptions
 ): NativeAgentService {
+	return createNativeAgentService(httpsNativeAgentAccess(options), {
+		fetch: options.fetch,
+		timeoutMs: options.timeoutMs,
+		signal: options.signal
+	});
+}
+
+/** Keep the native credential in the management process, shared by HTTP and PTY. */
+export function httpsNativeAgentAccess(options: HttpsNativeAgentServiceOptions): NativeAgentAccess {
 	const endpoint = validateEndpoint(options.endpoint, true);
 	if (!options.password || options.password.length > 16_384 || /[\r\n]/.test(options.password))
 		throw new Error('Native agent password must be one non-empty line.');
-	const authorization = `Basic ${Buffer.from(`opencode:${options.password}`).toString('base64')}`;
-	return createNativeAgentService(
-		{ endpoint, authorization: () => authorization },
-		{ fetch: options.fetch, timeoutMs: options.timeoutMs, signal: options.signal }
-	);
+	const username = options.username ?? 'opencode';
+	if (!username || username.length > 128 || /[:\r\n\0]/.test(username))
+		throw new Error('Native OpenCode username is invalid.');
+	const authorization = `Basic ${Buffer.from(`${username}:${options.password}`).toString('base64')}`;
+	return { endpoint, authorization: () => authorization };
 }

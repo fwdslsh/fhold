@@ -16,7 +16,8 @@ import {
 	renderNetworkDetails,
 	showPortalTokenForm
 } from '../admin/connections.js';
-import { bindConfigurationEvents } from '../admin/configuration.js';
+import { bindConfigurationEvents, loadDeploymentSettings } from '../admin/configuration.js';
+import { parseDeploymentPatch } from '../../lib/src/control-plane/provisioning-input.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import {
 	endpoint,
@@ -46,6 +47,12 @@ import {
 	verifyProvider
 } from '../admin/providers.js';
 import { bindRuntimeEvents, renderPhase, renderServices } from '../admin/runtime.js';
+import {
+	bindProvisioningEvents,
+	cloudInstallRequest,
+	renderInstallPlacement,
+	submitCloudInstall
+} from '../admin/provisioning.js';
 import {
 	bindSnapshotEvents,
 	render,
@@ -257,7 +264,7 @@ function normalizedSnapshot({
 	ref?: Record<string, unknown>;
 	name?: string;
 	location?: string;
-	lifecycle?: 'not-installed' | 'setup-incomplete' | 'ready' | 'externally-managed';
+	lifecycle?: 'not-installed' | 'setup-incomplete' | 'ready' | 'deployed';
 	config?: ReturnType<typeof defaultStackConfig>;
 	services?: Array<Record<string, unknown>>;
 	deployment?: Record<string, unknown>;
@@ -315,7 +322,7 @@ function normalizedSnapshot({
 				? {
 						'docker.install': supported(),
 						'docker.saveConfig': supported(),
-						'docker.update': supported(),
+						'host.deployment.update': supported(),
 						'docker.directory': supported()
 					}
 				: {}),
@@ -399,6 +406,191 @@ afterEach(() => {
 });
 
 describe('Admin static security boundary', () => {
+	it('offers a private password fallback when automatic credential resolution is unavailable and preserves Connect setup', async () => {
+		const snapshot = normalizedSnapshot({
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource/agent' },
+			lifecycle: 'deployed',
+			services: []
+		});
+		snapshot.operations['agent.connect'] = {
+			...supported(),
+			input: { acceptsPassword: true, requiresPassword: false }
+		};
+		state.currentSnapshot = snapshot;
+		state.awaitingSetupFinish = true;
+		const inputs: unknown[] = [];
+		state.api = {
+			connectAgent: async (input) => {
+				inputs.push(input);
+				expect(control('native-agent-password').value).toBe('');
+				if (!input.password)
+					throw new Error('Azure cannot read this native secret. Enter the OpenCode password.');
+				return { endpoint: 'https://private.example.test', username: 'custom-user' };
+			},
+			snapshot: async () => snapshot
+		};
+		renderConnectionDetails(snapshot);
+		bindConnectionsEvents();
+		expect(control('native-agent-password-field').hidden).toBe(false);
+		await control('provider-connect-agent').listeners.get('click')?.({});
+		expect(control('native-agent-password').focused).toBe(true);
+		expect(control('native-agent-connect').hidden).toBe(false);
+		control('native-agent-password').value = 'private-test-password';
+		await control('connect-native-agent').listeners.get('click')?.({});
+		expect(inputs).toEqual([{}, { password: 'private-test-password' }]);
+		expect(control('native-agent-password').value).toBe('');
+		expect(state.awaitingSetupFinish).toBe(true);
+		expect(state.currentView).toBe('provider');
+	});
+	function cloudSetup() {
+		state.installConnection = { id: 'cloud', kind: 'azure-container-apps', label: 'Cloud' };
+		state.installOptions = {
+			kind: 'azure-container-apps',
+			location: 'centralus',
+			image: 'registry/assistant:pinned',
+			timezone: 'America/Chicago',
+			environments: [],
+			storageAccounts: []
+		};
+		control('install-section').hidden = false;
+		renderInstallPlacement();
+		control('install-environment-name').value = 'my-environment';
+		control('install-storage-name').value = 'mystorage';
+		return {
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource/agent' },
+			image: 'registry/assistant:pinned',
+			summary: 'Create assistant with private recovery.',
+			resources: [{ name: 'my-environment', type: 'environment', action: 'create' }],
+			warnings: ['Charges depend on Azure usage.']
+		};
+	}
+	it('uses the shared wizard for cloud preview without preparing a directory or creating resources', async () => {
+		const preview = cloudSetup();
+		expect(html).toContain('<strong>Experimental Azure support.</strong>');
+		let installs = 0;
+		state.api = {
+			provisioningPreview: async ({ request }) => {
+				expect(request.kind).toBe('azure-container-apps');
+				return preview;
+			},
+			provisioningInstall: async () => {
+				installs++;
+			},
+			prepareNewInstance: async () => {
+				throw new Error('No cloud folder');
+			}
+		};
+		await submitCloudInstall();
+		expect(installs).toBe(0);
+		expect(control('install-review').hidden).toBe(false);
+		expect(control('install-directory-placement').hidden).toBe(true);
+		await submitCloudInstall();
+		expect(installs).toBe(0);
+		expect(control('install-cloud-confirm').focused).toBe(true);
+		control('install-mounts').value =
+			'project-files /work/project\nreference-files /work/reference';
+		expect(cloudInstallRequest().mounts).toEqual([
+			{ storageName: 'project-files', mountPath: '/work/project' },
+			{ storageName: 'reference-files', mountPath: '/work/reference' }
+		]);
+	});
+	it('retains an incomplete cloud result for deliberate continuation and never replays install', async () => {
+		const preview = cloudSetup();
+		let installs = 0;
+		state.api = {
+			provisioningPreview: async () => preview,
+			provisioningInstall: async () => {
+				installs++;
+				return {
+					ref: preview.ref,
+					state: 'unknown',
+					step: 'deployment',
+					reference: 'native-operation',
+					message: 'Inspect Azure progress.'
+				};
+			},
+			openInstance: async () => {
+				throw new Error('Incomplete installation must not select an instance');
+			}
+		};
+		await submitCloudInstall();
+		control('install-cloud-confirm').checked = true;
+		await submitCloudInstall();
+		await submitCloudInstall();
+		expect(installs).toBe(1);
+		expect(control('install-continuation-reference').textContent).toBe('native-operation');
+		expect(control('install').disabled).toBe(true);
+		expect(control('install-status').textContent).toContain('unknown');
+	});
+	it('ignores a cloud preview that finishes after another setup connection was selected', async () => {
+		const preview = cloudSetup();
+		let release: (value: typeof preview) => void = () => {};
+		state.api = {
+			provisioningPreview: () =>
+				new Promise((resolve) => {
+					release = resolve;
+				})
+		};
+		const pending = submitCloudInstall();
+		state.installConnection = { id: 'other', label: 'Other' };
+		state.installOptions = { kind: 'directory' };
+		release(preview);
+		await pending;
+		expect(state.installPreview).toBeNull();
+		expect(control('install-review').hidden).toBe(true);
+	});
+	it.each(['infrastructure', 'initialization', 'application'])(
+		'requires a separate confirmed retry for failed %s and ordinary resume never replays it',
+		async (step) => {
+			const preview = cloudSetup();
+			const failed = {
+				ref: preview.ref,
+				state: 'failed',
+				step,
+				reference: 'saved-init'
+			};
+			state.installOptions.continuations = [failed];
+			renderInstallPlacement();
+			control('install-resume-reference').value = 'saved-init';
+			bindProvisioningEvents();
+			await control('install-resume-reference').listeners.get('change')?.({});
+			expect(control('install-retry-saved-step').hidden).toBe(false);
+			const calls: unknown[] = [];
+			state.api = {
+				provisioningResume: async (input) => {
+					calls.push(input);
+					return failed;
+				}
+			};
+			await control('install-retry-saved-step').listeners.get('click')?.({});
+			expect(calls).toEqual([]);
+			window.confirm = () => true;
+			await control('install-resume-saved').listeners.get('click')?.({});
+			expect(calls).toEqual([{ connectionId: 'cloud', reference: 'saved-init', confirmed: true }]);
+			expect(control('install-retry-step').hidden).toBe(false);
+			await control('install-retry-step').listeners.get('click')?.({});
+			expect(calls.at(-1)).toEqual({
+				connectionId: 'cloud',
+				reference: 'saved-init',
+				confirmed: true,
+				retryFailedStep: true
+			});
+			state.installContinuation = { ...failed, state: 'unknown' };
+			await control('install-retry-step').listeners.get('click')?.({});
+			expect(calls).toHaveLength(2);
+		}
+	);
+	it('hides cloud continuation and placement controls when returning to directory setup', () => {
+		cloudSetup();
+		control('install-saved-continuations').hidden = false;
+		control('install-continuation').hidden = false;
+		state.installOptions = null;
+		renderInstallPlacement();
+		expect(control('install-saved-continuations').hidden).toBe(true);
+		expect(control('install-continuation').hidden).toBe(true);
+		expect(control('install-cloud-placement').hidden).toBe(true);
+		expect(control('install-directory-placement').hidden).toBe(false);
+	});
 	it('renders remote targets without a fake local configuration or provider discovery', () => {
 		let providers = 0;
 		state.api = {
@@ -411,7 +603,7 @@ describe('Admin static security boundary', () => {
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
 			name: 'cloud-agent',
 			location: '/resource',
-			lifecycle: 'externally-managed',
+			lifecycle: 'deployed',
 			deployment: {
 				warnings: ['Platform observation only'],
 				state: 'Scaled to zero',
@@ -461,7 +653,7 @@ describe('Admin static security boundary', () => {
 	it('uses the observed native username and only unwraps known observations', () => {
 		const snapshot = normalizedSnapshot({
 			ref: { kind: 'ssh-docker', connectionId: 'remote', remoteHome: '/agent' },
-			lifecycle: 'externally-managed'
+			lifecycle: 'deployed'
 		});
 		renderPlatformAccess({
 			...snapshot,
@@ -476,7 +668,12 @@ describe('Admin static security boundary', () => {
 		const snapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
 		state.currentSnapshot = snapshot;
 		let opened = 0;
-		state.api = { openKnowledge: async (...args) => { expect(args).toEqual([]); opened++; } };
+		state.api = {
+			openKnowledge: async (...args) => {
+				expect(args).toEqual([]);
+				opened++;
+			}
+		};
 		bindConnectionsEvents();
 		renderInstanceCapabilities(snapshot);
 		showView('knowledge');
@@ -491,7 +688,7 @@ describe('Admin static security boundary', () => {
 	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
-			lifecycle: 'externally-managed',
+			lifecycle: 'deployed',
 			operations: { 'agent.browserLink': supported() }
 		});
 		let opened = 0;
@@ -516,7 +713,7 @@ describe('Admin static security boundary', () => {
 	});
 	it('takes an unconnected HTTPS agent to native sign-in instead of opening an unauthenticated browser', async () => {
 		state.currentSnapshot = normalizedSnapshot({
-			lifecycle: 'externally-managed',
+			lifecycle: 'deployed',
 			operations: {
 				'agent.connect': { ...supported(), input: { requiresPassword: true } },
 				'agent.browserLink': {
@@ -539,7 +736,7 @@ describe('Admin static security boundary', () => {
 	it('keeps remote status failures in the selected remote view, with no local fallback', async () => {
 		state.currentSnapshot = normalizedSnapshot({
 			ref: { kind: 'ssh-docker', connectionId: 'remote', remoteHome: '/agent' },
-			lifecycle: 'externally-managed'
+			lifecycle: 'deployed'
 		});
 		state.api = {
 			snapshot: async () => {
@@ -547,7 +744,7 @@ describe('Admin static security boundary', () => {
 			}
 		};
 		await refresh({ statusOnly: true });
-		expect(state.currentSnapshot.lifecycle.value).toBe('externally-managed');
+		expect(state.currentSnapshot.lifecycle.value).toBe('deployed');
 		expect(control('runtime-status-detail').textContent).toContain(
 			'Container status is unavailable'
 		);
@@ -558,7 +755,7 @@ describe('Admin static security boundary', () => {
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
 			name: 'agent',
 			location: '/resource',
-			lifecycle: 'externally-managed',
+			lifecycle: 'deployed',
 			deployment: {
 				providerLabel: 'Cloud provider',
 				guidance: {
@@ -594,11 +791,11 @@ describe('Admin static security boundary', () => {
 		expect(control('provider-fields').disabled).toBe(false);
 		expect(control('transfer-fields').disabled).toBe(false);
 		expect(control('provider-fields-unavailable').hidden).toBe(true);
-		expect(instanceCapability('docker.update', snapshot).supported).toBe(true);
+		expect(instanceCapability('host.deployment.update', snapshot).supported).toBe(true);
 		expect(instanceCapability('update', snapshot).supported).toBe(false);
 		renderInstanceCapabilities(
 			normalizedSnapshot({
-				lifecycle: 'externally-managed',
+				lifecycle: 'deployed',
 				operations: { 'agent.providers': supported() }
 			})
 		);
@@ -609,13 +806,13 @@ describe('Admin static security boundary', () => {
 		renderInstanceDetails(normalizedSnapshot({ config: defaultStackConfig() }));
 		expect(selectedLogOptions()).toBeUndefined();
 		renderInstanceDetails(
-			normalizedSnapshot({ lifecycle: 'externally-managed', name: 'agent', location: '/remote' })
+			normalizedSnapshot({ lifecycle: 'deployed', name: 'agent', location: '/remote' })
 		);
 		control('log-source').value = 'system';
 		expect(selectedLogOptions()).toBeUndefined();
 		renderInstanceDetails(
 			normalizedSnapshot({
-				lifecycle: 'externally-managed',
+				lifecycle: 'deployed',
 				name: 'agent',
 				location: '/remote',
 				deployment: {
@@ -1259,6 +1456,26 @@ describe('Admin static security boundary', () => {
 		expect(control('view-title').textContent).toBe('Start your agent');
 	});
 
+	it('reports deployed platform state without treating it as native agent readiness or startup failure', () => {
+		for (const platformState of ['Running · 1 replica(s)', 'Scaled to zero', 'Stopped']) {
+			renderServices(
+				normalizedSnapshot({
+					lifecycle: 'deployed',
+					deployment: { state: platformState },
+					services: [{ name: 'assistant', state: platformState, health: 'Succeeded' }]
+				})
+			);
+			expect(control('setup-runtime').textContent).toBe(
+				`Platform status: ${platformState}. Native agent readiness is checked separately.`
+			);
+			expect(control('setup-recovery').hidden).toBe(true);
+		}
+		renderServices(normalizedSnapshot({ lifecycle: 'deployed', services: [] }));
+		expect(control('setup-runtime').textContent).toBe(
+			'Native agent readiness is checked separately.'
+		);
+	});
+
 	it('keeps account selection explicit and hides a redundant single sign-in method', () => {
 		renderProviders({
 			providers: [
@@ -1496,6 +1713,39 @@ describe('Admin static security boundary', () => {
 		expect(control('remote-dialog').open).toBe(false);
 	});
 
+	it('keeps Cancel available while native setup waits for private terminal readiness', async () => {
+		const button = new Control();
+		button.dataset.remoteEnable = 'claude';
+		selector('[data-remote-enable], [data-remote-connect], [data-codex-recall-review]', button);
+		const actions: string[] = [];
+		let interrupt!: (error: Error) => void;
+		state.api = {
+			confirmRestart: async () => true,
+			remote: (request: { action: string }) => {
+				actions.push(request.action);
+				if (request.action === 'enable')
+					return new Promise((_, reject) => {
+						interrupt = reject;
+					});
+				if (request.action === 'cancel') {
+					interrupt(new Error('Native setup was interrupted. Input was not replayed.'));
+					return Promise.resolve({ running: false });
+				}
+				throw new Error(`Unexpected remote action ${request.action}`);
+			}
+		};
+		bindRemoteEvents();
+		button.listeners.get('click')?.({});
+		control('remote-trust').checked = true;
+		const starting = control('remote-form').listeners.get('submit')?.({ preventDefault() {} });
+		await Bun.sleep(0);
+		expect(control('remote-cancel').disabled).toBe(false);
+		const cancelling = control('remote-cancel').listeners.get('click')?.({});
+		await Promise.all([starting, cancelling]);
+		expect(actions).toEqual(['enable', 'cancel']);
+		expect(control('remote-stage').textContent).toContain('interrupted');
+	});
+
 	it('requires an explicit Codex recall choice, sends only the current digest, and rejects stale reviews', async () => {
 		const button = new Control();
 		button.dataset.codexRecallReview = '';
@@ -1706,6 +1956,20 @@ describe('Admin app settings', () => {
 });
 
 describe('Admin instance picker and automatic status', () => {
+	it('identifies Azure targets without regard to ARM resource ID case, without changing SSH path identity', () => {
+		const id =
+			'/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/agents/providers/Microsoft.App/containerApps/agent';
+		const azure = (resourceId: string) => ({
+			kind: 'hosted',
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId }
+		});
+		expect(targetKey(azure(id))).toBe(targetKey(azure(id.toLowerCase())));
+		const ssh = (remoteHome: string) => ({
+			kind: 'hosted',
+			ref: { kind: 'ssh-docker', connectionId: 'server', remoteHome }
+		});
+		expect(targetKey(ssh('/Agent'))).not.toBe(targetKey(ssh('/agent')));
+	});
 	function emptySnapshot() {
 		const homeDir = '/home/person/fhold/instances/a-very-long-personal-instance-folder';
 		const config = {
@@ -1818,7 +2082,7 @@ describe('Admin instance picker and automatic status', () => {
 				{ kind: 'local-docker', id: 'local', label: 'This computer' }
 			],
 			hostingInstances: async () => [],
-			hostingFeatures: async () => ({ installation: true })
+			hostingFeatures: async () => ({ installation: true, directory: true })
 		};
 		bindInstanceEvents();
 		const choose = async (value: string) => {
@@ -1848,7 +2112,7 @@ describe('Admin instance picker and automatic status', () => {
 				{ id: 'cloud', label: 'Cloud', kind: 'azure-container-apps' }
 			],
 			hostingInstances: async () => [],
-			hostingFeatures: async () => ({ installation: false })
+			hostingFeatures: async () => ({ installation: false, directory: false })
 		};
 		await showHostingChooser('cloud');
 		for (const id of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
@@ -1881,7 +2145,7 @@ describe('Admin instance picker and automatic status', () => {
 	it('waits for pending status before browsing and returns without losing the target or drafts', async () => {
 		const current = normalizedSnapshot({
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/agent' },
-			lifecycle: 'externally-managed',
+			lifecycle: 'deployed',
 			name: 'cloud-agent',
 			location: '/agent'
 		});
@@ -1898,7 +2162,7 @@ describe('Admin instance picker and automatic status', () => {
 				{ kind: 'local-docker', id: 'local', label: 'This computer' }
 			],
 			hostingInstances: async () => [],
-			hostingFeatures: async () => ({ installation: true })
+			hostingFeatures: async () => ({ installation: true, directory: true })
 		};
 		bindHostingEvents();
 		const browsing = showHostingChooser('local');
@@ -1987,7 +2251,7 @@ describe('Admin instance picker and automatic status', () => {
 			docker: { ...snapshot.docker, updateImageTag: undefined },
 			operations: {
 				...snapshot.operations,
-				'docker.update': { support: 'unknown', reason: 'Remote CLI must be updated.' }
+				'host.deployment.update': { support: 'unknown', reason: 'Remote CLI must be updated.' }
 			}
 		});
 		expect(control('runtime-version-help').textContent).toContain('Remote CLI must be updated');
@@ -2526,6 +2790,159 @@ describe('Admin runtime recovery controls', () => {
 });
 
 describe('Admin renderer behavior', () => {
+	it('keeps ambiguous Assistant fields disabled while allowing an explicit sidecar image change', async () => {
+		const snapshot = normalizedSnapshot({ config: defaultStackConfig() });
+		for (const name of ['inspect', 'prepare', 'apply', 'discard'])
+			snapshot.operations[`host.deployment.${name}`] = supported();
+		state.currentSnapshot = snapshot;
+		const reason = 'Assistant container is ambiguous.';
+		const settings = {
+			containers: [{ name: 'sidecar', image: 'custom/sidecar:old' }],
+			environment: {},
+			unavailable: Object.fromEntries(
+				['FH_TIMEZONE', 'FH_SCHEDULER_ENABLED', 'FH_CLAUDE_REMOTE', 'FH_CODEX_REMOTE'].map(
+					(key) => [key, reason]
+				)
+			)
+		};
+		const calls: unknown[] = [];
+		state.api = {
+			deploymentSettings: async () => settings,
+			prepareDeployment: async (patch) => {
+				calls.push(parseDeploymentPatch(patch));
+				return { ...settings, pending: patch };
+			},
+			snapshot: async () => snapshot
+		};
+		await loadDeploymentSettings();
+		for (const field of ['timezone', 'schedule', 'claude', 'codex'])
+			expect(control(`deployment-${field}`).disabled).toBe(true);
+		expect(control('deployment-timezone-help').textContent).toBe(reason);
+		control('deployment-timezone').value = 'UTC'; // An old DOM value is never submitted while disabled.
+		control('deployment-container').value = 'sidecar';
+		control('deployment-image').value = 'custom/sidecar:new';
+		bindConfigurationEvents();
+		await control('deployment-edit-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls).toEqual([{ container: 'sidecar', image: 'custom/sidecar:new' }]);
+	});
+	for (const kind of ['local-docker', 'ssh-docker', 'azure-container-apps']) {
+		it(`uses the same deployment form and native API keys for ${kind}`, async () => {
+			const snapshot = normalizedSnapshot({ config: defaultStackConfig() });
+			snapshot.identity.ref.kind = kind;
+			snapshot.pendingChanges = known({ pending: true });
+			for (const name of ['inspect', 'prepare', 'apply', 'discard'])
+				snapshot.operations[`host.deployment.${name}`] = supported();
+			state.currentSnapshot = snapshot;
+			const settings = {
+				containers: [{ name: 'assistant', image: 'fwdslsh/fhold-assistant:0.4.1001' }],
+				environment: {
+					FH_TIMEZONE: 'America/Chicago',
+					FH_CLAUDE_REMOTE: '1',
+					FH_CODEX_REMOTE: '1'
+				},
+				...(kind === 'azure-container-apps'
+					? { availability: 'always' }
+					: {
+							unavailable: {
+								availability: 'Use Start and Stop.',
+								FH_SCHEDULER_ENABLED: 'Use custom Compose.'
+							}
+						})
+			};
+			const calls: unknown[] = [];
+			state.api = {
+				deploymentSettings: async () => settings,
+				prepareDeployment: async (patch) => {
+					calls.push(parseDeploymentPatch(patch));
+					return { ...settings, pending: patch };
+				},
+				confirmRestart: async (action) => {
+					calls.push(action);
+					return false;
+				},
+				snapshot: async () => snapshot
+			};
+			await loadDeploymentSettings();
+			expect(control('deployment-edit-form').hidden).toBe(false);
+			expect(control('deployment-current').textContent).toContain('America/Chicago');
+			expect(control('deployment-availability').disabled).toBe(kind !== 'azure-container-apps');
+			expect(control('deployment-schedule').disabled).toBe(kind !== 'azure-container-apps');
+			control('deployment-timezone').value = 'Asia/Tokyo';
+			control('deployment-claude').value = '0';
+			bindConfigurationEvents();
+			await control('deployment-edit-form').listeners.get('submit')?.({ preventDefault() {} });
+			expect(calls).toEqual([
+				{ environment: { FH_TIMEZONE: 'Asia/Tokyo', FH_CLAUDE_REMOTE: '0' } },
+				'apply'
+			]);
+			expect(control('apply-pending-restart').textContent).toBe('Apply changes');
+		});
+	}
+	it('stores a narrow deployment draft and choosing Later never applies or starts the target', async () => {
+		const snapshot = {
+			...normalizedSnapshot({
+				ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource/agent' },
+				lifecycle: 'deployed',
+				services: []
+			}),
+			pendingChanges: known({ pending: true }),
+			operations: { 'host.deployment.prepare': supported(), 'host.deployment.apply': supported() }
+		};
+		state.currentSnapshot = snapshot;
+		state.deploymentSettings = {
+			containers: [{ name: 'assistant', image: 'image:pinned' }],
+			environment: {}
+		};
+		const calls: unknown[] = [];
+		state.api = {
+			prepareDeployment: async (patch) => {
+				calls.push(['prepare', patch]);
+				return { ...state.deploymentSettings, pending: patch };
+			},
+			confirmRestart: async (action) => {
+				calls.push(['confirm', action]);
+				return false;
+			},
+			applyDeployment: async () => {
+				throw new Error('Later must not apply');
+			},
+			action: async () => {
+				throw new Error('Later must not start');
+			},
+			snapshot: async () => snapshot
+		};
+		control('deployment-availability').value = 'on-demand';
+		bindConfigurationEvents();
+		await control('deployment-edit-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls).toEqual([
+			['prepare', { availability: 'on-demand' }],
+			['confirm', 'apply']
+		]);
+		expect(control('pending-restart').hidden).toBe(false);
+		expect(control('apply-pending-restart').textContent).toBe('Apply changes');
+	});
+	it('does not turn an accepted update or lifecycle request into a completion message', async () => {
+		const snapshot = normalizedSnapshot({ config: defaultStackConfig() });
+		state.currentSnapshot = snapshot;
+		state.api = {
+			confirmRestart: async () => true,
+			update: async () => ({
+				snapshot,
+				outcome: { state: 'unknown', step: 'stopping', reference: 'operation-1' }
+			}),
+			action: async () => ({
+				snapshot,
+				outcome: { state: 'submitted', step: 'start', reference: 'operation-2' }
+			})
+		};
+		bindRuntimeEvents();
+		await control('update-stack').listeners.get('click')?.({});
+		expect(control('notice-message').textContent).toContain('unknown');
+		expect(control('notice-message').textContent).toContain('operation-1');
+		await requestStackAction('host.start');
+		expect(control('notice-message').textContent).toContain('submitted');
+		expect(control('notice-message').textContent).not.toContain('started');
+	});
 	it('keeps pending changes visible when restart is postponed, refreshed or navigation changes', async () => {
 		state.currentSnapshot = {
 			...normalizedSnapshot({
@@ -2545,7 +2962,7 @@ describe('Admin renderer behavior', () => {
 		await offerRestart();
 		expect(applies).toBe(0);
 		expect(control('pending-restart').hidden).toBe(false);
-		expect(control('pending-restart-title').textContent).toBe('Pending restart');
+		expect(control('pending-restart-title').textContent).toBe('Changes pending');
 		showView('system');
 		expect(control('pending-restart').hidden).toBe(false);
 		renderRestartStatus(structuredClone(state.currentSnapshot));
@@ -2572,9 +2989,9 @@ describe('Admin renderer behavior', () => {
 			}
 		};
 		renderRestartStatus(state.currentSnapshot);
-		expect(control('apply-pending-restart').textContent).toBe('Start to apply');
+		expect(control('apply-pending-restart').textContent).toBe('Apply changes');
 		await offerRestart();
-		expect(calls).toEqual(['start', ['start', true]]);
+		expect(calls).toEqual(['apply', ['start', true]]);
 		expect(control('pending-restart').hidden).toBe(false);
 		state.api.action = async (...args) => {
 			calls.push(args);

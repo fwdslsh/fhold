@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
 import { FH_RUNTIME_VERSION } from '../../lib/src/control-plane/release.js';
+import { parseDeploymentPatch } from '../../lib/src/control-plane/provisioning-input.js';
 import axe from 'axe-core';
 
 type DebuggerResult = {
@@ -215,7 +216,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 					support: 'supported',
 					availability: { state: 'ready' }
 				},
-				'docker.update': { support: 'supported', availability: { state: 'ready' } }
+				'host.deployment.update': { support: 'supported', availability: { state: 'ready' } }
 			},
 			pendingChanges: known({ pending: false }),
 			agent: {
@@ -412,7 +413,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe(true);
 		await evaluate(
-			`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,docker:{...window.overviewQa.docker,updateImageTag:undefined},operations:{...window.overviewQa.operations,'docker.update':{support:'unknown'}},services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]}});})()`
+			`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,docker:{...window.overviewQa.docker,updateImageTag:undefined},operations:{...window.overviewQa.operations,'host.deployment.update':{support:'unknown'}},services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]}});})()`
 		);
 		expect(await evaluate("document.querySelector('#runtime-version-settings').hidden")).toBe(
 			false
@@ -946,10 +947,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.currentView='overview';
 			render({
 				identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},
-				lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'externally-managed'},
+				lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'deployed'},
 				deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{providerLabel:'Azure Container Apps · experimental',state:'Scaled to zero',clientUrl:'https://agent.example.com',containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}'}],logSources:[{type:'system',label:'Platform'},{type:'console',label:'Agent console'}],warnings:[]}},
 				services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[]},
-				operations:{'host.start':{support:'supported',availability:{state:'ready'}},'host.stop':{support:'supported',availability:{state:'ready'}},'host.restart':{support:'unsupported',reason:'Ordered replacement uses deployment tooling.'},'host.logs':{support:'supported',availability:{state:'ready'}},'agent.providers':{support:'unsupported',reason:'Connect to the agent first.'},'agent.connect':{support:'unsupported',reason:'Use the deployment address.'},'agent.remote':{support:'unsupported',reason:'Connect to the agent first.'},'data.backup':{support:'unsupported',reason:'No local instance folder.'},'data.restoreData':{support:'unsupported',reason:'No local instance folder.'},'data.restoreInstance':{support:'unsupported',reason:'No local instance folder.'},'docker.update':{support:'unsupported',reason:'Managed by the deployment platform.'}},
+				operations:{'host.start':{support:'supported',availability:{state:'ready'}},'host.stop':{support:'supported',availability:{state:'ready'}},'host.restart':{support:'unsupported',reason:'Ordered replacement uses deployment tooling.'},'host.logs':{support:'supported',availability:{state:'ready'}},'agent.providers':{support:'unsupported',reason:'Connect to the agent first.'},'agent.connect':{support:'unsupported',reason:'Use the deployment address.'},'agent.remote':{support:'unsupported',reason:'Connect to the agent first.'},'data.backup':{support:'unsupported',reason:'No local instance folder.'},'data.restoreData':{support:'unsupported',reason:'No local instance folder.'},'data.restoreInstance':{support:'unsupported',reason:'No local instance folder.'},'host.deployment.update':{support:'unsupported',reason:'Managed by the deployment platform.'}},
 				pendingChanges:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{pending:false}},
 				agent:{access:{state:'not-inspected',reason:'Connect explicitly.'},account:{state:'not-inspected',reason:'Connect explicitly.'},models:{state:'not-inspected',reason:'Connect explicitly.'},readiness:{state:'not-inspected',reason:'Connect explicitly.'}},
 				apps:{config:{state:'not-inspected',reason:'Not managed through this connection.'},connections:{state:'not-inspected',reason:'Connect explicitly.'},status:{state:'not-inspected',reason:'Not managed through this connection.'}},
@@ -975,7 +976,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const {bindHostingEvents}=await import('./hosting.js');
 			window.hostingQa={actions:0,approved:false,dialogFails:true};
 			state.api.confirmRestart=async()=>{if(window.hostingQa.dialogFails) throw Error('Native confirmation unavailable'); return window.hostingQa.approved;};
-			state.api.action=async()=>{window.hostingQa.actions++;return {...state.currentSnapshot,deployment:{...state.currentSnapshot.deployment,value:{...state.currentSnapshot.deployment.value,warnings:['Azure accepted start. Agent readiness remains unverified.']}}};};
+			state.api.action=async()=>{window.hostingQa.actions++;return {snapshot:{...state.currentSnapshot,deployment:{...state.currentSnapshot.deployment,value:{...state.currentSnapshot.deployment.value,warnings:['Azure accepted start. Agent readiness remains unverified.']}}},outcome:{state:'submitted',step:'start',message:'Azure accepted start. Agent readiness remains unverified.'}};};
 			bindHostingEvents();
 		})()`);
 		await click('#start-stack');
@@ -990,7 +991,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('#start-stack');
 		expect(await evaluate('window.hostingQa.actions')).toBe(1);
 		expect(await evaluate("document.querySelector('#notice-message').textContent")).toBe(
-			'fhold started. Saved settings applied.'
+			'submitted: Azure accepted start. Agent readiness remains unverified.'
 		);
 		expect(
 			await evaluate("document.querySelector('#runtime-status-detail').textContent")
@@ -1098,7 +1099,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		})()`);
 		expect(
 			await evaluate(
-				"!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Pending restart'"
+				"!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Changes pending'"
 			)
 		).toBe(true);
 		expect(
@@ -1138,7 +1139,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.hostingUpdateConnection=async(id,value)=>{qa.saved++;qa.connections=qa.connections.map(item=>item.id===id?value:item);return value;};
 			state.api.hostingRemoveConnection=async id=>{if(!qa.approve)return false;qa.removed++;qa.connections=qa.connections.filter(item=>item.id!==id);return true;};
 			state.api.hostingCheckConnection=async()=>({ok:!qa.checkFails,instances:[],checks:[{name:'SSH',ok:true,detail:'Connected to krang.'},{name:'Management helper',ok:!qa.checkFails,detail:qa.checkFails?'Cache needs writable executable storage.':'Helper ready.'}]});
-			state.api.hostingFeatures=async()=>({installation:true});
+			state.api.hostingFeatures=async()=>({installation:true,directory:true});
 			state.api.hostingInstances=async()=>{throw Error('SSH sign-in failed. Review native SSH configuration.');};
 			bindAdminSettingsEvents();await manageHostingConnections();
 		})()`);
@@ -1280,6 +1281,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.installationReadiness=async()=>({ok:true});
 			state.api.hostingInstances=async id=>{qa.discoveries.push(id);return [{name:id==='local'?'april':'lab-agent',location:id==='local'?'/home/user/fhold/instances/april':'/opt/stacks/lab-agent',ref:id==='local'?{kind:'local-docker',connectionId:'local',homeDir:'/home/user/fhold/instances/april'}:{kind:'ssh-docker',connectionId:id,remoteHome:'/opt/stacks/lab-agent'}}];};
 			state.api.hostingInfo=async id=>({instancesDirectory:id==='local'?'/home/user/fhold/instances':'/opt/stacks',defaultHome:id==='local'?'/home/user/fhold/instances/default':'/opt/stacks/default'});
+			state.api.provisioningOptions=async id=>({kind:'directory',...await state.api.hostingInfo(id),config:window.overviewQa.docker.config});
 			state.api.chooseDirectory=async()=>undefined;
 			state.api.openInstance=async target=>{qa.opens.push(target);throw Error('This instance is not available. Choose another instance or check its host connection.');};
 			state.api.prepareNewInstance=async target=>{qa.prepares.push(target);};
@@ -1300,7 +1302,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		// finishing discovery must refresh controls, not navigate back to that view.
 		await evaluate(`(async()=>{const {state}=await import('./state.js');const {render}=await import('./snapshot.js');render({
 			identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/agent'},name:'cloud-agent',location:'/agent'},
-			lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'externally-managed'},
+			lifecycle:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:'deployed'},
 			deployment:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:{warnings:[]}},
 			services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[]},
 			operations:{'host.start':{support:'supported',availability:{state:'ready'}},'host.stop':{support:'supported',availability:{state:'ready'}},'host.restart':{support:'unsupported',reason:'No restart.'},'agent.providers':{support:'unsupported',reason:'Connect first.'}},
@@ -1452,7 +1454,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		);
 		expect(await evaluate("document.querySelector('#apply-instance-restore').disabled")).toBe(true);
 		await evaluate(
-			`(async()=>{const {state}=await import('./state.js');const {showHostingChooser}=await import('./hosting.js');window.connectionQa.connections.push({id:'cloud',kind:'azure-container-apps',label:'Cloud test',subscriptionId:'synthetic',resourceGroup:'agents'});state.api.hostingFeatures=async()=>({installation:false});state.api.hostingInstances=async()=>[];await showHostingChooser('cloud');})()`
+			`(async()=>{const {state}=await import('./state.js');const {showHostingChooser}=await import('./hosting.js');window.connectionQa.connections.push({id:'cloud',kind:'azure-container-apps',label:'Cloud test',subscriptionId:'synthetic',resourceGroup:'agents'});state.api.hostingFeatures=async()=>({installation:false,directory:false});state.api.hostingInstances=async()=>[];await showHostingChooser('cloud');})()`
 		);
 		expect(
 			await evaluate(
@@ -1461,6 +1463,172 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		).toBe(true);
 		expect(await evaluate("document.querySelector('#hosting-creation-help').hidden")).toBe(false);
 		await capture('instances-cloud-creation-unavailable.png');
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1060,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js'); const {showHostingChooser}=await import('./hosting.js');
+			window.cloudInstallQa={previews:[],installs:[],connections:[]};
+			state.api.hostingFeatures=async()=>({installation:true,directory:false});
+			state.api.provisioningOptions=async()=>({kind:'azure-container-apps',location:'centralus',timezone:'America/Chicago',image:'fwdslsh/fhold-assistant:0.4.1001',environments:[],storageAccounts:[]});
+			state.api.provisioningPreview=async input=>{window.cloudInstallQa.previews.push(input);return {ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/synthetic/resourceGroups/agents/providers/Microsoft.App/containerApps/personal-agent'},image:input.request.image,summary:'Install the selected assistant with private Blob recovery.',resources:[{name:'assistant-environment',type:'Container Apps environment',action:'create'},{name:'assistantstore',type:'Storage account',action:'create'}],warnings:['Shared project folders are protected independently. Azure usage may incur charges.']};};
+			state.api.provisioningInstall=async input=>{window.cloudInstallQa.installs.push(input);return {ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource/agent'},state:'unknown',reference:'synthetic-native-operation',step:'deployment',message:'Inspect the accepted native operation before continuing.'};};
+			await showHostingChooser('cloud');
+		})()`);
+		expect(await evaluate("document.querySelector('#hosting-install').disabled")).toBe(false);
+		expect(await evaluate("document.querySelector('#hosting-import').disabled")).toBe(true);
+		await click('#hosting-install');
+		expect(await evaluate("document.querySelector('#install-environment-name').value")).toMatch(
+			/-env$/
+		);
+		expect(await evaluate("document.querySelector('#install-storage-name').value")).toMatch(
+			/^[a-z0-9]{3,24}$/
+		);
+		await evaluate("document.querySelector('#install-advanced').open=false");
+		await click('#install');
+		expect(await evaluate('window.cloudInstallQa.previews.length')).toBe(1);
+		expect(await evaluate('window.cloudInstallQa.installs.length')).toBe(0);
+		await capture('instances-cloud-default-review-desktop.png');
+		await value('#install-environment-name', 'assistant-environment');
+		await evaluate("document.querySelector('#install-advanced').open=true");
+		await value('#install-storage-name', 'assistantstore');
+		await value('#install-mounts', 'project-files /work/project');
+		await capture('instances-cloud-install-desktop.png');
+		await click('#install');
+		expect(await evaluate('window.cloudInstallQa.previews.length')).toBe(2);
+		expect(await evaluate('window.cloudInstallQa.installs.length')).toBe(0);
+		expect(await evaluate("document.querySelector('#install-review').hidden")).toBe(false);
+		await capture('instances-cloud-review-desktop.png');
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 320,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
+		await capture('instances-cloud-review-320.png');
+		await click('#install-cloud-confirm');
+		await click('#install');
+		expect(await evaluate('window.cloudInstallQa.installs.length')).toBe(1);
+		expect(
+			await evaluate("document.querySelector('#install-continuation-reference').textContent")
+		).toBe('synthetic-native-operation');
+		expect(await evaluate("document.querySelector('#install').disabled")).toBe(true);
+		await capture('instances-cloud-progress-320.png');
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1060,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
+			window.cloudAccessQa={...window.overviewQa,identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource/agent'},name:'Cloud assistant',location:'/resource/agent'},docker:undefined,lifecycle:{state:'known',value:'deployed'},agent:{access:{state:'not-inspected',reason:'Connect explicitly'}},operations:{...window.overviewQa.operations,'agent.connect':{support:'supported',availability:{state:'ready'},input:{acceptsPassword:true,requiresPassword:false}}}};
+			state.api.snapshot=async()=>window.cloudAccessQa;
+			state.api.connectAgent=async input=>{window.cloudInstallQa.connections.push(input);if(!input.password)throw Error('Azure secret access is unavailable. Enter the native OpenCode password.');return {endpoint:'https://private.example.test',username:'custom-user'};};
+			state.awaitingSetupFinish=true; render(window.cloudAccessQa);
+		})()`);
+		await click('#provider-connect-agent');
+		expect(await evaluate("document.querySelector('#native-agent-password-field').hidden")).toBe(
+			false
+		);
+		await value('#native-agent-password', 'synthetic-private-password');
+		await click('#connect-native-agent');
+		expect(await evaluate("document.querySelector('#native-agent-password').value")).toBe('');
+		expect(await evaluate("import('./state.js').then(({state})=>state.awaitingSetupFinish)")).toBe(
+			true
+		);
+		expect(await evaluate('window.cloudInstallQa.connections')).toEqual([
+			{},
+			{ password: 'synthetic-private-password' }
+		]);
+		await capture('instances-cloud-connected-awaiting-verification.png');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
+			const {bindConfigurationEvents}=await import('./configuration.js');
+			window.cloudDraftQa={prepared:[],applied:0,confirmations:[],settings:{containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],availability:'always',environment:{FH_TIMEZONE:'America/Chicago',FH_SCHEDULER_ENABLED:'1',FH_CLAUDE_REMOTE:'0',FH_CODEX_REMOTE:'0'}}};
+			state.awaitingSetupFinish=false; state.currentView='system';
+			window.cloudAccessQa={...window.cloudAccessQa,operations:{...window.cloudAccessQa.operations,...Object.fromEntries(['inspect','prepare','apply','discard'].map(name=>['host.deployment.'+name,{support:'supported',availability:{state:'ready'}}]))}};
+			state.api.deploymentSettings=async()=>window.cloudDraftQa.settings;
+			state.api.prepareDeployment=async patch=>{window.cloudDraftQa.prepared.push(patch);window.cloudDraftQa.settings={...window.cloudDraftQa.settings,pending:patch};window.cloudAccessQa={...window.cloudAccessQa,pendingChanges:{state:'known',value:{pending:true,detail:'Deployment changes are saved locally. Apply them when you are ready to interrupt the current instance.'}}};return window.cloudDraftQa.settings;};
+			state.api.applyDeployment=async()=>{window.cloudDraftQa.applied++;throw Error('Later must not apply cloud changes');};
+			state.api.confirmRestart=async action=>{window.cloudDraftQa.confirmations.push(action);return false;};
+			bindConfigurationEvents();render(window.cloudAccessQa);
+			document.querySelector('#deployment-settings').open=true;
+		})()`);
+		await click('#load-deployment-settings');
+		await value('#deployment-availability', 'on-demand');
+		await value('#deployment-timezone', 'America/New_York');
+		await click('#deployment-edit-form button[type="submit"]');
+		expect(await evaluate('window.cloudDraftQa.prepared')).toEqual([
+			{ availability: 'on-demand', environment: { FH_TIMEZONE: 'America/New_York' } }
+		]);
+		expect(parseDeploymentPatch(await evaluate('window.cloudDraftQa.prepared[0]'))).toMatchObject({
+			environment: { FH_TIMEZONE: 'America/New_York' }
+		});
+		expect(await evaluate('window.cloudDraftQa.confirmations')).toEqual(['apply']);
+		expect(await evaluate('window.cloudDraftQa.applied')).toBe(0);
+		expect(await evaluate("document.querySelector('#pending-restart').hidden")).toBe(false);
+		await evaluate('window.scrollTo(0,0)');
+		await capture('aca-pending-apply-later-desktop.png');
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 320,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
+		await capture('aca-pending-apply-later-320.png');
+		for (const kind of ['local-docker', 'ssh-docker']) {
+			await command('Emulation.setDeviceMetricsOverride', {
+				width: 1060,
+				height: 900,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+			await evaluate(`(async()=>{
+				const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
+				window.cloudDraftQa.prepared=[];window.cloudDraftQa.confirmations=[];
+				window.cloudDraftQa.settings={containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],environment:{FH_TIMEZONE:'America/Chicago',FH_CLAUDE_REMOTE:'1',FH_CODEX_REMOTE:'1'},unavailable:{availability:'Automatic scale-to-zero is not available on this host. Use Start and Stop.',FH_SCHEDULER_ENABLED:'Scheduling overrides are configured in this instance’s custom Compose file.'}};
+				window.cloudAccessQa={...window.cloudAccessQa,identity:{name:'Test assistant',location:'/synthetic/instance',ref:{kind:${JSON.stringify(kind)},connectionId:'synthetic',homeDir:'/synthetic/instance',remoteHome:'/synthetic/instance'}}};
+				render(window.cloudAccessQa);document.querySelector('#deployment-settings').open=true;
+			})()`);
+			await click('#load-deployment-settings');
+			expect(await evaluate("document.querySelector('#deployment-fields').disabled")).toBe(false);
+			expect(await evaluate("document.querySelector('#deployment-schedule').disabled")).toBe(true);
+			expect(await evaluate("document.querySelector('#deployment-availability').disabled")).toBe(
+				true
+			);
+			await value('#deployment-timezone', 'Asia/Tokyo');
+			await value('#deployment-claude', '0');
+			await click('#deployment-edit-form button[type="submit"]');
+			expect(parseDeploymentPatch(await evaluate('window.cloudDraftQa.prepared[0]'))).toEqual({
+				environment: { FH_TIMEZONE: 'Asia/Tokyo', FH_CLAUDE_REMOTE: '0' }
+			});
+			expect(await evaluate('window.cloudDraftQa.confirmations')).toEqual(['apply']);
+			expect(await evaluate('window.cloudDraftQa.applied')).toBe(0);
+			expect(await evaluate("document.querySelector('#apply-pending-restart').textContent")).toBe(
+				'Apply changes'
+			);
+			await capture(`${kind}-deployment-settings-desktop.png`);
+			await command('Emulation.setDeviceMetricsOverride', {
+				width: 320,
+				height: 900,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+			expect(
+				await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+			).toBe(true);
+			await capture(`${kind}-deployment-settings-320.png`);
+		}
 		await evaluate(
 			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
 		);

@@ -1,4 +1,6 @@
 import { defineCommand } from 'citty';
+import { readFileSync } from 'node:fs';
+import { parseArgs } from 'node:util';
 import {
 	configureGuardianModeratorModel,
 	createFholdState,
@@ -6,13 +8,75 @@ import {
 	readStackConfig,
 	requireInstall,
 	testAssistantReadiness,
-	waitForAssistant
+	waitForAssistant,
+	invokeOperation,
+	type ComposedInstanceSession
 } from '@fhold/lib';
 
 import { defineAction } from '../lib/action.js';
 import { runRestartAction, runStartAction } from './lifecycle.js';
 import { runNativeProviderLogin } from './provider.js';
 import { enableRemote } from './remote.js';
+import { runSessionProviderCommand } from '../lib/session-provider-command.js';
+
+/** The same native Connect/Ready steps, without treating a hosted target as a folder. */
+export async function completeHostedSetup(
+	session: ComposedInstanceSession,
+	argv: string[],
+	write: (text: string) => void = console.log
+): Promise<void> {
+	const { values } = parseArgs({
+		args: argv,
+		strict: true,
+		options: {
+			provider: { type: 'string' },
+			method: { type: 'string' },
+			model: { type: 'string' },
+			'password-file': { type: 'string' }
+		}
+	});
+	const passwordFile = values['password-file'];
+	let password: string | undefined;
+	if (passwordFile) {
+		password = readFileSync(passwordFile === '-' ? 0 : passwordFile, 'utf8').replace(
+			/[\r\n]+$/,
+			''
+		);
+		if (!password || /[\r\n]/.test(password))
+			throw new Error('Native password input must contain one nonempty line.');
+	}
+	await invokeOperation(session.agent.connect, password ? { password } : {});
+	const request = {
+		...(values.provider ? { provider: values.provider } : {}),
+		...(values.model ? { model: values.model } : {})
+	};
+	let readiness = await invokeOperation(session.agent.readiness, request);
+	if (!readiness.ok && values.provider) {
+		if (passwordFile === '-')
+			throw new Error(
+				`Provider readiness failed: ${readiness.error}. Use provider login with a private password file so native sign-in can continue.`
+			);
+		await runSessionProviderCommand(
+			session,
+			[
+				'login',
+				values.provider,
+				...(values.method ? ['--method', values.method] : []),
+				...(passwordFile ? ['--password-file', passwordFile] : [])
+			],
+			write
+		);
+		readiness = await invokeOperation(session.agent.readiness, request);
+	}
+	if (!readiness.ok)
+		throw new Error(
+			`Provider readiness failed: ${readiness.error}. Use provider login or provider key, then repeat setup.`
+		);
+	write(JSON.stringify(readiness, null, 2));
+	write(
+		'Verified a real native Assistant response. Native worker sign-in and client consent remain separate.'
+	);
+}
 
 export async function completeSetup(options: {
 	homeDir?: string;

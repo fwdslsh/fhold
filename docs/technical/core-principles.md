@@ -156,11 +156,16 @@ runtime contracts, directory/Blob transports, product tests and reusable image
 smokes. External tooling consumes the shipped image and documented interfaces
 without importing internal source modules.
 CLI/Admin additionally share a small host-side hosting-provider boundary: implicit
-local Docker, native SSH to the installed Docker-host CLI, and an optional,
-experimental native Azure CLI adapter for existing Container Apps. It creates no
-cloud resources and owns no custom deployment configuration. Connection metadata
+local Docker, native SSH with the distribution's bundled private helper, and an
+experimental Azure adapter using workstation Azure credentials and native SDKs.
+Connection-scoped provisioning installs assistants; instance-scoped deployment
+operations stage and apply narrow changes. Standard ARM templates are bundled
+with CLI/Admin, not downloaded or compiled on demand. Connection metadata
 and recents are shared in the host's `~/.config/fhold/hosting.json` (or XDG root),
-not copied into instance intent or backups. Remote targets never fall back to
+not copied into instance intent or backups. Small target-bound deployment drafts
+and operation continuations share that private preference file; Azure remains
+authoritative and credentials/resource-response bodies are not persisted there.
+Remote targets never fall back to
 local files/containers; unsupported operations show a specific explanation.
 CLI and Admin consume one composed instance session with separately typed host,
 agent, app and data operations. Ordinary pages do not branch on hosting provider
@@ -183,10 +188,10 @@ native transport and Docker host primitives sit below hosting and management.
 CLI `connect` defaults to MCP consistently and uses advertised route metadata to
 explain an OpenCode-only connection before requesting native credentials.
 Native host authentication stays with SSH/Azure. A fixed SSH command receives
-typed JSON and uses the native PATH plus standard `~/.local/bin`. Discovery reads
-managed Compose labels and bounded root/child/home candidates. Host-CLI repair is
-explicitly confirmed, checksum-verified and atomic; it never changes Docker,
-SSH trust or instance files. Connection editing/removal affects metadata only,
+typed JSON and uses the exact bundled content-addressed executable. Discovery reads
+managed Compose labels and bounded root/child/home candidates. Helper preparation
+never replaces an operator-installed CLI, changes Docker, SSH trust or instance
+files. Connection editing/removal affects metadata only,
 clearing scoped recents on endpoint changes rather than silently retargeting them.
 Admin's own Settings page owns host-connection management and app-update
 preferences. These remain accessible without a selected or healthy instance.
@@ -208,13 +213,16 @@ typed JSON on stdin; no shell-interpolated path, arbitrary exec RPC, extra servi
 container manager credential or runtime management port is added. Native Docker
 subprocesses pin a local socket from the selected native context, never send local
 bind paths to a remote daemon or mutate the global context. ACA reports platform
-observations and accepted lifecycle requests honestly, separately from readiness,
-replica drain, runtime recovery ownership and external deployment intent.
+observations and native operation completion separately from agent readiness,
+replica drain and runtime recovery ownership.
 Azure onboarding uses native browser sign-in and read-only account/scope choices.
 The adapter owns scoped diagnostics, logs and its explicit interactive console.
-Confirmed restart addresses the one active revision through Azure's native API;
-it does not apply Docker intent, edit deployment templates or establish recovery
-completion. Native management credentials stay on the user's computer, and
+Confirmed restart follows native Stop completion before Start. Deployment changes
+re-read the full selected resource and preserve unrelated containers, settings,
+mounts, identities and secrets. An intentionally stopped app stays stopped after
+update. Unknown mutation outcomes are inspected, not blindly replayed; confirmed
+native failures remain correctable. No external-manager detection or takeover
+approval is introduced. Native management credentials stay on the user's computer, and
 status/discovery never contact the agent or implicitly wake an idle replica.
 Provider capabilities are named operations; diagnostics and optional onboarding,
 console and file-management interfaces remain adapter-owned. Common CLI/Admin
@@ -226,6 +234,18 @@ shown as absent or off. Cloud observations use the ordinary service inventory an
 System logs/details, without a separate hosted-instance page or a fake StackConfig.
 No unsupported action falls back to local files, credentials or containers, and
 viewing these pages does not wake an idle agent.
+System's shared Deployment settings editor uses the same inspect/prepare/apply/
+discard operations for local Docker, SSH Docker and ACA. Docker maps the narrow
+draft to existing StackConfig intent through the same native management port;
+it does not create an overlay or a cloud-shaped local configuration. Drafts stay
+in the existing private, target-bound hosting preferences until confirmed apply.
+Unsupported individual fields remain disabled with reasons. The persistent
+action is always Apply changes; host operation effect metadata supplies the
+confirmation detail, not provider-specific page logic. A Docker apply uses its
+existing start/recreate path, while ACA preserves final stopped intent. Failed
+application retains pending state; discarding a draft never reverses already
+saved instance settings. All deployment timezone input uses FH_TIMEZONE; only
+the native ACA template adapter translates it to the image's TZ variable.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped
@@ -327,8 +347,11 @@ Admin's Open OpenCode action uses native `POST /api/pair` and opens its single-u
 and the browser session cookie. The long-lived password stays in the management
 process, not the URL, renderer or clipboard. Local Docker and SSH use the selected
 instance's existing credential and route; SSH keeps its existing session-scoped
-forward. HTTPS-hosted agents use the explicit native connection established in
-Admin, without fetching cloud secrets or assuming Azure login is OpenCode login.
+forward. HTTPS-hosted agents resolve the selected deployment's native credential
+on explicit access when Azure permissions allow; otherwise they accept private
+native password entry. An unavoidable ARM secret collection stays private to the
+management process and only the selected reference is used. Azure login itself
+is not OpenCode login.
 Passive inspection never creates a pairing code. No proxy, new ingress, runtime
 patch, auth bypass or deployment restart is needed.
 
@@ -522,8 +545,12 @@ seeding or any AKM/native writer, takes bounded SQLite-native snapshots on its
 own timer, and publishes complete immutable generations under ownership and a
 conditional descriptor. Live SQLite stays on local storage. Local or mounted
 network directories hold artifacts, subject to coherent atomic filesystem
-semantics; object-storage transports share the same recovery core. No deployment,
-wake, scale, cloud-management tooling, extra service or mandatory sidecar is added.
+semantics; object-storage transports share the same recovery core. The runtime
+includes no deployment, wake, scale or cloud-management tooling, extra service or
+mandatory sidecar. Host-side ACA provisioning uses that unchanged published image
+in a finite initialization Job, then deploys the assistant. Live files use its
+owned writable container directories; Blob holds checkpoints, not live SQLite.
+Optional Files mounts are independent storage with explicit coverage exclusions.
 
 One optional externally supplied `FH_RECOVERY_INCLUDE_FILE` extends the native
 catalog with literal absolute file/directory paths and registered SQLite files.
@@ -532,9 +559,9 @@ Restore applies the current selection without writing newly excluded or unselect
 paths; the next checkpoint records the edited coverage. No new namespace is
 required for coverage edits. Lists have no fixed entry cap, but all existing
 size/count/deadline, link, private-state and destination boundaries still apply.
-CLI/Admin expose the same generic settings through StackConfig and an operator
-policy file, not another backup engine, format, service, plugin registry or cloud
-management layer. Saving is deferred. Initialization/offline restore require
+CLI/Admin expose the same generic settings through Docker intent or the selected
+host's deployment binding, not another backup engine, format or runtime service.
+Saving is deferred. Initialization/offline restore require
 confirmation and stopped local writers; status/coverage inspection are read-only.
 Host tools and the image share the selection normalizer. Blob credentials are
 private files granted only to Assistant, never environment values or portable

@@ -172,7 +172,7 @@ export function showView(name, options = {}) {
 		state.currentSnapshot?.lifecycle?.state === 'known'
 			? state.currentSnapshot.lifecycle.value
 			: undefined;
-	const ready = lifecycle === 'ready' || lifecycle === 'externally-managed';
+	const ready = lifecycle === 'ready' || lifecycle === 'deployed';
 	if (!ready && name !== 'provider') return;
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;

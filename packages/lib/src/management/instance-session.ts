@@ -237,7 +237,7 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 				? unavailableLifecycle()
 				: (application.lifecycle ?? {
 						state: 'known' as const,
-						value: 'externally-managed' as const,
+						value: 'deployed' as const,
 						observedAt
 					});
 			const docker = unavailable ? undefined : application.docker;

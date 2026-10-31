@@ -25,6 +25,10 @@
     "directory": "packages/lib"
   },
   "dependencies": {
+    "@azure/arm-appcontainers": "4.0.0",
+    "@azure/arm-resources": "8.0.0",
+    "@azure/arm-resourcesdeployments": "2.0.0",
+    "@azure/identity": "4.14.1",
     "tar": "^7.5.22",
     "jsonc-parser": "^3.3.1"
   },

@@ -204,14 +204,16 @@ export function renderConnectionDetails(snapshot) {
 	// intentionally cleared on every render and never enters drafts or recents.
 	byId('native-agent-connect').hidden =
 		(snapshot.agent?.access?.state === 'known' &&
-			!snapshot.operations?.['agent.connect']?.input?.requiresPassword) ||
+			!snapshot.operations?.['agent.connect']?.input?.requiresPassword &&
+			!snapshot.operations?.['agent.connect']?.input?.acceptsPassword) ||
 		!ready('agent.connect');
 	setText(
 		'connect-native-agent',
 		snapshot.agent?.access?.state === 'known' ? 'Reconnect to agent' : 'Connect to agent'
 	);
 	byId('native-agent-password-field').hidden =
-		snapshot.operations?.['agent.connect']?.input?.requiresPassword !== true;
+		snapshot.operations?.['agent.connect']?.input?.requiresPassword !== true &&
+		snapshot.operations?.['agent.connect']?.input?.acceptsPassword !== true;
 	byId('provider-agent-access').hidden =
 		snapshot.agent?.access?.state === 'known' || !ready('agent.connect');
 	for (const id of ['load-direct-password', 'copy-direct-password', 'show-direct-password'])
@@ -262,6 +264,8 @@ export function renderNetworkDetails(snapshot) {
 async function connectNativeAgent() {
 	const target = JSON.stringify(state.currentSnapshot?.identity?.ref);
 	const password = byId('native-agent-password').value;
+	byId('native-agent-password').value = '';
+	const setup = state.awaitingSetupFinish;
 	try {
 		const connected = await operation(
 			'Connecting to agent',
@@ -273,7 +277,13 @@ async function connectNativeAgent() {
 			const { resetProviderState } = await import('./providers.js');
 			if (JSON.stringify(state.currentSnapshot?.identity?.ref) !== target) return undefined;
 			resetProviderState();
+			state.awaitingSetupFinish = setup;
 			await import('./snapshot.js').then(({ refresh }) => refresh());
+		} else if (state.currentSnapshot?.operations?.['agent.connect']?.input?.acceptsPassword) {
+			showConnectionApp('opencode');
+			byId('native-agent-connect').hidden = false;
+			byId('native-agent-password-field').hidden = false;
+			byId('native-agent-password').focus();
 		}
 		return JSON.stringify(state.currentSnapshot?.identity?.ref) === target ? connected : undefined;
 	} finally {
@@ -308,12 +318,12 @@ export function bindConnectionsEvents() {
 	for (const id of ['gateway', 'discord', 'slack'])
 		byId(id).addEventListener('change', updateConditionalConnections);
 
-	byId('connect-native-agent').addEventListener('click', () => void connectNativeAgent());
+	byId('connect-native-agent').addEventListener('click', () => connectNativeAgent());
 	byId('provider-connect-agent').addEventListener('click', () => {
 		if (state.currentSnapshot?.operations?.['agent.connect']?.input?.requiresPassword) {
 			showConnectionApp('opencode');
 			byId('native-agent-password').focus();
-		} else void connectNativeAgent();
+		} else return connectNativeAgent();
 	});
 	for (const id of ['overview-opencode-link', 'direct-url', 'assistant-url-detail']) {
 		byId(id).addEventListener('click', async (event) => {
@@ -329,7 +339,21 @@ export function bindConnectionsEvents() {
 				notice('Connect this agent once below, then Open OpenCode will sign your browser in.');
 				return;
 			}
-			await operation('Opening OpenCode', () => state.api.openOpenCode(), 'OpenCode opened.');
+			let opened = false;
+			await operation(
+				'Opening OpenCode',
+				async () => {
+					await state.api.openOpenCode();
+					opened = true;
+				},
+				'OpenCode opened.'
+			);
+			if (!opened && state.currentSnapshot?.operations?.['agent.connect']?.input?.acceptsPassword) {
+				showConnectionApp('opencode');
+				byId('native-agent-connect').hidden = false;
+				byId('native-agent-password-field').hidden = false;
+				byId('native-agent-password').focus();
+			}
 		});
 	}
 

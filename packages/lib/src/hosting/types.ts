@@ -1,4 +1,8 @@
-import type { InstanceSessionBindings } from '../management/contracts.js';
+import type {
+	InstanceSessionBindings,
+	DeploymentOperations,
+	ProvisioningOperations
+} from '../management/contracts.js';
 import type {
 	DirectoryListing,
 	HostingAction,
@@ -47,6 +51,7 @@ export type ConnectionSetup = {
 	choices(field: string, values?: Record<string, string>): Promise<HostingChoice[]>;
 };
 export interface InstanceSession {
+	readonly deployment?: DeploymentOperations;
 	readonly ref: InstanceRef;
 	/** Static adapter semantics; they do not depend on a prior status read. */
 	readonly actionEffects: Record<HostingAction, HostingActionEffect>;
@@ -65,6 +70,7 @@ export interface InstanceSession {
 	}): Omit<InstanceSessionBindings, 'ref' | 'host' | 'inspectHost'>;
 }
 export interface HostingProvider {
+	provisioning?: ProvisioningOperations;
 	/** Provider-specific host setup and diagnostics; discovery itself is read-only. */
 	check?(): Promise<ConnectionCheck>;
 	readonly emptyHint?: string;
@@ -104,6 +110,6 @@ export function instanceKey(ref: InstanceRef): string {
 			? ref.homeDir
 			: ref.kind === 'ssh-docker'
 				? ref.remoteHome
-				: ref.resourceId
+				: ref.resourceId.toLowerCase()
 	]);
 }

@@ -12,6 +12,7 @@ import {
 	parseLegacyRecoveryOperation,
 	parseOperationInput as parseInput,
 	parseRequestContext as confirmationContext,
+	parseProvisioningRequest,
 	type ComposedInstanceSession
 } from '@fhold/lib';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
@@ -122,10 +123,22 @@ function requireAdminSender(event: IpcMainInvokeEvent): void {
 export async function adminSnapshot(): Promise<AdminSnapshot> {
 	return session().inspect();
 }
-export async function runAdminAction(action: StackAction): Promise<AdminSnapshot> {
-	if (action === 'restart') await invoke(session().host.restart, undefined, { confirmed: true });
-	else await invoke(session().host[action], undefined, { confirmed: true });
-	return adminSnapshot();
+export async function runAdminAction(action: StackAction) {
+	const result =
+		action === 'restart'
+			? await invoke(session().host.restart, undefined, { confirmed: true })
+			: await invoke(session().host[action], undefined, { confirmed: true });
+	const outcome =
+		result.state === 'completed'
+			? result.result.operation || {
+					state: 'completed' as const,
+					step: action,
+					message: result.result.message
+				}
+			: result.state === 'accepted'
+				? { state: 'submitted' as const, step: action, reference: result.reference }
+				: { state: result.state, step: action, message: result.reason };
+	return { snapshot: await adminSnapshot(), outcome };
 }
 
 export function registerAdminIpc(): void {
@@ -228,8 +241,65 @@ export function registerAdminIpc(): void {
 	ipcMain.handle(ADMIN_CHANNELS.hostingFeatures, (event, id: string) => {
 		requireAdminSender(event);
 		const provider = hostingProvider(instances.hosting.connection(id));
-		return { installation: !!provider.installation, emptyHint: provider.emptyHint };
+		return {
+			installation: !!provider.provisioning,
+			directory: !!provider.installation,
+			emptyHint: provider.emptyHint
+		};
 	});
+	ipcMain.handle(ADMIN_CHANNELS.provisioningOptions, (event, id: unknown) => {
+		requireAdminSender(event);
+		if (typeof id !== 'string') throw new Error('Choose a hosting connection.');
+		return instances.runConnection(() => {
+			const provisioning = hostingProvider(instances.hosting.connection(id)).provisioning;
+			if (!provisioning) throw new Error('This connection does not support installation.');
+			return invoke(provisioning.options, undefined);
+		});
+	});
+	for (const action of ['preview', 'install', 'resume'] as const) {
+		const channel =
+			action === 'preview'
+				? ADMIN_CHANNELS.provisioningPreview
+				: action === 'install'
+					? ADMIN_CHANNELS.provisioningInstall
+					: ADMIN_CHANNELS.provisioningResume;
+		ipcMain.handle(channel, (event, value: unknown) => {
+			requireAdminSender(event);
+			if (!value || typeof value !== 'object' || Array.isArray(value))
+				throw new Error('Choose an installation request.');
+			const input = value as Record<string, unknown>;
+			if (typeof input.connectionId !== 'string') throw new Error('Choose a hosting connection.');
+			const provisioning = hostingProvider(
+				instances.hosting.connection(input.connectionId)
+			).provisioning;
+			if (!provisioning) throw new Error('This connection does not support installation.');
+			return instances.runConnection(async () => {
+				if (action === 'resume') {
+					if (typeof input.reference !== 'string' || !input.reference.trim())
+						throw new Error('Choose the saved installation reference.');
+					if (
+						input.retryFailedStep !== undefined &&
+						typeof input.retryFailedStep !== 'boolean'
+					)
+						throw new Error('Choose whether to retry the failed installation step.');
+					return invoke(
+						provisioning.resume,
+						{
+							reference: input.reference,
+							...(input.retryFailedStep === true
+								? { retryFailedStep: true }
+								: {})
+						},
+						confirmationContext(value)
+					);
+				}
+				const request = parseProvisioningRequest(input.request);
+				return action === 'preview'
+					? invoke(provisioning.preview, request)
+					: invoke(provisioning.install, request, confirmationContext(value));
+			});
+		});
+	}
 	ipcMain.handle(ADMIN_CHANNELS.hostingSetup, (event, value: unknown) => {
 		requireAdminSender(event);
 		return instances.runConnection(async () => {
@@ -420,21 +490,57 @@ export function registerAdminIpc(): void {
 				return active.inspect();
 		}
 	});
-	handleAdmin(ADMIN_CHANNELS.update, (_event, value) => {
-		const operation = session().docker?.update;
-		if (!operation) throw new Error('This instance does not support image updates.');
-		return invoke(operation, parseInput('docker.update', value ?? {}), { confirmed: true }).then(
-			() => adminSnapshot()
+	handleAdmin(ADMIN_CHANNELS.update, async (_event, value) => {
+		const outcome = await invoke(
+			session().host.deployment.update,
+			parseInput('host.deployment.update', value ?? {}),
+			confirmationContext(value)
 		);
+		return { snapshot: await adminSnapshot(), outcome };
 	});
+	handleAdmin(ADMIN_CHANNELS.deploymentSettings, () =>
+		invoke(session().host.deployment.inspect, undefined)
+	);
+	handleAdmin(ADMIN_CHANNELS.prepareDeployment, (_event, value) =>
+		invoke(session().host.deployment.prepare, parseInput('host.deployment.prepare', value))
+	);
+	handleAdmin(ADMIN_CHANNELS.applyDeployment, async (_event, value) => {
+		const outcome = await invoke(
+			session().host.deployment.apply,
+			undefined,
+			confirmationContext(value)
+		);
+		return { snapshot: await adminSnapshot(), outcome };
+	});
+	handleAdmin(ADMIN_CHANNELS.discardDeployment, () =>
+		invoke(session().host.deployment.discard, undefined)
+	);
 	ipcMain.handle(ADMIN_CHANNELS.install, (event, config: unknown, automaticPorts: unknown) => {
 		requireAdminSender(event);
 		return instances.run(async () => {
-			const operation = session().docker?.install;
-			if (!operation) throw new Error('This instance does not support local installation.');
-			await invoke(operation, parseInput('docker.install', { config, automaticPorts }), {
-				confirmed: true
-			});
+			const ref = session().ref;
+			if (ref.kind === 'azure-container-apps')
+				throw new Error('Choose cloud placement before installation.');
+			const provisioning = hostingProvider(
+				instances.hosting.connection(ref.connectionId)
+			).provisioning;
+			if (!provisioning) throw new Error('This connection does not support installation.');
+			const parsed = parseInput('docker.install', { config, automaticPorts });
+			const result = await invoke(
+				provisioning.install,
+				{
+					kind: 'directory',
+					name: instances.setupName || parsed.config.deployment.projectName,
+					directory: ref.kind === 'local-docker' ? ref.homeDir : ref.remoteHome,
+					config: parsed.config,
+					automaticPorts: parsed.automaticPorts
+				},
+				{
+					confirmed: true
+				}
+			);
+			if (result.state !== 'completed')
+				throw new Error(result.message || `Installation ${result.state}: ${result.step}`);
 			return adminSnapshot();
 		});
 	});
@@ -587,7 +693,9 @@ export function registerAdminIpc(): void {
 		const operation =
 			action === 'start' || action === 'stop' || action === 'restart'
 				? session().host[action]
-				: undefined;
+				: action === 'update' || action === 'apply'
+					? session().host.deployment[action]
+					: undefined;
 		const effect = operation?.support === 'supported' ? operation.effect : undefined;
 		const options = {
 			...interruptionPrompt(action, effect),

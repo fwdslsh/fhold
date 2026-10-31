@@ -30,7 +30,7 @@ import {
 } from './ui.js';
 
 let statusReadInFlight = false;
-const lifecycle = (snapshot) => known(snapshot?.lifecycle) || 'externally-managed';
+const lifecycle = (snapshot) => known(snapshot?.lifecycle) || 'deployed';
 const instanceKey = (snapshot) => JSON.stringify(snapshot?.identity?.ref || null);
 
 export function render(snapshot, options = {}) {
@@ -39,7 +39,11 @@ export function render(snapshot, options = {}) {
 	const phase = lifecycle(snapshot);
 	state.currentSnapshot = snapshot;
 	state.currentConfig = snapshot.docker?.config || null;
-	if (previous && instanceKey(previous) !== instanceKey(snapshot)) resetProviderState();
+	if (previous && instanceKey(previous) !== instanceKey(snapshot)) {
+		resetProviderState();
+		state.deploymentSettings = null;
+		byId('deployment-edit-form').hidden = true;
+	}
 	state.renderingSnapshot = true;
 	if (
 		phase === 'not-installed' &&

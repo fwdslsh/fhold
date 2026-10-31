@@ -27,3 +27,4 @@ export {
 export { runHostingProcess } from '../control-plane/process.js';
 export { hostingMachineRequest } from './machine.js';
 export { checkHostingConnection } from './maintenance.js';
+export { parseProvisioningRequest, parseDeploymentPatch } from './provisioning.js';

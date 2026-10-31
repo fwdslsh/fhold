@@ -7,6 +7,10 @@ let tool;
 let running = false;
 let timer;
 let starting = false;
+// The initial private-PTY handshake is asynchronous. Keep a distinct flag so
+// Cancel becomes available only after the setup request exists; closing the
+// consent dialog before that remains a local, non-interrupting dismissal.
+let pendingStart = false;
 let connectionOnly = false;
 let recallOnly = false;
 let recallReview;
@@ -36,10 +40,10 @@ function renderRecallStatus(review, error) {
 	byId('codex-recall-guidance').textContent =
 		error ??
 		(review?.status === 'approval-needed'
-				? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
-				: review?.status === 'ready'
-					? 'Native approval was verified in this explicit review. Review again after a restart or hook changes.'
-					: 'Review AKM hooks here; no Codex command is needed. Start Assistant to check approval.');
+			? 'AKM hooks need approval or are partly disabled. Review to enable complete automatic recall.'
+			: review?.status === 'ready'
+				? 'Native approval was verified in this explicit review. Review again after a restart or hook changes.'
+				: 'Review AKM hooks here; no Codex command is needed. Start Assistant to check approval.');
 }
 
 export function renderRemoteStatus(snapshot) {
@@ -86,8 +90,7 @@ async function loadRecall() {
 		byId('remote-recall').disabled = false;
 		byId('remote-recall').required = recallOnly;
 		byId('remote-recall').checked = review.status === 'ready';
-		byId('remote-recall-disable').hidden =
-			!recallOnly || !review.hooks.some((h) => h.enabled);
+		byId('remote-recall-disable').hidden = !recallOnly || !review.hooks.some((h) => h.enabled);
 		byId('remote-begin').hidden = false;
 		byId('remote-begin').disabled = false;
 	} catch (error) {
@@ -299,6 +302,11 @@ export function bindRemoteEvents() {
 				renderRecallStatus(recallReview);
 				return;
 			}
+			pendingStart = !connectionOnly;
+			if (pendingStart) {
+				byId('remote-cancel').disabled = false;
+				byId('remote-cancel').textContent = 'Cancel setup';
+			}
 			const progress = await state.api.remote(
 				connectionOnly
 					? { action: 'connection', tool }
@@ -323,6 +331,7 @@ export function bindRemoteEvents() {
 				await loadRecall();
 			}
 		} finally {
+			pendingStart = false;
 			starting = false;
 			if (!running) setBusy(false);
 			if (!running) byId('remote-recall').disabled = !recallReview;
@@ -338,7 +347,20 @@ export function bindRemoteEvents() {
 		}
 	});
 	const cancel = async () => {
-		if (starting) return;
+		if (starting) {
+			if (!pendingStart) return;
+			byId('remote-cancel').disabled = true;
+			byId('remote-stage').textContent =
+				'Cancelling setup; the existing startup setting will be preserved…';
+			try {
+				await state.api.remote({ action: 'cancel', tool });
+			} catch (error) {
+				notice(message(error), 'error', { persist: true });
+			} finally {
+				byId('remote-cancel').disabled = false;
+			}
+			return;
+		}
 		clearTimeout(timer);
 		if (running) {
 			byId('remote-cancel').disabled = true;

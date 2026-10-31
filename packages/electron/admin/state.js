@@ -26,6 +26,10 @@ export function createAdminState() {
 		activeOAuth: null,
 		operationInFlight: false,
 		installConnection: null,
+		installOptions: null,
+		installPreview: null,
+		installContinuation: null,
+		deploymentSettings: null,
 		disabledButtons: [],
 		noticeTimer: undefined,
 		restorePreviewSignature: null,
@@ -44,6 +48,7 @@ export function createAdminState() {
 export const state = createAdminState();
 
 export const managedFormIds = [
+	'deployment-edit-form',
 	'mcp-connections-form',
 	'discord-connections-form',
 	'slack-connections-form',

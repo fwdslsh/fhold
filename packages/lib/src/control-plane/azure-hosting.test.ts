@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HostingPreferencesStore } from '../hosting/preferences.js';
+import type { AzureManagement } from '../hosting/azure-client.js';
+import {
+	azureContainerAppsProvider,
+	azureRecoveryInspectionEnvironment
+} from '../hosting/azure-container-apps.js';
 import { hostingConnectionSetup } from '../hosting/provider.js';
 import { checkHostingConnection } from '../hosting/maintenance.js';
 import { hostingFailure, type HostingProcess, type HostingTerminal } from './process.js';
@@ -15,10 +23,42 @@ const connection: Extract<HostingConnection, { kind: 'azure-container-apps' }> =
 };
 const resourceId = `/subscriptions/${subscriptionId}/resourceGroups/agents/providers/Microsoft.App/containerApps/agent`;
 const ref = { kind: 'azure-container-apps' as const, connectionId: 'azure', resourceId };
-function fixture(options: { many?: boolean; readFails?: boolean } = {}) {
+
+test('coverage inspection projects only native recovery inputs from the full deployment environment', () => {
+	const environment = azureRecoveryInspectionEnvironment({
+		properties: {
+			template: {
+				containers: [{
+					name: 'assistant',
+					image: 'fwdslsh/fhold-assistant:test',
+					env: [
+						{ name: 'FH_RECOVERY_URL', value: 'azblob://storage/checkpoints' },
+						{ name: 'FH_INSTANCE_ID', value: 'fixture' },
+						{ name: 'FH_RECOVERY_INCLUDE_FILE', value: '/run/recovery/include.json' },
+						{ name: 'FH_RECOVERY_INTERVAL_SECONDS', value: '60' },
+						{ name: 'TZ', value: 'America/Chicago' },
+						{ name: 'AZURE_CLIENT_ID', value: 'identity' },
+						{ name: 'AZURE_STORAGE_CONNECTION_STRING', value: 'private' },
+						{ name: 'OPENCODE_SERVER_PASSWORD', secretRef: 'native-password' }
+					]
+				}]
+			}
+		}
+	});
+	expect(environment).toEqual({
+		FH_RECOVERY_URL: 'azblob://storage/checkpoints',
+		FH_INSTANCE_ID: 'fixture',
+		FH_RECOVERY_INCLUDE_FILE: '/run/recovery/include.json',
+		FH_RECOVERY_INTERVAL_SECONDS: '60'
+	});
+});
+
+function fixture(options: { many?: boolean; readFails?: boolean; startFailsOnce?: boolean } = {}) {
 	const calls: string[][] = [];
 	const terminals: string[][] = [];
+	const native: string[] = [];
 	let restarted = false;
+	let stopped = false;
 	const run: HostingProcess = async (binary, args, nativeOptions) => {
 		expect(binary).toBe('az');
 		expect(nativeOptions?.env?.AZURE_EXTENSION_USE_DYNAMIC_INSTALL).toBe('no');
@@ -44,7 +84,7 @@ function fixture(options: { many?: boolean; readFails?: boolean } = {}) {
 			name: 'agent',
 			tags: { fhold: 'assistant' },
 			properties: {
-				runningStatus: 'Running',
+				runningStatus: stopped ? 'Stopped' : 'Running',
 				configuration: { ingress: { external: true, fqdn: 'agent.example.com' } },
 				template: { containers: [{ name: 'assistant', image: 'fwdslsh/fhold-assistant:test' }] }
 			}
@@ -55,7 +95,39 @@ function fixture(options: { many?: boolean; readFails?: boolean } = {}) {
 		expect(binary).toBe('az');
 		terminals.push(args);
 	};
-	return { calls, terminals, provider: azureContainerAppsProvider(connection, run, terminal) };
+	const management = {
+		lifecycle(_name: string, action: string, saved?: string) {
+			native.push(saved ? `resume-${action}` : action);
+			restarted = true;
+			return {
+				serialize: async () =>
+					JSON.stringify({
+						state: {
+							status: 'running',
+							config: {
+								initialRequestUrl: `https://management.azure.com${resourceId}/${action}`,
+								requestMethod: 'POST'
+							}
+						}
+					}),
+				pollUntilDone: async () => {
+					if (action === 'start' && options.startFailsOnce && !saved)
+						throw new Error('lost start response');
+					stopped = action === 'stop';
+				}
+			};
+		}
+	} as unknown as AzureManagement;
+	const preferences = new HostingPreferencesStore(
+		join(mkdtempSync(join(tmpdir(), 'fhold-azure-hosting-')), 'hosting.json')
+	);
+	preferences.saveConnection(connection);
+	return {
+		calls,
+		native,
+		terminals,
+		provider: azureContainerAppsProvider(connection, run, terminal, { management, preferences })
+	};
 }
 
 test('connection onboarding uses native browser auth and account choices without changing global scope', async () => {
@@ -137,25 +209,16 @@ test('discovery recognizes exact image repository names or explicit custom-image
 	]);
 });
 
-test('restart uses exactly one native revision request after confirmation and current revision review', async () => {
-	const { provider, calls } = fixture();
+test('restart waits for native Stop and Start after confirmation and current revision review', async () => {
+	const { provider, calls, native } = fixture();
 	const session = provider.open(ref);
 	await expect(session.operate('restart', false)).rejects.toThrow('Confirm');
 	expect(calls).toHaveLength(0);
 	const result = await session.operate('restart', true, { revision: 'agent--first' });
-	expect(result.pending).toBe(true);
-	expect(result.message).toContain('does not prove replica drain');
-	expect(calls.filter((args) => args.includes('restart'))).toHaveLength(1);
-	expect(calls.find((args) => args.includes('restart'))).toEqual(
-		expect.arrayContaining([
-			'revision',
-			'restart',
-			'--revision',
-			'agent--first',
-			'--subscription',
-			subscriptionId
-		])
-	);
+	expect(result.pending).toBe(false);
+	expect(result.message).toContain('Native readiness');
+	expect(native).toEqual(['stop', 'start']);
+	expect(calls.filter((args) => args.includes('restart'))).toHaveLength(0);
 	expect(calls.flat()).not.toContain('update');
 	expect(calls.flat()).not.toContain('deactivate');
 	const stale = fixture();
@@ -164,17 +227,28 @@ test('restart uses exactly one native revision request after confirmation and cu
 	).rejects.toThrow('no longer');
 	expect(stale.calls.filter((args) => args.includes('restart'))).toHaveLength(0);
 	const many = fixture({ many: true });
-	await expect(many.provider.open(ref).operate('restart', true)).rejects.toThrow(
-		'one active revision'
-	);
+	expect((await many.provider.open(ref).operate('restart', true)).pending).toBe(false);
+	expect(many.native).toEqual(['stop', 'start']);
 });
 
-test('accepted restart remains pending if the status read fails; no mutation replay', async () => {
-	const { provider, calls } = fixture({ readFails: true });
+test('completed native restart remains completed if follow-up inventory fails; no mutation replay', async () => {
+	const { provider, native } = fixture({ readFails: true });
 	const result = await provider.open(ref).operate('restart', true);
 	expect(result.snapshot.platformState).toBe('Status unavailable');
 	expect(result.snapshot.services).toEqual([]);
-	expect(calls.filter((args) => args.includes('restart'))).toHaveLength(1);
+	expect(result.pending).toBe(false);
+	expect(native).toEqual(['stop', 'start']);
+});
+
+test('public Restart remains available while its stopped target has a pending Start continuation', async () => {
+	const { provider, native } = fixture({ startFailsOnce: true });
+	const session = provider.open(ref);
+	const first = await session.operate('restart', true);
+	expect(first.operation?.state).toBe('unknown');
+	expect(first.snapshot.platformState).toBe('Stopped');
+	expect(first.snapshot.capabilities.restart.supported).toBe(true);
+	expect((await session.operate('restart', true)).operation?.state).toBe('completed');
+	expect(native).toEqual(['stop', 'start', 'resume-start']);
 });
 
 test('console is a native interactive action with explicit replica scope and no embedded shell script', async () => {

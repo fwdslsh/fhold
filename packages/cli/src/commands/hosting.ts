@@ -8,7 +8,9 @@ import {
 	LOCAL_CONNECTION,
 	hostingProvider,
 	hostingMachineRequest,
-	openInstanceSession
+	openInstanceSession,
+	invokeOperation,
+	parseProvisioningRequest
 } from '@fhold/lib';
 import { checkHostingConnection, connectionEndpoint } from '@fhold/lib';
 import { serveManagementSession } from '@fhold/lib';
@@ -28,6 +30,56 @@ const store = () => new HostingPreferencesStore();
 export const hostingCommand = defineCommand({
 	meta: { name: 'hosting', description: 'Manage host connections and discover their instances' },
 	subCommands: {
+		options: defineCommand({
+			meta: {
+				name: 'options',
+				description: 'Show installation defaults and native choices without creating resources'
+			},
+			args: { connection: { type: 'string', default: 'local' } },
+			async run({ args }) {
+				const provider = hostingProvider(store().connection(String(args.connection)));
+				if (!provider.provisioning)
+					throw new Error('This connection does not support installation.');
+				console.log(
+					JSON.stringify(await invokeOperation(provider.provisioning.options, undefined), null, 2)
+				);
+			}
+		}),
+		preview: provisioningCommand(false),
+		install: provisioningCommand(true),
+		resume: defineCommand({
+			meta: {
+				name: 'resume',
+				description: 'Inspect and continue an existing installation by its saved native reference'
+			},
+			args: {
+				connection: { type: 'string', default: 'local' },
+				reference: { type: 'string', required: true },
+				'retry-failed-step': {
+					type: 'boolean',
+					default: false,
+					description: 'Explicitly retry a confirmed failed installation step, after inspection'
+				},
+				confirm: { type: 'boolean', default: false }
+			},
+			async run({ args }) {
+				if (!args.confirm)
+					throw new Error('Continuing installation may create resources. Repeat with --confirm.');
+				const provider = hostingProvider(store().connection(String(args.connection)));
+				if (!provider.provisioning)
+					throw new Error('This connection does not support installation.');
+				const result = await invokeOperation(
+					provider.provisioning.resume,
+					{
+						reference: args.reference,
+						...(args['retry-failed-step'] ? { retryFailedStep: true } : {})
+					},
+					{ confirmed: true }
+				);
+				console.log(JSON.stringify(result, null, 2));
+				if (result.state === 'failed' || result.state === 'unknown') process.exitCode = 1;
+			}
+		}),
 		login: defineCommand({
 			meta: {
 				name: 'login',
@@ -229,6 +281,57 @@ export const hostingCommand = defineCommand({
 	}
 });
 
+function provisioningCommand(install: boolean) {
+	return defineCommand({
+		meta: {
+			name: install ? 'install' : 'preview',
+			description: install
+				? 'Install from a reviewed connection-scoped placement request'
+				: 'Preview exact installation resources without creating them'
+		},
+		args: {
+			connection: { type: 'string', default: 'local' },
+			input: {
+				type: 'string',
+				required: true,
+				description: 'JSON request file, or - for standard input; inspect hosting options first'
+			},
+			confirm: { type: 'boolean', default: false }
+		},
+		async run({ args }) {
+			if (install && !args.confirm)
+				throw new Error(
+					'Review with fhold hosting preview first, then repeat installation with --confirm. Cloud resources may incur charges.'
+				);
+			const provider = hostingProvider(store().connection(String(args.connection)));
+			if (!provider.provisioning) throw new Error('This connection does not support installation.');
+			const request = parseProvisioningRequest(
+				JSON.parse(readFileSync(args.input === '-' ? 0 : args.input, 'utf8'))
+			);
+			if (!install) {
+				console.log(
+					JSON.stringify(await invokeOperation(provider.provisioning.preview, request), null, 2)
+				);
+				return;
+			}
+			const result = await invokeOperation(provider.provisioning.install, request, {
+				confirmed: true
+			});
+			console.log(JSON.stringify(result, null, 2));
+			if (result.state === 'failed' || result.state === 'unknown') process.exitCode = 1;
+			if (result.state === 'completed') {
+				try {
+					store().remember(result.ref);
+				} catch {
+					console.warn(
+						'Installed, but recent connections could not be saved. Keep the returned instance reference.'
+					);
+				}
+			}
+		}
+	});
+}
+
 export async function runHostedCommand(
 	connectionId: string,
 	instance: string | undefined,
@@ -240,7 +343,8 @@ export async function runHostedCommand(
 		['status', 'logs', 'start', 'stop', 'restart', 'console', 'backup', 'restore'].includes(
 			action
 		) ||
-		(action === 'connect' && argv[1] !== 'remote');
+		(action === 'connect' && argv[1] !== 'remote') ||
+		(action === 'update' && (connection.kind !== 'ssh-docker' || argv.includes('--resume')));
 	if (connection.kind === 'ssh-docker' && !composedAction) {
 		if (!instance) throw Error('Choose a remote instance with --name/-n.');
 		const listed =
@@ -288,9 +392,13 @@ export async function runHostedCommand(
 				}
 				if (!uploader) {
 					const hello = JSON.parse(
-						await runHostingProcess('ssh', [...sshArgs(connection), await sshHelperCommand(connection, 'rpc')], {
-							input: JSON.stringify({ version: 1, action: 'hello' })
-						})
+						await runHostingProcess(
+							'ssh',
+							[...sshArgs(connection), await sshHelperCommand(connection, 'rpc')],
+							{
+								input: JSON.stringify({ version: 1, action: 'hello' })
+							}
+						)
 					) as { value: { instancesDirectory: string } };
 					const home = name.startsWith('/') ? name : `${hello.value.instancesDirectory}/${name}`;
 					uploader = createSshCommandFiles(connection, home);

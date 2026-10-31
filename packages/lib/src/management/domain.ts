@@ -51,6 +51,7 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 			'restart',
 			'stop',
 			'update',
+			'apply',
 			'remote-setup',
 			'recovery-init',
 			'recovery-restore',
@@ -59,6 +60,15 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 		].includes(action)
 	)
 		throw new Error('Invalid restart confirmation request.');
+	if (action === 'apply')
+		return {
+			message: 'Apply saved changes?',
+			detail:
+				effect === 'update-deployment'
+					? 'The hosting platform will update the deployment. Running instances stop and start again; a stopped instance finishes stopped, although the platform may briefly activate a new revision. Active work may be interrupted. Agent readiness and backup durability are checked separately.'
+					: 'All saved instance settings will be applied. Containers will start or restart, interrupting active work and connections. Your data is kept. You can leave this for later.',
+			buttons: ['Later', 'Apply changes']
+		};
 	if (effect === 'request-platform-state' && (action === 'start' || action === 'stop'))
 		return {
 			message: `Request the hosting platform to ${action} this app?`,

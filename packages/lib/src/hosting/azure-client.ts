@@ -1,5 +1,163 @@
 import { runHostingProcess, type HostingProcess } from '../control-plane/process.js';
 import type { ConnectionSetup, HostingChoice } from './types.js';
+import type { HostingConnection } from './types.js';
+
+export const AZURE_APP_API_VERSION = '2026-07-01';
+/** Generated resource SDK paths already add the leading slash. */
+export function azureSdkResourceId(resourceId: string): string {
+	return resourceId.startsWith('/') ? resourceId.slice(1) : resourceId;
+}
+/** Only publish known error codes, never response messages or request contents. */
+export function azureInitialResponse(response: {
+	status: number;
+	request: { method: string };
+	parsedBody?: unknown;
+}): { status: number; code?: string } | undefined {
+	if (response.request.method !== 'PUT') return undefined;
+	const body = response.parsedBody as { error?: { code?: unknown } } | undefined;
+	const code = body?.error?.code;
+	return {
+		status: response.status,
+		...(typeof code === 'string' &&
+		[
+			'InvalidTemplateDeployment',
+			'InvalidTemplate',
+			'InvalidRequestContent',
+			'BadRequest',
+			'AuthorizationFailed',
+			'RequestDisallowedByPolicy',
+			'DeploymentQuotaExceeded'
+		].includes(code)
+			? { code }
+			: {})
+	};
+}
+/** SDK-owned LRO, not an ARM polling implementation. */
+export interface AzurePoller {
+	readonly operationState?: { status?: string };
+	serialize(): Promise<string>;
+	pollUntilDone(options?: { abortSignal?: AbortSignal }): Promise<unknown>;
+}
+export interface AzureManagement {
+	get(resourceId: string, apiVersion?: string): Promise<Record<string, unknown>>;
+	lifecycle(name: string, action: 'start' | 'stop', saved?: string): AzurePoller;
+	patch(resourceId: string, properties: Record<string, unknown>, saved?: string): AzurePoller;
+	deploy(
+		name: string,
+		template: Record<string, unknown>,
+		parameters?: Record<string, { value: unknown }>,
+		onInitialResponse?: (response: { status: number; code?: string }) => void
+	): AzurePoller;
+	deployment(name: string): Promise<Record<string, unknown>>;
+	startJob(name: string): AzurePoller;
+	jobExecutions(name: string): Promise<Array<{ name?: string; status?: string }>>;
+	deleteJob(name: string): AzurePoller;
+	secret(name: string, secretName: string): Promise<string | undefined>;
+	secrets(
+		name: string
+	): Promise<Array<{ name?: string; value?: string; identity?: string; keyVaultUrl?: string }>>;
+}
+export async function azureManagement(
+	connection: Extract<HostingConnection, { kind: 'azure-container-apps' }>
+): Promise<AzureManagement> {
+	const [{ AzureCliCredential }, appsSdk, resourcesSdk, deploymentsSdk] = await Promise.all([
+		import('@azure/identity'),
+		import('@azure/arm-appcontainers'),
+		import('@azure/arm-resources'),
+		import('@azure/arm-resourcesdeployments')
+	]);
+	const credential = new AzureCliCredential({ subscription: connection.subscriptionId });
+	// No mutating-request retry: a lost response must be reconciled, not replayed.
+	const options = { retryOptions: { maxRetries: 0 } };
+	const apps = new appsSdk.ContainerAppsAPIClient(credential, connection.subscriptionId, options);
+	const resources = new resourcesSdk.ResourceManagementClient(
+		credential,
+		connection.subscriptionId,
+		options
+	);
+	const deployments = new deploymentsSdk.DeploymentsClient(
+		credential,
+		connection.subscriptionId,
+		options
+	);
+	const group = connection.resourceGroup;
+	return {
+		get: async (id, version = AZURE_APP_API_VERSION) =>
+			(await resources.resources.getById(azureSdkResourceId(id), version)) as Record<
+				string,
+				unknown
+			>,
+		lifecycle(name, action, saved) {
+			return saved
+				? appsSdk.restorePoller(apps, saved, apps.containerApps[action])
+				: apps.containerApps[action](group, name);
+		},
+		patch(id, properties, saved) {
+			return saved
+				? resourcesSdk.restorePoller(resources, saved, resources.resources.updateById)
+				: resources.resources.updateById(azureSdkResourceId(id), AZURE_APP_API_VERSION, {
+						properties
+					});
+		},
+		deploy: (name, template, parameters = {}, onInitialResponse) =>
+			deployments.deployments.createOrUpdate(
+				group,
+				name,
+				{
+					properties: { mode: 'Incremental', template, parameters }
+				},
+				{
+					onResponse(response) {
+						const initial = azureInitialResponse(response);
+						if (initial) onInitialResponse?.(initial);
+					}
+				}
+			),
+		deployment: async (name) =>
+			(await deployments.deployments.get(group, name)) as Record<string, unknown>,
+		startJob: (name) => apps.jobs.start(group, name),
+		async jobExecutions(name) {
+			const results: Array<{ name?: string; status?: string }> = [];
+			for await (const item of apps.jobsExecutions.list(group, name))
+				results.push({ name: item.name, status: item.status });
+			return results;
+		},
+		deleteJob: (name) => apps.jobs.delete(group, name),
+		async secret(name, secretName) {
+			// ARM returns a collection. Keep it private and return only the configured reference.
+			const collection = await apps.containerApps.listSecrets(group, name);
+			return collection.value?.find((item) => item.name === secretName)?.value;
+		},
+		async secrets(name) {
+			return (await apps.containerApps.listSecrets(group, name)).value ?? [];
+		}
+	};
+}
+
+/** Persist only SDK continuation configuration; resource bodies may contain private settings. */
+export async function azureContinuation(poller: AzurePoller): Promise<string> {
+	const value = JSON.parse(await poller.serialize()) as {
+		state?: { config?: unknown; status?: string };
+	};
+	if (!value.state?.config) throw new Error('Azure did not provide an operation continuation.');
+	const source = value.state.config as Record<string, unknown>;
+	const config = Object.fromEntries(
+		['operationLocation', 'resourceLocation', 'initialRequestUrl', 'requestMethod']
+			.filter((key) => typeof source[key] === 'string')
+			.map((key) => [key, source[key]])
+	);
+	const metadata = source.metadata as Record<string, unknown> | undefined;
+	if (metadata)
+		config.metadata = {
+			...(['OperationLocation', 'ResourceLocation', 'Body'].includes(String(metadata.mode))
+				? { mode: metadata.mode }
+				: {}),
+			...(typeof metadata.resourceLocationConfig === 'string'
+				? { resourceLocationConfig: metadata.resourceLocationConfig }
+				: {})
+		};
+	return JSON.stringify({ state: { config, status: value.state.status } });
+}
 
 /** Native Azure authentication and per-command scope; never change the global account. */
 export function azureClient(run: HostingProcess = runHostingProcess) {

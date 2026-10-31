@@ -79,6 +79,15 @@ describe('Admin domain', () => {
 		}
 		expect(() => confirmedAdminAction({ action: ['start'], confirmed: true })).toThrow();
 		expect(interruptionPrompt('restart').buttons).toEqual(['Restart later', 'Restart now']);
+		for (const effect of ['reconcile-deployment', 'update-deployment'] as const) {
+			expect(interruptionPrompt('apply', effect).buttons).toEqual(['Later', 'Apply changes']);
+			expect(interruptionPrompt('apply', effect).message).toBe('Apply saved changes?');
+		}
+		expect(interruptionPrompt('apply', 'reconcile-deployment').detail).toContain(
+			'start or restart'
+		);
+		expect(interruptionPrompt('apply', 'reconcile-deployment').detail).not.toContain('revision');
+		expect(interruptionPrompt('apply', 'update-deployment').detail).toContain('finishes stopped');
 		expect(interruptionPrompt('start', 'request-platform-state').buttons).toEqual([
 			'Cancel',
 			'Request start'

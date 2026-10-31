@@ -1,7 +1,8 @@
 # Environment, mounts, and networks
 
-This document describes the active runtime. The executable source is
-`packages/skeleton/system/stack/stack.compose.yml`.
+This document describes the active runtime. Docker placement is defined in
+`packages/skeleton/system/stack/stack.compose.yml`; host-side ACA placement is in
+`packages/lib/src/hosting/azure-template.ts`. Both use the same published image.
 
 The released runtime uses OpenCode 2. See the
 [qualification report](../operations/opencode-v2-qualification.md) for verified
@@ -11,7 +12,9 @@ native settings, persistence and API behavior; each release retains its own gate
 
 Hosting connections and recent instance locators belong to the CLI/Admin host,
 in `$XDG_CONFIG_HOME/fhold/hosting.json` (default `~/.config/fhold/hosting.json`).
-They are not instance intent, credentials or backup members. SSH paths resolve
+The same file holds small target-bound non-secret deployment drafts and operation
+continuations, not full Azure templates or credentials. These are not backup members.
+SSH paths resolve
 on the Docker host; ACA resource IDs are not filesystem homes. The implicit
 local workflow is unchanged. See [hosted management](../hosting.md).
 
@@ -263,9 +266,34 @@ validates checkpoint identity, integrity and ownership. No new service is introd
 Standalone recovery optionally uses externally supplied
 `FH_RECOVERY_INCLUDE_FILE` for additional paths/SQLite and versioned mount policy.
 Explicit exclusions, required external mounts and opt-in network discovery do
-not change normal Compose volume coverage. SQLite stays local; fhold neither
-provisions nor restores independent mounts. See [Assistant recovery](../assistant-recovery.md)
+not change normal Compose volume coverage. SQLite stays local; the recovery engine
+neither provisions nor restores independent mounts. See [Assistant recovery](../assistant-recovery.md)
 for the schema, private inspection and stopped-writer policy transition.
+
+### ACA placement
+
+Fresh ACA installation keeps `/home/fhold`, `/work`, `/stash`, `/opt/akm/data`
+and `/etc/akm` on the image-owned writable container layer. Any container recreation
+can lose that layer; the existing recovery worker restores its last accepted
+checkpoint before starting writers. Blob storage is the checkpoint destination,
+never a live SQLite mount. Replica-scoped EmptyDir retention is not selected by
+default and was not qualified in ACA; no startup chown/init workaround is added.
+
+The provider creates or reuses an environment/storage account, creates a private
+per-instance Blob container and grants its user-assigned identity Blob access.
+The same identity serves a finite initialization Job and the assistant. The
+password and recovery policy use ordinary ACA secret-file mounts. The generated
+runtime receives `TZ` (not Docker's `FH_TIMEZONE` intent), stable `FH_INSTANCE_ID`
+and the existing recovery variables. Native account files stay native and are
+checkpointed, not copied into Azure environment settings.
+
+Optional existing environment Files storage can mount independent project folders.
+Those paths are required external mounts and excluded from recovery. The provider
+does not create Files shares or move files into them. Live native databases stay
+local. Existing deployment mounts, secrets and identities remain unchanged unless
+the user requests the corresponding supported edit. Cloud full export/import is
+not implemented. See [hosting](../hosting.md) and
+[qualification limits](../operations/azure-management-verification.md).
 
 Optional native Codex/Claude Code remote workers inherit the same nonroot
 container boundary, with no additional mounts or ports. Their own native sign-in

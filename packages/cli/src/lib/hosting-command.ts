@@ -3,6 +3,7 @@ import { invokeOperation, type ComposedInstanceSession, type HostingLogOptions }
 import { runSessionProviderCommand } from './session-provider-command.js';
 import { runSessionDataCommand } from './session-data-command.js';
 import { runSessionConnectCommand } from './session-connect-command.js';
+import { completeHostedSetup } from '../commands/setup.js';
 
 /** Shared remote verbs. The adapter, not the CLI, supplies their implementation. */
 export async function runSessionCommand(
@@ -11,22 +12,31 @@ export async function runSessionCommand(
 	write: (text: string) => void = console.log
 ): Promise<void> {
 	const action = argv[0] || 'status';
+	if (action === 'setup') return completeHostedSetup(session, argv.slice(1), write);
 	if (action === 'provider') return runSessionProviderCommand(session, argv.slice(1), write);
 	if (action === 'backup' || action === 'restore')
 		return runSessionDataCommand(session, argv, write);
 	if (action === 'connect') return runSessionConnectCommand(session, argv.slice(1), write);
 	const options: ParseArgsOptionsConfig =
-		action === 'logs' || action === 'console'
+		action === 'update'
 			? {
-					tail: { type: 'string' as const },
-					type: { type: 'string' as const },
-					revision: { type: 'string' as const },
-					replica: { type: 'string' as const },
-					container: { type: 'string' as const }
+					confirm: { type: 'boolean' as const },
+					resume: { type: 'boolean' as const },
+					pull: { type: 'boolean' as const },
+					container: { type: 'string' as const },
+					image: { type: 'string' as const }
 				}
-			: action === 'status'
-				? {}
-				: { confirm: { type: 'boolean' as const }, revision: { type: 'string' as const } };
+			: action === 'logs' || action === 'console'
+				? {
+						tail: { type: 'string' as const },
+						type: { type: 'string' as const },
+						revision: { type: 'string' as const },
+						replica: { type: 'string' as const },
+						container: { type: 'string' as const }
+					}
+				: action === 'status'
+					? {}
+					: { confirm: { type: 'boolean' as const }, revision: { type: 'string' as const } };
 	const parsed = parseArgs({ args: argv.slice(1), options, allowPositionals: true, strict: true });
 	const values = parsed.values;
 	if (parsed.positionals.length) throw new Error(`Unexpected argument for ${action}.`);
@@ -54,6 +64,31 @@ export async function runSessionCommand(
 			}
 			write(await invokeOperation(session.host.logs, value));
 		}
+	} else if (action === 'update') {
+		if (!values.confirm)
+			throw new Error('Deployment changes can interrupt work. Repeat with --confirm when ready.');
+		if (values.resume) {
+			if (values.pull !== undefined || values.container !== undefined || values.image !== undefined)
+				throw new Error(
+					'--resume continues saved changes and cannot be combined with --pull, --container or --image.'
+				);
+			const settings = await invokeOperation(session.host.deployment.inspect, undefined);
+			if (!settings.pending) throw new Error('There are no saved deployment changes to resume.');
+			const outcome = await invokeOperation(session.host.deployment.apply, undefined, {
+				confirmed: true
+			});
+			write(JSON.stringify(outcome, null, 2));
+			return;
+		}
+		const input = {
+			...(typeof values.pull === 'boolean' ? { pull: values.pull } : {}),
+			...(typeof values.container === 'string' ? { container: values.container } : {}),
+			...(typeof values.image === 'string' ? { image: values.image } : {})
+		};
+		const outcome = await invokeOperation(session.host.deployment.update, input, {
+			confirmed: true
+		});
+		write(JSON.stringify(outcome, null, 2));
 	} else if (['start', 'stop', 'restart'].includes(action)) {
 		if (!values.confirm)
 			throw new Error(
