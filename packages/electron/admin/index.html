@@ -378,8 +378,8 @@
         <div id="sidebar-alerts" class="sidebar-alerts">
           <section id="notification-area" aria-label="Notifications">
             <aside id="pending-restart" class="pending-restart" role="status" aria-live="polite" hidden>
-              <div><strong id="pending-restart-title">Pending restart</strong><p id="pending-restart-detail"></p></div>
-              <button id="apply-pending-restart" class="secondary" type="button">Restart to apply</button>
+              <div><strong id="pending-restart-title">Changes pending</strong><p id="pending-restart-detail"></p></div>
+              <button id="apply-pending-restart" class="secondary" type="button">Apply changes</button>
             </aside>
             <div id="notice" class="notice" role="status" aria-live="polite" hidden>
               <span id="notice-icon" class="notice-icon" aria-hidden="true">●</span>
@@ -890,9 +890,9 @@
                 <button id="load-deployment-settings" class="secondary" type="button">Load current settings</button>
                 <form id="deployment-edit-form" class="form-stack" hidden>
                   <p id="deployment-current" class="help-text"></p>
-                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select></label>
+                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability" aria-describedby="deployment-availability-help"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select><small id="deployment-availability-help"></small></label>
                   <label class="field" for="deployment-container"><span>Container to update</span><select id="deployment-container"></select></label>
-                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" /></label>
+                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" aria-describedby="deployment-image-help" /><small id="deployment-image-help"></small></label>
                   <label class="field" for="deployment-timezone"><span>Scheduler timezone (optional)</span><input id="deployment-timezone" placeholder="Keep current timezone" /></label>
                   <label class="field" for="deployment-schedule"><span>Scheduling</span><select id="deployment-schedule"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-schedule-current"></small></label>
                   <label class="field" for="deployment-claude"><span>Claude worker startup</span><select id="deployment-claude"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-claude-current"></small></label>

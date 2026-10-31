@@ -166,6 +166,7 @@ test('narrow updates preserve full native fields, containers, secret refs and cu
 		secretRef: 'other'
 	});
 	expect(next.properties.template.containers[0]?.env).toContainEqual({ name: 'TZ', value: 'UTC' });
+	expect((await f.deployment.inspect()).environment).toEqual({ FH_TIMEZONE: 'UTC' });
 	expect(next.properties.template.volumes).toEqual(
 		(original as ReturnType<typeof document>).properties.template.volumes
 	);

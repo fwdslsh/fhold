@@ -29,17 +29,34 @@ Evidence gathered during implementation:
   configuration, completed lifecycle ordering, failed versus unknown outcomes,
   target-bound continuations, initialization progress/retry, and generated Job
   collision avoidance. There is no external-manager/adoption/tag prerequisite.
-- The shared Admin workflow passed a real Chromium walkthrough with 343
+- The shared Admin workflow passed a real Chromium walkthrough with 360
   assertions against synthetic hosting/native services. It includes new cloud
   installation, collapsed defaults, deployment preview, pending changes, narrow
   layouts and local-provider regressions. It is not a live Azure deployment test.
+
+The UX consistency follow-up gives local and SSH Docker the same System deployment
+editor as ACA, backed by existing intent-save and lifecycle operations. Shared
+drafts remain target-bound on the management computer until explicit apply.
+Tests cover postponement, discard, persistence across reopen, unrelated-setting
+preservation and failed activation. The common action/confirmation is Apply
+changes, with host-effect-specific interruption details. Docker-only limitations
+(scale-to-zero, scheduling overrides and custom image repositories) are explained
+without changing the screen layout. No new Compose layer or runtime input was added.
+
+The follow-up also fixes the form's incorrect timezone key (`TZ` instead of the
+shared `FH_TIMEZONE`). Renderer tests now pass all three provider submissions
+through the real input parser; the Azure adapter verifies the native `TZ`
+translation and normalized readback. Real Chromium exercises the same form,
+disabled fields and Later behavior for all three providers, with desktop and
+320-pixel captures visually reviewed. These use synthetic service responses,
+not live Azure or SSH deployments.
 
 Final integrated checks:
 
 | Check | Result |
 | --- | --- |
 | All six workspace typechecks | Passed. |
-| Full repository tests with socket tests enabled | 1,199 passed, zero failed; nine opt-in image tests skipped in the general run. The two new image tests were exercised separately as described above. |
+| Full repository tests with socket tests enabled | 1,207 passed, zero failed; nine opt-in image tests skipped in the general run. The two new image tests were exercised separately as described above. |
 | Repository lint | Passed its configured gate; existing style warnings remain. |
 | CLI compile and Admin bundle | Passed, including both bundled Linux management helpers. |
 | Compiled CLI no-start installation and all-profile Compose validation | Passed against a disposable generated home; no services started. |

@@ -234,6 +234,18 @@ shown as absent or off. Cloud observations use the ordinary service inventory an
 System logs/details, without a separate hosted-instance page or a fake StackConfig.
 No unsupported action falls back to local files, credentials or containers, and
 viewing these pages does not wake an idle agent.
+System's shared Deployment settings editor uses the same inspect/prepare/apply/
+discard operations for local Docker, SSH Docker and ACA. Docker maps the narrow
+draft to existing StackConfig intent through the same native management port;
+it does not create an overlay or a cloud-shaped local configuration. Drafts stay
+in the existing private, target-bound hosting preferences until confirmed apply.
+Unsupported individual fields remain disabled with reasons. The persistent
+action is always Apply changes; host operation effect metadata supplies the
+confirmation detail, not provider-specific page logic. A Docker apply uses its
+existing start/recreate path, while ACA preserves final stopped intent. Failed
+application retains pending state; discarding a draft never reverses already
+saved instance settings. All deployment timezone input uses FH_TIMEZONE; only
+the native ACA template adapter translates it to the image's TZ variable.
 Standalone deployers may opt into exact-name workload environment aliases using
 `FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
 logged or passed as command arguments. Original configured names are stripped

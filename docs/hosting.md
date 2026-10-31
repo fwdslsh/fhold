@@ -246,9 +246,26 @@ Unknown outcomes are not permission to replay installation or initialization.
 Deployment completion opens the ordinary Connect stage; it is not model-provider
 or native-worker readiness. A real native no-tool response is still required.
 
-In **System → Deployment settings**, load current settings, choose a narrow
-change and save it. The draft stays on this computer, bound to the selected
-target. **Later** does not mutate Azure. **Apply changes** requires confirmation;
+All providers use **System → Deployment settings** for supported image, timezone
+and native worker-startup changes. Load settings, choose changes and save them.
+The draft stays on this computer, bound to the selected target. **Later** changes
+neither the instance files nor the running deployment. **Discard pending changes**
+removes only this draft, not settings already saved to the instance by other
+operations or an earlier failed apply. **Apply changes** always uses the same
+confirmation and postponement flow, with an explanation of the host's effect.
+Docker starts/recreates containers through its existing lifecycle path; Azure
+updates its deployment and preserves the final stopped state when applicable.
+
+Local and SSH Docker use the same editor and intent-saving implementation.
+Docker image edits select a new tag in the current component repository; the
+Portal pin is shared by Discord and Slack. Operator custom Compose overrides
+remain authoritative and unchanged. Scale-to-zero and scheduler overrides are
+not exposed by the Docker settings API: their controls remain visible, disabled
+and explained (scheduling overrides still use custom Compose). Azure supports
+these controls through native deployment fields. No new runtime feature or
+configuration store inside an instance is introduced.
+
+On Azure, **Apply changes** requires confirmation;
 the adapter preserves unrelated fields and reports submitted, in-progress,
 completed, failed or unknown outcomes without treating request acceptance as
 runtime readiness. Availability, a selected container's image and allowlisted

@@ -13,6 +13,7 @@ export type HostingActionOptions = { revision?: string };
 export type HostingActionEffect =
 	| 'reconcile-deployment'
 	| 'request-platform-state'
+	| 'update-deployment'
 	| 'restart-runtime';
 export type HostingCapabilities = Record<
 	HostingAction | 'settings' | 'transfer',
@@ -84,6 +85,9 @@ export type DeploymentSettings = {
 	containers: Array<{ name: string; image: string }>;
 	availability?: 'always' | 'on-demand';
 	environment: Record<string, string>;
+	/** Field-level reasons; the common form retains unavailable controls in place. */
+	unavailable?: Record<string, string>;
+	imageHelp?: string;
 	pending?: DeploymentPatch;
 	operation?: DeploymentOutcome;
 };

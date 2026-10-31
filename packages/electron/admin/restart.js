@@ -10,7 +10,7 @@ export function renderRestartStatus(snapshot) {
 	byId('pending-restart').hidden = !pending?.pending;
 	const services = known(snapshot.services) || [];
 	const running = services.some(isRunning);
-	setText('pending-restart-title', running ? 'Pending restart' : 'Saved changes pending startup');
+	setText('pending-restart-title', 'Changes pending');
 	setText(
 		'pending-restart-detail',
 		pending?.detail ||
@@ -19,10 +19,7 @@ export function renderRestartStatus(snapshot) {
 				: 'Saved changes will apply when the instance starts.')
 	);
 	const deploymentApply = instanceCapability('host.deployment.apply', snapshot).supported;
-	setText(
-		'apply-pending-restart',
-		deploymentApply ? 'Apply changes' : running ? 'Restart to apply' : 'Start to apply'
-	);
+	setText('apply-pending-restart', 'Apply changes');
 	byId('apply-pending-restart').disabled =
 		state.operationInFlight ||
 		snapshot.services?.state === 'unavailable' ||
@@ -73,32 +70,35 @@ export async function requestStackAction(operationKey) {
 
 export async function offerRestart(snapshot = state.currentSnapshot) {
 	const pending = known(snapshot?.pendingChanges);
-	if (!pending?.pending) return;
-	if (instanceCapability('host.deployment.apply', snapshot).supported) {
-		if (state.operationInFlight) return;
-		let confirmed = false;
-		setBusy(true);
-		try {
-			confirmed = await state.api.confirmRestart('apply');
-		} catch (error) {
-			notice(message(error), 'error', { persist: true });
-		} finally {
-			setBusy(false);
-		}
-		if (!confirmed) return;
-		const result = await operation(
-			'Applying saved deployment changes',
-			() => state.api.applyDeployment({ confirmed: true }),
-			'Deployment result received.'
-		);
-		if (result) {
-			render(result.snapshot);
-			deploymentOutcomeNotice(result.outcome);
-		}
-		return result;
-	}
+	if (!pending?.pending || state.operationInFlight) return;
+	const deploymentApply = instanceCapability('host.deployment.apply', snapshot).supported;
 	const services = known(snapshot?.services) || [];
-	return requestStackAction(services.some(isRunning) ? 'host.restart' : 'host.start');
+	const action = services.some(isRunning) ? 'restart' : 'start';
+	if (!deploymentApply && !instanceCapability(`host.${action}`, snapshot).supported) return;
+	let confirmed = false;
+	setBusy(true);
+	try {
+		confirmed = await state.api.confirmRestart('apply');
+	} catch (error) {
+		notice(message(error), 'error', { persist: true });
+	} finally {
+		setBusy(false);
+	}
+	if (!confirmed) return;
+	const result = await operation(
+		'Applying saved deployment changes',
+		() =>
+			deploymentApply
+				? state.api.applyDeployment({ confirmed: true })
+				: state.api.action(action, true),
+		'Deployment result received.'
+	);
+	if (result?.snapshot) {
+		render(result.snapshot);
+		deploymentOutcomeNotice(result.outcome);
+	}
+	if (!result) await refresh();
+	return result;
 }
 
 export function bindRestartEvents() {

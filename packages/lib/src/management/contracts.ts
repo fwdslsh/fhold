@@ -433,6 +433,6 @@ export function supportedOperation<Input, Output>(
 	invoke: (input: Input, context: RequestContext) => Promise<Output>,
 	availability: () => Availability = () => ({ state: 'ready' }),
 	input?: OperationInputMetadata
-): Operation<Input, Output> {
+): Extract<Operation<Input, Output>, { support: 'supported' }> {
 	return { support: 'supported', availability, invoke, ...(input ? { input } : {}) };
 }

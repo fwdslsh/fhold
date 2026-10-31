@@ -406,11 +406,14 @@ export function azureDeploymentOperations(
 				throw new Error('A submitted Azure operation cannot be discarded as a local draft.');
 			store.saveDeployment(ref, {});
 		}),
-		apply: supportedOperation(async (_input, context) => {
-			if (!context.confirmed)
-				throw new Error('Confirm applying deployment changes and interruption.');
-			return apply();
-		}),
+		apply: {
+			...supportedOperation(async (_input: void, context) => {
+				if (!context.confirmed)
+					throw new Error('Confirm applying deployment changes and interruption.');
+				return apply();
+			}),
+			effect: 'update-deployment'
+		},
 		update: supportedOperation(async (input, context) => {
 			if (!context.confirmed) throw new Error('Confirm image update and interruption.');
 			const saved = store.deployment(ref);

@@ -268,7 +268,7 @@ export class HostingPreferencesStore {
 			};
 		} catch {
 			throw new Error(
-				'This target’s saved deployment draft/continuation is invalid. Review its private hosting preferences; no Azure action was submitted.'
+				'This target’s saved deployment draft/continuation is invalid. Review its private hosting preferences; no deployment action was submitted.'
 			);
 		}
 	}

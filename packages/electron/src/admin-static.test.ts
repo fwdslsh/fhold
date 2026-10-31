@@ -16,7 +16,8 @@ import {
 	renderNetworkDetails,
 	showPortalTokenForm
 } from '../admin/connections.js';
-import { bindConfigurationEvents } from '../admin/configuration.js';
+import { bindConfigurationEvents, loadDeploymentSettings } from '../admin/configuration.js';
+import { parseDeploymentPatch } from '../../lib/src/control-plane/provisioning-input.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import {
 	endpoint,
@@ -2754,6 +2755,59 @@ describe('Admin runtime recovery controls', () => {
 });
 
 describe('Admin renderer behavior', () => {
+	for (const kind of ['local-docker', 'ssh-docker', 'azure-container-apps']) {
+		it(`uses the same deployment form and native API keys for ${kind}`, async () => {
+			const snapshot = normalizedSnapshot({ config: defaultStackConfig() });
+			snapshot.identity.ref.kind = kind;
+			snapshot.pendingChanges = known({ pending: true });
+			for (const name of ['inspect', 'prepare', 'apply', 'discard'])
+				snapshot.operations[`host.deployment.${name}`] = supported();
+			state.currentSnapshot = snapshot;
+			const settings = {
+				containers: [{ name: 'assistant', image: 'fwdslsh/fhold-assistant:0.4.1001' }],
+				environment: {
+					FH_TIMEZONE: 'America/Chicago',
+					FH_CLAUDE_REMOTE: '1',
+					FH_CODEX_REMOTE: '1'
+				},
+				...(kind === 'azure-container-apps'
+					? { availability: 'always' }
+					: {
+							unavailable: {
+								availability: 'Use Start and Stop.',
+								FH_SCHEDULER_ENABLED: 'Use custom Compose.'
+							}
+						})
+			};
+			const calls: unknown[] = [];
+			state.api = {
+				deploymentSettings: async () => settings,
+				prepareDeployment: async (patch) => {
+					calls.push(parseDeploymentPatch(patch));
+					return { ...settings, pending: patch };
+				},
+				confirmRestart: async (action) => {
+					calls.push(action);
+					return false;
+				},
+				snapshot: async () => snapshot
+			};
+			await loadDeploymentSettings();
+			expect(control('deployment-edit-form').hidden).toBe(false);
+			expect(control('deployment-current').textContent).toContain('America/Chicago');
+			expect(control('deployment-availability').disabled).toBe(kind !== 'azure-container-apps');
+			expect(control('deployment-schedule').disabled).toBe(kind !== 'azure-container-apps');
+			control('deployment-timezone').value = 'Asia/Tokyo';
+			control('deployment-claude').value = '0';
+			bindConfigurationEvents();
+			await control('deployment-edit-form').listeners.get('submit')?.({ preventDefault() {} });
+			expect(calls).toEqual([
+				{ environment: { FH_TIMEZONE: 'Asia/Tokyo', FH_CLAUDE_REMOTE: '0' } },
+				'apply'
+			]);
+			expect(control('apply-pending-restart').textContent).toBe('Apply changes');
+		});
+	}
 	it('stores a narrow deployment draft and choosing Later never applies or starts the target', async () => {
 		const snapshot = {
 			...normalizedSnapshot({
@@ -2838,7 +2892,7 @@ describe('Admin renderer behavior', () => {
 		await offerRestart();
 		expect(applies).toBe(0);
 		expect(control('pending-restart').hidden).toBe(false);
-		expect(control('pending-restart-title').textContent).toBe('Pending restart');
+		expect(control('pending-restart-title').textContent).toBe('Changes pending');
 		showView('system');
 		expect(control('pending-restart').hidden).toBe(false);
 		renderRestartStatus(structuredClone(state.currentSnapshot));
@@ -2865,9 +2919,9 @@ describe('Admin renderer behavior', () => {
 			}
 		};
 		renderRestartStatus(state.currentSnapshot);
-		expect(control('apply-pending-restart').textContent).toBe('Start to apply');
+		expect(control('apply-pending-restart').textContent).toBe('Apply changes');
 		await offerRestart();
-		expect(calls).toEqual(['start', ['start', true]]);
+		expect(calls).toEqual(['apply', ['start', true]]);
 		expect(control('pending-restart').hidden).toBe(false);
 		state.api.action = async (...args) => {
 			calls.push(args);

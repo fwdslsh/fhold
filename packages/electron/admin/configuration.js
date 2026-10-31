@@ -30,26 +30,39 @@ export async function loadDeploymentSettings() {
 	state.deploymentSettings = settings;
 	setOptions(
 		byId('deployment-container'),
-		settings.containers.map((item) => ({ value: item.name, label: `${item.name} · ${item.image}` })),
+		settings.containers.map((item) => ({
+			value: item.name,
+			label: `${item.name} · ${item.image}`
+		})),
 		settings.pending?.container
 	);
 	byId('deployment-availability').value = settings.pending?.availability || '';
-	byId('deployment-availability').disabled = !settings.availability;
+	const availabilityReason =
+		settings.unavailable?.availability ||
+		(!settings.availability ? 'Availability controls are not available for this instance.' : '');
+	byId('deployment-availability').disabled = Boolean(availabilityReason);
+	byId('deployment-availability-help').textContent = availabilityReason;
 	byId('deployment-image').value = settings.pending?.image || '';
-	byId('deployment-timezone').value = settings.pending?.environment?.TZ || '';
+	byId('deployment-image-help').textContent =
+		settings.imageHelp || 'Use a full image reference. Unrelated containers are unchanged.';
+	byId('deployment-timezone').value = settings.pending?.environment?.FH_TIMEZONE || '';
 	for (const [field, name] of [
 		['schedule', 'FH_SCHEDULER_ENABLED'],
 		['claude', 'FH_CLAUDE_REMOTE'],
 		['codex', 'FH_CODEX_REMOTE']
 	]) {
 		byId(`deployment-${field}`).value = settings.pending?.environment?.[name] ?? '';
+		byId(`deployment-${field}`).disabled = Boolean(settings.unavailable?.[name]);
 		byId(`deployment-${field}-current`).textContent =
-			settings.environment[name] === undefined
+			settings.unavailable?.[name] ||
+			(settings.environment[name] === undefined
 				? 'Current value not reported'
-				: `Current: ${settings.environment[name] === '1' ? 'enabled' : 'disabled'}`;
+				: `Saved: ${settings.environment[name] === '1' ? 'enabled' : 'disabled'}`);
 	}
 	byId('deployment-current').textContent =
-		`${settings.availability ? `Current availability: ${settings.availability === 'always' ? 'Always running' : 'On demand'}. ` : ''}${settings.environment.TZ ? `Timezone: ${settings.environment.TZ}. ` : ''}Only the fields you choose below will change.`;
+		`${settings.availability ? `Saved availability: ${settings.availability === 'always' ? 'Always running' : 'On demand'}. ` : ''}${settings.environment.FH_TIMEZONE ? `Timezone: ${settings.environment.FH_TIMEZONE}. ` : ''}Only the fields you choose below will change.`;
+	byId('discard-deployment').disabled =
+		!settings.pending || !instanceCapability('host.deployment.discard').supported;
 	byId('deployment-edit-form').hidden = false;
 	if (settings.operation) deploymentOutcomeNotice(settings.operation);
 }
@@ -80,7 +93,7 @@ export function bindConfigurationEvents() {
 		)
 			return;
 		const patch = {};
-		if (byId('deployment-availability').value)
+		if (!byId('deployment-availability').disabled && byId('deployment-availability').value)
 			patch.availability = byId('deployment-availability').value;
 		if (byId('deployment-image').value.trim()) {
 			patch.image = byId('deployment-image').value.trim();
@@ -88,13 +101,13 @@ export function bindConfigurationEvents() {
 		}
 		const environment = {};
 		if (byId('deployment-timezone').value.trim())
-			environment.TZ = byId('deployment-timezone').value.trim();
+			environment.FH_TIMEZONE = byId('deployment-timezone').value.trim();
 		for (const [field, name] of [
 			['schedule', 'FH_SCHEDULER_ENABLED'],
 			['claude', 'FH_CLAUDE_REMOTE'],
 			['codex', 'FH_CODEX_REMOTE']
 		]) {
-			if (byId(`deployment-${field}`).value !== '')
+			if (!byId(`deployment-${field}`).disabled && byId(`deployment-${field}`).value !== '')
 				environment[name] = byId(`deployment-${field}`).value;
 		}
 		if (Object.keys(environment).length) patch.environment = environment;
@@ -106,6 +119,8 @@ export function bindConfigurationEvents() {
 		);
 		if (!saved) return;
 		state.deploymentSettings = saved;
+		byId('discard-deployment').disabled =
+			!saved.pending || !instanceCapability('host.deployment.discard').supported;
 		setFormClean('deployment-edit-form');
 		await refresh();
 		await offerRestart();
@@ -113,7 +128,9 @@ export function bindConfigurationEvents() {
 	byId('discard-deployment').addEventListener('click', async () => {
 		if (state.operationInFlight || !instanceCapability('host.deployment.discard').supported) return;
 		if (
-			!window.confirm('Discard the pending deployment changes? Running resources will not change.')
+			!window.confirm(
+				'Discard this deployment draft? This does not undo changes already saved to the instance or change running resources.'
+			)
 		)
 			return;
 		await operation(

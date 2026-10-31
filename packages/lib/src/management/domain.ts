@@ -62,10 +62,12 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 		throw new Error('Invalid restart confirmation request.');
 	if (action === 'apply')
 		return {
-			message: 'Apply the saved deployment changes?',
+			message: 'Apply saved changes?',
 			detail:
-				'Current work may be interrupted. Only the selected changes are applied. Azure may activate a revision during an update; an intentionally stopped cloud instance finishes with native Stop. Native readiness and recovery durability are reported separately.',
-			buttons: ['Later', 'Apply now']
+				effect === 'update-deployment'
+					? 'The hosting platform will update the deployment. Running instances stop and start again; a stopped instance finishes stopped, although the platform may briefly activate a new revision. Active work may be interrupted. Agent readiness and backup durability are checked separately.'
+					: 'All saved instance settings will be applied. Containers will start or restart, interrupting active work and connections. Your data is kept. You can leave this for later.',
+			buttons: ['Later', 'Apply changes']
 		};
 	if (effect === 'request-platform-state' && (action === 'start' || action === 'stop'))
 		return {

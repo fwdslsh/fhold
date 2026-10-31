@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
 import { FH_RUNTIME_VERSION } from '../../lib/src/control-plane/release.js';
+import { parseDeploymentPatch } from '../../lib/src/control-plane/provisioning-input.js';
 import axe from 'axe-core';
 
 type DebuggerResult = {
@@ -1098,7 +1099,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		})()`);
 		expect(
 			await evaluate(
-				"!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Pending restart'"
+				"!document.querySelector('#pending-restart').hidden && document.querySelector('#pending-restart-title').textContent==='Changes pending'"
 			)
 		).toBe(true);
 		expect(
@@ -1550,7 +1551,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
 			const {bindConfigurationEvents}=await import('./configuration.js');
-			window.cloudDraftQa={prepared:[],applied:0,confirmations:[],settings:{containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],availability:'always',environment:{TZ:'America/Chicago',FH_SCHEDULER_ENABLED:'1',FH_CLAUDE_REMOTE:'0',FH_CODEX_REMOTE:'0'}}};
+			window.cloudDraftQa={prepared:[],applied:0,confirmations:[],settings:{containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],availability:'always',environment:{FH_TIMEZONE:'America/Chicago',FH_SCHEDULER_ENABLED:'1',FH_CLAUDE_REMOTE:'0',FH_CODEX_REMOTE:'0'}}};
 			state.awaitingSetupFinish=false; state.currentView='system';
 			window.cloudAccessQa={...window.cloudAccessQa,operations:{...window.cloudAccessQa.operations,...Object.fromEntries(['inspect','prepare','apply','discard'].map(name=>['host.deployment.'+name,{support:'supported',availability:{state:'ready'}}]))}};
 			state.api.deploymentSettings=async()=>window.cloudDraftQa.settings;
@@ -1565,8 +1566,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await value('#deployment-timezone', 'America/New_York');
 		await click('#deployment-edit-form button[type="submit"]');
 		expect(await evaluate('window.cloudDraftQa.prepared')).toEqual([
-			{ availability: 'on-demand', environment: { TZ: 'America/New_York' } }
+			{ availability: 'on-demand', environment: { FH_TIMEZONE: 'America/New_York' } }
 		]);
+		expect(parseDeploymentPatch(await evaluate('window.cloudDraftQa.prepared[0]'))).toMatchObject({
+			environment: { FH_TIMEZONE: 'America/New_York' }
+		});
 		expect(await evaluate('window.cloudDraftQa.confirmations')).toEqual(['apply']);
 		expect(await evaluate('window.cloudDraftQa.applied')).toBe(0);
 		expect(await evaluate("document.querySelector('#pending-restart').hidden")).toBe(false);
@@ -1582,6 +1586,49 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
 		).toBe(true);
 		await capture('aca-pending-apply-later-320.png');
+		for (const kind of ['local-docker', 'ssh-docker']) {
+			await command('Emulation.setDeviceMetricsOverride', {
+				width: 1060,
+				height: 900,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+			await evaluate(`(async()=>{
+				const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
+				window.cloudDraftQa.prepared=[];window.cloudDraftQa.confirmations=[];
+				window.cloudDraftQa.settings={containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],environment:{FH_TIMEZONE:'America/Chicago',FH_CLAUDE_REMOTE:'1',FH_CODEX_REMOTE:'1'},unavailable:{availability:'Automatic scale-to-zero is not available on this host. Use Start and Stop.',FH_SCHEDULER_ENABLED:'Scheduling overrides are configured in this instance’s custom Compose file.'}};
+				window.cloudAccessQa={...window.cloudAccessQa,identity:{name:'Test assistant',location:'/synthetic/instance',ref:{kind:${JSON.stringify(kind)},connectionId:'synthetic',homeDir:'/synthetic/instance',remoteHome:'/synthetic/instance'}}};
+				render(window.cloudAccessQa);document.querySelector('#deployment-settings').open=true;
+			})()`);
+			await click('#load-deployment-settings');
+			expect(await evaluate("document.querySelector('#deployment-fields').disabled")).toBe(false);
+			expect(await evaluate("document.querySelector('#deployment-schedule').disabled")).toBe(true);
+			expect(await evaluate("document.querySelector('#deployment-availability').disabled")).toBe(
+				true
+			);
+			await value('#deployment-timezone', 'Asia/Tokyo');
+			await value('#deployment-claude', '0');
+			await click('#deployment-edit-form button[type="submit"]');
+			expect(parseDeploymentPatch(await evaluate('window.cloudDraftQa.prepared[0]'))).toEqual({
+				environment: { FH_TIMEZONE: 'Asia/Tokyo', FH_CLAUDE_REMOTE: '0' }
+			});
+			expect(await evaluate('window.cloudDraftQa.confirmations')).toEqual(['apply']);
+			expect(await evaluate('window.cloudDraftQa.applied')).toBe(0);
+			expect(await evaluate("document.querySelector('#apply-pending-restart').textContent")).toBe(
+				'Apply changes'
+			);
+			await capture(`${kind}-deployment-settings-desktop.png`);
+			await command('Emulation.setDeviceMetricsOverride', {
+				width: 320,
+				height: 900,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+			expect(
+				await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+			).toBe(true);
+			await capture(`${kind}-deployment-settings-320.png`);
+		}
 		await evaluate(
 			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
 		);

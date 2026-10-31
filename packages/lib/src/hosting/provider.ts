@@ -7,8 +7,8 @@ import type { HostingProcess } from '../control-plane/process.js';
 import type { HostingConnection, HostingProvider, InstanceRef, InstanceSession } from './types.js';
 import { composeInstanceSession, type ComposedInstanceSession } from '../management/index.js';
 import { hostOperations } from '../management/host-operations.js';
-import { invokeOperation, supportedOperation } from '../management/contracts.js';
 import { directoryProvisioning } from './provisioning.js';
+import { dockerDeploymentOperations } from './docker-deployment.js';
 
 /** The composition root: clients depend on provider capabilities, not vendor branches. */
 export function hostingProvider(value: HostingConnection, run?: HostingProcess): HostingProvider {
@@ -49,23 +49,22 @@ export function openInstanceSession(
 	const hostSession = openHostingInstance(connection, value);
 	const { host, inspectHost } = hostOperations(hostSession);
 	const bindings = hostSession.applicationBindings?.(options);
+	let inspectDeployment = inspectHost;
 	if (bindings?.docker) {
-		const docker = bindings.docker;
-		host.deployment.update = supportedOperation(async (input, context) => {
-			if (input.container || input.image)
-				throw new Error('Use Docker deployment settings to change an explicit image pin.');
-			await invokeOperation(docker.update, { pull: input.pull }, context);
-			return { state: 'completed', step: 'updated' };
-		});
-		host.deployment.apply = supportedOperation(async (_input, context) => {
-			await invokeOperation(host.restart, undefined, context);
-			return { state: 'completed', step: 'applied' };
-		});
+		const deployment = dockerDeploymentOperations(
+			hostSession.ref,
+			bindings.docker,
+			host,
+			inspectHost,
+			async () => (await bindings.inspectApplication?.())?.docker?.config
+		);
+		host.deployment = deployment.operations;
+		inspectDeployment = deployment.inspectHost;
 	}
 	return composeInstanceSession({
 		ref: hostSession.ref,
 		host,
-		inspectHost,
+		inspectHost: inspectDeployment,
 		...bindings
 	});
 }
