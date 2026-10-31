@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Stamped publication version, chosen after functional validation (for example 0.3.261000-beta)'
+        description: 'Stamped publication version: 0.3 uses YYMMNN; 0.4+ uses MMNN (for example 0.4.1001-beta)'
         required: true
         type: string
       candidate_sha:

@@ -414,6 +414,8 @@ describe('release completeness gate', () => {
 	const productName = readElectronProductName();
 
 	test('the mandatory audit runs after source qualification and still gates images', () => {
+		const audit = readJson('package.json').scripts?.audit;
+		expect(audit).toBe('bun audit --ignore GHSA-mrhx-c7xc-m3w5 --ignore GHSA-3g3m-2fjr-6pw4 --ignore GHSA-g3hv-75wg-m249');
 		const gates = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
 		const steps = gates.jobs.quality.steps;
 		const auditIndex = steps.findIndex((step: { run?: string }) => step.run === 'bun run audit');
@@ -715,6 +717,20 @@ describe('release completeness gate', () => {
 		});
 		expect(() => requiredReleaseAssets('0.3.261000-beta.1')).toThrow('Invalid');
 		expect(() => requiredReleaseAssets('0.3.2610100')).toThrow('Invalid');
+	});
+
+	test('0.4 MMNN artifacts and manifests use the exact version and reject malformed patches', () => {
+		for (const version of ['0.4.1001-beta', '0.4.1002', '0.4.1101-rc', '0.5.101']) {
+			withDir((dir) => {
+				writeCompleteDist(dir, version);
+				expect(requiredReleaseAssets(version, productName)).toContain(`fhold-admin-${version}-x86_64-linux.AppImage`);
+				expect(requiredReleaseAssets(version, productName)).toContain(`fhold-claude-desktop-${version}.mcpb`);
+				expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
+				expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
+			});
+		}
+		for (const version of ['0.4.0101', '0.4.1000', '0.4.1301', '0.4.261001', '0.4.1001-beta.1'])
+			expect(() => requiredReleaseAssets(version)).toThrow('Invalid');
 	});
 
 	test('validateReleaseAssets fails closed when every Admin artifact is missing', () => {

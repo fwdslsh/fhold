@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Update AKM CLI to 0.10.261022 and all three AKM plugins to 0.10.261020.
+
+Prepare yearless `X.Y.MMNN[-alpha|-beta|-rc]` versioning from 0.4 onward, with
+monthly counters 01–99. Examples: `0.4.1001`, `0.4.1002`, `0.4.1101`; January
+uses canonical SemVer `0.4.101`. Year rollover requires a new minor line.
+The 0.3 format and current version stamps are unchanged.
+
+Add the owner's exact source-audit exceptions for the inherited glob cancellation
+and minimatch amplification findings. They remain visible in raw audits;
+mandatory audit gating and image scanner rules remain enabled.
+
 ## 0.3.261013-beta — open your assistant’s AKM UI
 
 Admin now includes **Knowledge → Open AKM UI**. Open AKM’s native browser

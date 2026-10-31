@@ -35,7 +35,7 @@
     "portal:discord:dev": "PORTAL_ADAPTER=discord bun run --cwd packages/portal start",
     "portal:slack:dev": "PORTAL_ADAPTER=slack bun run --cwd packages/portal start",
     "cli:test": "bun run --cwd packages/cli test",
-    "audit": "bun audit --ignore GHSA-mrhx-c7xc-m3w5",
+    "audit": "bun audit --ignore GHSA-mrhx-c7xc-m3w5 --ignore GHSA-3g3m-2fjr-6pw4 --ignore GHSA-g3hv-75wg-m249",
     "install:dev": "FH_HOME=/tmp/fhold-dev bun run packages/cli/src/main.ts install --no-start",
     "lib:test": "bun run --cwd packages/lib test",
     "test:recovery": "bun test --isolate scripts/recovery-engine.test.ts scripts/recovery-mounts.test.ts scripts/recovery-acceptance.test.ts scripts/recovery-wrapper.test.ts scripts/blob-store.test.ts scripts/assistant-recovery-runtime.test.ts scripts/akm-index-cache.test.ts",

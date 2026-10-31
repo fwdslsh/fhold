@@ -10,8 +10,7 @@ const fixtures: string[] = [];
 afterEach(() => {
 	for (const path of fixtures.splice(0)) rmSync(path, { recursive: true, force: true });
 });
-function fixture() {
-	const version = '0.3.261002-beta';
+function fixture(version = '0.3.261002-beta') {
 	const directory = mkdtempSync(join(tmpdir(), 'fhold-admin-feeds-'));
 	fixtures.push(directory);
 	for (const [index, asset] of expectedAdminAssets(version).entries()) {
@@ -33,6 +32,13 @@ function fixture() {
 test('both native architecture feeds identify the exact checksummed AppImage bytes', () => {
 	const { directory, version } = fixture();
 	expect(() => validateAdminUpdateFeeds(directory, version)).not.toThrow();
+});
+
+test('0.4 month-counter versions retain their exact names in both update feeds', () => {
+	for (const value of ['0.4.1001-beta', '0.4.1002', '0.4.1101', '0.5.101']) {
+		const { directory, version } = fixture(value);
+		expect(() => validateAdminUpdateFeeds(directory, version)).not.toThrow();
+	}
 });
 test('a stale feed, swapped architecture or corrupt image cannot be published', () => {
 	for (const mutation of ['version', 'architecture', 'hash', 'size', 'legacy-path', 'extra-file']) {

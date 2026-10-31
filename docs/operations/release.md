@@ -139,7 +139,7 @@ tags, recovery formats or instance identities.
 
 ### Monthly versions from 0.3
 
-From **0.3 onward**, use `X.Y.YYMMNN[-alpha|-beta|-rc]`, with UTC year/month
+For the **0.3 release line**, use `X.Y.YYMMNN[-alpha|-beta|-rc]`, with UTC year/month
 and a two-digit monthly counter `NN`. The first October 2026 release is
 `0.3.261000-beta`. There is no additional prerelease serial. The patch is a
 canonical SemVer integer (no leading zero); this calendar format covers 2010–2099.
@@ -167,6 +167,35 @@ Historical 0.1 timestamps and 0.2 daily builds remain readable and immutable.
 Cross-format clock checks use shared month precision, so moving from an October
 21 daily release to October's monthly line is valid. Moving to a prior month
 is refused, including across minor lines.
+
+### Month-counter versions from 0.4
+
+Starting with **0.4**, drop the `YY` year prefix and use
+`X.Y.MMNN[-alpha|-beta|-rc]`. Month selection remains UTC. `NN` starts at `01`
+each month and runs through `99`, shared by all channels. Examples:
+`0.4.1001`, `0.4.1002`, `0.4.1101`, or `0.4.1001-beta`. Promotions consume the
+next counter; `0.4.1001-beta` promotes to `0.4.1002-rc` or `0.4.1002`, never a
+different channel under the same public counter. No prerelease serial is allowed.
+
+Keep the patch a canonical SemVer integer. For January through September, omit
+the leading zero from the complete patch: January counter 01 is **`0.4.101`**,
+not `0.4.0101`; September counter 99 is `0.4.999`. The two counter digits stay
+present. Counter00, invalid months, `NN=100`, and year-prefixed 0.4 patches are
+rejected. Counter gaps are allowed; published counter reuse is not.
+
+Comparison uses major/minor, numeric month/counter, then channel. The year is
+not encoded and the parser does not invent one. At December-to-January rollover,
+start a new minor line, for example **`0.4.1299` → `0.5.101`**. January on the
+same minor line would be a SemVer downgrade and is refused. After counter 99,
+wait for the next UTC month or explicitly review a new minor line; never widen
+or wrap the counter. A new minor line takes normal SemVer precedence even when
+its patch is numerically smaller. This also permits `0.3.261013-beta` to advance
+to `0.4.1001-beta` without interpreting the shorter patch as a clock regression.
+
+The 0.3 format and all published historical versions remain unchanged. This PR
+prepares the 0.4 naming policy; it does not stamp or publish 0.4. Existing
+immutable publication identity, unused-counter checks, SHA/digest development
+candidates and rebuild/retry rules apply unchanged to the new format.
 
 All stamping, release workflow and artifact validation use the shared parser.
 CLI/Admin derive their own, runtime and MCPB versions from the owning manifests;
@@ -335,8 +364,9 @@ exceptions pending supported upstream fixes. Track removal in
   (latest 3.25.76), so its source-audit exception remains. MCPB packs
   repository-owned manifests; do not describe this remaining exposure as patched.
 
-`bun run audit` excludes only the remaining Zod advisory; raw `bun audit` still
-reports it. No global major-version override, vendor patch, severity-wide exclusion or
+`bun run audit` excludes the remaining Zod advisory and the two explicitly
+approved glob/minimatch findings below; raw `bun audit` still reports them.
+No global major-version override, vendor patch, severity-wide exclusion or
 disabled audit is introduced. Source checks run before the mandatory audit, so
 an advisory cannot hide unrelated test failures. The separately approved Assistant
 image scope is documented below.
@@ -344,6 +374,27 @@ Re-review with the next AKM update, before any release, and no later than
 **November 6, 2026**. Remove each exception as soon as its supported dependency
 chain is patched (including the separate MCPB and Azure chains), and qualify AKM
 or Blob behavior when updating those dependencies. This is not a clean-audit claim.
+
+## Temporary glob and minimatch source-audit exceptions
+
+On October 31, 2026, the product owner approved these exact advisory exceptions
+for PR #95. Raw audit against untouched main and the AKM update reports the same
+findings through OpenCode's SDK/util dependencies and Electron's packaging chain:
+
+- [GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4):
+  moderate glob cancellation bypass. An aborted walk can continue filesystem
+  traversal after its caller times out, consuming I/O and CPU. Patched in 14.0.2.
+- [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249):
+  moderate minimatch glob-pattern amplification, potentially exhausting CPU and
+  memory with hostile patterns. Patched in 11.0.1.
+
+These are acceptance of unresolved findings, not fixes or unreachable-code
+claims. The root audit command ignores only their exact IDs, alongside the
+existing MCPB Zod ID. The mandatory audit still gates images and catches all
+other advisories; raw reports remain unfiltered. No image exception, unsupported
+major override or installed vendor edit is added. Adopt supported parent-chain
+fixes and remove each ignore when its affected chains are patched. Re-review
+before the next release and by the existing **November 6, 2026** review deadline.
 
 ## Temporary Assistant image exceptions (October 26, 2026)
 

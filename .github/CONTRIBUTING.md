@@ -62,7 +62,11 @@ qualification; do not restart it to chase a newer noncritical release. Changed
 pins or lockfile content still require affected checks on the final commit.
 
 Develop and test candidates using commit SHAs/image digests. Stamp a release
-version near publication. Unpublished builds and dry runs can change without
+using `X.Y.YYMMNN` for 0.3; from 0.4 use `X.Y.MMNN` with monthly counter 01–99,
+e.g. `0.4.1001`, `0.4.1002`, `0.4.1101` (January: `0.4.101`). Keep optional
+alpha/beta/rc suffixes without a serial and use a new minor line at year rollover.
+See the [version policy](../docs/operations/release.md#month-counter-versions-from-04).
+Stamp the version near publication. Unpublished builds and dry runs can change without
 consuming another monthly counter; regenerate their evidence and validate the
 final stamped build. Public release tags, versioned registry images and release
 downloads remain immutable, even after partial publication. CI artifacts are

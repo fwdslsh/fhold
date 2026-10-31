@@ -199,11 +199,16 @@ Dependency changes that affect containers require a **full** release. A
 tooling-only release retains the existing published runtime and cannot ship
 pending container or dependency-resolution changes.
 
-From 0.3, choose an unused UTC version using `X.Y.YYMMNN-beta` (or alpha/rc/stable).
+For 0.3, use `X.Y.YYMMNN-beta` (or alpha/rc/stable), retaining its counter 00–99.
+Starting at 0.4, drop the year prefix: use `X.Y.MMNN[-alpha|-beta|-rc]`, for
+example `0.4.1001-beta`, `0.4.1002`, `0.4.1101`. Counter `NN` starts at 01 each
+UTC month and runs through 99. January's canonical SemVer form is `0.4.101`,
+not `0.4.0101`; at year rollover start a new minor line, e.g. `0.5.101`, to
+avoid a downgrade. See the [0.4 version policy](release.md#month-counter-versions-from-04).
 Use commit SHAs and image digests while developing and functionally validating
 candidates. Choose and stamp the public version near publication. Start the
-monthly counter at 00 and advance it for each public release, including channel
-promotion. No prerelease serial is used. Check public tags, releases and images
+monthly counter at 00 for 0.3 or 01 for 0.4+ and advance it for each public
+release, including channel promotion. No prerelease serial is used. Check public tags, releases and images
 for used counters; local candidate receipts and nonpublishing dry runs do not
 reserve one. See the
 [monthly version policy](release.md#monthly-versions-from-03) for retries,
@@ -213,7 +218,7 @@ overflow and historical 0.1/0.2 compatibility:
 git fetch origin --tags
 gh release list --repo fwdslsh/fhold --limit 20
 # Example only: select an unused month/counter/channel for the actual candidate.
-VERSION=0.3.261000-beta
+VERSION=0.4.1001-beta
 SCOPE=full VERSION="$VERSION" bun scripts/bump-release.mjs
 SCOPE=full VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
 bun install --lockfile-only

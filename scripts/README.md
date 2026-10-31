@@ -5,7 +5,7 @@ Only a small script surface remains active.
 | Script | Purpose |
 |---|---|
 | `dev-setup.sh` | Materialize an isolated `.dev` home for the stack |
-| `release-version.mjs` | Validate UTC release versions, precedence and immutable retry identity |
+| `release-version.mjs` | Validate historical UTC versions and 0.4+ MMNN patches, precedence and immutable retry identity |
 | `set-version.mjs` | Stamp package/Compose versions using the shared release contract |
 | `bump-release.mjs` | Stamp the complete product release |
 | `smoke-image.sh` | Assert image startup and runtime security boundaries |
