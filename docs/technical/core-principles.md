@@ -5,7 +5,7 @@ implementation that changes a boundary. fhold is a single-install personal
 OpenCode agent: native provider sign-in, real readiness, persistent knowledge,
 ordinary-language recurring work and standards-based client access.
 
-This implementation uses OpenCode 2 with AKM 0.10 prerelease integrations.
+This implementation uses OpenCode 2 with AKM 0.10 stable integrations.
 Native live settings, permissions and persistence checks are recorded in the
 [qualification report](../operations/opencode-v2-qualification.md). Public
 artifacts must additionally pass the GitHub release gates.
@@ -24,9 +24,9 @@ fhold is primarily a prebuilt image using AKM and OpenCode for custom, private
 assistants, with minimal repeatable setup and maintenance tooling. Reuse their
 native features before adding code; remove duplicate orchestration and local
 agent/tool/memory policy. Any machinery outside this purpose requires explicit
-product-owner approval to add or retain. Existing code is not approval. fhold
-remains beta; do not add historical configuration converters or compatibility
-frameworks. Preserve operator data/settings and native consent, and maintain
+product-owner approval to add or retain. Existing code is not approval. The first
+stable line is 0.4; do not add historical converters or compatibility frameworks
+to emulate older beta behavior. Preserve operator data/settings and native consent, and maintain
 Guardian\'s actual external credential boundaries.
 
 ## Product and ownership

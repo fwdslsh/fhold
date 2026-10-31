@@ -1,17 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.4.1001 — first stable release
+
+First stable Linux release for Assistant, Guardian, Portal, CLI/Admin and the
+Claude Desktop extension. All components now share **0.4.1001**. Stable downloads
+are available through GitHub's latest release and images through `latest`;
+the temporary beta recommendation is retired. Explicit updater channel choices
+and native consent remain unchanged.
 
 Update AKM CLI to 0.10.261022 and all three AKM plugins to 0.10.261020.
 
-Prepare yearless `X.Y.MMNN[-alpha|-beta|-rc]` versioning from 0.4 onward, with
+Use yearless `X.Y.MMNN[-alpha|-beta|-rc]` versioning from 0.4 onward, with
 monthly counters 01–99. Examples: `0.4.1001`, `0.4.1002`, `0.4.1101`; January
 uses canonical SemVer `0.4.101`. Year rollover requires a new minor line.
-The 0.3 format and current version stamps are unchanged.
+Historical published versions retain their original format and bytes.
 
 Add the owner's exact source-audit exceptions for the inherited glob cancellation
 and minimatch amplification findings. They remain visible in raw audits;
 mandatory audit gating and image scanner rules remain enabled.
+
+Includes Admin's **Knowledge → Open AKM UI** action from the preceding tooling
+beta, alongside the native migration, worker, diagnostics and recovery fixes
+already shipped in the 0.3 beta line. Linux x64 and ARM64 remain the supported
+public platforms; Windows/macOS distribution and the existing experimental
+features retain their documented limits. Publishing or updating Admin/CLI does
+not upgrade an existing instance.
 
 ## 0.3.261013-beta — open your assistant’s AKM UI
 

@@ -192,8 +192,8 @@ or wrap the counter. A new minor line takes normal SemVer precedence even when
 its patch is numerically smaller. This also permits `0.3.261013-beta` to advance
 to `0.4.1001-beta` without interpreting the shorter patch as a clock regression.
 
-The 0.3 format and all published historical versions remain unchanged. This PR
-prepares the 0.4 naming policy; it does not stamp or publish 0.4. Existing
+The first stable release is **0.4.1001**. The 0.3 format and all published
+historical versions remain unchanged. Existing
 immutable publication identity, unused-counter checks, SHA/digest development
 candidates and rebuild/retry rules apply unchanged to the new format.
 
@@ -476,13 +476,10 @@ executable, not an npm bootstrap package.
 
 Published bytes/tags must not be overwritten. Matching retries are no-write;
 differing content requires a new version. Stable uses `latest`; alpha/beta/rc
-use their explicit channels. While fhold remains prerelease-only, retain the
-temporary **beta-as-latest recommended release** policy: use the supported beta
-release and its pinned artifacts/beta image channel. GitHub's stable-only
-`releases/latest` endpoint may be absent; use the releases list or explicit beta
-links. This does not relabel a prerelease as stable, change an operator's native
-updater channel choice or broaden Stable to accept prereleases. Revisit this
-workaround at the first stable release. Preserve release/checkpoint evidence and
+use their explicit channels. Starting with **0.4.1001**, the recommended release
+is stable and GitHub's `releases/latest` endpoint selects it. The temporary
+beta-as-latest recommendation is retired. Preserve an operator's native updater
+channel choice; Stable still excludes prereleases. Preserve release/checkpoint evidence and
 disclose incomplete live/renderer/platform gates.
 
 ## Licensing

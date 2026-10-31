@@ -70,8 +70,8 @@ Stamp the version near publication. Unpublished builds and dry runs can change w
 consuming another monthly counter; regenerate their evidence and validate the
 final stamped build. Public release tags, versioned registry images and release
 downloads remain immutable, even after partial publication. CI artifacts are
-candidate evidence. During prerelease, beta remains the temporary latest
-recommended release; see the release guide for native channel behavior.
+candidate evidence. Stable releases use GitHub's latest release and the `latest`
+image channel; preserve native updater consent and explicit channel choices.
 
 ```bash
 bun run check
