@@ -22,8 +22,8 @@ helpers, policy stores, adapters, services or frameworks. Routine minimal
 integration that directly serves this intent and the user's authorized change
 does not need a second approval.
 
-fhold remains beta. Do not add or preserve historical configuration converters
-or compatibility frameworks to emulate older beta behavior. Correct current
+The first stable line is 0.4. Do not add or preserve historical configuration
+converters or compatibility frameworks to emulate older beta behavior. Correct current
 ownership and use native formats instead. Preserve operator-owned data,
 credentials and explicit settings; do not confuse removal of fhold policy with
 bypassing native consent or Guardian's actual external credential boundaries.
@@ -173,8 +173,12 @@ require the affected checks on the final SHA. Follow
 `docs/operations/updating-dependencies-and-releasing.md`. Keep runtime pins exact
 and image-baked rather than floating versions or startup upgrades.
 
-Identify development candidates by commit SHA and image digest. Choose and stamp
-the release version near publication, after functional validation. Unpublished
+Identify development candidates by commit SHA and image digest. Public version
+formats are `X.Y.YYMMNN` for 0.3 and `X.Y.MMNN` from 0.4 onward, with
+optional `-alpha`, `-beta` or `-rc` and no serial. The 0.4+ counter starts at 01
+each UTC month; January is canonical SemVer `0.4.101`. Drop the year prefix
+only from 0.4 onward. Start a new minor line at year rollover to preserve ordering.
+Choose and stamp the release version near publication, after functional validation. Unpublished
 local builds, dry runs and candidate receipts do not consume monthly counters;
 they may be rebuilt under the same provisional version with fresh evidence.
 Once a release Git tag, versioned registry image or release-download asset is
@@ -182,8 +186,8 @@ public, its version and bytes are immutable, including partial publication.
 CI/development artifacts identified by SHA/digest are candidate evidence, not
 release publication. Qualify the final stamped
 SHA and artifacts; reusing a version never makes earlier checks cover changed
-content. During prerelease, retain the temporary beta-as-latest recommendation;
-do not invent stable releases or change native updater consent/channel choices.
+content. Stable releases use GitHub's latest release and the `latest` image channel.
+Preserve native updater consent and an operator's explicit channel choice.
 
 Before final candidate qualification, identify the required checks and the eligible
 evidence that satisfies each. Separate development regression, final candidate

@@ -4,6 +4,7 @@
 // Env in:
 //   STAMP   — 'true' to write files in place; any other value = preview only
 //   VERSION — explicit semver to stamp (required)
+//             0.3: YYMMNN; 0.4+: MMNN, e.g. 0.4.1001-beta (January: 0.4.101)
 //   SCOPE   — 'tools' advances CLI/Admin only; 'full' (default) advances everything
 //
 // Preview locally: VERSION='<candidate-version>' node scripts/bump-release.mjs

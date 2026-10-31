@@ -1,6 +1,6 @@
 {
   "name": "@fhold/electron",
-  "version": "0.3.261013-beta",
+  "version": "0.4.1001",
   "private": true,
   "type": "module",
   "description": "Optional static desktop administration tool for fhold stacks",

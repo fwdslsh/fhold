@@ -5,7 +5,7 @@ implementation that changes a boundary. fhold is a single-install personal
 OpenCode agent: native provider sign-in, real readiness, persistent knowledge,
 ordinary-language recurring work and standards-based client access.
 
-This implementation uses OpenCode 2 with AKM 0.10 prerelease integrations.
+This implementation uses OpenCode 2 with AKM 0.10 stable integrations.
 Native live settings, permissions and persistence checks are recorded in the
 [qualification report](../operations/opencode-v2-qualification.md). Public
 artifacts must additionally pass the GitHub release gates.
@@ -24,9 +24,9 @@ fhold is primarily a prebuilt image using AKM and OpenCode for custom, private
 assistants, with minimal repeatable setup and maintenance tooling. Reuse their
 native features before adding code; remove duplicate orchestration and local
 agent/tool/memory policy. Any machinery outside this purpose requires explicit
-product-owner approval to add or retain. Existing code is not approval. fhold
-remains beta; do not add historical configuration converters or compatibility
-frameworks. Preserve operator data/settings and native consent, and maintain
+product-owner approval to add or retain. Existing code is not approval. The first
+stable line is 0.4; do not add historical converters or compatibility frameworks
+to emulate older beta behavior. Preserve operator data/settings and native consent, and maintain
 Guardian\'s actual external credential boundaries.
 
 ## Product and ownership
@@ -613,14 +613,21 @@ needs its own artifact and runtime gates; earlier artifacts do not qualify chang
 The 0.1 release line uses real UTC `X.Y.yyMMddHHmm` timestamps and explicit
 alpha/beta/rc channels. The historical 0.2 patch format is `yyMMdd<build>`:
 UTC year/month/day plus an unpadded daily build number starting at 1, with the
-same prerelease suffixes. From 0.3 onward use `X.Y.YYMMNN[-alpha|-beta|-rc]`:
+same prerelease suffixes. The 0.3 line uses `X.Y.YYMMNN[-alpha|-beta|-rc]`:
 UTC year/month and exactly two counter digits starting at 00. Each public release,
 including channel promotion, consumes a counter; there is no additional serial.
+Starting with 0.4, use `X.Y.MMNN[-alpha|-beta|-rc]` without the year prefix,
+with counter 01–99 each UTC month: `0.4.1001`, `0.4.1002`, `0.4.1101`.
+Canonical SemVer removes the leading patch zero for January–September
+(`0.4.101`, not `0.4.0101`). Start a new minor line at year rollover to preserve
+ordering, e.g. `0.4.1299` → `0.5.101`. The shared parser never fabricates a year.
 Development candidates use source SHA/image digest; reserve a version near
 publication. Unpublished candidates and local dry-run receipts do not reserve a
 counter and may change. Published tags, images and downloads remain immutable.
 See the [release runbook](../operations/release.md#monthly-versions-from-03)
 for ordering, UTC reset, immutable retries and refusal after counter 99.
+The [0.4 policy](../operations/release.md#month-counter-versions-from-04)
+defines the yearless form; the 0.3 format and all published versions stay unchanged.
 Historical 0.1/0.2 versions remain valid and immutable. This changes release
 naming, not recovery or runtime schemas.
 The CLI remains a standalone executable,
