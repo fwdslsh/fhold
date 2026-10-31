@@ -8,6 +8,8 @@ import {
 	type HostingConnection,
 	type InstanceRef
 } from './types.js';
+import type { DeploymentOutcome, DeploymentPatch, ProvisioningResult } from '../dto/hosting.js';
+import { parseDeploymentPatch, parseProvisioningRequest } from './provisioning.js';
 
 function record(value: unknown): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -85,6 +87,17 @@ export type HostingPreferences = {
 	version: 1;
 	connections: HostingConnection[];
 	recent: InstanceRef[];
+	deployment?: Record<
+		string,
+		{
+			draft?: DeploymentPatch;
+			operation?: DeploymentOutcome;
+			continuation?: string;
+			resumeAfterUpdate?: boolean;
+			restartPhase?: 'stop' | 'start';
+		}
+	>;
+	installations?: ProvisioningResult[];
 };
 export function hostingPreferencesFile(): string {
 	return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'fhold', 'hosting.json');
@@ -101,7 +114,19 @@ export class HostingPreferencesStore {
 		const connections = input.connections.map(parseHostingConnection);
 		if (new Set(connections.map((item) => item.id)).size !== connections.length)
 			throw new Error('Hosting connection names must be unique.');
-		return { version: 1, connections, recent: input.recent.map(parseInstanceRef).slice(0, 20) };
+		return {
+			version: 1,
+			connections,
+			recent: input.recent.map(parseInstanceRef).slice(0, 20),
+			...(input.deployment &&
+			typeof input.deployment === 'object' &&
+			!Array.isArray(input.deployment)
+				? { deployment: input.deployment as HostingPreferences['deployment'] }
+				: {}),
+			...(Array.isArray(input.installations)
+				? { installations: input.installations as ProvisioningResult[] }
+				: {})
+		};
 	}
 	connection(id: string): HostingConnection {
 		if (id === 'local') return LOCAL_CONNECTION;
@@ -135,7 +160,7 @@ export class HostingPreferencesStore {
 		const data = this.read();
 		data.connections = data.connections.map((item) => (item.id === id ? connection : item));
 		if (connectionEndpoint(previous) !== connectionEndpoint(connection))
-			data.recent = data.recent.filter((item) => item.connectionId !== id);
+			this.forgetConnectionTargets(data, id);
 		this.write(data);
 		return connection;
 	}
@@ -145,6 +170,7 @@ export class HostingPreferencesStore {
 		const data = this.read();
 		data.connections = data.connections.filter((item) => item.id !== id);
 		data.recent = data.recent.filter((item) => item.connectionId !== id);
+		this.forgetConnectionTargets(data, id);
 		this.write(data);
 	}
 	remember(ref: InstanceRef, imported: InstanceRef[] = []): void {
@@ -157,9 +183,201 @@ export class HostingPreferencesStore {
 			.slice(0, 20);
 		this.write(data);
 	}
+	deployment(ref: InstanceRef): NonNullable<HostingPreferences['deployment']>[string] {
+		const entry = this.read().deployment?.[instanceKey(ref)];
+		if (!entry) return {};
+		try {
+			const raw = record(entry),
+				operation = raw.operation === undefined ? undefined : parseOutcome(raw.operation);
+			if (ref.kind === 'azure-container-apps') {
+				const connection = this.connection(ref.connectionId);
+				if (
+					connection.kind !== ref.kind ||
+					!ref.resourceId
+						.toLowerCase()
+						.startsWith(
+							`/subscriptions/${connection.subscriptionId}/resourceGroups/${connection.resourceGroup}/providers/Microsoft.App/containerApps/`.toLowerCase()
+						)
+				)
+					throw new Error('Saved target scope changed.');
+			}
+			let continuation: string | undefined;
+			if (raw.continuation !== undefined) {
+				if (typeof raw.continuation !== 'string' || ref.kind !== 'azure-container-apps')
+					throw new Error('Invalid continuation.');
+				const state = record(record(JSON.parse(raw.continuation)).state),
+					config = record(state.config);
+				const url = new URL(String(config.initialRequestUrl));
+				if (
+					url.origin !== 'https://management.azure.com' ||
+					![
+						ref.resourceId.toLowerCase(),
+						`${ref.resourceId}/start`.toLowerCase(),
+						`${ref.resourceId}/stop`.toLowerCase()
+					].includes(url.pathname.toLowerCase())
+				)
+					throw new Error('Continuation target mismatch.');
+				for (const key of ['operationLocation', 'resourceLocation'])
+					if (config[key]) {
+						const location = new URL(String(config[key]));
+						if (
+							location.origin !== url.origin ||
+							!location.pathname
+								.toLowerCase()
+								.startsWith(`/subscriptions/${ref.resourceId.split('/')[2]}/`.toLowerCase())
+						)
+							throw new Error('Continuation scope mismatch.');
+					}
+				if (
+					Object.keys(state).some((key) => !['config', 'status'].includes(key)) ||
+					Object.keys(config).some(
+						(key) =>
+							![
+								'initialRequestUrl',
+								'requestMethod',
+								'operationLocation',
+								'resourceLocation',
+								'metadata'
+							].includes(key)
+					)
+				)
+					throw new Error('Invalid continuation fields.');
+				if (config.metadata !== undefined) {
+					const metadata = record(config.metadata);
+					if (
+						Object.keys(metadata).some(
+							(key) => !['mode', 'resourceLocationConfig'].includes(key)
+						) ||
+						(metadata.mode !== undefined &&
+							!['OperationLocation', 'ResourceLocation', 'Body'].includes(String(metadata.mode)))
+					)
+						throw new Error('Invalid continuation metadata.');
+				}
+				if (!['POST', 'PATCH'].includes(String(config.requestMethod).toUpperCase()))
+					throw new Error('Invalid continuation method.');
+				continuation = raw.continuation;
+			}
+			return {
+				...(raw.draft ? { draft: parseDeploymentPatch(raw.draft) } : {}),
+				operation,
+				continuation,
+				resumeAfterUpdate:
+					typeof raw.resumeAfterUpdate === 'boolean' ? raw.resumeAfterUpdate : undefined,
+				restartPhase:
+					raw.restartPhase === 'stop' || raw.restartPhase === 'start' ? raw.restartPhase : undefined
+			};
+		} catch {
+			throw new Error(
+				'This target’s saved deployment draft/continuation is invalid. Review its private hosting preferences; no Azure action was submitted.'
+			);
+		}
+	}
+	saveDeployment(
+		ref: InstanceRef,
+		value: NonNullable<HostingPreferences['deployment']>[string]
+	): void {
+		const data = this.read();
+		data.deployment = { ...data.deployment, [instanceKey(ref)]: value };
+		this.write(data);
+	}
+	installations(connectionId: string): ProvisioningResult[] {
+		const connection = this.connection(connectionId);
+		return (this.read().installations ?? []).flatMap((value) => {
+			try {
+				const item = record(value),
+					ref = parseInstanceRef(item.ref),
+					operation = parseOutcome(item);
+				if (
+					ref.connectionId !== connectionId ||
+					ref.kind !== connection.kind ||
+					operation.state === 'completed' ||
+					!operation.reference ||
+					!/^fhold-[a-z0-9-]+-[a-f0-9]{8}$/.test(operation.reference)
+				)
+					return [];
+				if (
+					ref.kind === 'azure-container-apps' &&
+					connection.kind === 'azure-container-apps' &&
+					!ref.resourceId
+						.toLowerCase()
+						.startsWith(
+							`/subscriptions/${connection.subscriptionId}/resourceGroups/${connection.resourceGroup}/providers/Microsoft.App/containerApps/`.toLowerCase()
+						)
+				)
+					return [];
+				const previous = item.previousInitializationExecutions;
+				const request =
+					item.request === undefined ? undefined : parseProvisioningRequest(item.request);
+				if (
+					request &&
+					(request.kind !== 'azure-container-apps' ||
+						ref.kind !== 'azure-container-apps' ||
+						ref.resourceId.split('/').at(-1)?.toLowerCase() !== request.name.toLowerCase())
+				)
+					return [];
+				if (
+					previous !== undefined &&
+					(!Array.isArray(previous) ||
+						previous.some((entry) => typeof entry !== 'string' || !/^[a-z0-9-]+$/i.test(entry)))
+				)
+					return [];
+				return [
+					{
+						...operation,
+						ref,
+						...(previous ? { previousInitializationExecutions: previous as string[] } : {}),
+						...(request?.kind === 'azure-container-apps' ? { request } : {})
+					}
+				];
+			} catch {
+				return [];
+			} // One damaged optional record must not hide other connections.
+		});
+	}
+	saveInstallation(value: ProvisioningResult): void {
+		const data = this.read();
+		data.installations = [
+			...(data.installations ?? []).filter((item) => item?.reference !== value.reference),
+			value
+		];
+		this.write(data);
+	}
 	private write(data: HostingPreferences): void {
 		writeFileAtomic(this.path, `${JSON.stringify(data, null, 2)}\n`);
 	}
+	private forgetConnectionTargets(data: HostingPreferences, id: string): void {
+		data.recent = data.recent.filter((item) => item.connectionId !== id);
+		data.installations = (data.installations ?? []).filter(
+			(item) => item?.ref?.connectionId !== id
+		);
+		data.deployment = Object.fromEntries(
+			Object.entries(data.deployment ?? {}).filter(([key]) => {
+				try {
+					return JSON.parse(key)[1] !== id;
+				} catch {
+					return false;
+				}
+			})
+		);
+	}
+}
+
+function parseOutcome(value: unknown): DeploymentOutcome {
+	const input = record(value);
+	if (
+		!['submitted', 'in-progress', 'completed', 'failed', 'unknown'].includes(String(input.state)) ||
+		typeof input.step !== 'string' ||
+		!/^[a-z-]+$/.test(input.step) ||
+		(input.reference !== undefined && typeof input.reference !== 'string') ||
+		(input.message !== undefined && typeof input.message !== 'string')
+	)
+		throw new Error('Invalid operation outcome.');
+	return {
+		state: input.state as DeploymentOutcome['state'],
+		step: input.step,
+		...(input.reference ? { reference: input.reference as string } : {}),
+		...(input.message ? { message: input.message as string } : {})
+	};
 }
 
 export function connectionEndpoint(connection: HostingConnection): string {

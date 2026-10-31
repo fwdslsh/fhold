@@ -116,8 +116,9 @@ async function discover() {
 	});
 	if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
 	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
-		byId(button).disabled = !features?.installation;
-		byId(button).title = features?.installation ? '' : 'Unavailable through this connection.';
+		const available = button === 'hosting-install' ? features?.installation : features?.directory;
+		byId(button).disabled = !available;
+		byId(button).title = available ? '' : 'Unavailable through this connection.';
 	}
 	byId('hosting-creation-help').hidden = !features || features.installation;
 	byId('hosting-discover').hidden = !byId('hosting-status').classList.contains('danger-text');
@@ -442,11 +443,16 @@ export function bindHostingEvents() {
 				(item) => item.id === byId('hosting-connection').value
 			);
 			const info = await connectionOperation('Preparing setup', () =>
-				state.api.hostingInfo(connection.id)
+				importing
+					? state.api.hostingInfo(connection.id)
+					: state.api.provisioningOptions(connection.id)
 			);
 			if (!info) return;
 			state.installConnection = connection;
-			state.instancesDirectory = info.instancesDirectory;
+			state.installOptions = importing ? null : info;
+			state.installPreview = null;
+			state.installContinuation = null;
+			state.instancesDirectory = info.instancesDirectory || '';
 			state.installationReadiness = undefined;
 			byId('open-hosting').hidden = true;
 			byId('install-home').value = '';

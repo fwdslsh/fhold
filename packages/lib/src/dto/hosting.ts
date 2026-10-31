@@ -1,5 +1,6 @@
 import type { RestartStatus } from '../control-plane/runtime-revision.js';
 import type { StackConfig } from '../control-plane/stack-config.js';
+import type { RecoverySettings, RecoverySelection } from './recovery.js';
 
 /** Provider-neutral host DTOs and pure value constructors, shared across layers. */
 export type InstanceRef =
@@ -56,7 +57,82 @@ export type HostingSnapshot = InstanceSummary & {
 	providerLabel?: string;
 	guidance?: { access?: string; client?: string; restart?: string };
 };
-export type HostingResult = { snapshot: HostingSnapshot; message?: string; pending?: boolean };
+export type HostingResult = {
+	snapshot: HostingSnapshot;
+	message?: string;
+	pending?: boolean;
+	operation?: DeploymentOutcome;
+};
+
+export type DeploymentOutcome = {
+	state: 'submitted' | 'in-progress' | 'completed' | 'failed' | 'unknown';
+	reference?: string;
+	step: string;
+	message?: string;
+};
+/** A narrow user-requested patch, never a replacement cloud template. No secrets. */
+export type DeploymentPatch = {
+	container?: string;
+	image?: string;
+	availability?: 'always' | 'on-demand';
+	environment?: Record<string, string | null>;
+	cpu?: number;
+	memory?: string;
+	recovery?: { settings: RecoverySettings; selection: RecoverySelection };
+};
+export type DeploymentSettings = {
+	containers: Array<{ name: string; image: string }>;
+	availability?: 'always' | 'on-demand';
+	environment: Record<string, string>;
+	pending?: DeploymentPatch;
+	operation?: DeploymentOutcome;
+};
+export type ProvisioningRequest =
+	| {
+			kind: 'directory';
+			name: string;
+			directory: string;
+			config: StackConfig;
+			automaticPorts?: boolean;
+	  }
+	| {
+			kind: 'azure-container-apps';
+			name: string;
+			location: string;
+			environment: { name: string; create: boolean };
+			storage: { name: string; create: boolean };
+			availability: 'always' | 'on-demand';
+			timezone: string;
+			cpu?: number;
+			memory?: string;
+			image?: string;
+			/** Existing environment storage; independent Files mounts, never live native databases. */
+			mounts?: Array<{ storageName: string; mountPath: string }>;
+	  };
+export type ProvisioningResult = DeploymentOutcome & {
+	ref: InstanceRef;
+	previousInitializationExecutions?: string[];
+	/** Validated non-secret placement allows retry when failed ARM deployments have no outputs. */
+	request?: Extract<ProvisioningRequest, { kind: 'azure-container-apps' }>;
+};
+export type ProvisioningOptions = (
+	| { kind: 'directory'; instancesDirectory: string; defaultHome: string; config: StackConfig }
+	| {
+			kind: 'azure-container-apps';
+			location: string;
+			image: string;
+			timezone: string;
+			environments: Array<{ value: string; label: string }>;
+			storageAccounts: Array<{ value: string; label: string }>;
+	  }
+) & { continuations?: ProvisioningResult[] };
+export type ProvisioningPreview = {
+	ref: InstanceRef;
+	image: string;
+	summary: string;
+	resources: Array<{ name: string; type: string; action: 'create' | 'reuse' }>;
+	warnings: string[];
+};
 export type DirectoryListing = {
 	path: string;
 	parent: string;

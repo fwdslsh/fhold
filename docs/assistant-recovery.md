@@ -25,10 +25,13 @@ host portable backup. See [managing fhold](managing-fhold.md) for those flows.
 
 ## Runtime configuration
 
-Standalone deployments supply the image inputs below. Managed CLI/Admin installs
+Standalone deployments supply the image inputs below. Docker CLI/Admin installs
 store the same non-secret intent in `state/stack.json` under `recovery`, selection
 in `config/recovery/include.json`, and Blob credentials in the private file
-`state/secrets/fhold_recovery_connection_string`. No cloud management is included.
+`state/secrets/fhold_recovery_connection_string`. The runtime itself includes no
+cloud-management tooling. The experimental host-side ACA provider supplies those
+same image inputs through native deployment settings and secret-file mounts;
+see [Azure hosting](hosting.md#azure-container-apps-experimental).
 
 ### Configure through Admin or CLI
 
@@ -58,6 +61,16 @@ The native engine checks database integrity, required mounts and accepted
 authority. Ordinary image upgrades and coverage edits do not require a new
 destination. Package versions are recorded for diagnosis, not used to reject
 an otherwise valid checkpoint. Native tools handle their own database upgrades.
+
+For ACA, changes are staged locally for the exact resource and applied through
+the common pending-change confirmation. Native coverage/status inspection requires
+an explicit agent connection. **Start** restores the app's checkpoint before its
+writers run. A separate Job cannot restore the app's ephemeral writable layer,
+so the offline **Validate / restore** action remains unavailable for ACA. Fresh
+installation initializes its new namespace using a finite same-image Job;
+existing-namespace initialization still requires stopped writers and suitable
+native authentication. Unsupported identity/mount layouts are reported rather
+than silently changed. Cloud full export/import is separate future work.
 
 The CLI uses the same shared operations:
 
@@ -632,7 +645,8 @@ The image's non-root user must be able to create/write the chosen locations and
 parent directories. A backup of a read-only mounted source needs a writable empty
 target on replacement; this does not add mount provisioning or mount remapping.
 This selection works identically for directory and Blob destinations, with no
-Azure-specific settings in the snapshot algorithm or CLI/Admin.
+Azure-specific settings in the snapshot algorithm. Host-specific deployment
+placement belongs to the provider, not the recovery engine.
 
 Do not use path selection to emulate an unavailable OS credential store: a
 client whose tokens live in a desktop keyring still needs a headless storage
@@ -670,7 +684,8 @@ content belongs to an independent drive/volume rather than recovery:
 
 Lists default empty; discovery defaults off. This policy works with ordinary
 Docker binds, named volumes and independently provisioned mounts on other hosts.
-There are no hosting selectors or mount-provisioning tools in fhold.
+The recovery engine does not provision mounts. Host providers may attach existing
+storage separately; selecting a path here never attaches or copies a drive.
 
 - `excludePaths`: canonical absolute directory roots skipped even when absent
   or not mounted. Recovery never traverses/restores them. Existing linked paths

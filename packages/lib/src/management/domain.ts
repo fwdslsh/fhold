@@ -51,6 +51,7 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 			'restart',
 			'stop',
 			'update',
+			'apply',
 			'remote-setup',
 			'recovery-init',
 			'recovery-restore',
@@ -59,6 +60,13 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 		].includes(action)
 	)
 		throw new Error('Invalid restart confirmation request.');
+	if (action === 'apply')
+		return {
+			message: 'Apply the saved deployment changes?',
+			detail:
+				'Current work may be interrupted. Only the selected changes are applied. Azure may activate a revision during an update; an intentionally stopped cloud instance finishes with native Stop. Native readiness and recovery durability are reported separately.',
+			buttons: ['Later', 'Apply now']
+		};
 	if (effect === 'request-platform-state' && (action === 'start' || action === 'stop'))
 		return {
 			message: `Request the hosting platform to ${action} this app?`,

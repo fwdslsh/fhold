@@ -5,7 +5,17 @@ import {
 	type HostingProcess,
 	type HostingTerminal
 } from '../control-plane/process.js';
-import { azureClient } from './azure-client.js';
+import { azureClient, azureManagement, type AzureManagement } from './azure-client.js';
+import {
+	azureDeploymentOperations,
+	azureObject,
+	azureEnvironment,
+	selectedAzureContainer
+} from './azure-deployment.js';
+import { azureProvisioning } from './azure-provisioning.js';
+import { HostingPreferencesStore } from './preferences.js';
+import { AZURE_ASSISTANT_IMAGE } from './azure-template.js';
+import { azureRecovery } from './azure-recovery.js';
 import { httpsAgentBindings } from '../management/https-agent-session.js';
 import {
 	capabilities,
@@ -16,7 +26,6 @@ import {
 	type InstanceRef
 } from './types.js';
 
-const API_VERSION = '2026-07-01';
 type AzureApp = {
 	id: string;
 	name: string;
@@ -30,7 +39,13 @@ type AzureApp = {
 };
 type AzureRevision = {
 	name: string;
-	properties: { active?: boolean; replicas?: number; healthState?: string; runningState?: string };
+	properties: {
+		active?: boolean;
+		replicas?: number;
+		healthState?: string;
+		runningState?: string;
+		template?: { containers?: Array<{ name: string; image: string }> };
+	};
 };
 
 function object(value: unknown): Record<string, unknown> {
@@ -87,6 +102,10 @@ function revisionDocuments(value: unknown): AzureRevision[] {
 		return {
 			name: doc.name,
 			properties: {
+				template:
+					props.template && typeof props.template === 'object'
+						? (props.template as AzureRevision['properties']['template'])
+						: undefined,
 				active: props.active === true,
 				replicas:
 					typeof props.replicas === 'number' &&
@@ -119,9 +138,16 @@ function systemLogText(raw: string): string {
 export function azureContainerAppsProvider(
 	connection: Extract<HostingConnection, { kind: 'azure-container-apps' }>,
 	run: HostingProcess = runHostingProcess,
-	terminal: HostingTerminal = runHostingTerminal
+	terminal: HostingTerminal = runHostingTerminal,
+	options: { management?: AzureManagement; preferences?: HostingPreferencesStore } = {}
 ): HostingProvider {
 	const client = azureClient(run);
+	const preferences = options.preferences ?? new HostingPreferencesStore();
+	let sdkPromise: Promise<AzureManagement> | undefined;
+	const management = () =>
+		(sdkPromise ??= options.management
+			? Promise.resolve(options.management)
+			: azureManagement(connection));
 	const scope = [
 		'--subscription',
 		connection.subscriptionId,
@@ -162,8 +188,9 @@ export function azureContainerAppsProvider(
 			);
 	}
 	const provider: HostingProvider = {
+		provisioning: azureProvisioning(connection, management, client, preferences),
 		emptyHint:
-			'No fhold apps found in this resource group. Check the Azure scope. Custom images need the deployment tag fhold=assistant.',
+			'No recognized fhold images found. Install an assistant or select an exact existing Container App resource ID. Tags are discovery hints, not management permission.',
 		async check() {
 			const result: import('./types.js').ConnectionCheck = {
 				ok: false,
@@ -260,6 +287,7 @@ export function azureContainerAppsProvider(
 			assertScope(ref);
 			const selectedResourceId = ref.resourceId;
 			const name = ref.resourceId.split('/').at(-1) || '';
+			const deployment = azureDeploymentOperations(ref, management, preferences);
 			async function inspect(): Promise<HostingSnapshot> {
 				// Native projections avoid returning secrets, environment and storage config.
 				const app = appDocument(
@@ -280,14 +308,7 @@ export function azureContainerAppsProvider(
 					);
 				let revisions: AzureRevision[] = [];
 				const warnings: string[] = [];
-				const managed = recognized(app);
-				const recognitionReason =
-					'This app is inspect-only. Its deployment must declare fhold=assistant or use a fhold-assistant image before lifecycle management.';
-				const lifecycle = {
-					supported: managed,
-					...(!managed ? { reason: recognitionReason } : {})
-				};
-				if (!managed) warnings.push(recognitionReason);
+				const lifecycle = { supported: true };
 				try {
 					const observed = await az([
 						'containerapp',
@@ -297,7 +318,7 @@ export function azureContainerAppsProvider(
 						'--name',
 						name,
 						'--query',
-						'[].{name:name,properties:{active:properties.active,replicas:properties.replicas,healthState:properties.healthState,runningState:properties.runningState}}'
+						'[].{name:name,properties:{active:properties.active,replicas:properties.replicas,healthState:properties.healthState,runningState:properties.runningState,template:{containers:properties.template.containers[].{name:name,image:image}}}}'
 					]);
 					if (!Array.isArray(observed)) throw new Error('Revision list unavailable.');
 					revisions = revisionDocuments(observed);
@@ -337,7 +358,7 @@ export function azureContainerAppsProvider(
 						client:
 							'Status checks do not wake an idle agent. Opening OpenCode may wake a scaled-to-zero app; a platform-stopped app needs Start first.',
 						restart:
-							'Restart interrupts current work in the active revision. It does not change Azure deployment settings.'
+							'Restart waits for native Stop completion before Start. Agent readiness and recovery durability remain separate observations.'
 					},
 					name: app.name,
 					location: app.id,
@@ -346,17 +367,15 @@ export function azureContainerAppsProvider(
 						start: lifecycle,
 						stop: lifecycle,
 						restart:
-							managed && active.length === 1 && !stopped
+							!stopped || !!preferences.deployment(ref).restartPhase
 								? { supported: true }
 								: {
 										supported: false,
-										reason:
-											'Start the app and choose exactly one active revision before restarting. Multi-revision deployment changes stay with Azure deployment tooling.'
+										reason: 'Start the stopped app before restarting.'
 									},
 						settings: {
-							supported: false,
-							reason:
-								'Deployment settings are owned by your Azure deployment tooling. Use the agent’s native interface for assistant settings.'
+							supported: true,
+							reason: 'Native settings and selected deployment edits are managed independently.'
 						},
 						transfer: {
 							supported: false,
@@ -366,20 +385,34 @@ export function azureContainerAppsProvider(
 					},
 					platformState,
 					warnings,
-					services: [
-						{
-							name: 'assistant',
-							imageProvenance: {
-								configuredReferences: [
-									...new Set(
-										(app.properties.template?.containers ?? []).map((container) => container.image)
-									)
-								]
-							},
-							state: platformState,
-							health: app.properties.provisioningState || 'Unknown'
-						}
-					],
+					services: (app.properties.template?.containers ?? []).map((container) => ({
+						name: container.name,
+						imageProvenance: {
+							configuredReference: container.image,
+							observedReferences: [
+								...new Set(
+									active
+										.filter((revision) => (revision.properties.replicas ?? 0) > 0)
+										.flatMap(
+											(revision) =>
+												revision.properties.template?.containers
+													?.filter((item) => item.name === container.name)
+													.map((item) => item.image) ?? []
+										)
+								)
+							],
+							...(/^fwdslsh\/fhold-assistant:/.test(container.image)
+								? {
+										updateCandidate: {
+											reference: AZURE_ASSISTANT_IMAGE,
+											source: 'managing tool bundled runtime cohort'
+										}
+									}
+								: {})
+						},
+						state: platformState,
+						health: app.properties.provisioningState || 'Unknown'
+					})),
 					revisions: revisions.map((item) => ({
 						name: item.name,
 						active: !!item.properties.active,
@@ -392,11 +425,13 @@ export function azureContainerAppsProvider(
 						{ type: 'console', label: 'Agent console' }
 					],
 					portalUrl: `https://portal.azure.com/#resource${encodeURI(app.id)}`,
-					...(ingress?.external && ingress.fqdn ? { clientUrl: `https://${ingress.fqdn}` } : {})
+					...(ingress?.fqdn ? { clientUrl: `https://${ingress.fqdn}` } : {}),
+					pendingRestart: { required: !!preferences.deployment(ref).draft }
 				};
 			}
 			return {
 				ref,
+				deployment: deployment.operations,
 				actionEffects: {
 					start: 'request-platform-state',
 					stop: 'request-platform-state',
@@ -404,7 +439,82 @@ export function azureContainerAppsProvider(
 				},
 				inspect,
 				applicationBindings() {
-					return httpsAgentBindings({ inspectHost: inspect });
+					const native = httpsAgentBindings({
+						inspectHost: inspect,
+						readinessTimeoutMs: 600_000,
+						recoveryEnvironment: async () =>
+							azureEnvironment(
+								selectedAzureContainer(await (await management()).get(ref.resourceId))
+							),
+						async resolveAccess() {
+							const sdk = await management(),
+								document = await sdk.get(ref.resourceId),
+								properties = azureObject(document.properties);
+							const container = selectedAzureContainer(document),
+								env = azureEnvironment(container);
+							const ingress = azureObject(azureObject(properties.configuration).ingress);
+							if (typeof ingress.fqdn !== 'string' || !/^[a-z\d.-]+$/i.test(ingress.fqdn))
+								throw new Error(
+									'Configure a reachable native HTTPS endpoint; fhold will not publish private ingress.'
+								);
+							const passwordEnvironment = (Array.isArray(container.env) ? container.env : [])
+								.map(azureObject)
+								.find((item) => item.name === 'OPENCODE_SERVER_PASSWORD');
+							let secretName =
+								typeof passwordEnvironment?.secretRef === 'string'
+									? passwordEnvironment.secretRef
+									: undefined;
+							const passwordPath = env.OPENCODE_SERVER_PASSWORD_FILE;
+							if (passwordPath && Array.isArray(container.volumeMounts))
+								for (const raw of container.volumeMounts) {
+									const mount = azureObject(raw);
+									if (
+										typeof mount.mountPath !== 'string' ||
+										!passwordPath.startsWith(`${mount.mountPath}/`)
+									)
+										continue;
+									const template = azureObject(properties.template);
+									const volume = (Array.isArray(template.volumes) ? template.volumes : [])
+										.map(azureObject)
+										.find(
+											(item) => item.name === mount.volumeName && item.storageType === 'Secret'
+										);
+									const secret = (Array.isArray(volume?.secrets) ? volume.secrets : [])
+										.map(azureObject)
+										.find(
+											(item) => item.path === passwordPath.slice(String(mount.mountPath).length + 1)
+										);
+									if (typeof secret?.secretRef === 'string') secretName = secret.secretRef;
+								}
+							let password: string | undefined;
+							if (secretName)
+								try {
+									password = await sdk.secret(name, secretName);
+								} catch {
+									/* Native credential entry remains available when ARM secret access is denied. */
+								}
+							return {
+								endpoint: `https://${ingress.fqdn}`,
+								username: env.OPENCODE_SERVER_USERNAME ?? 'opencode',
+								password
+							};
+						}
+					});
+					const recovery = azureRecovery(
+						ref,
+						management,
+						deployment.operations,
+						native,
+						preferences
+					);
+					return {
+						...native,
+						data: recovery.data,
+						async inspectApplication() {
+							const observed = await native.inspectApplication!();
+							return { ...observed, data: { recovery: recovery.observation() } };
+						}
+					};
 				},
 				async logs(options = {}) {
 					const args = [
@@ -457,41 +567,15 @@ export function azureContainerAppsProvider(
 					const before = await inspect();
 					if (!before.capabilities[action].supported)
 						throw new Error(before.capabilities[action].reason);
-					// Native ARM Start/Stop, not revision deactivate or maxReplicas=0.
-					// Do not repeat this POST after an uncertain transport failure.
-					if (action === 'restart') {
-						const revision = before.revisions?.filter((item) => item.active)[0]?.name;
-						if (options.revision && options.revision !== revision)
-							throw new Error(
-								'The selected revision is no longer the active revision. Refresh before restarting.'
-							);
-						await client.text(
-							[
-								'containerapp',
-								'revision',
-								'restart',
-								...scope,
-								'--name',
-								name,
-								'--revision',
-								revision!,
-								'--output',
-								'none'
-							],
-							120_000
+					if (
+						options.revision &&
+						!before.revisions?.some((item) => item.active && item.name === options.revision)
+					)
+						throw new Error(
+							'The selected revision is no longer active. Refresh before restarting.'
 						);
-					} else
-						await client.text([
-							'rest',
-							'--method',
-							'post',
-							'--url',
-							`${ref.resourceId}/${action}?api-version=${API_VERSION}`,
-							'--subscription',
-							connection.subscriptionId,
-							'--output',
-							'none'
-						]);
+					const operation =
+						action === 'restart' ? await deployment.restart() : await deployment.lifecycle(action);
 					let snapshot: HostingSnapshot;
 					try {
 						snapshot = await inspect();
@@ -509,8 +593,11 @@ export function azureContainerAppsProvider(
 					}
 					return {
 						snapshot,
-						pending: true,
-						message: `Azure accepted ${action}. Platform status is shown separately; acceptance does not prove replica drain or agent readiness. Refresh status before proceeding with replacement.`
+						pending: operation.state !== 'completed',
+						operation,
+						message:
+							operation.message ??
+							`Azure completed ${action}. Native readiness and final-checkpoint durability are separate observations; no recovery ownership was cleared.`
 					};
 				}
 			};

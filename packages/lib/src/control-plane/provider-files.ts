@@ -28,6 +28,18 @@ export type NativeSettingsWriteResult = {
 	detail?: string;
 };
 
+export function parseNativePreferenceDocument(text: string): NativePreferenceDocument {
+	if (Buffer.byteLength(text) > MAX_PROVIDER_FILE_BYTES)
+		throw new Error('OpenCode preferences exceed 1 MiB. No settings were changed.');
+	const errors: ParseError[] = [];
+	const value: unknown = parse(text, errors, { allowTrailingComma: true });
+	if (errors.length || !value || typeof value !== 'object' || Array.isArray(value))
+		throw new Error(
+			'Fix invalid JSON/JSONC preferences. No settings were changed or values logged.'
+		);
+	return { text, value: value as Record<string, unknown> };
+}
+
 /** Apply an owned JSONC preference patch without removing comments or unrelated keys. */
 export function editNativePreferenceJsonc(text: string, patch: Record<string, unknown>): string {
 	function edit(change: Record<string, unknown>, path: string[] = []): void {

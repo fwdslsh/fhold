@@ -43,6 +43,24 @@ import type {
 	DirectoryListing
 } from '../dto/hosting.js';
 export type { DirectoryListing } from '../dto/hosting.js';
+import type {
+	DeploymentOutcome,
+	DeploymentPatch,
+	DeploymentSettings,
+	ProvisioningRequest,
+	ProvisioningOptions,
+	ProvisioningPreview,
+	ProvisioningResult
+} from '../dto/hosting.js';
+export type {
+	DeploymentOutcome,
+	DeploymentPatch,
+	DeploymentSettings,
+	ProvisioningRequest,
+	ProvisioningOptions,
+	ProvisioningPreview,
+	ProvisioningResult
+} from '../dto/hosting.js';
 
 /** A fact observed without treating an unavailable optional source as absence. */
 export type Observation<T> =
@@ -67,6 +85,7 @@ export type RequestContext = {
 
 export type AppClient = 'opencode' | 'mcp' | 'claude';
 export type OperationInputMetadata = {
+	acceptsPassword?: boolean;
 	requiresPassword?: boolean;
 	/** Client routes this explicit connection operation can acquire. */
 	acquireClients?: readonly AppClient[];
@@ -125,11 +144,7 @@ export type DockerInstanceSubview = {
 };
 
 /** Installation is distinct from deployment status and native-agent readiness. */
-export type InstanceLifecycle =
-	| 'not-installed'
-	| 'setup-incomplete'
-	| 'ready'
-	| 'externally-managed';
+export type InstanceLifecycle = 'not-installed' | 'setup-incomplete' | 'ready' | 'deployed';
 
 export type AgentObservations = {
 	access: Observation<{ endpoint: string; username?: string }>;
@@ -185,6 +200,7 @@ export type InstanceSnapshot = {
 };
 
 export type HostOperations = {
+	deployment: DeploymentOperations;
 	inspect: Operation<void, HostingSnapshot>;
 	start: Operation<void, LifecycleOutcome>;
 	stop: Operation<void, LifecycleOutcome>;
@@ -194,6 +210,20 @@ export type HostOperations = {
 		Pick<HostingLogOptions, 'revision' | 'replica' | 'container'> | undefined,
 		void
 	>;
+};
+
+export type DeploymentOperations = {
+	inspect: Operation<void, DeploymentSettings>;
+	prepare: Operation<DeploymentPatch, DeploymentSettings>;
+	apply: Operation<void, DeploymentOutcome>;
+	discard: Operation<void, void>;
+	update: Operation<{ pull?: boolean; container?: string; image?: string }, DeploymentOutcome>;
+};
+export type ProvisioningOperations = {
+	options: Operation<void, ProvisioningOptions>;
+	preview: Operation<ProvisioningRequest, ProvisioningPreview>;
+	install: Operation<ProvisioningRequest, ProvisioningResult>;
+	resume: Operation<{ reference: string; retryFailedStep?: boolean }, ProvisioningResult>;
 };
 
 export type LifecycleOutcome =

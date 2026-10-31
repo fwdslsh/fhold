@@ -1,6 +1,15 @@
 # Azure hosting management implementation plan
 
-Status: planned, not implemented. Updated October 31, 2026.
+Status: implemented for review on `codex/aca-management`, not released.
+Updated October 31, 2026. Live Azure qualification remains pending; see the
+[verification record](../operations/azure-management-verification.md).
+
+Implementation refinements: live native state uses the published image's owned
+writable directories, not unqualified EmptyDir overlays. A separate offline Job
+cannot restore the app's writable layer, so that action remains disabled; normal
+Start performs actual restoration. Existing system-assigned identities are not
+converted to enable offline jobs. Full cloud archives and Guardian/Portal deployment
+remain the explicitly deferred follow-on scope below.
 
 Extend CLI and Admin so users can install and manage an Azure Container Apps
 (ACA) assistant through the same workflows as a local instance. Keep Azure
@@ -195,7 +204,7 @@ Use the existing [recovery contract](../assistant-recovery.md) and
 
 | Content | Location and management |
 | --- | --- |
-| Live SQLite, native account state and recovery receipts | Local ephemeral storage; restore before native writers. Qualify replica-scoped EmptyDir for coherent surviving-state behavior. |
+| Live SQLite, native account state and recovery receipts | Image-owned writable container directories; restore from Blob before native writers on recreation. No default EmptyDir overlays. |
 | Recovery generations | Private Blob container through existing managed-identity transport. |
 | Optional shared project/workspace directories | Azure Files, with explicit read/write intent and recovery mount exclusions. Never put live databases here. |
 | Boot/deployment intent | ACA environment variables, including recovery location/ID, scheduler, timezone and existing worker settings. |
@@ -204,8 +213,9 @@ Use the existing [recovery contract](../assistant-recovery.md) and
 | AI accounts and harness preferences | Native files/auth APIs, covered by recovery; not duplicated into ACA env on every edit. |
 
 Azure Files is optional, not the assistant's default home. Blob is the checkpoint
-destination, not a mounted live filesystem. EmptyDir survives a container restart
-within a replica but not replica deletion. [Azure storage mounts](https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts)
+destination, not a mounted live filesystem. Both container recreation and replica
+replacement may require restoration; durability does not depend on the local
+writable layer surviving. [Azure storage mounts](https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts)
 
 Qualify supported Files authentication with current native APIs. Do not make a
 preview Files identity feature, custom VNet, Key Vault or private endpoint mandatory
@@ -242,7 +252,9 @@ For a running instance, apply a restart-requiring change as:
    after the required checks for that operation succeed. Optional subsystem failures
    remain local and visible.
 
-Updating an intentionally stopped instance leaves it stopped. Waking an on-demand
+Updating an intentionally stopped instance finishes with a completed Stop. Azure
+may activate a revision while applying its new template; this does not promise
+zero transient execution during an explicitly confirmed update. Waking an on-demand
 instance is explicit; passive inventory/log inspection never contacts ingress.
 Explicit Restart uses a qualified graceful stop/start sequence when recovery is
 enabled; an accepted revision-restart request alone is not completion evidence.
@@ -255,6 +267,13 @@ not blindly replay an unknown mutation, force-unlock storage, fabricate a blank
 instance or automatically downgrade an image after native database migration.
 Retry uses current resource/native operation state. No blanket drift detector or
 external-manager approval gate is added.
+
+Confirmed failed infrastructure, initialization and app-deployment steps have an
+explicit retry action. Unknown outcomes are observed, never blindly replayed.
+The continuation retains the validated nonsecret original placement and exact
+image because failed ARM deployments may not populate outputs. Retrying a known
+failed deployment reapplies that reviewed template; this is not a new adoption
+or manager-ownership mechanism.
 
 ### Save now and apply later
 

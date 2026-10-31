@@ -8,11 +8,12 @@ are built-in host adapters.
 The [management design](hosting-agent-management-design.md) records the reasons,
 contracts and migration decisions. The [hosting guide](../hosting.md) describes
 the user workflow. See the [verification record](../operations/hosting-agent-management-verification.md)
-for what was tested and the ACA execution limitation.
+for historical checks and the [Azure qualification record](../operations/azure-management-verification.md)
+for current native-route evidence and remaining live-cloud qualification.
 
 The [Azure management implementation plan](aca-management-implementation-plan.md)
-describes the planned extension to provisioning, updates and native agent parity.
-It does not change the shipped capabilities documented below.
+records the scope and decisions behind provisioning, updates and native agent
+parity. Implementation evidence is separate from release/publication status.
 
 ## Composition and dependency direction
 
@@ -51,7 +52,7 @@ Dependency-graph tests enforce the directory directions and reject runtime cycle
 
 | Owner | Responsibility |
 | --- | --- |
-| Hosting | Discovery, exact target selection, connection diagnostics, platform inventory/logs, lifecycle and available deployment operations. |
+| Hosting | Connection-scoped provisioning; exact target selection, connection diagnostics, platform inventory/logs, lifecycle and selected deployment operations. |
 | Agent | Native AI accounts, effective model/configuration, explicit readiness tests, owned preferences and native worker setup. |
 | Apps | Guardian identities/policies and Portal tokens, allowlists and user mappings. These are not Assistant-owned settings. |
 | Data | Portable-content transfer, entire stopped-instance archives and same-instance runtime recovery, preserving each format's guarantees. |
@@ -66,6 +67,21 @@ platform observations; it receives no synthetic home or Compose configuration.
 Connections, instances and storage destinations remain distinct. Native SSH/Azure
 credentials stay on the management computer. OpenCode owns AI-account credentials.
 Recovery storage credentials grant storage access, not hosting authority.
+
+Provisioning options/preview/install/resume exist before an instance is selected.
+Local/SSH delegate to the existing installer. ACA placement uses small dedicated
+controls inside the common wizard, not a schema-driven form system or fake home.
+Deployment inspect/prepare/apply/update belongs to the selected host session.
+Real Compose settings remain Docker-specific; common update consumers do not
+require a Docker operation. Native SDKs track Azure long-running operations.
+Only non-secret patches and resumable operation references are kept locally.
+Known failures, pending operations and ambiguous outcomes remain distinct.
+
+Fresh ACA installation uses packaged ARM templates, private Blob recovery and
+a user-assigned identity shared with a finite same-image initialization Job.
+It uses the image-owned writable layer, not a network-mounted runtime home.
+Existing instances need no adoption, manager tag or takeover confirmation.
+Updates change selected fields and preserve unrelated native configuration.
 
 ## Observations and capabilities
 
@@ -146,17 +162,28 @@ Connection metadata describes the client routes that explicit acquisition can
 provide. CLI `connect` defaults to MCP consistently; an OpenCode-only route gives
 `connect opencode` guidance before requesting native credentials.
 
-ACA hosting uses the native workstation Azure CLI. The reachable OpenCode HTTP
-subset is independent of deployment management, but HTTPS does not provide
-native preference-file writes or stateful CLI setup. The tested Azure CLI console
-requires a terminal and is not qualified as a typed unattended transport.
-Those operations retain specific capability explanations; no console scraping,
-management daemon or image-baked cloud tooling is introduced.
+ACA authentication uses the workstation Azure CLI; native management SDKs own ARM
+deployments and resumable operations. Stop completion precedes update/Start to
+avoid overlapping stateful writers. Passive platform inspection never wakes the
+agent. Accepted platform state, native readiness and checkpoint durability remain
+separate observations.
 
-Provisioning, ACA deployment-template editing, mount/secret changes and image
-rollout remain external deployment responsibilities. Full Docker-home archives
-do not pretend to export an entire ACA deployment. Runtime checkpoint storage
-and ownership remain with the Assistant's existing recovery engine.
+The qualified native OpenCode terminal API carries private stdin and bounded
+output/exit/cancellation for existing management use cases. It executes atomic
+JSONC saves through the shared editor, model discovery from the agent network and
+the image's existing Claude/Codex setup scripts. OpenCode's HTTP file-write API
+does not provide atomic replacement; its shell-only config PATCH is not used for
+model/provider writes. No exact OpenCode-version gate is imposed. Tests record
+which native version/image was actually exercised. The Azure CLI console remains
+interactive, not an unattended RPC transport; there is no console scraping,
+new daemon, image helper, proxy or cloud-specific runtime mode.
+
+Full cloud archives/import and Guardian/Portal deployment remain unsupported,
+with the same common sections disabled. A cloud offline Job restoring files into
+its own ephemeral disk is not an assistant restore. The app's normal Start path
+performs actual checkpoint restoration before writers. Recovery storage and
+single-writer ownership remain with the existing engine; the provider never
+force-clears ownership or auto-initializes an established namespace.
 
 ## Adding a provider or operation
 

@@ -69,7 +69,12 @@ async function autoRun(): Promise<void> {
 }
 
 const subCommands = {
-	console: defineCommand({ meta: { name: 'console', description: 'Open a hosted agent’s native console' }, run() { throw new Error('Choose a console-capable hosting connection with --connection and --name.'); } }),
+	console: defineCommand({
+		meta: { name: 'console', description: 'Open a hosted agent’s native console' },
+		run() {
+			throw new Error('Choose a console-capable hosting connection with --connection and --name.');
+		}
+	}),
 	hosting: () => import('./commands/hosting.js').then((module) => module.default),
 	install: () => import('./commands/install.js').then((module) => module.default),
 	setup: () => import('./commands/setup.js').then((module) => module.default),
@@ -95,15 +100,19 @@ const subCommands = {
 } as const;
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
-	hosting: 'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | instances --connection <connection>',
-	console: 'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
+	hosting:
+		'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | instances --connection <connection> | options --connection <connection> | preview --connection <connection> --input <json|-> | install --connection <connection> --input <json|-> --confirm | resume --connection <connection> --reference <reference> --confirm',
+	console:
+		'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
-	setup: 'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote]',
+	setup:
+		'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote] (hosted native setup: [--model <id>] [--password-file <private-file|->])',
 	provider:
 		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
 	backup:
 		'fhold backup --to <empty-directory> [--full --confirm-stopped | --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
-	recovery: 'fhold recovery configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
+	recovery:
+		'fhold recovery configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
 	history:
 		'fhold history export --from <source-home> --image <source-assistant-image> --to <new-private-archive> [--runtime <resolved-opencode-data-directory>] | restore --from <archive> --directory-map <file> [--archive-interrupted] [--apply --same-instance]',
 	connect:
@@ -113,7 +122,8 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	restore:
 		'fhold restore --from <export-directory> [--dry-run|--apply] [--full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
-	update: 'fhold update [--no-start] [--pull|--no-pull] (local fhold images never pull)',
+	update:
+		'fhold update [--no-start] [--pull|--no-pull] (local fhold images never pull; cloud: --confirm [--container <name>] [--image <reference>])',
 	guardian: 'fhold guardian enable | disable | configure [--bind <ip>] [--port <port>]',
 	credential:
 		'fhold credential list | add <username> <chat|read|full> [--key-file <path>] [--show-key] | show <username> [--show-key] | set-policy <username> <chat|read|full> | rotate <username> [--key-file <path>] [--show-key] | remove <username> | map <discord|slack> <user-id> <username> | map oauth <issuer> <subject> <username> | unmap <discord|slack> <user-id> | unmap oauth <issuer> <subject> | mappings <discord|slack|oauth>',
@@ -189,8 +199,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 	}
 	if (argv[0] === 'hosting') {
 		// Host metadata and the SSH machine endpoint do not select or seed a local home.
-		if (selected.instance !== undefined) throw new Error('--name selects an instance, not a hosting connection.');
-		await runCommand(mainCommand, { rawArgs: [...argv, ...(selected.connection ? ['--connection', selected.connection] : [])] });
+		if (selected.instance !== undefined)
+			throw new Error('--name selects an instance, not a hosting connection.');
+		await runCommand(mainCommand, {
+			rawArgs: [...argv, ...(selected.connection ? ['--connection', selected.connection] : [])]
+		});
 		return;
 	}
 	if (selected.connection && selected.connection !== 'local') {

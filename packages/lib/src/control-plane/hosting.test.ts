@@ -14,6 +14,7 @@ import { hostingMachineRequest } from '../hosting/machine.js';
 import { sshDockerProvider as createSshDockerProvider } from '../hosting/ssh-docker.js';
 import { configureSshHelperResources } from './ssh-helper.js';
 import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
+import type { AzureManagement } from '../hosting/azure-client.js';
 import {
 	capabilities,
 	instanceKey,
@@ -413,7 +414,7 @@ describe('native SSH transport', () => {
 	});
 });
 
-describe('ACA adapter uses external deployment ownership', () => {
+describe('ACA adapter manages exact selected resources with native Azure authorization', () => {
 	function fixture(
 		options: {
 			revisionsFail?: boolean;
@@ -425,6 +426,7 @@ describe('ACA adapter uses external deployment ownership', () => {
 		} = {}
 	) {
 		const calls: string[][] = [];
+		const native: string[] = [];
 		let mutationAccepted = false;
 		const run: HostingProcess = async (binary, args) => {
 			expect(binary).toBe('az');
@@ -469,7 +471,9 @@ describe('ACA adapter uses external deployment ownership', () => {
 			};
 			return JSON.stringify(args.includes('list') ? [app] : app);
 		};
-		return { calls, provider: azureContainerAppsProvider(aca, run) };
+		const management = { lifecycle(_name: string, action: string) { native.push(action); mutationAccepted = true; return { serialize: async () => JSON.stringify({ state: { status: 'running', config: { initialRequestUrl: `https://management.azure.com${resourceId}/${action}`, requestMethod: 'POST' } } }), pollUntilDone: async () => { if (options.mutationFail) throw Object.assign(new Error('not authorized'), { statusCode: 403 }); } }; } } as unknown as AzureManagement;
+		const preferences = new HostingPreferencesStore(join(root(), 'hosting.json')); preferences.saveConnection(aca);
+		return { calls, native, provider: azureContainerAppsProvider(aca, run, undefined, { management, preferences }) };
 	}
 	test('scoped discovery and status use no assistant HTTP requests or deployment writes', async () => {
 		const { provider, calls } = fixture({ zero: true });
@@ -479,10 +483,8 @@ describe('ACA adapter uses external deployment ownership', () => {
 		expect(snapshot.config).toBeUndefined();
 		expect(snapshot.clientUrl).toBe('https://agent.example.com');
 		expect(snapshot.services[0]?.image).toBeUndefined();
-		expect(snapshot.services[0]?.imageProvenance?.configuredReferences).toEqual([
-			'registry.example/assistant:beta',
-			'registry.example/helper:1'
-		]);
+		expect(snapshot.services[0]?.imageProvenance?.configuredReference).toBe('registry.example/assistant:beta');
+		expect(snapshot.services[1]?.imageProvenance?.configuredReference).toBe('registry.example/helper:1');
 		expect(snapshot.capabilities.restart.supported).toBe(true);
 		for (const args of calls) {
 			expect(args).toContain(subscription);
@@ -497,42 +499,38 @@ describe('ACA adapter uses external deployment ownership', () => {
 		expect(snapshot.platformState).toBe('Running');
 		expect(snapshot.warnings).toHaveLength(1);
 	});
-	test('native Start/Stop is confirmed, accepted-only and never changes global account or scale settings', async () => {
-		const { provider, calls } = fixture({ stopped: true });
+	test('native Start/Stop is confirmed, completion-aware and never changes global account or scale settings', async () => {
+		const { provider, calls, native } = fixture({ stopped: true });
 		const session = provider.open(acaRef);
 		await expect(session.operate('stop', false)).rejects.toThrow('Confirm');
 		expect(calls).toHaveLength(0);
 		const result = await session.operate('stop', true);
-		expect(result.pending).toBe(true);
-		expect(result.message).toContain('does not prove replica drain');
-		const request = calls.find((args) => args[0] === 'rest');
-		expect(request).toContain(`${resourceId}/stop?api-version=2026-07-01`);
-		expect(calls.filter((args) => args[0] === 'rest')).toHaveLength(1);
+		expect(result.pending).toBe(false);
+		expect(result.message).toContain('Native readiness');
+		expect(native).toEqual(['stop']);
 		expect(calls.flat()).not.toContain('account');
 		expect(calls.flat()).not.toContain('update');
 		const failed = fixture({ mutationFail: true });
-		await expect(failed.provider.open(acaRef).operate('start', true)).rejects.toThrow(
-			'not authorized'
-		);
-		expect(failed.calls.filter((args) => args[0] === 'rest')).toHaveLength(1);
+		expect((await failed.provider.open(acaRef).operate('start', true)).operation?.state).toBe('failed');
+		expect(failed.native).toEqual(['start']);
 		expect((await failed.provider.open(acaRef).inspect()).name).toBe('agent');
 	});
-	test('an accepted request stays accepted when its follow-up status is unavailable', async () => {
-		const { provider, calls } = fixture({ statusFailsAfterMutation: true });
+	test('a completed request stays completed when its follow-up inventory is unavailable', async () => {
+		const { provider, native } = fixture({ statusFailsAfterMutation: true });
 		const result = await provider.open(acaRef).operate('start', true);
-		expect(result.pending).toBe(true);
+		expect(result.pending).toBe(false);
 		expect(result.snapshot.platformState).toBe('Status unavailable');
 		expect(result.snapshot.services).toEqual([]);
 		expect(result.snapshot.warnings.join(' ')).toContain('do not repeat');
-		expect(calls.filter((args) => args[0] === 'rest')).toHaveLength(1);
+		expect(native).toEqual(['start']);
 	});
-	test('an unrecognized explicit app remains inspect-only without losing status or logs', async () => {
-		const { provider, calls } = fixture({ unrecognized: true });
+	test('an explicit app with unrelated tags and custom images can be managed without ownership gating', async () => {
+		const { provider, native } = fixture({ unrecognized: true });
 		const session = provider.open(acaRef);
-		expect((await session.inspect()).capabilities.start.supported).toBe(false);
-		await expect(session.operate('stop', true)).rejects.toThrow('inspect-only');
+		expect((await session.inspect()).capabilities.start.supported).toBe(true);
+		expect((await session.operate('stop', true)).operation?.state).toBe('completed');
 		expect(await session.logs()).toBe('system log');
-		expect(calls.filter((args) => args[0] === 'rest')).toHaveLength(0);
+		expect(native).toEqual(['stop']);
 	});
 	test('resource scope is checked before invoking Azure; system logs need no active replica', async () => {
 		const { provider, calls } = fixture({ zero: true });

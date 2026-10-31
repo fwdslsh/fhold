@@ -1,9 +1,20 @@
 import type { HostingSnapshot } from '../hosting/types.js';
-import type { ProviderSettings } from '../control-plane/provider-settings.js';
+import {
+	discoverProviderModels,
+	listProviderSettings,
+	removeProviderSetup,
+	saveProviderEndpoint,
+	useProviderModel,
+	type ProviderSettings
+} from '../control-plane/provider-settings.js';
 import {
 	createHttpsNativeAgentService,
+	httpsNativeAgentAccess,
 	type NativeAgentService
 } from '../control-plane/native-agent.js';
+import { createNativeManagement } from '../control-plane/native-management.js';
+import type { NativePtyOptions, NativePtySession } from '../control-plane/native-pty.js';
+import type { RemoteProgress } from '../control-plane/remote.js';
 import type { InstanceSessionBindings } from './instance-session.js';
 import {
 	supportedOperation,
@@ -13,10 +24,15 @@ import {
 	type Observation,
 	type RequestContext
 } from './contracts.js';
+import type { Operation } from './contracts.js';
 
 type Options = {
 	inspectHost(): Promise<HostingSnapshot>;
 	fetch?: typeof fetch;
+	webSocket?: NativePtyOptions['webSocket'];
+	resolveAccess?(): Promise<{ endpoint: string; username: string; password?: string }>;
+	readinessTimeoutMs?: number;
+	recoveryEnvironment?(): Promise<Record<string, string>>;
 };
 type OAuthAttempt = { provider: string; method: number; id: string; runtime: string };
 type ConnectionState =
@@ -26,16 +42,29 @@ type ConnectionState =
 	| {
 			state: 'connected';
 			service: NativeAgentService;
+			management: ReturnType<typeof createNativeManagement>;
 			route: AbortController;
 			runtime: string;
 			attempt?: OAuthAttempt;
 	  };
 
 /** Native HTTP capabilities over an explicitly acquired, private session route. */
-export function httpsAgentBindings(
-	options: Options
-): Pick<InstanceSessionBindings, 'agent' | 'inspectApplication' | 'close'> {
+export function httpsAgentBindings(options: Options): Pick<
+	InstanceSessionBindings,
+	'agent' | 'inspectApplication' | 'close' | 'busy'
+> & {
+	recoveryStatus: Operation<void, Record<string, unknown>>;
+	recoveryInspect: Operation<void, string>;
+} {
 	let connection: ConnectionState = { state: 'idle' };
+	let verifiedModel: { provider: string; model: string } | undefined;
+	let remote:
+		| {
+				session?: NativePtySession;
+				startup?: AbortController;
+				progress: RemoteProgress;
+		  }
+		| undefined;
 	let access: AgentObservations['access'] = {
 		state: 'not-inspected',
 		reason: 'Connect to the agent with its native OpenCode password.'
@@ -56,9 +85,13 @@ export function httpsAgentBindings(
 		reason: string,
 		phase: 'connecting' | 'unavailable' = 'unavailable'
 	): void {
+		remote?.startup?.abort();
+		if (connection.state === 'connected') void connection.management.close();
 		if (connection.state === 'connected' || connection.state === 'connecting')
 			connection.route.abort();
 		connection = { state: 'idle' };
+		verifiedModel = undefined;
+		remote = undefined;
 		access =
 			phase === 'connecting'
 				? { state: 'not-inspected', reason }
@@ -162,10 +195,19 @@ export function httpsAgentBindings(
 		}
 		models = known(selectedModel ?? {});
 		account = known({ signedIn: inventory.some((item) => item.authenticated) });
-		return { providers: inventory, ...(selectedModel ? { currentModel: selectedModel } : {}) };
+		try {
+			return await listProviderSettings(assertCurrent(context).management.settings, {
+				signal: context.signal
+			});
+		} catch {
+			context.signal?.throwIfAborted();
+			return { providers: inventory, ...(selectedModel ? { currentModel: selectedModel } : {}) };
+		}
 	}
-	const preferenceReason =
-		'Native preferences need an owned file-editing route. This connection provides the OpenCode HTTP API only; use the native agent interface or deployment tools.';
+	async function management(context: RequestContext, writing = true) {
+		await bound(context, writing);
+		return assertCurrent(context).management;
+	}
 	const agent: Partial<AgentOperations> = {
 		browserLink: connected(async (_input, context) =>
 			(await bound(context, false)).browserLink({ signal: context.signal })
@@ -180,9 +222,16 @@ export function httpsAgentBindings(
 					throw new Error('This instance session is closed. Open the instance again.');
 				context.signal?.throwIfAborted();
 				const selected = runtime(snapshot, false);
-				if (!snapshot.clientUrl)
+				const resolved = options.resolveAccess
+					? await options.resolveAccess()
+					: { endpoint: snapshot.clientUrl, username: 'opencode' };
+				context.signal?.throwIfAborted();
+				if (isClosed())
+					throw new Error('This instance session is closed. Open the instance again.');
+				if (!resolved.endpoint)
 					throw new Error('No reachable native OpenCode HTTPS address is configured.');
-				if (!input.password)
+				const password = input.password || ('password' in resolved ? resolved.password : undefined);
+				if (!password)
 					throw new Error(
 						'Enter this agent’s native OpenCode password. Azure sign-in is a separate credential.'
 					);
@@ -190,13 +239,17 @@ export function httpsAgentBindings(
 				const pendingRoute = new AbortController();
 				connection = { state: 'connecting', route: pendingRoute };
 				const pending = createHttpsNativeAgentService({
-					endpoint: snapshot.clientUrl,
-					password: input.password,
+					endpoint: resolved.endpoint,
+					username: resolved.username,
+					password,
 					signal: pendingRoute.signal,
 					fetch: options.fetch
 				});
 				try {
-					await pending.waitForReady({ timeoutMs: 10_000, signal: context.signal });
+					await pending.waitForReady({
+						timeoutMs: options.readinessTimeoutMs ?? 300_000,
+						signal: context.signal
+					});
 				} catch (error) {
 					if (connection.state === 'connecting' && connection.route === pendingRoute) {
 						clearConnection(
@@ -210,28 +263,48 @@ export function httpsAgentBindings(
 				connection = {
 					state: 'connected',
 					service: pending,
+					management: createNativeManagement(
+						httpsNativeAgentAccess({
+							endpoint: resolved.endpoint,
+							username: resolved.username,
+							password
+						}),
+						pending,
+						{ fetch: options.fetch, webSocket: options.webSocket, signal: pendingRoute.signal }
+					),
 					route: pendingRoute,
 					runtime: selected
 				};
-				access = known({ endpoint: snapshot.clientUrl, username: 'opencode' });
-				return { endpoint: snapshot.clientUrl, username: 'opencode' };
+				access = known({ endpoint: resolved.endpoint, username: resolved.username });
+				return { endpoint: resolved.endpoint, username: resolved.username };
 			},
 			undefined,
-			{ requiresPassword: true, acquireClients: ['opencode'] }
+			{
+				requiresPassword: !options.resolveAccess,
+				acceptsPassword: true,
+				acquireClients: ['opencode']
+			}
 		),
 		providers: connected(async (_input, context) => providers(context)),
 		modelInventory: connected(async (_input, context) => (await providers(context)).providers),
 		setKey: connected(async (input, context) => {
+			verifiedModel = undefined;
 			await (await bound(context)).setProviderApiKey(input.provider, input.key, {
 				signal: context.signal
 			});
 		}),
 		removeProvider: connected(async (input, context) => {
-			if (input.endpoint) throw new Error(preferenceReason);
+			verifiedModel = undefined;
+			if (input.endpoint)
+				return removeProviderSetup((await management(context)).settings, input.provider, {
+					endpoint: true,
+					signal: context.signal
+				});
 			await (await bound(context)).removeProviderAuth(input.provider, { signal: context.signal });
 			return providers(context);
 		}),
 		oauthStart: connected(async (input, context) => {
+			verifiedModel = undefined;
 			const selected = await bound(context);
 			const result = await selected.beginProviderOAuth(input.provider, input.method, input.inputs, {
 				signal: context.signal
@@ -273,22 +346,172 @@ export function httpsAgentBindings(
 			if (connection.state !== 'connected' || connection.service !== selected)
 				throw new Error('The agent connection closed during the test.');
 			readiness = known({ ready: result.ok, ...(!result.ok ? { detail: result.error } : {}) });
+			verifiedModel =
+				result.ok && result.provider && result.model
+					? { provider: result.provider, model: result.model }
+					: undefined;
 			return result;
 		}),
-		selectModel: unsupportedOperation(preferenceReason),
-		saveEndpoint: unsupportedOperation(preferenceReason),
-		discoverModels: unsupportedOperation(
-			'Custom server model discovery must run from the Assistant network; this connection has no qualified runtime command route.'
+		selectModel: connected(async (input, context) => {
+			if (verifiedModel?.provider !== input.provider || verifiedModel.model !== input.model)
+				throw new Error('Test this model before using it for your agent.');
+			return useProviderModel((await management(context)).settings, input.provider, input.model, {
+				signal: context.signal
+			});
+		}),
+		saveEndpoint: connected(async (input, context) => {
+			verifiedModel = undefined;
+			return saveProviderEndpoint((await management(context)).settings, input, {
+				signal: context.signal
+			});
+		}),
+		discoverModels: connected(async (input, context) =>
+			discoverProviderModels((await management(context)).settings, input)
 		),
-		remote: unsupportedOperation(
-			'Guided Claude/Codex setup requires a qualified native command session. Use the deployment’s interactive console and the image-baked setup skills.'
-		),
+		remote: connected(async (input, context) => {
+			if (!['claude', 'codex'].includes(input.tool)) throw new Error('Choose claude or codex.');
+			if (input.action === 'disable')
+				throw new Error(
+					'Change native worker startup in deployment settings and apply it explicitly. Cancelling sign-in never changes startup intent.'
+				);
+			if (input.action === 'connection') {
+				const selected = await management(context, false);
+				const settings = await selected.remoteSettings();
+				if (!settings[input.tool])
+					throw new Error('Enable the worker in deployment settings first.');
+				return {
+					tool: input.tool,
+					stage: 'connection',
+					output: await selected.remoteConnection(input.tool),
+					running: false,
+					enabled: true
+				};
+			}
+			if (input.action !== 'enable') {
+				if (!remote || remote.progress.tool !== input.tool)
+					throw new Error('Start native setup for this worker first.');
+				if (input.action === 'cancel') {
+					remote.startup?.abort();
+					await remote.session?.cancel();
+				} else if (input.action === 'input') {
+					await management(context, false);
+					if (
+						input.input === undefined ||
+						input.input.length > 2_048 ||
+						[...input.input].some((character) => {
+							const code = character.charCodeAt(0);
+							return code < 32 || code === 127;
+						})
+					)
+						throw new Error('Enter a single native setup response.');
+					remote.session?.input(JSON.stringify({ input: input.input }) + '\n');
+				}
+				return { ...remote.progress };
+			}
+			if (input.trusted !== true)
+				throw new Error('Confirm trusted native access; it bypasses Guardian.');
+			if (remote?.progress.running)
+				throw new Error('Finish or cancel the existing native setup first.');
+			const selected = await management(context);
+			const settings = await selected.remoteSettings();
+			const sandbox = input.sandbox ?? settings.sandbox;
+			if (!['read-only', 'workspace-write', 'danger-full-access'].includes(sandbox))
+				throw new Error('Choose a supported native Codex isolation mode.');
+			if (input.tool === 'codex' && sandbox !== settings.sandbox)
+				throw new Error(
+					'Save and apply the chosen native isolation mode in deployment settings before sign-in.'
+				);
+			const startup = new AbortController();
+			const current: {
+				progress: RemoteProgress;
+				session?: NativePtySession;
+				startup?: AbortController;
+			} = {
+				progress: {
+					tool: input.tool,
+					stage: 'starting',
+					output: '',
+					running: true,
+					enabled: settings[input.tool]
+				} as RemoteProgress,
+				startup
+			};
+			remote = current;
+			let buffer = '',
+				ready = false;
+			try {
+				current.session = await selected.remoteSetup(
+					input.tool,
+					sandbox,
+					(text) => {
+						buffer += text;
+						while (buffer.includes('\n')) {
+							const end = buffer.indexOf('\n'),
+								line = buffer.slice(0, end).trim();
+							buffer = buffer.slice(end + 1);
+							if (!line) continue;
+							try {
+								const item = JSON.parse(line) as Record<string, unknown>;
+								if (typeof item.stage === 'string') current.progress.stage = item.stage;
+								if (typeof item.output === 'string')
+									current.progress.output = (
+										item.replace === true ? item.output : current.progress.output + item.output
+									).slice(-65_536);
+								if (typeof item.error === 'string') current.progress.error = item.error;
+								if (item.ready === true) ready = true;
+							} catch {
+								current.progress.error = 'Native setup output was invalid; setup was interrupted.';
+								void current.session?.cancel();
+							}
+						}
+					},
+					{
+						signal: AbortSignal.any(
+							[context.signal, startup.signal].filter(
+								(value): value is AbortSignal => value instanceof AbortSignal
+							)
+						)
+					}
+				);
+				current.startup = undefined;
+				void current.session.done
+					.then(({ exitCode }) => {
+						current.progress.running = false;
+						current.progress.stage =
+							exitCode === 0 && ready && !current.progress.error ? 'complete' : 'failed';
+						if (current.progress.stage === 'failed')
+							current.progress.error ??=
+								'Native setup did not complete. Review its output; startup settings were preserved.';
+					})
+					.catch(() => {
+						current.progress.running = false;
+						current.progress.stage = 'interrupted';
+						current.progress.error =
+							'Native setup disconnected or was cancelled. Input was not replayed and deployment settings were preserved.';
+					});
+			} catch (error) {
+				current.progress.running = false;
+				throw error;
+			}
+			return { ...current.progress };
+		}),
 		codexRecall: unsupportedOperation(
 			'Native hook inspection requires a qualified runtime command session.'
 		)
 	};
 	return {
 		agent,
+		recoveryStatus: connected(async (_input, context) =>
+			(await management(context)).recoveryStatus()
+		),
+		recoveryInspect: options.recoveryEnvironment
+			? connected(async (_input, context) =>
+					(await management(context)).recoveryInspect(await options.recoveryEnvironment!())
+				)
+			: unsupportedOperation(
+					'Native coverage inspection requires the selected deployment’s recovery configuration.'
+				),
+		busy: () => remote?.progress.running === true,
 		inspectApplication: async () => ({ agent: { access, account, models, readiness } }),
 		async close() {
 			clearConnection('The native agent connection is closed.');

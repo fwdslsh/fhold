@@ -1,5 +1,16 @@
 # Hosting and agent management verification
 
+## Current follow-on evidence
+
+The October 31 ACA parity work qualifies the existing OpenCode native HTTPS/PTY
+route for shared preference editing, network-side discovery and image-baked
+remote-worker scripts; it does not turn Azure CLI's interactive console into RPC.
+See the [ACA verification record](azure-management-verification.md) for actual
+published-image and SDK evidence, and the remaining live-cloud qualifications.
+The records below describe the earlier architecture refactor and retain its
+original limits; they are not claims that those limits still apply to every
+operation in the follow-on implementation.
+
 This record accompanies the [management architecture](../technical/hosting-agent-management-design.md).
 It distinguishes library/transport evidence from actual hosting-platform behavior.
 Verification date: October 22, 2026. No existing personal instance was used as a

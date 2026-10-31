@@ -7,10 +7,12 @@ import { renderConnectionStatus, updateGuardianGuide } from './connections.js';
 import { checkInstallationReadiness, prepareInstallTarget } from './instances.js';
 import { all, byId, notice, operation, setBadge, setSkipTarget, setText, showView } from './ui.js';
 import { instanceCapability, instancePresentation } from './instance-presentation.js';
+import { bindProvisioningEvents, submitCloudInstall } from './provisioning.js';
+import { deploymentOutcomeNotice } from './configuration.js';
 
 export function renderPhase(lifecycle) {
 	const setup = lifecycle === 'setup-incomplete' || state.awaitingSetupFinish;
-	const ready = lifecycle === 'ready' || lifecycle === 'externally-managed';
+	const ready = lifecycle === 'ready' || lifecycle === 'deployed';
 	byId('instance-welcome').hidden = true;
 	byId('loading-state').hidden = true;
 	byId('error-state').hidden = true;
@@ -41,7 +43,7 @@ export function renderRuntimeControls(snapshot) {
 		['start', 'host.start'],
 		['restart', 'host.restart'],
 		['stop', 'host.stop'],
-		['update', 'docker.update']
+		['update', 'host.deployment.update']
 	]) {
 		const capability = instanceCapability(operationKey, snapshot);
 		const button = byId(`${action}-stack`);
@@ -69,18 +71,26 @@ export function renderRuntimeControls(snapshot) {
 export function renderServices(snapshot) {
 	const view = instancePresentation(snapshot);
 	const reportedServices = view.services;
+	const candidates = reportedServices.flatMap((service) =>
+		service.imageProvenance?.updateCandidate ? [service.imageProvenance.updateCandidate] : []
+	);
+	const updateReference =
+		view.docker?.updateImageTag ||
+		[...new Set(candidates.map((candidate) => candidate.reference))].join(', ');
 	const missingHostVersion =
-		!view.docker?.updateImageTag && snapshot.operations?.['docker.update']?.support === 'unknown';
-	setText('update-image-tag', view.docker?.updateImageTag || 'Not reported');
+		!updateReference && snapshot.operations?.['host.deployment.update']?.support === 'unknown';
+	setText('update-image-tag', updateReference || 'Not reported');
 	setText(
 		'runtime-version-help',
 		missingHostVersion
-			? `${snapshot.operations?.['docker.update']?.reason ? `${snapshot.operations['docker.update'].reason} ` : ''}Image metadata is unavailable. Check this host connection and local tooling distribution. Your agent keeps running.`
-			: !instanceCapability('docker.update', snapshot).supported
-				? `${instanceCapability('docker.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
+			? `${snapshot.operations?.['host.deployment.update']?.reason ? `${snapshot.operations['host.deployment.update'].reason} ` : ''}Image metadata is unavailable. Check this host connection and local tooling distribution. Your agent keeps running.`
+			: !instanceCapability('host.deployment.update', snapshot).supported
+				? `${instanceCapability('host.deployment.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
 				: view.docker?.updateImageTag
 					? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
-					: 'The managing tool did not report an update version. Update the fhold tools to restore version information. Your agent keeps running.'
+					: candidates.length
+						? `Update candidate from ${[...new Set(candidates.map((candidate) => candidate.source))].join(', ')}. Configured images above remain distinct from running image observations.`
+						: 'No update candidate was reported. Custom images require an explicit image reference in System → Deployment settings. Your agent keeps running.'
 	);
 	byId('runtime-version-settings').hidden = !missingHostVersion;
 	renderConnectionStatus(snapshot);
@@ -218,15 +228,19 @@ export function renderServices(snapshot) {
 }
 
 export function bindRuntimeEvents() {
+	bindProvisioningEvents();
 	byId('update-stack').addEventListener('click', async () => {
-		if (state.operationInFlight || !instanceCapability('docker.update').supported) return;
+		if (state.operationInFlight || !instanceCapability('host.deployment.update').supported) return;
 		if (!(await state.api.confirmRestart('update'))) return;
 		const result = await operation(
 			'Updating instance',
 			() => state.api.update({ confirmed: true }),
-			'Instance updated.'
+			'Update result received.'
 		);
-		if (result) render(result);
+		if (result) {
+			render(result.snapshot);
+			deploymentOutcomeNotice(result.outcome);
+		}
 	});
 	for (const button of all('[data-check-prerequisites]'))
 		button.addEventListener('click', () => void checkInstallationReadiness());
@@ -238,6 +252,7 @@ export function bindRuntimeEvents() {
 	byId('install-form').addEventListener('submit', async (event) => {
 		event.preventDefault();
 		if (state.operationInFlight || byId('install-section').hidden) return;
+		if (state.installOptions?.kind === 'azure-container-apps') return submitCloudInstall();
 		const automaticPorts = byId('install-automatic-ports').checked;
 		const assistantPort = Number(byId('install-assistant-port').value);
 		const gatewayPort = Number(byId('install-gateway-port').value);

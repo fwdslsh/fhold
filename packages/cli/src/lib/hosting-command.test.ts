@@ -11,6 +11,18 @@ function fixture() {
 		resourceId: '/resource'
 	};
 	const host = {
+		deployment: {
+			inspect: unsupportedOperation('not used'),
+			prepare: unsupportedOperation('not used'),
+			apply: unsupportedOperation('not used'),
+			discard: unsupportedOperation('not used'),
+			update: supportedOperation(
+				async (value: { pull?: boolean; container?: string; image?: string }, context) => {
+					calls.push(['update', value, context.confirmed]);
+					return { state: 'in-progress' as const, step: 'stopping', reference: 'native-operation' };
+				}
+			)
+		},
 		inspect: supportedOperation(async () => {
 			throw Error('not used');
 		}),
@@ -51,7 +63,7 @@ function fixture() {
 			identity: { ref, name: 'agent', location: '/resource' },
 			lifecycle: {
 				state: 'known',
-				value: 'externally-managed',
+				value: 'deployed',
 				observedAt: new Date().toISOString()
 			},
 			deployment: {
@@ -111,10 +123,65 @@ test('unknown and irrelevant arguments never cause lifecycle mutations or silent
 		['logs', '--type', 'bad'],
 		['console', '--tail', '10'],
 		['status', '--revision', 'ignored'],
-		['update', '--confirm']
+		['update'],
+		['update', '--confirm', '--revision', 'ignored']
 	])
 		await expect(f.run(argv)).rejects.toThrow();
 	expect(f.calls).toEqual([]);
 	f.session.host.console = unsupportedOperation('This provider does not expose a console.');
 	await expect(f.run(['console'])).rejects.toThrow('does not expose');
+});
+
+test('hosted updates use the shared deployment operation and preserve incomplete outcomes', async () => {
+	const f = fixture();
+	await f.run([
+		'update',
+		'--confirm',
+		'--container',
+		'assistant',
+		'--image',
+		'registry/assistant:pinned'
+	]);
+	expect(f.calls).toEqual([
+		['update', { container: 'assistant', image: 'registry/assistant:pinned' }, true]
+	]);
+	expect(JSON.parse(f.output[0]!)).toEqual({
+		state: 'in-progress',
+		step: 'stopping',
+		reference: 'native-operation'
+	});
+});
+
+test('hosted setup verifies the native agent without changing deployment or claiming readiness on failure', async () => {
+	const f = fixture();
+	f.session.agent.connect = supportedOperation(async (input) => {
+		f.calls.push(['connect', input]);
+		return { endpoint: 'https://agent.example.test', username: 'native' };
+	});
+	f.session.agent.readiness = supportedOperation(async (input) => {
+		f.calls.push(['readiness', input]);
+		return { ok: false as const, error: 'Native account needs sign-in.' };
+	});
+	await expect(f.run(['setup'])).rejects.toThrow('Native account needs sign-in.');
+	expect(f.output).toEqual([]);
+	expect(f.calls).toEqual([
+		['connect', {}],
+		['readiness', {}]
+	]);
+	f.calls.length = 0;
+	f.session.agent.readiness = supportedOperation(async (input) => {
+		f.calls.push(['readiness', input]);
+		return {
+			ok: true as const,
+			response: 'Synthetic verified response',
+			provider: 'native-provider',
+			model: 'native-model'
+		};
+	});
+	await f.run(['setup', '--provider', 'native-provider', '--model', 'native-model']);
+	expect(f.calls).toEqual([
+		['connect', {}],
+		['readiness', { provider: 'native-provider', model: 'native-model' }]
+	]);
+	expect(f.output.at(-1)).toContain('Verified a real native Assistant response.');
 });

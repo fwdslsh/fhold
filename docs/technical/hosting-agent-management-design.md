@@ -1,6 +1,8 @@
 # Separating hosting management from agent management
 
-Status: implemented on `codex/hosting-agent-management`, pending merge and release.
+Status: historical design for the initial hosting/agent separation.
+The October 31 [ACA extension](aca-management-implementation-plan.md) supersedes
+this document's original existing-app-only scope and HTTPS capability limits.
 The original design was reviewed against main
 `451f4c9ae806c10693c009f82afc3df3f872b86b` on October 22, 2026.
 The software architecture and software engineering reviews were independent;
@@ -281,7 +283,9 @@ Refactor the existing OpenCode HTTP helper to receive an endpoint and a private
 authorization provider. Keep native provider-account secrets in OpenCode's store.
 Local/SSH retain their current private-file resolution on the owning host. ACA
 needs an explicit deployment-supplied or user-supplied native API credential;
-initially keep it session-scoped. Do not read all Azure secrets, put passwords in
+initially keep it session-scoped. The ACA extension resolves only the configured
+native secret reference on explicit access (ARM returns a private collection),
+with manual input as fallback. Do not expose unrelated secrets, put passwords in
 recents, repurpose a Guardian key or introduce a second credential registry.
 Persistent remember-password support would require a deliberate host secret-store
 design, not plaintext in `hosting.json`. Unreachable private ingress reports that
@@ -463,13 +467,15 @@ coupling incrementally. Do not make all management HTTP, move the host CLI into
 the Assistant, use Guardian as a privileged control plane, invent a universal
 filesystem, duplicate account state or add speculative infrastructure.
 
-The ACA execution experiment found the installed native console requires a terminal
-and does not establish unattended typed process I/O. Consequently, this implementation
-uses the explicit authenticated HTTPS subset and leaves preference-file edits and
-guided worker setup unavailable through ACA. It adds no image helper, terminal
-scraping, cloud SDK or management daemon. A future route needs independent
-qualification before enabling those operations; the contracts/local/SSH extraction
-do not depend on that future work. Details are in the verification record.
+The initial ACA execution experiment found the installed Azure console requires a
+terminal and does not establish unattended typed process I/O. That limit remains.
+The October 31 extension instead qualifies OpenCode's native terminal API against
+the published image for atomic preference saves, private input and guided worker
+setup. It adds host-side Azure SDK provisioning/operation tracking, not an image
+helper, console scraper or management daemon. The current
+[architecture](hosting-provider-architecture.md) and
+[Azure evidence](../operations/azure-management-verification.md) supersede the
+original capability table and future-work assumptions above.
 
 ## External platform evidence
 

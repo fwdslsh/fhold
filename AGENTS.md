@@ -51,11 +51,17 @@ running processes, mocked tests and source scans are not live readiness.
   native-tested, but public distribution/signing and update feeds remain unqualified.
   SSH automatically supplies this distribution's private content-addressed management
   executable; never depend on or replace a manually installed remote fhold CLI.
-- Shared host-side hosting adapters manage existing local Docker, SSH-Docker and
-  experimental ACA targets. Keep provider selection in the shared library,
+- Shared host-side hosting adapters install and manage local Docker, SSH-Docker and
+  experimental assistant-only ACA targets. Keep provider selection in the shared library,
   native SSH/Azure credentials on the management host, and remote paths/resources
   out of local FH_HOME. Unsupported actions must not fall back to local operations.
-  No cloud provisioning, custom deployment editing or host-side recovery engine.
+  Connection-scoped provisioning and instance-scoped deployment operations use
+  native host APIs. ACA uses workstation Azure credentials, native ARM deployments
+  and operation tracking; no cloud tooling or recovery engine runs on the host's
+  behalf inside a new daemon. The published Assistant owns recovery. Preserve
+  unrelated deployment fields; do not add external-manager detection, takeover
+  prompts or manager tags as permission gates. Keep native authorization, exact
+  target selection and actual recovery ownership checks.
 - Native Codex and Claude Code workers are experimental and image-baked.
   Both supervisors default on, waiting for native sign-in and consent.
   Explicit off choices remain off. Enabled workers start

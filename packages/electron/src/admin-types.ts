@@ -14,6 +14,15 @@ import type { HostingChoice, HostingLogOptions } from '@fhold/lib';
 import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
 import type { CodexRecallReview } from '@fhold/lib';
 import type { InstanceSnapshot } from '@fhold/lib';
+import type {
+	ProvisioningOptions,
+	ProvisioningRequest,
+	ProvisioningPreview,
+	ProvisioningResult,
+	DeploymentOutcome,
+	DeploymentSettings,
+	DeploymentPatch
+} from '@fhold/lib';
 import type { AdminSettings } from './admin-settings.js';
 import type { AdminAppSnapshot } from './admin-updates.js';
 import type { DesktopStatus } from './admin-desktop.js';
@@ -24,6 +33,7 @@ export type StackAction = 'start' | 'restart' | 'stop';
 export type InterruptingAction =
 	| StackAction
 	| 'update'
+	| 'apply'
 	| 'remote-setup'
 	| 'recovery-init'
 	| 'recovery-restore'
@@ -50,7 +60,31 @@ export type AdminApi = {
 	downloadAppUpdate(): Promise<AdminAppSnapshot>;
 	installAppUpdate(): Promise<void>;
 	onAppUpdate(listener: (snapshot: AdminAppSnapshot) => void): () => void;
-	hostingFeatures(id: string): Promise<{ installation: boolean; emptyHint?: string }>;
+	hostingFeatures(
+		id: string
+	): Promise<{ installation: boolean; directory: boolean; emptyHint?: string }>;
+	provisioningOptions(connectionId: string): Promise<ProvisioningOptions>;
+	provisioningPreview(value: {
+		connectionId: string;
+		request: ProvisioningRequest;
+	}): Promise<ProvisioningPreview>;
+	provisioningInstall(value: {
+		connectionId: string;
+		request: ProvisioningRequest;
+		confirmed: boolean;
+	}): Promise<ProvisioningResult>;
+	provisioningResume(value: {
+		connectionId: string;
+		reference: string;
+		retryFailedStep?: boolean;
+		confirmed: boolean;
+	}): Promise<ProvisioningResult>;
+	deploymentSettings(): Promise<DeploymentSettings>;
+	prepareDeployment(value: DeploymentPatch): Promise<DeploymentSettings>;
+	applyDeployment(value: {
+		confirmed: boolean;
+	}): Promise<{ snapshot: AdminSnapshot; outcome: DeploymentOutcome }>;
+	discardDeployment(): Promise<void>;
 	hostingSetup(value: {
 		provider: HostingConnection['kind'];
 		action: 'sign-in' | 'choices';
@@ -63,7 +97,12 @@ export type AdminApi = {
 		connectionId: string;
 		path?: string;
 	}): Promise<import('@fhold/lib').DirectoryListing>;
-	update(value: { confirmed: boolean; pull?: boolean }): Promise<AdminSnapshot>;
+	update(value: {
+		confirmed: boolean;
+		pull?: boolean;
+		container?: string;
+		image?: string;
+	}): Promise<{ snapshot: AdminSnapshot; outcome: DeploymentOutcome }>;
 	hostingConnections(): Promise<HostingConnection[]>;
 	hostingSaveConnection(value: unknown): Promise<HostingConnection>;
 	hostingUpdateConnection(id: string, value: unknown): Promise<HostingConnection | undefined>;
@@ -93,7 +132,10 @@ export type AdminApi = {
 	install(config: StackConfig, automaticPorts?: boolean): Promise<AdminSnapshot>;
 	saveConfig(value: { config: StackConfig; baseConfig: StackConfig }): Promise<AdminSnapshot>;
 	confirmRestart(action: InterruptingAction): Promise<boolean>;
-	action(action: StackAction, confirmed?: boolean): Promise<AdminSnapshot>;
+	action(
+		action: StackAction,
+		confirmed?: boolean
+	): Promise<{ snapshot: AdminSnapshot; outcome: DeploymentOutcome }>;
 	logs(options?: HostingLogOptions): Promise<string>;
 	providers(): Promise<ProviderSettings>;
 	providerKey(value: { provider: string; key: string }): Promise<void>;
@@ -177,6 +219,14 @@ export const ADMIN_CHANNELS = {
 	installAppUpdate: 'admin:install-app-update',
 	appUpdateChanged: 'admin:app-update-changed',
 	hostingFeatures: 'admin:hosting-features',
+	provisioningOptions: 'admin:provisioning-options',
+	provisioningPreview: 'admin:provisioning-preview',
+	provisioningInstall: 'admin:provisioning-install',
+	provisioningResume: 'admin:provisioning-resume',
+	deploymentSettings: 'admin:deployment-settings',
+	prepareDeployment: 'admin:prepare-deployment',
+	applyDeployment: 'admin:apply-deployment',
+	discardDeployment: 'admin:discard-deployment',
 	hostingSetup: 'admin:hosting-setup',
 	directory: 'admin:directory',
 	hostingInfo: 'admin:hosting-info',

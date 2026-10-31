@@ -1,8 +1,9 @@
 import { isRunning, known } from './model.js';
-import { refresh } from './snapshot.js';
+import { refresh, render } from './snapshot.js';
 import { state } from './state.js';
 import { byId, message, notice, operation, setBusy, setText } from './ui.js';
 import { instanceCapability } from './instance-presentation.js';
+import { deploymentOutcomeNotice } from './configuration.js';
 
 export function renderRestartStatus(snapshot) {
 	const pending = known(snapshot.pendingChanges);
@@ -17,11 +18,15 @@ export function renderRestartStatus(snapshot) {
 				? 'Saved changes will apply after a restart.'
 				: 'Saved changes will apply when the instance starts.')
 	);
-	setText('apply-pending-restart', running ? 'Restart to apply' : 'Start to apply');
+	const deploymentApply = instanceCapability('host.deployment.apply', snapshot).supported;
+	setText(
+		'apply-pending-restart',
+		deploymentApply ? 'Apply changes' : running ? 'Restart to apply' : 'Start to apply'
+	);
 	byId('apply-pending-restart').disabled =
 		state.operationInFlight ||
 		snapshot.services?.state === 'unavailable' ||
-		!instanceCapability(running ? 'host.restart' : 'host.start').supported;
+		!(deploymentApply || instanceCapability(running ? 'host.restart' : 'host.start').supported);
 }
 
 /** Native dialog: postponing is the default and Escape never applies changes. */
@@ -56,8 +61,12 @@ export async function requestStackAction(operationKey) {
 	const result = await operation(
 		lifecycle.labels[0],
 		() => state.api.action(lifecycle.action, true),
-		lifecycle.labels[1]
+		'Lifecycle result received.'
 	);
+	if (result?.snapshot) {
+		render(result.snapshot);
+		deploymentOutcomeNotice(result.outcome);
+	}
 	if (!result) await refresh();
 	return result;
 }
@@ -65,6 +74,29 @@ export async function requestStackAction(operationKey) {
 export async function offerRestart(snapshot = state.currentSnapshot) {
 	const pending = known(snapshot?.pendingChanges);
 	if (!pending?.pending) return;
+	if (instanceCapability('host.deployment.apply', snapshot).supported) {
+		if (state.operationInFlight) return;
+		let confirmed = false;
+		setBusy(true);
+		try {
+			confirmed = await state.api.confirmRestart('apply');
+		} catch (error) {
+			notice(message(error), 'error', { persist: true });
+		} finally {
+			setBusy(false);
+		}
+		if (!confirmed) return;
+		const result = await operation(
+			'Applying saved deployment changes',
+			() => state.api.applyDeployment({ confirmed: true }),
+			'Deployment result received.'
+		);
+		if (result) {
+			render(result.snapshot);
+			deploymentOutcomeNotice(result.outcome);
+		}
+		return result;
+	}
 	const services = known(snapshot?.services) || [];
 	return requestStackAction(services.some(isRunning) ? 'host.restart' : 'host.start');
 }
