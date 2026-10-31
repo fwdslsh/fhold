@@ -98,7 +98,7 @@ export function azureInfrastructureTemplate(
 			name: request.environment.name,
 			location: request.location,
 			properties: {
-				appLogsConfiguration: { destination: 'none' },
+				// Omitting log routing disables export; Azure rejects the CLI spelling "none" here.
 				workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
 			}
 		});

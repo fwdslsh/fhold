@@ -37,7 +37,10 @@ function withCachedHelper(run: HostingProcess): HostingProcess {
 		return run(binary, args, options);
 	};
 }
-function sshDockerProvider(connection: Extract<HostingConnection, { kind: 'ssh-docker' }>, run: HostingProcess) {
+function sshDockerProvider(
+	connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
+	run: HostingProcess
+) {
 	return createSshDockerProvider(connection, withCachedHelper(run));
 }
 afterEach(() => {
@@ -137,7 +140,10 @@ test('connection check preserves SSH success when helper preparation fails', asy
 	expect(result.checks[1]?.detail).toContain('cache');
 });
 test('connection checks report unexpected remote output without disclosing it', async () => {
-	const result = await checkHostingConnection(ssh, withCachedHelper(async () => 'private startup message'));
+	const result = await checkHostingConnection(
+		ssh,
+		withCachedHelper(async () => 'private startup message')
+	);
 	expect(result.ok).toBe(false);
 	expect(result.checks.at(-1)?.detail).toContain('unexpected output');
 	expect(result.checks.at(-1)?.detail).not.toContain('private startup message');
@@ -155,7 +161,11 @@ test('discovery prepares the bundled helper automatically without replacing an i
 			return '';
 		}
 		const input = JSON.parse(options?.input || '{}');
-		return JSON.stringify({ version: 1, ok: true, value: input.action === 'hello' ? { actions: ['list'] } : [] });
+		return JSON.stringify({
+			version: 1,
+			ok: true,
+			value: input.action === 'hello' ? { actions: ['list'] } : []
+		});
 	};
 	const provider = createSshDockerProvider(ssh, run);
 	expect(await provider.listInstances()).toEqual([]);
@@ -172,7 +182,10 @@ test('failed helper upload never submits or retries an instance operation', asyn
 	const provider = createSshDockerProvider(ssh, async (_binary, args, options) => {
 		if (args.at(-1) === 'uname -sm') return 'Linux x86_64';
 		if (args.at(-1)?.startsWith('if test -f ')) return '';
-		if (options?.inputFile) { uploads++; throw Error('transfer interrupted'); }
+		if (options?.inputFile) {
+			uploads++;
+			throw Error('transfer interrupted');
+		}
 		operations++;
 		return '';
 	});
@@ -194,6 +207,9 @@ describe('hosting metadata is separate from instance intent and credentials', ()
 		expect(() => store.saveConnection({ ...ssh, host: 'other-host' })).toThrow('already used');
 	});
 	test('connection and target identity includes hosting scope', () => {
+		expect(instanceKey(acaRef)).toBe(
+			instanceKey({ ...acaRef, resourceId: resourceId.toLowerCase() })
+		);
 		expect(instanceKey({ kind: 'ssh-docker', connectionId: 'one', remoteHome: '/agent' })).not.toBe(
 			instanceKey({ kind: 'ssh-docker', connectionId: 'two', remoteHome: '/agent' })
 		);
@@ -205,6 +221,28 @@ describe('hosting metadata is separate from instance intent and credentials', ()
 		expect(() =>
 			parseInstanceRef({ ...acaRef, resourceId: resourceId.replace('containerApps', 'jobs') })
 		).toThrow();
+	});
+	test('Azure identity deduplicates case variants and retains existing draft keys without losing conflicts', () => {
+		const path = join(root(), 'hosting.json');
+		const store = new HostingPreferencesStore(path);
+		store.saveConnection(aca);
+		store.remember(acaRef);
+		const raw = JSON.parse(readFileSync(path, 'utf8'));
+		const legacyKey = JSON.stringify([acaRef.kind, acaRef.connectionId, resourceId]);
+		raw.recent.push({ ...acaRef, resourceId: resourceId.toLowerCase() });
+		raw.deployment = { [legacyKey]: { draft: { image: 'example/image:old' } } };
+		writeFileSync(path, JSON.stringify(raw));
+		expect(store.read().recent).toHaveLength(1);
+		expect(store.deployment({ ...acaRef, resourceId: resourceId.toLowerCase() }).draft?.image).toBe(
+			'example/image:old'
+		);
+		store.saveDeployment(acaRef, { draft: { image: 'example/image:new' } });
+		const saved = JSON.parse(readFileSync(path, 'utf8'));
+		expect(Object.keys(saved.deployment)).toEqual([legacyKey]);
+		saved.deployment[instanceKey(acaRef)] = { draft: { image: 'different/image:pin' } };
+		writeFileSync(path, JSON.stringify(saved));
+		expect(() => store.deployment(acaRef)).toThrow('Multiple saved deployment records');
+		expect(() => store.saveDeployment(acaRef, {})).toThrow('Multiple saved deployment records');
 	});
 	test('corrupt preferences do not change or prevent the implicit local connection', () => {
 		const path = join(root(), 'hosting.json');
@@ -357,7 +395,9 @@ describe('native SSH transport', () => {
 			remoteHome
 		});
 		expect((await session.inspect()).ref).toEqual(session.ref);
-		expect(requests[0]?.args.at(-1)).toBe(`exec "\${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/${helperDigest}"/fhold hosting rpc`);
+		expect(requests[0]?.args.at(-1)).toBe(
+			`exec "\${XDG_CACHE_HOME:-$HOME/.cache}/fhold/management/${helperDigest}"/fhold hosting rpc`
+		);
 		expect(requests[0]?.args.join(' ')).not.toContain(remoteHome);
 		expect(requests[0]?.input).toMatchObject({
 			version: 1,
@@ -471,9 +511,35 @@ describe('ACA adapter manages exact selected resources with native Azure authori
 			};
 			return JSON.stringify(args.includes('list') ? [app] : app);
 		};
-		const management = { lifecycle(_name: string, action: string) { native.push(action); mutationAccepted = true; return { serialize: async () => JSON.stringify({ state: { status: 'running', config: { initialRequestUrl: `https://management.azure.com${resourceId}/${action}`, requestMethod: 'POST' } } }), pollUntilDone: async () => { if (options.mutationFail) throw Object.assign(new Error('not authorized'), { statusCode: 403 }); } }; } } as unknown as AzureManagement;
-		const preferences = new HostingPreferencesStore(join(root(), 'hosting.json')); preferences.saveConnection(aca);
-		return { calls, native, provider: azureContainerAppsProvider(aca, run, undefined, { management, preferences }) };
+		const management = {
+			lifecycle(_name: string, action: string) {
+				native.push(action);
+				mutationAccepted = true;
+				return {
+					serialize: async () =>
+						JSON.stringify({
+							state: {
+								status: 'running',
+								config: {
+									initialRequestUrl: `https://management.azure.com${resourceId}/${action}`,
+									requestMethod: 'POST'
+								}
+							}
+						}),
+					pollUntilDone: async () => {
+						if (options.mutationFail)
+							throw Object.assign(new Error('not authorized'), { statusCode: 403 });
+					}
+				};
+			}
+		} as unknown as AzureManagement;
+		const preferences = new HostingPreferencesStore(join(root(), 'hosting.json'));
+		preferences.saveConnection(aca);
+		return {
+			calls,
+			native,
+			provider: azureContainerAppsProvider(aca, run, undefined, { management, preferences })
+		};
 	}
 	test('scoped discovery and status use no assistant HTTP requests or deployment writes', async () => {
 		const { provider, calls } = fixture({ zero: true });
@@ -483,8 +549,12 @@ describe('ACA adapter manages exact selected resources with native Azure authori
 		expect(snapshot.config).toBeUndefined();
 		expect(snapshot.clientUrl).toBe('https://agent.example.com');
 		expect(snapshot.services[0]?.image).toBeUndefined();
-		expect(snapshot.services[0]?.imageProvenance?.configuredReference).toBe('registry.example/assistant:beta');
-		expect(snapshot.services[1]?.imageProvenance?.configuredReference).toBe('registry.example/helper:1');
+		expect(snapshot.services[0]?.imageProvenance?.configuredReference).toBe(
+			'registry.example/assistant:beta'
+		);
+		expect(snapshot.services[1]?.imageProvenance?.configuredReference).toBe(
+			'registry.example/helper:1'
+		);
 		expect(snapshot.capabilities.restart.supported).toBe(true);
 		for (const args of calls) {
 			expect(args).toContain(subscription);
@@ -511,7 +581,9 @@ describe('ACA adapter manages exact selected resources with native Azure authori
 		expect(calls.flat()).not.toContain('account');
 		expect(calls.flat()).not.toContain('update');
 		const failed = fixture({ mutationFail: true });
-		expect((await failed.provider.open(acaRef).operate('start', true)).operation?.state).toBe('failed');
+		expect((await failed.provider.open(acaRef).operate('start', true)).operation?.state).toBe(
+			'failed'
+		);
 		expect(failed.native).toEqual(['start']);
 		expect((await failed.provider.open(acaRef).inspect()).name).toBe('agent');
 	});

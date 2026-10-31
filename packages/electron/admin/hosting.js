@@ -11,7 +11,13 @@ import { openAdminSettings, closeAdminSettings } from './settings.js';
 
 export function targetKey(target) {
 	return target.kind === 'hosted'
-		? JSON.stringify([target.ref.kind, target.ref.connectionId, targetLocation(target)])
+		? JSON.stringify([
+				target.ref.kind,
+				target.ref.connectionId,
+				target.ref.kind === 'azure-container-apps'
+					? targetLocation(target).toLowerCase()
+					: targetLocation(target)
+			])
 		: target.homeDir;
 }
 export function targetLocation(target) {

@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HostingPreferencesStore } from '../hosting/preferences.js';
 import type { AzureManagement } from '../hosting/azure-client.js';
-import { azureContainerAppsProvider } from '../hosting/azure-container-apps.js';
+import {
+	azureContainerAppsProvider,
+	azureRecoveryInspectionEnvironment
+} from '../hosting/azure-container-apps.js';
 import { hostingConnectionSetup } from '../hosting/provider.js';
 import { checkHostingConnection } from '../hosting/maintenance.js';
 import { hostingFailure, type HostingProcess, type HostingTerminal } from './process.js';
@@ -20,6 +23,36 @@ const connection: Extract<HostingConnection, { kind: 'azure-container-apps' }> =
 };
 const resourceId = `/subscriptions/${subscriptionId}/resourceGroups/agents/providers/Microsoft.App/containerApps/agent`;
 const ref = { kind: 'azure-container-apps' as const, connectionId: 'azure', resourceId };
+
+test('coverage inspection projects only native recovery inputs from the full deployment environment', () => {
+	const environment = azureRecoveryInspectionEnvironment({
+		properties: {
+			template: {
+				containers: [{
+					name: 'assistant',
+					image: 'fwdslsh/fhold-assistant:test',
+					env: [
+						{ name: 'FH_RECOVERY_URL', value: 'azblob://storage/checkpoints' },
+						{ name: 'FH_INSTANCE_ID', value: 'fixture' },
+						{ name: 'FH_RECOVERY_INCLUDE_FILE', value: '/run/recovery/include.json' },
+						{ name: 'FH_RECOVERY_INTERVAL_SECONDS', value: '60' },
+						{ name: 'TZ', value: 'America/Chicago' },
+						{ name: 'AZURE_CLIENT_ID', value: 'identity' },
+						{ name: 'AZURE_STORAGE_CONNECTION_STRING', value: 'private' },
+						{ name: 'OPENCODE_SERVER_PASSWORD', secretRef: 'native-password' }
+					]
+				}]
+			}
+		}
+	});
+	expect(environment).toEqual({
+		FH_RECOVERY_URL: 'azblob://storage/checkpoints',
+		FH_INSTANCE_ID: 'fixture',
+		FH_RECOVERY_INCLUDE_FILE: '/run/recovery/include.json',
+		FH_RECOVERY_INTERVAL_SECONDS: '60'
+	});
+});
+
 function fixture(options: { many?: boolean; readFails?: boolean; startFailsOnce?: boolean } = {}) {
 	const calls: string[][] = [];
 	const terminals: string[][] = [];

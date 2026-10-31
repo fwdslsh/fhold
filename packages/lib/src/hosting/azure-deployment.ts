@@ -452,7 +452,9 @@ export function azureDeploymentOperations(
 			if (!context.confirmed) throw new Error('Confirm image update and interruption.');
 			const saved = store.deployment(ref);
 			if (saved.draft)
-				throw new Error('Apply or discard the deployment draft before updating the instance.');
+				throw new Error(
+					'Apply or discard the deployment draft before updating the instance. To apply or continue it from the CLI, run update --resume --confirm.'
+				);
 			const document = await (await management()).get(ref.resourceId),
 				selected = selectedAzureContainer(document, input.container);
 			const existing = String(selected.image);

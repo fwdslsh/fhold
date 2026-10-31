@@ -114,10 +114,16 @@ export class HostingPreferencesStore {
 		const connections = input.connections.map(parseHostingConnection);
 		if (new Set(connections.map((item) => item.id)).size !== connections.length)
 			throw new Error('Hosting connection names must be unique.');
+		const recent = input.recent.map(parseInstanceRef);
 		return {
 			version: 1,
 			connections,
-			recent: input.recent.map(parseInstanceRef).slice(0, 20),
+			recent: recent
+				.filter(
+					(item, index) =>
+						recent.findIndex((other) => instanceKey(other) === instanceKey(item)) === index
+				)
+				.slice(0, 20),
 			...(input.deployment &&
 			typeof input.deployment === 'object' &&
 			!Array.isArray(input.deployment)
@@ -184,7 +190,9 @@ export class HostingPreferencesStore {
 		this.write(data);
 	}
 	deployment(ref: InstanceRef): NonNullable<HostingPreferences['deployment']>[string] {
-		const entry = this.read().deployment?.[instanceKey(ref)];
+		const deployments = this.read().deployment;
+		const key = this.deploymentKey(ref, deployments);
+		const entry = key ? deployments?.[key] : undefined;
 		if (!entry) return {};
 		try {
 			const raw = record(entry),
@@ -208,13 +216,19 @@ export class HostingPreferencesStore {
 				const state = record(record(JSON.parse(raw.continuation)).state),
 					config = record(state.config);
 				const url = new URL(String(config.initialRequestUrl));
+				// Older SDK calls constructed exactly one redundant initial path slash.
+				// Preserve the original serialized continuation for SDK polling.
+				const initialPath =
+					url.pathname.startsWith('//') && !url.pathname.startsWith('///')
+						? url.pathname.slice(1)
+						: url.pathname;
 				if (
 					url.origin !== 'https://management.azure.com' ||
 					![
 						ref.resourceId.toLowerCase(),
 						`${ref.resourceId}/start`.toLowerCase(),
 						`${ref.resourceId}/stop`.toLowerCase()
-					].includes(url.pathname.toLowerCase())
+					].includes(initialPath.toLowerCase())
 				)
 					throw new Error('Continuation target mismatch.');
 				for (const key of ['operationLocation', 'resourceLocation'])
@@ -277,8 +291,31 @@ export class HostingPreferencesStore {
 		value: NonNullable<HostingPreferences['deployment']>[string]
 	): void {
 		const data = this.read();
-		data.deployment = { ...data.deployment, [instanceKey(ref)]: value };
+		const key = this.deploymentKey(ref, data.deployment) ?? instanceKey(ref);
+		data.deployment = { ...data.deployment, [key]: value };
 		this.write(data);
+	}
+	private deploymentKey(
+		ref: InstanceRef,
+		deployments: HostingPreferences['deployment']
+	): string | undefined {
+		const wanted = instanceKey(ref);
+		const matches = Object.keys(deployments ?? {}).filter((key) => {
+			try {
+				const value: unknown = JSON.parse(key);
+				if (!Array.isArray(value) || value.length !== 3) return false;
+				if (value[0] === 'azure-container-apps' && typeof value[2] === 'string')
+					value[2] = value[2].toLowerCase();
+				return JSON.stringify(value) === wanted;
+			} catch {
+				return false;
+			}
+		});
+		if (matches.length > 1)
+			throw new Error(
+				'Multiple saved deployment records refer to the same instance. Review hosting preferences before changing this target.'
+			);
+		return matches[0];
 	}
 	installations(connectionId: string): ProvisioningResult[] {
 		const connection = this.connection(connectionId);
@@ -306,6 +343,7 @@ export class HostingPreferencesStore {
 				)
 					return [];
 				const previous = item.previousInitializationExecutions;
+				if (item.initialRejected !== undefined && item.initialRejected !== true) return [];
 				const request =
 					item.request === undefined ? undefined : parseProvisioningRequest(item.request);
 				if (
@@ -326,6 +364,7 @@ export class HostingPreferencesStore {
 						...operation,
 						ref,
 						...(previous ? { previousInitializationExecutions: previous as string[] } : {}),
+						...(item.initialRejected === true ? { initialRejected: true } : {}),
 						...(request?.kind === 'azure-container-apps' ? { request } : {})
 					}
 				];

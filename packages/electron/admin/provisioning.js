@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { byId, all, notice, operation, setOptions, setText } from './ui.js';
 import { refresh } from './snapshot.js';
+import { targetKey } from './hosting.js';
 
 function canRetryFailedStep(result) {
 	return (
@@ -217,11 +218,16 @@ export async function submitCloudInstall() {
 	if (result) await installationResult(result);
 	else {
 		// A rejected/disconnected IPC call cannot prove that submission never happened.
-		const resourceId = state.installPreview?.preview.ref.resourceId;
+		const ref = state.installPreview?.preview.ref;
 		state.installPreview = null;
 		const options = await state.api.provisioningOptions(connectionId).catch(() => undefined);
 		if (!stillSelected()) return;
-		const continuation = options?.continuations?.find((item) => item.ref.resourceId === resourceId);
+		const continuation =
+			ref &&
+			options?.continuations?.find(
+				(item) =>
+					targetKey({ kind: 'hosted', ref: item.ref }) === targetKey({ kind: 'hosted', ref })
+			);
 		await installationResult(
 			continuation || {
 				state: 'unknown',

@@ -209,11 +209,9 @@ export function createNativeManagement(
 			// The existing image script owns vendor login, native sandbox checks and
 			// explicit consent. execve replaces this preamble, preserving its PTY.
 			const session = await terminal(
-				LINE_INPUT +
-					`process.execve('/usr/local/bin/fhold-remote-setup',['fhold-remote-setup',${JSON.stringify(tool)},${JSON.stringify(sandbox)}],process.env);`,
+				`process.execve('/usr/local/bin/fhold-remote-setup',['fhold-remote-setup',${JSON.stringify(tool)},${JSON.stringify(sandbox)}],process.env);`,
 				{ ...overrides, timeoutMs: 900_000, output, cancelInput: '{"cancel":true}\n' }
 			);
-			session.input('{}\n');
 			return session;
 		},
 		async remoteConnection(tool: 'claude' | 'codex') {

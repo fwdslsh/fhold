@@ -123,7 +123,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 		'fhold restore --from <export-directory> [--dry-run|--apply] [--full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
 	update:
-		'fhold update [--no-start] [--pull|--no-pull] (local fhold images never pull; cloud: --confirm [--container <name>] [--image <reference>])',
+		'fhold update [--no-start] [--pull|--no-pull] (hosted: --confirm [--container <name>] [--image <reference>] or --resume --confirm for saved changes)',
 	guardian: 'fhold guardian enable | disable | configure [--bind <ip>] [--port <port>]',
 	credential:
 		'fhold credential list | add <username> <chat|read|full> [--key-file <path>] [--show-key] | show <username> [--show-key] | set-policy <username> <chat|read|full> | rotate <username> [--key-file <path>] [--show-key] | remove <username> | map <discord|slack> <user-id> <username> | map oauth <issuer> <subject> <username> | unmap <discord|slack> <user-id> | unmap oauth <issuer> <subject> | mappings <discord|slack|oauth>',

@@ -466,6 +466,7 @@ describe('Admin static security boundary', () => {
 	}
 	it('uses the shared wizard for cloud preview without preparing a directory or creating resources', async () => {
 		const preview = cloudSetup();
+		expect(html).toContain('<strong>Experimental Azure support.</strong>');
 		let installs = 0;
 		state.api = {
 			provisioningPreview: async ({ request }) => {
@@ -1455,6 +1456,26 @@ describe('Admin static security boundary', () => {
 		expect(control('view-title').textContent).toBe('Start your agent');
 	});
 
+	it('reports deployed platform state without treating it as native agent readiness or startup failure', () => {
+		for (const platformState of ['Running · 1 replica(s)', 'Scaled to zero', 'Stopped']) {
+			renderServices(
+				normalizedSnapshot({
+					lifecycle: 'deployed',
+					deployment: { state: platformState },
+					services: [{ name: 'assistant', state: platformState, health: 'Succeeded' }]
+				})
+			);
+			expect(control('setup-runtime').textContent).toBe(
+				`Platform status: ${platformState}. Native agent readiness is checked separately.`
+			);
+			expect(control('setup-recovery').hidden).toBe(true);
+		}
+		renderServices(normalizedSnapshot({ lifecycle: 'deployed', services: [] }));
+		expect(control('setup-runtime').textContent).toBe(
+			'Native agent readiness is checked separately.'
+		);
+	});
+
 	it('keeps account selection explicit and hides a redundant single sign-in method', () => {
 		renderProviders({
 			providers: [
@@ -1935,6 +1956,20 @@ describe('Admin app settings', () => {
 });
 
 describe('Admin instance picker and automatic status', () => {
+	it('identifies Azure targets without regard to ARM resource ID case, without changing SSH path identity', () => {
+		const id =
+			'/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/agents/providers/Microsoft.App/containerApps/agent';
+		const azure = (resourceId: string) => ({
+			kind: 'hosted',
+			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId }
+		});
+		expect(targetKey(azure(id))).toBe(targetKey(azure(id.toLowerCase())));
+		const ssh = (remoteHome: string) => ({
+			kind: 'hosted',
+			ref: { kind: 'ssh-docker', connectionId: 'server', remoteHome }
+		});
+		expect(targetKey(ssh('/Agent'))).not.toBe(targetKey(ssh('/agent')));
+	});
 	function emptySnapshot() {
 		const homeDir = '/home/person/fhold/instances/a-very-long-personal-instance-folder';
 		const config = {

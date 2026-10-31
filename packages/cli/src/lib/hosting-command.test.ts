@@ -152,6 +152,38 @@ test('hosted updates use the shared deployment operation and preserve incomplete
 	});
 });
 
+test('hosted update resume requires confirmation, saved changes, and no new update options', async () => {
+	const f = fixture();
+	f.session.host.deployment.inspect = supportedOperation(async () => ({
+		containers: [],
+		environment: {},
+		pending: { image: 'example/old:pin' }
+	}));
+	f.session.host.deployment.apply = supportedOperation(async (_input, context) => {
+		f.calls.push(['apply', context.confirmed]);
+		return { state: 'unknown', step: 'update' };
+	});
+	for (const args of [
+		['update', '--resume'],
+		['update', '--resume', '--confirm', '--image', 'other'],
+		['update', '--resume', '--confirm', '--container', 'other'],
+		['update', '--resume', '--confirm', '--pull']
+	])
+		await expect(f.run(args)).rejects.toThrow();
+	expect(f.calls).toEqual([]);
+	await f.run(['update', '--resume', '--confirm']);
+	expect(f.calls).toEqual([['apply', true]]);
+	expect(JSON.parse(f.output[0]!)).toEqual({ state: 'unknown', step: 'update' });
+	f.session.host.deployment.inspect = supportedOperation(async () => ({
+		containers: [],
+		environment: {}
+	}));
+	await expect(f.run(['update', '--resume', '--confirm'])).rejects.toThrow(
+		'no saved deployment changes'
+	);
+	expect(f.calls).toHaveLength(1);
+});
+
 test('hosted setup verifies the native agent without changing deployment or claiming readiness on failure', async () => {
 	const f = fixture();
 	f.session.agent.connect = supportedOperation(async (input) => {

@@ -205,7 +205,11 @@ export function renderServices(snapshot) {
 	byId('provider-connection').hidden = needsRecovery;
 	setText(
 		'setup-runtime',
-		isHealthy(assistant) ? 'Your agent is running.' : 'Agent startup needs attention.'
+		isHealthy(assistant)
+			? 'Your agent is running.'
+			: needsRecovery
+				? 'Agent startup needs attention.'
+				: `${view.deployment.state ? `Platform status: ${view.deployment.state}. ` : ''}Native agent readiness is checked separately.`
 	);
 	setText(
 		'setup-step',

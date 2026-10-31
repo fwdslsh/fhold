@@ -21,6 +21,7 @@ export async function runSessionCommand(
 		action === 'update'
 			? {
 					confirm: { type: 'boolean' as const },
+					resume: { type: 'boolean' as const },
 					pull: { type: 'boolean' as const },
 					container: { type: 'string' as const },
 					image: { type: 'string' as const }
@@ -65,7 +66,20 @@ export async function runSessionCommand(
 		}
 	} else if (action === 'update') {
 		if (!values.confirm)
-			throw new Error('Image updates can interrupt work. Repeat with --confirm when ready.');
+			throw new Error('Deployment changes can interrupt work. Repeat with --confirm when ready.');
+		if (values.resume) {
+			if (values.pull !== undefined || values.container !== undefined || values.image !== undefined)
+				throw new Error(
+					'--resume continues saved changes and cannot be combined with --pull, --container or --image.'
+				);
+			const settings = await invokeOperation(session.host.deployment.inspect, undefined);
+			if (!settings.pending) throw new Error('There are no saved deployment changes to resume.');
+			const outcome = await invokeOperation(session.host.deployment.apply, undefined, {
+				confirmed: true
+			});
+			write(JSON.stringify(outcome, null, 2));
+			return;
+		}
 		const input = {
 			...(typeof values.pull === 'boolean' ? { pull: values.pull } : {}),
 			...(typeof values.container === 'string' ? { container: values.container } : {}),

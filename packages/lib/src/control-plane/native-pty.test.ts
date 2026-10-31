@@ -67,6 +67,22 @@ const access = {
 };
 
 describe('native private terminal transport', () => {
+	it('passes immediate native setup cancellation directly to the exec without a line-reading preamble', async () => {
+		const f = fixture(true, 0);
+		const service = createHttpsNativeAgentService({
+			endpoint: access.endpoint,
+			password: 'private-password',
+			fetch: f.options.fetch
+		});
+		const management = createNativeManagement(access, service, f.options);
+		const session = await management.remoteSetup('claude', 'workspace-write', () => {});
+		expect(f.socket.sent).toEqual([]);
+		expect(f.requests[0]?.body).not.toContain('node:readline');
+		session.input('{"cancel":true}\n');
+		expect(f.socket.sent).toEqual(['{"cancel":true}\n']);
+		f.socket.end();
+		await session.done;
+	});
 	it('preserves UTF-8 preferences split across binary frames and cursor metadata', async () => {
 		const f = fixture(true, 0),
 			chunks: string[] = [];

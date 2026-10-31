@@ -475,9 +475,40 @@ test('continuations bind exact target and connection scope and optional corrupti
 	expect(next.connection(connection.id)).toEqual(connection);
 	expect(next.installations(connection.id)).toEqual([]);
 });
+test('accepts exactly one legacy extra leading slash on the same ARM continuation target', () => {
+	const store = preferences();
+	function continuation(path: string) {
+		return JSON.stringify({
+			state: {
+				config: {
+					initialRequestUrl: `https://management.azure.com${path}`,
+					requestMethod: 'PATCH'
+				},
+				status: 'running'
+			}
+		});
+	}
+	const legacy = continuation(`/${ref.resourceId}`);
+	store.saveDeployment(ref, {
+		operation: { state: 'in-progress', step: 'update' },
+		continuation: legacy
+	});
+	expect(store.deployment(ref).continuation).toBe(legacy);
+	for (const invalid of [`//${ref.resourceId}`, `/${ref.resourceId}-other`]) {
+		store.saveDeployment(ref, {
+			operation: { state: 'in-progress', step: 'update' },
+			continuation: continuation(invalid)
+		});
+		expect(() => store.deployment(ref)).toThrow('invalid');
+	}
+});
 test('templates use published runtime contract, secure parameters, private probe and writable image roots', () => {
 	const app = azureApplicationTemplate(connection, input),
 		infrastructure = azureInfrastructureTemplate(connection, input);
+	const environment = (infrastructure.resources as Record<string, unknown>[]).find(
+		(item) => item.type === 'Microsoft.App/managedEnvironments'
+	)!;
+	expect(azureObject(environment.properties).appLogsConfiguration).toBeUndefined();
 	const resource = (app.resources as Record<string, unknown>[])[0]!,
 		props = azureObject(resource.properties),
 		template = azureObject(props.template),
@@ -591,6 +622,11 @@ function provisioningFixture() {
 }
 test('install observes delayed native job completion automatically before app deployment', async () => {
 	const f = provisioningFixture();
+	const preview = await invokeOperation(f.operations.preview, input);
+	expect(preview.warnings).toContain(
+		'Experimental Azure support. Use a test assistant first and keep an independent backup of important work.'
+	);
+	expect(f.submissions).toEqual([]);
 	const result = await invokeOperation(f.operations.install, input, confirm);
 	expect(result.state).toBe('completed');
 	expect(f.reads()).toBe(3);
@@ -657,6 +693,180 @@ test('unknown job submission is never started again by resume or retry', async (
 		)
 	).rejects.toThrow('confirmed failed');
 	expect(f.submissions.filter((item) => item === 'lost-start')).toHaveLength(1);
+});
+test('an initial rejected deployment is persisted and only explicitly retried; uncertain submission is not', async () => {
+	for (const status of [400, 408, 500]) {
+		const f = provisioningFixture();
+		let attempts = 0;
+		f.sdk.deployment = async () => {
+			throw Object.assign(new Error('missing'), { statusCode: 404 });
+		};
+		f.sdk.deploy = (_name, _template, _parameters, response) => {
+			attempts++;
+			expect(f.store.installations(connection.id)[0]?.initialRejected).toBeUndefined();
+			return {
+				serialize: async () => '{}',
+				pollUntilDone: async () => {
+					response?.({ status, code: 'InvalidTemplateDeployment' });
+					throw new Error('raw secret must not appear');
+				}
+			};
+		};
+		const result = await invokeOperation(f.operations.install, input, confirm);
+		expect(result.state).toBe(status === 400 ? 'failed' : 'unknown');
+		expect(result.message).not.toContain('raw secret');
+		expect(f.store.installations(connection.id)[0]?.initialRejected).toBe(
+			status === 400 ? true : undefined
+		);
+		await invokeOperation(f.operations.resume, { reference: result.reference! }, confirm);
+		expect(attempts).toBe(1);
+		if (status === 400) {
+			const retried = await invokeOperation(
+				f.operations.resume,
+				{ reference: result.reference!, retryFailedStep: true },
+				confirm
+			);
+			expect(retried.state).toBe('failed');
+			expect(retried.message).toContain('HTTP 400');
+			expect(attempts).toBe(2);
+		} else {
+			await invokeOperation(
+				f.operations.resume,
+				{ reference: result.reference!, retryFailedStep: true },
+				confirm
+			);
+			expect(attempts).toBe(1);
+		}
+	}
+});
+test('accepted ARM deployments report terminal poller failure without treating uncertain transport as failed', async () => {
+	for (const [http, status, expected] of [
+		[202, 'failed', 'failed'],
+		[202, 'canceled', 'failed'],
+		[202, 'running', 'unknown'],
+		[500, 'failed', 'unknown'],
+		[undefined, 'failed', 'unknown']
+	] as const) {
+		const f = provisioningFixture();
+		f.sdk.deploy = (_name, _template, _parameters, response) => ({
+			operationState: { status },
+			serialize: async () => '{}',
+			pollUntilDone: async () => {
+				if (http) response?.({ status: http });
+				throw new Error('private response body');
+			}
+		});
+		const result = await invokeOperation(f.operations.install, input, confirm);
+		expect(result.state).toBe(expected);
+		expect(result.initialRejected).toBeUndefined();
+		expect(result.message).not.toContain('private response body');
+		if (expected === 'failed') expect(result.message).toContain('activity log');
+	}
+});
+test('rejected initial deployment retry rechecks resource collisions', async () => {
+	const f = provisioningFixture();
+	const reference = 'fhold-example-12345678';
+	f.store.saveInstallation({
+		ref,
+		reference,
+		request: input,
+		state: 'failed',
+		step: 'infrastructure',
+		initialRejected: true
+	});
+	f.sdk.deployment = async () => {
+		throw Object.assign(new Error('missing'), { statusCode: 404 });
+	};
+	f.collide();
+	await expect(
+		invokeOperation(f.operations.resume, { reference, retryFailedStep: true }, confirm)
+	).rejects.toThrow('already exists');
+	expect(f.submissions).toEqual([]);
+});
+test('inspecting a rejected initial app deployment preserves its explicit retry after ARM 404', async () => {
+	const f = provisioningFixture();
+	const reference = 'fhold-example-12345678';
+	f.store.saveInstallation({
+		ref,
+		reference,
+		request: input,
+		state: 'failed',
+		step: 'application',
+		initialRejected: true,
+		message: 'Azure rejected request.'
+	});
+	f.sdk.deployment = async (name) => {
+		if (name.endsWith('-app')) throw Object.assign(new Error('missing'), { statusCode: 404 });
+		return { properties: { provisioningState: 'Succeeded' } };
+	};
+	const inspected = await invokeOperation(f.operations.resume, { reference }, confirm);
+	expect(inspected.state).toBe('failed');
+	expect(inspected.message).toBe('Azure rejected request.');
+	expect(f.submissions).toEqual([]);
+	f.sdk.deploy = (_name, _template, _parameters, response) => ({
+		serialize: async () => '{}',
+		pollUntilDone: async () => {
+			response?.({ status: 400 });
+			throw new Error('failure');
+		}
+	});
+	const retried = await invokeOperation(
+		f.operations.resume,
+		{ reference, retryFailedStep: true },
+		confirm
+	);
+	expect(retried.state).toBe('failed');
+	expect(retried.message).toContain('activity log');
+});
+test('confirmed initial rejection survives transient inspection failure and remains explicitly retryable', async () => {
+	for (const step of ['infrastructure', 'application'] as const) {
+		const f = provisioningFixture();
+		const reference = 'fhold-example-12345678';
+		const message =
+			'Azure rejected the initial deployment request (HTTP 400, InvalidTemplateDeployment). Inspect the Azure activity log.';
+		f.store.saveInstallation({
+			ref,
+			reference,
+			request: input,
+			state: 'failed',
+			step,
+			initialRejected: true,
+			message
+		});
+		let status = 503;
+		f.sdk.deployment = async (name) => {
+			if (step === 'application' && !name.endsWith('-app'))
+				return { properties: { provisioningState: 'Succeeded' } };
+			throw Object.assign(new Error('synthetic'), { statusCode: status });
+		};
+		const observed = await invokeOperation(f.operations.resume, { reference }, confirm);
+		expect(observed.state).toBe('failed');
+		expect(observed.message).toBe(message);
+		expect(f.store.installations(connection.id)[0]?.message).toBe(message);
+		expect(f.submissions).toEqual([]);
+		await expect(
+			invokeOperation(f.operations.resume, { reference, retryFailedStep: true }, confirm)
+		).rejects.toThrow('No retry was submitted');
+		expect(f.store.installations(connection.id)[0]?.message).toBe(message);
+		status = 404;
+		expect((await invokeOperation(f.operations.resume, { reference }, confirm)).state).toBe(
+			'failed'
+		);
+		let submissions = 0;
+		f.sdk.deploy = (_name, _template, _parameters, response) => ({
+			serialize: async () => '{}',
+			pollUntilDone: async () => {
+				submissions++;
+				response?.({ status: 400 });
+				throw new Error('synthetic');
+			}
+		});
+		expect(
+			(await invokeOperation(f.operations.resume, { reference, retryFailedStep: true }, confirm))
+				.state
+		).toBe('failed');
+		expect(submissions).toBe(1);
+	}
 });
 test('confirmed failed infrastructure and app steps can retry the original incremental template without relying on ARM outputs', async () => {
 	for (const step of ['infrastructure', 'application'] as const) {

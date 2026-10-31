@@ -3,6 +3,35 @@ import type { ConnectionSetup, HostingChoice } from './types.js';
 import type { HostingConnection } from './types.js';
 
 export const AZURE_APP_API_VERSION = '2026-07-01';
+/** Generated resource SDK paths already add the leading slash. */
+export function azureSdkResourceId(resourceId: string): string {
+	return resourceId.startsWith('/') ? resourceId.slice(1) : resourceId;
+}
+/** Only publish known error codes, never response messages or request contents. */
+export function azureInitialResponse(response: {
+	status: number;
+	request: { method: string };
+	parsedBody?: unknown;
+}): { status: number; code?: string } | undefined {
+	if (response.request.method !== 'PUT') return undefined;
+	const body = response.parsedBody as { error?: { code?: unknown } } | undefined;
+	const code = body?.error?.code;
+	return {
+		status: response.status,
+		...(typeof code === 'string' &&
+		[
+			'InvalidTemplateDeployment',
+			'InvalidTemplate',
+			'InvalidRequestContent',
+			'BadRequest',
+			'AuthorizationFailed',
+			'RequestDisallowedByPolicy',
+			'DeploymentQuotaExceeded'
+		].includes(code)
+			? { code }
+			: {})
+	};
+}
 /** SDK-owned LRO, not an ARM polling implementation. */
 export interface AzurePoller {
 	readonly operationState?: { status?: string };
@@ -16,7 +45,8 @@ export interface AzureManagement {
 	deploy(
 		name: string,
 		template: Record<string, unknown>,
-		parameters?: Record<string, { value: unknown }>
+		parameters?: Record<string, { value: unknown }>,
+		onInitialResponse?: (response: { status: number; code?: string }) => void
 	): AzurePoller;
 	deployment(name: string): Promise<Record<string, unknown>>;
 	startJob(name: string): AzurePoller;
@@ -53,7 +83,10 @@ export async function azureManagement(
 	const group = connection.resourceGroup;
 	return {
 		get: async (id, version = AZURE_APP_API_VERSION) =>
-			(await resources.resources.getById(id, version)) as Record<string, unknown>,
+			(await resources.resources.getById(azureSdkResourceId(id), version)) as Record<
+				string,
+				unknown
+			>,
 		lifecycle(name, action, saved) {
 			return saved
 				? appsSdk.restorePoller(apps, saved, apps.containerApps[action])
@@ -62,12 +95,24 @@ export async function azureManagement(
 		patch(id, properties, saved) {
 			return saved
 				? resourcesSdk.restorePoller(resources, saved, resources.resources.updateById)
-				: resources.resources.updateById(id, AZURE_APP_API_VERSION, { properties });
+				: resources.resources.updateById(azureSdkResourceId(id), AZURE_APP_API_VERSION, {
+						properties
+					});
 		},
-		deploy: (name, template, parameters = {}) =>
-			deployments.deployments.createOrUpdate(group, name, {
-				properties: { mode: 'Incremental', template, parameters }
-			}),
+		deploy: (name, template, parameters = {}, onInitialResponse) =>
+			deployments.deployments.createOrUpdate(
+				group,
+				name,
+				{
+					properties: { mode: 'Incremental', template, parameters }
+				},
+				{
+					onResponse(response) {
+						const initial = azureInitialResponse(response);
+						if (initial) onInitialResponse?.(initial);
+					}
+				}
+			),
 		deployment: async (name) =>
 			(await deployments.deployments.get(group, name)) as Record<string, unknown>,
 		startJob: (name) => apps.jobs.start(group, name),

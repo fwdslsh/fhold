@@ -7,8 +7,8 @@ import {
 	type ProvisioningRequest,
 	type ProvisioningResult
 } from '../management/contracts.js';
-import type { HostingConnection, InstanceRef } from './types.js';
-import { azureClient, type AzureManagement } from './azure-client.js';
+import { instanceKey, type HostingConnection, type InstanceRef } from './types.js';
+import { azureClient, type AzureManagement, type AzurePoller } from './azure-client.js';
 import { HostingPreferencesStore } from './preferences.js';
 import { parseProvisioningRequest } from './provisioning.js';
 import {
@@ -113,8 +113,8 @@ export function azureProvisioning(
 				}))
 			],
 			warnings: [
+				'Experimental Azure support. Use a test assistant first and keep an independent backup of important work.',
 				'Recovery checkpoints cover selected native state, not the full Azure deployment or independent Files mounts. Forced termination may lose changes since the last accepted checkpoint.',
-				'Live Azure storage, identity and native account qualification is separate from template validation.',
 				...(input.availability === 'on-demand'
 					? [
 							'On demand disables user scheduling for this fresh instance. Outbound Claude/Codex connections cannot wake a zero-replica app.'
@@ -127,6 +127,47 @@ export function azureProvisioning(
 		store.saveInstallation(result);
 		return result;
 	}
+	async function submit(saved: ProvisioningResult, input: AzureInstallRequest) {
+		const sdk = await management();
+		let initial: { status: number; code?: string } | undefined;
+		let poller: AzurePoller | undefined;
+		// Clear the old rejection before sending; a crash or lost response is uncertain.
+		saved = save({ ...saved, state: 'submitted', initialRejected: undefined });
+		try {
+			poller = sdk.deploy(
+				saved.step === 'infrastructure' ? saved.reference! : `${saved.reference}-app`,
+				saved.step === 'infrastructure'
+					? azureInfrastructureTemplate(connection, input)
+					: azureApplicationTemplate(connection, input),
+				saved.step === 'application'
+					? { password: { value: randomBytes(32).toString('base64url') } }
+					: undefined,
+				(response) => {
+					initial ??= response;
+				}
+			);
+			await poller.pollUntilDone({ abortSignal: AbortSignal.timeout(20 * 60_000) });
+			return saved;
+		} catch {
+			const rejected =
+				initial && initial.status >= 400 && initial.status < 500 && initial.status !== 408;
+			const terminalFailure =
+				initial &&
+				initial.status >= 200 &&
+				initial.status < 300 &&
+				['failed', 'canceled'].includes(poller?.operationState?.status ?? '');
+			return save({
+				...saved,
+				state: rejected || terminalFailure ? 'failed' : 'unknown',
+				...(rejected ? { initialRejected: true } : {}),
+				message: rejected
+					? `Azure rejected the initial deployment request (HTTP ${initial!.status}${initial!.code ? `, ${initial!.code}` : ''}). Inspect the Azure deployment or activity log for details, correct the problem, and explicitly retry the failed step.`
+					: terminalFailure
+						? 'Azure reported the deployment failed or was canceled. Inspect the Azure deployment or activity log. Explicit retry reuses the recorded settings; correct an external cause first, or choose a new installation target if those settings are invalid.'
+						: 'Deployment submission/completion is unconfirmed. Resume observes the named deployment without replaying it.'
+			});
+		}
+	}
 	async function advance(
 		saved: ProvisioningResult,
 		signal?: AbortSignal,
@@ -135,17 +176,34 @@ export function azureProvisioning(
 		const reference = saved.reference!;
 		const sdk = await management();
 		let deployment: Record<string, unknown>;
+		let missingInitialDeployment = false;
 		try {
 			deployment = await sdk.deployment(reference);
-		} catch {
-			return save({
-				...saved,
-				state: 'unknown',
-				message:
-					'Infrastructure submission cannot be confirmed. Inspect the named Azure deployment; do not reinstall or initialize again.'
-			});
+		} catch (error) {
+			if (
+				saved.initialRejected &&
+				saved.step === 'infrastructure' &&
+				error &&
+				typeof error === 'object' &&
+				'statusCode' in error &&
+				error.statusCode === 404
+			) {
+				deployment = { properties: { provisioningState: 'Failed' } };
+				missingInitialDeployment = true;
+			} else if (saved.initialRejected && saved.state === 'failed') {
+				if (retryFailedStep)
+					throw new Error('Azure deployment inspection is unavailable. No retry was submitted.');
+				return saved;
+			} else
+				return save({
+					...saved,
+					state: 'unknown',
+					message:
+						'Infrastructure submission cannot be confirmed. Inspect the named Azure deployment; do not reinstall or initialize again.'
+				});
 		}
 		const properties = azureObject(deployment.properties);
+		if (missingInitialDeployment && !retryFailedStep) return saved;
 		if (
 			retryFailedStep &&
 			(saved.state !== 'failed' ||
@@ -160,39 +218,35 @@ export function azureProvisioning(
 					azureInstallNames(connection, input).app.toLowerCase()
 			)
 				throw new Error('The recorded installation request does not match this target.');
-			const native =
-				saved.step === 'infrastructure'
-					? properties
-					: azureObject((await sdk.deployment(`${reference}-app`)).properties);
+			let native = saved.step === 'infrastructure' ? properties : undefined;
+			let missingAppDeployment = false;
+			if (!native) {
+				try {
+					native = azureObject((await sdk.deployment(`${reference}-app`)).properties);
+				} catch (error) {
+					if (
+						saved.initialRejected &&
+						error &&
+						typeof error === 'object' &&
+						'statusCode' in error &&
+						error.statusCode === 404
+					) {
+						native = { provisioningState: 'Failed' };
+						missingAppDeployment = true;
+					} else
+						throw new Error('Azure deployment inspection is unavailable. No retry was submitted.');
+				}
+			}
 			if (!['Failed', 'Canceled'].includes(String(native.provisioningState)))
 				throw new Error('Azure does not confirm this step failed. No deployment was replayed.');
+			if (missingInitialDeployment) await preview(input);
+			if (missingAppDeployment && (await exists(azureInstallNames(connection, input).app)))
+				throw new Error(
+					'An app appeared before retry. Open it for management; the install template was not applied.'
+				);
 			signal?.throwIfAborted();
-			saved = save({
-				...saved,
-				state: 'submitted',
-				message:
-					'Retrying the recorded failed incremental deployment with its original placement. This reapplies the installation template; coordinate any concurrent changes in other tools.'
-			});
-			try {
-				await sdk
-					.deploy(
-						saved.step === 'infrastructure' ? reference : `${reference}-app`,
-						saved.step === 'infrastructure'
-							? azureInfrastructureTemplate(connection, input)
-							: azureApplicationTemplate(connection, input),
-						saved.step === 'application'
-							? { password: { value: randomBytes(32).toString('base64url') } }
-							: undefined
-					)
-					.pollUntilDone({ abortSignal: AbortSignal.timeout(20 * 60_000) });
-			} catch {
-				return save({
-					...saved,
-					state: 'unknown',
-					message:
-						'Retry completion is unconfirmed. Resume observes the recorded deployment without another submission.'
-				});
-			}
+			saved = await submit(saved, input);
+			if (saved.state !== 'submitted') return saved;
 			return advance(saved, signal);
 		}
 		if (properties.provisioningState !== 'Succeeded')
@@ -293,26 +347,15 @@ export function azureProvisioning(
 						'An app appeared before fresh deployment. Open it for management; the install template was not applied.'
 				});
 			saved = save({ ...saved, state: 'submitted', step: 'application' });
-			try {
-				await sdk
-					.deploy(`${reference}-app`, azureApplicationTemplate(connection, input), {
-						password: { value: randomBytes(32).toString('base64url') }
-					})
-					.pollUntilDone({ abortSignal: AbortSignal.timeout(20 * 60_000) });
-			} catch {
-				return save({
-					...saved,
-					state: 'unknown',
-					message:
-						'Application deployment completion is unconfirmed. Resume inspects the named deployment; no new password or deployment is submitted.'
-				});
-			}
+			saved = await submit(saved, input);
+			if (saved.state !== 'submitted') return saved;
 		}
 		if (saved.step === 'application') {
 			let deployed: Record<string, unknown>;
 			try {
 				deployed = await sdk.deployment(`${reference}-app`);
 			} catch {
+				if (saved.initialRejected && saved.state === 'failed') return saved;
 				return save({
 					...saved,
 					state: 'unknown',
@@ -398,7 +441,7 @@ export function azureProvisioning(
 				.find(
 					(item) =>
 						item.ref.kind === 'azure-container-apps' &&
-						item.ref.resourceId === azureInstallNames(connection, input).app
+						instanceKey(item.ref) === instanceKey(ref(input))
 				);
 			if (pending) return pending;
 			await preview(input);
@@ -411,19 +454,9 @@ export function azureProvisioning(
 				request: input
 			};
 			save(result);
-			try {
-				await (await management())
-					.deploy(reference, azureInfrastructureTemplate(connection, input))
-					.pollUntilDone({ abortSignal: AbortSignal.timeout(20 * 60_000) });
-			} catch {
-				return save({
-					...result,
-					state: 'unknown',
-					message:
-						'Infrastructure submission/completion is unconfirmed. Resume the recorded deployment; closing this app does not cancel Azure resources.'
-				});
-			}
-			return advance(result, context.signal);
+			const submitted = await submit(result, input);
+			if (submitted.state !== 'submitted') return submitted;
+			return advance(submitted, context.signal);
 		}),
 		resume: supportedOperation(async ({ reference, retryFailedStep }, context) => {
 			if (!context.confirmed) throw new Error('Confirm continuation of this installation.');

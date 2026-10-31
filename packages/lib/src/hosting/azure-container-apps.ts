@@ -17,6 +17,7 @@ import { HostingPreferencesStore } from './preferences.js';
 import { AZURE_ASSISTANT_IMAGE } from './azure-template.js';
 import { azureRecovery } from './azure-recovery.js';
 import { httpsAgentBindings } from '../management/https-agent-session.js';
+import { RECOVERY_INSPECTION_ENVIRONMENT } from '../control-plane/native-management.js';
 import {
 	capabilities,
 	selectListedInstance,
@@ -133,6 +134,15 @@ function systemLogText(raw: string): string {
 			return line;
 		})
 		.join('\n');
+}
+
+export function azureRecoveryInspectionEnvironment(document: Record<string, unknown>) {
+	const environment = azureEnvironment(selectedAzureContainer(document));
+	return Object.fromEntries(
+		RECOVERY_INSPECTION_ENVIRONMENT.filter((key) => environment[key] !== undefined).map(
+			(key) => [key, environment[key]!]
+		)
+	);
 }
 
 export function azureContainerAppsProvider(
@@ -443,9 +453,7 @@ export function azureContainerAppsProvider(
 						inspectHost: inspect,
 						readinessTimeoutMs: 600_000,
 						recoveryEnvironment: async () =>
-							azureEnvironment(
-								selectedAzureContainer(await (await management()).get(ref.resourceId))
-							),
+							azureRecoveryInspectionEnvironment(await (await management()).get(ref.resourceId)),
 						async resolveAccess() {
 							const sdk = await management(),
 								document = await sdk.get(ref.resourceId),

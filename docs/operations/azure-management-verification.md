@@ -1,5 +1,60 @@
 # Azure management qualification
 
+## October 31, 2026 — live experimental qualification
+
+PR #97 was exercised against two disposable, synthetic-data-only assistants in
+the approved development subscription, using the published `0.4.1001` image.
+Existing lab assistants were not changed. Azure remains explicitly experimental
+in the setup form, installation preview and hosting documentation.
+
+| Live scenario | Result |
+| --- | --- |
+| Fresh CLI installation | Created a Consumption environment, storage account, per-assistant Blob container, user-assigned identity and initialization Job; deployed the assistant and removed its successful temporary Job. |
+| Admin installation using existing resources | The actual Electron wizard reused the test environment/account, selected on-demand availability and an existing Azure Files mount, reviewed costs/resources and installed successfully. |
+| Identity propagation failure | The second initializer initially failed Blob authentication while the newly assigned role propagated. The failed Job remained inspectable. Admin's explicit Retry failed step succeeded without clearing the namespace. No automatic retry or credential workaround was used. |
+| Native management | Admin connected using the generated native secret. Native preference writes hot-reloaded and round-tripped multibyte UTF-8. Both image-baked worker setup scripts accepted immediate cancellation without vendor sign-in. |
+| Stop, update while stopped, Start | Interrupted update was resumed with the compiled CLI. Final stopped intent was preserved. Start restored three synthetic files and a real SQLite-backed OpenCode session onto a different replica. |
+| Deferred settings and revision update | The real Admin IPC saved a timezone draft without changing Azure; the draft survived closing/reopening Electron. Explicit apply created a new revision, retained authentication/identity/mounts and restored the files/session. Native OS confirmation dialogs were not manually qualified; the shared confirmation/Later behavior is covered by renderer regressions. |
+| Recovery policy editing | Native inspection supplied the baseline; saving a changed checkpoint interval and custom path created a pending draft. Explicit apply preserved native credentials and produced healthy, durable recovery with the requested coverage. |
+| Natural scale to zero and wake | With clients closed and no ingress probing, ARM reported zero replicas. Access through the normal authenticated OpenCode endpoint woke a new replica. Three recovered local files, the SQLite-backed session and an independent Azure Files marker were intact. |
+| Independent Azure Files | Non-root writes succeeded. Coverage reported the mounted directory as external and excluded it from checkpoint ownership. |
+| Invalid Azure placement | An invalid CPU/memory combination produced a retained failed ARM deployment, no application writers, and an inspectable continuation. Initial rejection, accepted-then-failed and uncertain transport results now have distinct regression coverage using the actual Azure SDK transport. |
+
+Failures found and fixed during qualification:
+
+- ARM rejects the CLI's literal logging destination `none`; the template now
+  omits log routing, verified by live Azure validation and a fresh deployment.
+- Recovery inspection now receives only recovery-related environment inputs,
+  rather than unrelated container settings such as timezone.
+- Azure resource identity comparison is case-insensitive; local/SSH paths are
+  unchanged. Existing recent selections and deployment drafts retain their identity.
+- Native remote setup no longer has an extra stdin reader that could consume
+  the user's first answer or cancellation before the setup program starts.
+- Generic ARM SDK resource calls no longer double-prefix the resource path.
+  Existing native continuations with that spelling remain resumable without
+  altering their signed polling URLs.
+- `update --resume --confirm` gives CLI users an explicit route to finish saved
+  deployment changes. Plain Update still does not consume an unrelated draft.
+- Confirmed initial rejections remain actionable after temporary inspection
+  failures. Confirmed failed/canceled pollers are not mislabeled as unknown;
+  genuinely uncertain submissions are still inspected instead of replayed.
+- The setup screen distinguishes platform status from native readiness instead
+  of claiming startup failure merely because native readiness is uninspected.
+
+Verification: full repository suite **1,227 passed, nine opt-in tests skipped,
+zero failed**; subsequent final focused regressions **48 passed**; actual Chromium
+workflow **360 assertions**; all six typechecks, configured lint gate, CLI/Admin
+builds and documentation tests passed. Terra reviewed the final changes and its
+remaining transient-inspection finding was fixed and regression-tested.
+
+This qualifies the exercised single-replica public-ingress path, not every Azure
+topology. Native vendor login/pairing, paid model inference, private-network/Key
+Vault/private-registry deployments and packaged OS confirmation dialogs remain
+outside this live pass. Forced termination can still lose work since the last
+accepted checkpoint; Files mounts require their own protection. No container
+source or runtime pins changed, and this work does not claim full cloud archive,
+Guardian or Portal provisioning support.
+
 ## October 31, 2026 — PR #97 Terra review follow-up
 
 A separate `gpt-6.1-terra` reviewer examined the PR and re-reviewed the fixes.
@@ -100,7 +155,9 @@ Using native Node and a normal generated fixture directory resolved them without
 product/test workarounds. Packaged AppImage and native runner qualification are
 left to PR CI; a successful bundle is not claimed as packaged-app qualification.
 
-### Qualification still required
+### Qualification outstanding at the implementation checkpoint
+
+The later live experimental qualification above supersedes this earlier list.
 
 Live Azure resource creation, initial managed-identity role propagation, actual
 Blob checkpoint/restore across a new replica, scale-to-zero/wake, optional Azure

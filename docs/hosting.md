@@ -115,6 +115,10 @@ instance/recovery locations and a native local picker for export/import archives
 
 ## Azure Container Apps (experimental)
 
+Azure hosting remains experimental. Start with a test assistant and keep an
+independent backup of important work. Admin setup and CLI installation previews
+show this status before creating resources.
+
 Install the native Azure CLI on this computer and explicitly sign in with
 `az login` or `fhold hosting login azure-container-apps`. In Admin, choose
 **Settings → Host connections → Add connection → Azure Container Apps**. **Sign in
@@ -292,6 +296,7 @@ configured/observed image references from the managing tool's update candidate.
 fhold --connection cloud --name <app-name> update --confirm
 fhold --connection cloud --name <app-name> update --confirm \
   --container assistant --image <exact-image-reference>
+fhold --connection cloud --name <app-name> update --resume --confirm
 fhold --connection cloud --name <app-name> setup \
   --password-file /private/opencode-password --provider <provider-id> --model <model-id>
 ```
@@ -301,7 +306,11 @@ steps; it is not a rolling-update shortcut. The provider completes Stop before
 patching a running app, then starts it again. An initially stopped app is left
 stopped after application; Azure may briefly activate a new revision while
 applying a template update, so applying is not a promise of zero execution.
-A pending/unknown operation retains its native reference for inspection.
+A pending/unknown operation retains its native reference for inspection. Use
+`update --resume --confirm` to apply saved deployment changes or continue their
+outstanding operation; it accepts no new image, container or pull options. A
+plain update never consumes an unrelated pending draft. Admin can also apply or
+discard the draft; discarding cannot undo changes already submitted to Azure.
 Native runtime recovery remains the
 Assistant's existing implementation: no host-side Blob reader, automatic unlock
 or ownership fallback is added. Portable/full-instance transfer is not exposed

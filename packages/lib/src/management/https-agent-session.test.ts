@@ -143,7 +143,7 @@ describe('explicit HTTPS agent session', () => {
 		await invoke(f.bindings.agent.connect, { password: 'private' });
 		await invoke(f.bindings.agent.remote, { tool: 'codex', action: 'enable', trusted: true });
 		await invoke(f.bindings.agent.remote, { tool: 'codex', action: 'input', input: '' });
-		expect(sockets[1]?.sent).toEqual(['{}\n', '{"input":""}\n']);
+		expect(sockets[1]?.sent).toEqual(['{"input":""}\n']);
 		sockets[1]?.dispatchEvent(new Event('close'));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		await f.bindings.close?.();

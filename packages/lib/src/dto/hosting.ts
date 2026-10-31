@@ -117,6 +117,8 @@ export type ProvisioningRequest =
 export type ProvisioningResult = DeploymentOutcome & {
 	ref: InstanceRef;
 	previousInitializationExecutions?: string[];
+	/** Initial ARM request was definitively rejected; no accepted operation is replayed. */
+	initialRejected?: boolean;
 	/** Validated non-secret placement allows retry when failed ARM deployments have no outputs. */
 	request?: Extract<ProvisioningRequest, { kind: 'azure-container-apps' }>;
 };

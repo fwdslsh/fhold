@@ -7,7 +7,12 @@ import {
 	ResourceManagementClient,
 	restorePoller as restoreResourcesPoller
 } from '@azure/arm-resources';
-import { azureContinuation } from '../hosting/azure-client.js';
+import { DeploymentsClient } from '@azure/arm-resourcesdeployments';
+import {
+	azureContinuation,
+	azureInitialResponse,
+	azureSdkResourceId
+} from '../hosting/azure-client.js';
 
 type ClientOptions = NonNullable<ConstructorParameters<typeof ContainerAppsAPIClient>[2]>;
 type TestHttpClient = NonNullable<ClientOptions['httpClient']>;
@@ -59,6 +64,89 @@ function transport() {
 }
 
 describe('official Azure SDK continuation', () => {
+	it('reports a terminal failed state after accepting a deployment', async () => {
+		const httpClient: TestHttpClient = {
+			async sendRequest(request) {
+				request.headers.set('content-type', 'application/json');
+				const initial = request.method === 'PUT';
+				if (initial) request.headers.set('azure-asyncoperation', operationUrl);
+				return {
+					request,
+					status: initial ? 202 : 200,
+					headers: request.headers,
+					bodyAsText: JSON.stringify(
+						initial
+							? { properties: { provisioningState: 'Running' } }
+							: {
+									status: 'Failed',
+									error: { code: 'ContainerAppInvalidResourceTotal', message: privateValue }
+								}
+					)
+				};
+			}
+		};
+		const client = new DeploymentsClient(credential, subscription, {
+			httpClient,
+			retryOptions: { maxRetries: 0 }
+		});
+		let initialStatus: number | undefined;
+		const poller = client.deployments.createOrUpdate(
+			'fixture',
+			'fixture',
+			{ properties: { mode: 'Incremental', template: {} } },
+			{
+				updateIntervalInMs: 1,
+				onResponse(response) {
+					initialStatus ??= azureInitialResponse(response)?.status;
+				}
+			}
+		);
+		await expect(poller.pollUntilDone()).rejects.toThrow();
+		expect(initialStatus).toBe(202);
+		expect(poller.operationState.status).toBe('failed');
+	});
+	it('uses exactly one leading slash in the real SDK get-by-id request', async () => {
+		const fixture = transport();
+		const resources = new ResourceManagementClient(credential, subscription, {
+			httpClient: fixture.httpClient,
+			retryOptions: { maxRetries: 0 }
+		});
+		await resources.resources.getById(azureSdkResourceId(resourceId), '2026-07-01');
+		expect(new URL(fixture.requests[0]!.url).pathname).toBe(resourceId);
+	});
+	it('observes the initial rejection through the real SDK callback without surfacing its body', async () => {
+		const httpClient: TestHttpClient = {
+			async sendRequest(request) {
+				request.headers.set('content-type', 'application/json');
+				return {
+					request,
+					status: 400,
+					headers: request.headers,
+					bodyAsText: JSON.stringify({
+						error: { code: 'InvalidTemplateDeployment', message: privateValue }
+					})
+				};
+			}
+		};
+		const client = new DeploymentsClient(credential, subscription, {
+			httpClient,
+			retryOptions: { maxRetries: 0 }
+		});
+		let observed: ReturnType<typeof azureInitialResponse>;
+		const poller = client.deployments.createOrUpdate(
+			'fixture',
+			'fixture',
+			{ properties: { mode: 'Incremental', template: {} } },
+			{
+				onResponse(response) {
+					observed = azureInitialResponse(response);
+				}
+			}
+		);
+		await expect(poller.pollUntilDone()).rejects.toThrow();
+		expect(observed).toEqual({ status: 400, code: 'InvalidTemplateDeployment' });
+		expect(JSON.stringify(observed)).not.toContain(privateValue);
+	});
 	for (const kind of ['start', 'patch'] as const) {
 		it(`restores ${kind} using only GET and persists no response body or secret`, async () => {
 			const fixture = transport();
@@ -69,7 +157,7 @@ describe('official Azure SDK continuation', () => {
 				kind === 'start'
 					? apps.containerApps.start('fixture', 'assistant', { updateIntervalInMs: 1 })
 					: resources.resources.updateById(
-							resourceId,
+							azureSdkResourceId(resourceId),
 							'2026-07-01',
 							{
 								properties: {
@@ -112,6 +200,7 @@ describe('official Azure SDK continuation', () => {
 			expect(fixture.requests.map(({ method }) => method)).toEqual([
 				kind === 'start' ? 'POST' : 'PATCH'
 			]);
+			if (kind === 'patch') expect(new URL(fixture.requests[0]!.url).pathname).toBe(resourceId);
 			fixture.requests.length = 0;
 			const restored =
 				kind === 'start'

@@ -1,4 +1,8 @@
-import type { InstanceSessionBindings, DeploymentOperations, ProvisioningOperations } from '../management/contracts.js';
+import type {
+	InstanceSessionBindings,
+	DeploymentOperations,
+	ProvisioningOperations
+} from '../management/contracts.js';
 import type {
 	DirectoryListing,
 	HostingAction,
@@ -106,6 +110,6 @@ export function instanceKey(ref: InstanceRef): string {
 			? ref.homeDir
 			: ref.kind === 'ssh-docker'
 				? ref.remoteHome
-				: ref.resourceId
+				: ref.resourceId.toLowerCase()
 	]);
 }

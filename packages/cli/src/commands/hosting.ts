@@ -344,7 +344,7 @@ export async function runHostedCommand(
 			action
 		) ||
 		(action === 'connect' && argv[1] !== 'remote') ||
-		(action === 'update' && connection.kind !== 'ssh-docker');
+		(action === 'update' && (connection.kind !== 'ssh-docker' || argv.includes('--resume')));
 	if (connection.kind === 'ssh-docker' && !composedAction) {
 		if (!instance) throw Error('Choose a remote instance with --name/-n.');
 		const listed =
