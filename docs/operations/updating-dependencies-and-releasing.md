@@ -52,7 +52,7 @@ Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
 AKM's npm `latest` is stable; `next` carries prereleases and may lag a later stable
 release. The current pins use the matching stable pair; see the
-[October 30 review](dependency-refresh-2026-10-30.md). Select channels explicitly.
+[CLI022/plugin020 review](dependency-refresh-akm-cli022.md). Select channels explicitly.
 Resolve the plugin's required CLI version before choosing that pin.
 Compare actual release provenance and published tags,
 not just numeric patches: upstream AKM has changed its prerelease naming.

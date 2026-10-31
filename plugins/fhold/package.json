@@ -6,6 +6,6 @@
   "dependencies": {
     "@opencode/plugin": "2.2.1",
     "effect": "4.0.1",
-    "akm-opencode-v2": "0.10.261019"
+    "akm-opencode-v2": "0.10.261020"
   }
 }
