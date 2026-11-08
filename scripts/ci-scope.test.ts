@@ -167,6 +167,7 @@ test('PR merge-base, deletions, renames and missing bases select conservative re
 					BASE_SHA: base,
 					HEAD_SHA: head,
 					GITHUB_EVENT_NAME: pr ? 'pull_request' : 'push',
+					GITHUB_REF: pr ? 'refs/pull/1/merge' : 'refs/heads/feature',
 					GITHUB_OUTPUT: ''
 				},
 				stdio: ['ignore', 'pipe', 'pipe']
