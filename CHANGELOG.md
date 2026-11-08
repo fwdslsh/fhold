@@ -14,6 +14,12 @@ release merge planning and native AKM indexing behavior. Include the published
 to its native browser UI, preserving session lifetime and native cookie, Host
 and Origin checks for local Linux Docker and SSH access.
 
+Refresh compatible stable Claude Code, Codex, Playwright/Chromium, Electron,
+builder/updater, jose, discord.js and Biome releases. Record the available glob
+13.0.7 cancellation backport and its unresolved parent/resolution constraints. Keep upstream-required
+Effect, Zod and remaining glob/minimatch versions pending compatible parent
+updates; document those holds without forcing dependency overrides.
+
 ## 0.4.1102-beta — patched AKM and native controls
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop

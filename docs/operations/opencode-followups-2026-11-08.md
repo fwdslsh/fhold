@@ -20,9 +20,50 @@ AKM CLI **0.10.261113-beta** and plugins **0.10.261112-beta** remain the current
 published `next` pair at review time. The native marketplace stays unchanged.
 AKM's OpenCode plugin still declares SDK 2.1.4 / Effect 4.0.1; its native harness
 must pass alongside OpenCode 2.2.6. There are no overrides or vendor patches.
-This targeted update does not refresh unrelated dependencies. The raw audit
+The subsequent owner-requested stable refresh is recorded below. The raw audit
 still reports only the three reviewed source exceptions tracked in #63;
 runtime image scans remain separate gates.
+
+## Compatible dependency refresh and upstream holds
+
+Reviewed November 8, 2026 against npm publications, native package requirements
+and official image tags. Update Claude Code **2.1.312 → 2.1.319**, Codex
+**0.165.0 → 0.167.0**, Playwright **1.64.1 → 1.65.0** (including its matching
+Chromium), jose **6.2.14 → 6.2.16**, discord.js **14.27.0 → 14.28.1**, Electron
+**45.1.0 → 45.2.3**, electron-builder **26.18.0 → 26.18.1**, electron-updater
+**6.8.11 → 6.8.12** and Biome **2.6.4 → 2.6.6**. Electron builder/updater's
+maintained `v26` dist-tag contains the newer stable releases even though their
+`latest` tags lag. Existing Discord REST constraints accept the retained override.
+
+Published glob **13.0.7** backports the abort/cancellation fix and satisfies
+the existing `^13` ranges. However, `bun update glob` deduplicated those edges
+onto OpenCode's exact **13.0.5** instead of selecting the backport. Discard that
+refresh and preserve the existing **13.0.6**, **13.0.5** and **10.5.0** resolutions.
+The backport is available but is not adopted here; wait for owning upstream
+package updates rather than adding a dependency solely to influence hoisting,
+forcing an override, or editing generated lock entries by hand.
+
+Wait for supported upstream package updates before changing these dependencies:
+
+| Hold | Reason and next action |
+| --- | --- |
+| Effect 4.1.0 | OpenCode 2.2.6's SDK and related packages require exactly 4.1.0. Adopt 4.1.2 or newer with a compatible upstream SDK release; do not force mixed versions. AKM's plugin retains its own native SDK/Effect resolution. |
+| MCPB 2.1.2 / Zod 3.25.76 | Latest MCPB still requires Zod 3. Await MCPB adopting patched Zod; never override its major version. AKM's own Zod 4.6.7 is already patched. |
+| Remaining glob and minimatch | Await OpenCode, Electron-builder and their owning dependencies adopting patched versions within supported constraints. Even Electron-builder 26.18.1 retains minimatch 10 and older native packaging dependencies. Do not force glob 14 or minimatch 11 into incompatible parents. |
+| Skopeo image 1.22.3 | Source 1.24.1 exists, but `quay.io/skopeo/stable:v1.24.1` is absent and the registry's `latest`/`v1` tags still resolve to the pinned 1.22.3 digest. Wait for the official image publication before changing the digest. |
+
+The [glob backport](https://github.com/isaacs/node-glob/compare/v13.0.6...v13.0.7)
+is newer evidence than the advisory's listed patched range (still only 14.0.2).
+The three exact source-audit exceptions in [#63](https://github.com/fwdslsh/fhold/issues/63)
+remain necessary for affected chains. No exceptions are widened or added, and
+the issue must stay open until all affected chains are resolved. Audit metadata
+alone must not obscure a verified backport or be treated as proof all chains are fixed.
+
+AKM CLI/web **0.10.261113-beta** and plugins **0.10.261112-beta** remain the
+approved compatible beta set. Bun 1.4.4, Node 26.13.0, npm 12.2.2, Go 1.27.3,
+Supercronic 0.2.51 and Trivy 0.76.2 were current on this review. Changed inputs
+require fresh native image and desktop checks; prior PR success does not qualify
+these dependency changes.
 
 ## Smaller maintenance changes
 
