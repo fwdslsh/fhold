@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Update AKM CLI to **0.10.261112-beta** and all three AKM plugins to
+**0.10.261111-beta**, retaining exact image-baked versions and the plugin's
+required CLI pair. Native project selection follows each agent session's working
+directory; no fhold scope registry or policy layer is added. The new CLI removes
+`akm ui` in favor of AKM Desktop. Admin reports the unsupported browser route
+promptly and keeps the selected Assistant's knowledge separate from host-local
+libraries.
+
+Update npm to **12.2.2**, which bundles patched Undici **6.29.1**, and remove
+the three expired runtime image exceptions. Independent source-audit findings
+remain tracked in issue #63. No fhold release is stamped or published by this PR.
+
 ## 0.4.1002 — experimental Azure instance management
 
 Tooling-only release for Linux Admin and the companion CLI. Assistant, Guardian,

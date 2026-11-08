@@ -1,7 +1,7 @@
 FROM node:26.13.0-bookworm-slim AS node-runtime
-ARG NPM_VERSION=12.2.1
+ARG NPM_VERSION=12.2.2
 # Use npm's supported self-upgrade at build time, without altering its bundle.
-# Keep npm's upstream bundle intact and retain the reviewed advisory scopes.
+# Keep npm's patched upstream bundle intact; do not override private packages.
 RUN npm install --global "npm@${NPM_VERSION}" \
     && test "$(npm --version)" = "${NPM_VERSION}"
 
@@ -59,17 +59,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:7e0b147d5540c1f0fa10c5384372b5a07741327b29122a9f8f7ec971a6d6f281 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/cb5aa3f66356dc17928d1ff5e573a4d275741fb3 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:e55933c47a7ee842ffbebbd9cc6861c462d8f2a79a87463b3370360cd91c1a07 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/2f81278c7e9acb7a83c4d50f733f19a2d0a2e587 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-cb5aa3f66356dc17928d1ff5e573a4d275741fb3/claude \
+    && plugin_root=akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-cb5aa3f66356dc17928d1ff5e573a4d275741fb3/.agents/plugins/marketplace.json \
-      akm-plugins-cb5aa3f66356dc17928d1ff5e573a4d275741fb3/.claude-plugin/marketplace.json \
-      akm-plugins-cb5aa3f66356dc17928d1ff5e573a4d275741fb3/LICENSE
+      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/.agents/plugins/marketplace.json \
+      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/.claude-plugin/marketplace.json \
+      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/LICENSE
 # Node's official Linux binaries require libatomic on both native architectures.
 RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
     && rm -rf /var/lib/apt/lists/*

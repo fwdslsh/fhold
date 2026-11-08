@@ -396,15 +396,24 @@ major override or installed vendor edit is added. Adopt supported parent-chain
 fixes and remove each ignore when its affected chains are patched. Re-review
 before the next release and by the existing **November 6, 2026** review deadline.
 
-## Temporary Assistant image exceptions (October 26, 2026)
+## Assistant image exceptions removed with npm 12.2.2
+
+The November 8 dependency update selects supported **npm 12.2.2**, whose official
+tarball bundles **Undici 6.29.1**. That version patches all three findings listed
+below. Remove their expired exceptions; `.github/trivy-ignore.yaml` now has an
+empty vulnerability list. Raw reporting and mandatory critical/fixable-high
+gates remain enabled, with native npm/npx and image checks required on the PR.
+There is no vendor edit, override, renewed expiry or replacement exception.
+
+### Historical image exception scope (October 26–November 6)
 
 On October 26, 2026 (October 27 UTC), the product owner explicitly approved
 three identified PR #67 Assistant findings until **November 6, 2026**. The AKM
 Zod entry was removed with CLI 0.10.261016-beta; the MSAL entry was removed with
 Azure Identity 4.14.1 on October 30. On October 28, the owner
 reaffirmed the upstream-package exceptions for PR #75/#76, including the two
-additional findings in the same npm-owned Undici bundle. These entries retain
-the existing **November 6, 2026** expiry:
+additional findings in the same npm-owned Undici bundle. Those entries expired
+on **November 6, 2026** and are now removed:
 
 | Trivy ID / exact GitHub alias | Package/version | Exact image package path |
 | --- | --- | --- |
@@ -412,28 +421,14 @@ the existing **November 6, 2026** expiry:
 | CVE-2026-109383 / GHSA-2m5v-pch6-74hx | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 | CVE-2026-87018 / GHSA-qrxm-fqhp-jwvm | `undici@6.29.0` | `usr/local/lib/node_modules/npm/node_modules/undici/package.json` |
 
-Trivy0.76.1 applies the path and exact package/version PURL together; there are
-no directory globs or severity-wide exclusions. The unfiltered high/critical
-report remains visible. Other critical/fixable-high findings still fail, and
-native expiry stops these entries applying after the deadline. The npm
-entries permit its bundled HTTP client's unhandled-error denial of service
-from excessive content-encodings, TLS certificate-validation bypass via dropped
-Agent TLS options, and denial of service during TLS renegotiation with a
-mismatched certificate. These accepted findings do not block otherwise-verified
-PR merges while the exceptions apply; they remain unresolved upstream defects.
-Official npm12.2.1 and maintained
-11.21.1 tarballs both still contain undici6.29.0; no vendor tree is modified.
-
-[Issue #63](https://github.com/fwdslsh/fhold/issues/63) tracks removal of the
-remaining entries. The supported AKM upgrade fixes its Zod chain independently
-of Azure/MSAL, MCPB and npm. The supported Azure chain is now selected; qualify
-Blob behavior with it. Adopt a supported patched npm release and qualify npm/npx
-before removing its entries. Preserve
-[issue #63](https://github.com/fwdslsh/fhold/issues/63)'s separate MCPB and npm
-tracking. Re-review before publication, when a supported fix appears, or by
-November 6; remove each exception as soon as its own chain is patched. Approval
-does not authorize disabling scans, major vendor overrides or skipping runtime
-qualification, and green filtered scans are not clean raw scans.
+The historical entries matched both path and exact package/version PURL; no
+directory globs or severity-wide exclusions were used. npm12.2.1 bundled the
+affected Undici6.29.0. The supported npm patch now fixes its excessive
+content-encoding denial of service, dropped Agent TLS options and mismatched
+certificate TLS-renegotiation denial of service. Keep
+[issue #63](https://github.com/fwdslsh/fhold/issues/63) open for the independent
+MCPB Zod and glob/minimatch source findings. An empty image exception list does
+not imply a clean source audit or qualify previously published images.
 
 ## Public release gates
 
