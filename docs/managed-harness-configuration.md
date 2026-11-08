@@ -141,8 +141,12 @@ installed OpenCode harness when appropriate:
 akm migrate status
 akm migrate apply --dry-run
 akm migrate apply
-akm config set harnesses.opencode '{"args":["run","--standalone"]}'
 ```
+
+OpenCode 2.2.6 executes the migrated native OpenCode invocation without the
+older `service.json` permission failure. No harness-argument repair is required
+for that case. Fresh installations explicitly select native standalone execution;
+existing supported operator invocations remain unchanged.
 
 Review the resulting catalog and task sources that explicitly name `scheduled`;
 remove the obsolete harness and select the intended native harness before

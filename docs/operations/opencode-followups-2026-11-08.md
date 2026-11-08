@@ -26,6 +26,10 @@ runtime image scans remain separate gates.
 
 ## Smaller maintenance changes
 
+- OpenCode 2.2.6 also executes the preserved migrated AKM harness invocation
+  without the old `service.json` permission failure. Remove the upgrade test's
+  expected failure and manual argument repair; require successful execution and
+  persisted proposals while asserting the operator config stays byte-identical.
 - Native Windows/macOS desktop CI already qualifies draft opening and pushes.
   Remove the redundant `ready_for_review` trigger, retaining base-change,
   reopening and manual runs. No failed check is waived or converted to success.

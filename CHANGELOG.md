@@ -5,6 +5,8 @@
 Update OpenCode to **2.2.6** and fhold's plugin Effect dependency to **4.1.0**.
 Configured models without a release date now appear in fresh browser model
 pickers through the upstream fix, while explicit hide/show choices are preserved.
+Preserved native AKM harness invocations also work without the previous manual
+argument repair; upgrade tests now require success and unchanged operator settings.
 Add a real-browser image regression for this behavior. Avoid repeating native
 desktop qualification when an unchanged draft PR is marked ready, and clarify
 release merge planning and native AKM indexing behavior. AKM UI integration is

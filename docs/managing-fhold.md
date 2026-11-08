@@ -444,8 +444,9 @@ Assistant, run an agent/task, apply migrations or write proposals. Legacy
 connected endpoints can also work without credentials.
 
 AKM configuration and executable availability do not prove successful agent
-execution. Use the [documented native harness repair](managed-harness-configuration.md#existing-beta-installations)
-when an old operator-selected invocation no longer works. Proposal write-target
+execution. Review [native migration and harness selection](managed-harness-configuration.md#existing-beta-installations)
+when a custom executable is no longer available. OpenCode 2.2.6 no longer requires
+the previous argument repair for a preserved native invocation. Proposal write-target
 readiness and aggregate extraction success remain explicitly not checked pending
 [AKM #1289](https://github.com/itlackey/akm/issues/1289) and
 [AKM #1290](https://github.com/itlackey/akm/issues/1290). No successful learning is
