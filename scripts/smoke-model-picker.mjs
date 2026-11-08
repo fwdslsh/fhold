@@ -33,6 +33,7 @@ const server = spawn('opencode', ['serve', '--hostname', '127.0.0.1', '--port', 
 	cwd: join(root, 'project'),
 	env: {
 		PATH: process.env.PATH,
+		...(process.env.BUN_OPTIONS ? { BUN_OPTIONS: process.env.BUN_OPTIONS } : {}),
 		HOME: join(root, 'home'),
 		XDG_CONFIG_HOME: join(root, 'config'),
 		XDG_DATA_HOME: join(root, 'data'),
