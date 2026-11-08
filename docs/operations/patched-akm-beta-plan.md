@@ -36,8 +36,10 @@ archive are updated together. All runtime pins remain exact and image-baked.
 Native marketplace commit: `52ebbec608fb33fb4fe19814db0ece5baa2674f2`.
 Archive SHA256: `9e01dc88d80805d36f3584f27ac54dd366e8091e981f85ab5fcb43fca7806ea9`.
 Both native manifests report 0.10.261112-beta. The release also includes native
-bundle-sync fixes and removal of curate reranking/read-time index rebuilding;
-fhold does not recreate that removed machinery.
+bundle-sync fixes and removal of curate reranking and the index freshness walker;
+fhold does not recreate that removed machinery. AKM still bootstraps missing or
+uninitialized indexes and indexes for a different stash on first use, and owns
+incremental index writes.
 
 The [same-day dependency review](dependency-refresh-2026-11-08.md) records the
 other selected versions, explicit holds and audit exceptions. Recheck required

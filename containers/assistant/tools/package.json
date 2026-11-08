@@ -8,9 +8,9 @@
 		"@openai/codex": "0.165.0",
 		"@anthropic-ai/claude-code": "2.1.312",
 		"akm-opencode-v2": "0.10.261112-beta",
-		"@opencode/cli": "2.2.1",
-		"@opencode/client": "2.2.1",
-		"@opencode/plugin": "2.2.1",
+		"@opencode/cli": "2.2.6",
+		"@opencode/client": "2.2.6",
+		"@opencode/plugin": "2.2.6",
 		"akm-cli": "0.10.261113-beta",
 		"playwright": "1.64.1"
 	}

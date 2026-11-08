@@ -240,6 +240,19 @@ evidence identified by SHA/digest; they do not reserve counters. Native data-sch
 not the product release number.
 
 Submit the reviewed change through a PR and retain its validation evidence.
+Before qualification, check the repository's allowed merge methods and resolve
+any stacked PRs. Prefer one release PR containing the intended changes. A squash
+merge preserves content but not constituent commit ancestry; do not assume it
+will mark stacked PRs merged. Do not change repository merge settings as a
+routine release step. When publishing retained artifacts from a candidate whose
+SHA differs from the merge commit, verify the merged tree matches the qualified
+candidate and supply its explicit `candidate_sha` to the release workflow.
+
+Native Windows/macOS desktop checks run on draft opening, pushes, reopening and
+base changes. Marking an unchanged draft ready does not rerun them; retain the
+existing checks and rerun failed checks explicitly when needed. Manual workflow
+dispatch remains available. This does not waive any required qualification.
+
 Push the stamped candidate to a canonical `release/*` branch and wait for that
 exact commit's GitHub CI to pass. Release validation can reuse this canonical
 push run for 24 hours, checking the SHA, workflow, successful quality job,

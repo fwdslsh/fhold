@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+Update OpenCode to **2.2.6** and fhold's plugin Effect dependency to **4.1.0**.
+Configured models without a release date now appear in fresh browser model
+pickers through the upstream fix, while explicit hide/show choices are preserved.
+Add a real-browser image regression for this behavior. Avoid repeating native
+desktop qualification when an unchanged draft PR is marked ready, and clarify
+release merge planning and native AKM indexing behavior. AKM UI integration is
+deferred until the upstream `akm-web` package is available.
+
 ## 0.4.1102-beta — patched AKM and native controls
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
@@ -7,7 +17,8 @@ extension. Update AKM CLI to **0.10.261113-beta** and all three AKM plugins to
 **0.10.261112-beta**, including the matching immutable native marketplace.
 The upstream CLI fixes locking on filesystems without hard links and cleanup of
 orphaned usage events. It also improves bundle sync and removes curate reranking
-and read-time index rebuilding. Actual SMB/Azure deployment verification remains
+and the index freshness walker. Native first-use indexing remains; an existing
+usable index no longer triggers a freshness walk on reads. Actual SMB/Azure deployment verification remains
 separate from upstream simulated-filesystem tests and container qualification.
 
 Let native plugin settings control automatic memory and learning when fhold's
