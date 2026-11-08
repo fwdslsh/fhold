@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.1101-beta — current AKM and patched npm
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. All components share **0.4.1101-beta**. Stable downloads and `latest`
+images remain on their existing stable releases; this beta uses the beta channel.
+
+Update AKM CLI to **0.10.261112-beta** and all three AKM plugins to
+**0.10.261111-beta**, retaining exact image-baked versions and the plugin's
+required CLI pair. Native project selection follows each agent session's working
+directory; no fhold scope registry or policy layer is added. The new CLI removes
+`akm ui` in favor of AKM Desktop. Admin reports the unsupported browser route
+promptly and keeps the selected Assistant's knowledge separate from host-local
+libraries.
+
+Update npm to **12.2.2**, which bundles patched Undici **6.29.1**, and remove
+the three expired runtime image exceptions. Update the image scanner to the
+Trivy **0.76.2** security patch. Independent source-audit findings
+remain tracked in issue #63. Includes the experimental Azure management changes
+from tooling 0.4.1002. Publishing or updating CLI/Admin does not upgrade existing
+instances or change their recovery settings.
+
 ## 0.4.1002 — experimental Azure instance management
 
 Tooling-only release for Linux Admin and the companion CLI. Assistant, Guardian,

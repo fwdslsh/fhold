@@ -216,6 +216,15 @@ settings snapshot is rejected so concurrent changes are not silently lost.
 
 ### Knowledge
 
+The current Assistant's AKM prerelease replaces `akm ui` with the standalone
+AKM Desktop application. **Open AKM UI** reports this limitation promptly;
+manage the selected Assistant's knowledge with AKM commands inside that
+Assistant. A host-local AKM Desktop uses its own library, not the selected
+container's bundles. fhold does not substitute another service or bypass
+upstream browser protections.
+
+For an Assistant whose installed AKM still provides the native browser UI:
+
 Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
 Assistant's native AKM interface in your default browser, using that instance's
 bundles, configuration and index. Keep Admin open with that instance selected;

@@ -98,16 +98,17 @@ export class KnowledgeUi {
 		child.stdin.on('error', () => {
 			/* Exit/startup handles the failure. */
 		});
-		child.stderr.resume(); // Native output can contain private paths; never log it.
 		child.once('close', () => {
 			if (this.child === child) {
 				this.child = undefined;
 				this.url = undefined;
 			}
 		});
+		let unavailable = false;
 		try {
 			const native = await new Promise<URL>((resolve, reject) => {
 				let output = '';
+				let diagnostics = '';
 				const timer = setTimeout(
 					() =>
 						reject(
@@ -125,6 +126,18 @@ export class KnowledgeUi {
 				};
 				child.once('error', fail);
 				child.once('close', fail);
+				child.stderr.on('data', (chunk) => {
+					// Consume only the native error code; private diagnostics never leave
+					// this process. New AKM releases replaced `akm ui` with Desktop.
+					diagnostics = (diagnostics + String(chunk)).slice(-8192);
+					try {
+						if (JSON.parse(diagnostics).code !== 'UNKNOWN_COMMAND') return;
+						unavailable = true;
+						fail();
+					} catch {
+						/* Wait for a complete native response, without logging it. */
+					}
+				});
 				child.stdout.on('data', (chunk) => {
 					output = (output + String(chunk)).slice(-8192);
 					const match = /(?:^|\n)akm ui: (http:\/\/[^\s]+)\r?\n/.exec(output);
@@ -157,7 +170,9 @@ export class KnowledgeUi {
 		} catch {
 			await this.stop();
 			throw new Error(
-				'Could not open this Assistant’s AKM UI. It needs AKM UI support and a host-reachable Linux Docker bridge; Docker Desktop is not supported.'
+				unavailable
+					? 'This Assistant’s AKM version no longer provides the browser UI; newer AKM releases use AKM Desktop. Manage this Assistant’s knowledge with AKM commands inside the Assistant.'
+					: 'Could not open this Assistant’s AKM UI. It needs AKM UI support and a host-reachable Linux Docker bridge; Docker Desktop is not supported.'
 			);
 		}
 	}

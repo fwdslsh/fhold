@@ -51,8 +51,9 @@ npm view @openai/codex@latest version engines --json
 Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
 AKM's npm `latest` is stable; `next` carries prereleases and may lag a later stable
-release. The current pins use the matching stable pair; see the
-[CLI022/plugin020 review](dependency-refresh-akm-cli022.md). Select channels explicitly.
+release. The current pins use the matching prerelease pair selected under the
+owner's approval to use AKM betas; see the
+[November 8 review](dependency-refresh-2026-11-08.md). Select channels explicitly.
 Resolve the plugin's required CLI version before choosing that pin.
 Compare actual release provenance and published tags,
 not just numeric patches: upstream AKM has changed its prerelease naming.
