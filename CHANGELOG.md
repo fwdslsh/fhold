@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.4.1103-beta — native AKM web and OpenCode fixes
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Stable channels remain unchanged. Publishing does not upgrade live
+instances or change recovery settings.
+
 Update OpenCode to **2.2.6** and fhold's plugin Effect dependency to **4.1.0**.
 Configured models without a release date now appear in fresh browser model
 pickers through the upstream fix, while explicit hide/show choices are preserved.

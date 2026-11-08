@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,8 +47,9 @@ const server = spawn('opencode', ['serve', '--hostname', '127.0.0.1', '--port', 
 let log = '';
 let launchError;
 server.on('error', (error) => { launchError = error; });
-server.stdout.on('data', (data) => { log += data; });
-server.stderr.on('data', (data) => { log += data; });
+const captureLog = (data) => { log = (log + data).slice(-8192); };
+server.stdout.on('data', captureLog);
+server.stderr.on('data', captureLog);
 let browser;
 try {
 	const deadline = Date.now() + 60_000;
@@ -113,4 +114,5 @@ try {
 		await exited;
 		clearTimeout(killTimer);
 	}
+	rmSync(root, { recursive: true, force: true });
 }

@@ -197,7 +197,10 @@ export class SshInstanceManagement implements InstanceManagement {
 	): Promise<ManagementRequestMap[M]['result']>;
 	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
 		if (method === 'knowledgeUi') {
-			this.knowledgePort ??= availablePort();
+			this.knowledgePort ??= availablePort().catch((error) => {
+				this.knowledgePort = undefined;
+				throw error;
+			});
 			const port = await this.knowledgePort;
 			const result = await this.rpc('knowledgeUi', { loopbackPort: port });
 			if (this.closing) throw new Error('This instance connection is closed.');
