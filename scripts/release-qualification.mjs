@@ -1,6 +1,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { selectArtifacts } from './release-candidate.mjs';
+import { inferReleaseScope, releaseImages } from './release-scope.mjs';
 
 const repository = 'fwdslsh/fhold';
 export function pullRequestCandidate(event, isAncestor) {
@@ -11,7 +12,6 @@ export function pullRequestCandidate(event, isAncestor) {
 		pr?.head?.repo?.full_name !== repository ||
 		pr?.base?.repo?.full_name !== repository ||
 		pr?.base?.ref !== 'main' ||
-		!pr?.head?.ref?.startsWith('release/') ||
 		!/^[a-f0-9]{40}$/.test(pr?.head?.sha) ||
 		!/^[a-f0-9]{40}$/.test(pr?.base?.sha) ||
 		!isAncestor(pr.base.sha, pr.head.sha)
@@ -40,11 +40,12 @@ export function qualifies(run, jobs, sha, scope, now = Date.now()) {
 	const tested = quality.steps?.some((item) => item.name === step && item.conclusion === 'success');
 	if (quality.steps?.length && !tested) return false;
 	if (scope === 'tools') return tested === true;
-	if (scope !== 'full') return false;
+	let images;
+	try { images = releaseImages(scope); } catch { return false; }
 	// GitHub can omit step metadata for successful reusable jobs. In this
 	// workflow, all six images require quality and run under the same != tools
 	// condition as the full source tests. Their success proves full scope.
-	return ['assistant', 'guardian', 'portal'].every((image) =>
+	return images.length > 0 && images.every((image) =>
 		['amd64', 'arm64'].every((arch) =>
 			jobs.some(
 				(job) =>
@@ -154,6 +155,7 @@ if (import.meta.main) {
 			appendFileSync(process.env.GITHUB_OUTPUT, 'reused=false\n');
 			process.exit(0);
 		}
+		process.env.SCOPE = inferReleaseScope(JSON.parse(readFileSync('package.json', 'utf8')).version);
 	}
 	let reused = false;
 	try {

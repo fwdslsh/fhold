@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { installHome } from './install.js';
 import { localInstanceManagement } from '../management/instance.js';
 import { localDockerManagementHost } from './local-instance-host.js';
-import { FH_RUNTIME_VERSION } from './release.js';
+import { FH_RUNTIME_VERSION, FH_RUNTIME_LABEL } from './release.js';
 
 import {
 	assertProjectOwnership,
@@ -119,7 +119,7 @@ if(args[0]==='inspect') console.log(args[2].includes('.Config.Image')
 	const management = localInstanceManagement(homeDir, { host: localDockerManagementHost(homeDir) });
 	try {
 		const snapshot = await management.call('snapshot');
-		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_VERSION);
+		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_LABEL);
 		expect(snapshot.services.map((service) => service.image)).toEqual([
 			'assistant:docker-observed',
 			'guardian:compose-observed'

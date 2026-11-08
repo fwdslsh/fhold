@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 const image = process.argv[2];
+const endurance = process.argv.includes('--endurance');
 assert.ok(image, 'Usage: node scripts/smoke-keepalive.mjs IMAGE');
 const name = `fhold-keepalive-smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-keepalive-smoke-only';
@@ -33,6 +34,7 @@ function command(args, timeout = 600000) {
 }
 
 const probe = `
+const endurance = ${endurance};
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -102,12 +104,14 @@ try {
   assert.equal(count, quiet, 'Idle native sessions must not send keep-alive');
   // Shorten only the documented native idle TTL for this regression. Observe
   // actual native cleanup before starting work; never write activity markers.
+  if (endurance) {
   await until(() => unloaded > 0, 130);
   assert.equal(streamFailure, undefined);
   assert.equal(activityStatus('/tmp/fhold-runtime'), 'idle', 'Normal native workspace unload must preserve idle');
   const afterUnload = count;
   await pause(62000);
   assert.equal(count, afterUnload, 'Unloaded idle workspace must remain quiet for three intervals');
+  }
   const session = await api('/session', {title:'Disposable keep-alive qualification', location:{directory:'/work'}});
   await api('/session/' + session.id + '/synthetic', {resume:false, text:'Append-only history fixture; do not execute.'});
   await pause(500);
@@ -127,7 +131,9 @@ try {
   const cron = readFileSync('/tmp/fhold-crontabs/fhold', 'utf8');
   assert.ok(cron.includes('fhold-keepalive tick'));
   assert.ok(!cron.includes('# akm:task'), 'User scheduling remains disabled');
+  console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0}));
 
+  if (endurance) {
   // Plugin deactivation also calls cleanup, but the location can still accept
   // work. Exercise native config reload and inventory, never activity markers.
   const registered = async () => (await api('/plugin?location[directory]=/work')).some(plugin => plugin.id === 'fhold.activity' && plugin.state.status === 'active');
@@ -172,6 +178,7 @@ try {
   await pause(22000);
   assert.equal(count, restored, 'Re-enabled native observation must return to quiet idle');
   console.log(JSON.stringify({nativeActivity:true, conditionalHttp:true, unsignedRemotesIdle:true, userSchedulesDisabled:true, activeRequests:completed-quiet, idleRequests:0, nativeUnloads:unloaded, afterUnloadQuietIntervals:3, workAfterUnload:true, nativePluginDisableUnknown:true, conservativeRequests, replacementRestoresIdle:true, removalWhileUnloadedUnknown:true, unloadedConservativeRequests}));
+  }
 } finally {
   events.abort(); await eventStream;
   sink.closeAllConnections(); await new Promise(resolve => sink.close(resolve));

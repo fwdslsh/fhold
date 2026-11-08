@@ -8,7 +8,7 @@ import {
 } from './foundation.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { FH_RELEASE_VERSION, FH_RUNTIME_VERSION } from './release.js';
+import { FH_RELEASE_VERSION, FH_IMAGE_VERSIONS } from './release.js';
 import { applyHomeSeed, preflightHomeSeed } from './seed.js';
 import {
 	defaultStackConfig,
@@ -87,7 +87,7 @@ export async function installHome(
 		ensureRuntime(state);
 		writeFileAtomic(
 			join(state.homeDir, 'state', 'installation.json'),
-			`${JSON.stringify({ product: 'fhold', homeDir: state.homeDir, release: FH_RELEASE_VERSION, managedImages: Object.fromEntries(Object.entries(config.deployment.images).filter(([, tag]) => tag === FH_RUNTIME_VERSION)) }, null, 2)}\n`
+			`${JSON.stringify({ product: 'fhold', homeDir: state.homeDir, release: FH_RELEASE_VERSION, managedImages: Object.fromEntries(Object.entries(config.deployment.images).filter(([component, tag]) => tag === FH_IMAGE_VERSIONS[component as keyof typeof FH_IMAGE_VERSIONS])) }, null, 2)}\n`
 		);
 	} finally {
 		releaseStackLock(lock);

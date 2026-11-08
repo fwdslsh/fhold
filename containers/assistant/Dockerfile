@@ -111,11 +111,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=scheduler-build /go/bin/supercronic /usr/local/bin/supercronic
-COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
-COPY --from=tools /usr/local/bin/bun /usr/local/bin/bun
-RUN ln -s bun /usr/local/bin/bunx
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+# Copy only the locked browser packages before installing Chromium. BuildKit
+# reuses this layer when AKM/agent dependencies change but Playwright does not.
+COPY --from=tools /repo/node_modules/playwright /opt/fhold/tools/node_modules/playwright
+COPY --from=tools /repo/node_modules/playwright-core /opt/fhold/tools/node_modules/playwright-core
 # Install the locked upstream browser and its system libraries before USER fhold.
 # A shared immutable cache survives home mounts and works on both native arches.
 RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chromium \
@@ -123,6 +124,9 @@ RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chr
     && chmod -R a+rX /opt/ms-playwright \
     && chmod -R a-w /opt/ms-playwright \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
+COPY --from=tools /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s bun /usr/local/bin/bunx
 # Keep the compatible, pinned upstream npm/npx installed in the Node stage,
 # not Debian's npm or a second package manager installation at startup.
 COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm

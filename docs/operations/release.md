@@ -31,22 +31,28 @@ include unrelated upgrades. Reserve and stamp the release version near
 publication, then qualify the final stamped SHA and artifacts. Do not repeat
 completed qualification merely because a newer noncritical dependency appears.
 
-### Tooling-only publication
+### Select the components to publish
 
 Use `SCOPE=tools VERSION=<new-version> STAMP=true bun scripts/bump-release.mjs`
 for CLI/Admin changes, then regenerate `bun.lock` with `bun install --lockfile-only`.
-Only the root, library, CLI and Admin versions advance. The Skeleton version pins
-the last published Assistant/Guardian/Portal cohort; the Claude Desktop package
+Only the root, library, CLI and Admin versions advance. The Skeleton, Guardian and
+Portal package versions each pin that image's last publication; the Claude Desktop package
 version pins its last published extension. Fresh installs and updates never refer
 to an unpublished image or extension tag.
 
-The release workflow defaults to `scope=auto`: matching tooling/runtime versions
-publish the full stack; different versions publish only Linux x64/arm64 CLI and
+For an AKM-only upgrade, use `SCOPE=assistant` instead. Other image combinations
+use comma-separated names, for example `SCOPE=assistant,portal`. The selected image
+manifests and Compose defaults advance alongside CLI/Admin; unselected images and
+the extension retain their published versions. Extension changes require `SCOPE=full`.
+Do not move an unchanged image's channel alias or invent a new tag for its old bytes.
+
+The release workflow defaults to `scope=auto`: the stamped component package
+versions select the images to publish. All scopes publish Linux x64/arm64 CLI and
 Admin downloads, standard `latest-linux.yml` / `latest-linux-arm64.yml` update
 feeds, checksums and the asset manifest. Tooling releases run library,
 CLI, Admin and release-helper checks and native artifact smokes. They do not build,
 scan, sign or publish containers, build the unchanged extension, or move Docker
-channel tags. Release notes disclose the retained runtime version.
+channel tags. Release notes disclose each component's actual version.
 
 PR CI shares the publication classifier, with a separate affected-check plan.
 Changes to runtime sources, Skeleton,
@@ -59,13 +65,20 @@ Runtime resolution changes, unexplained changed lock records and unknown lock
 formats still select full qualification.
 As required by repository policy, docs/site and lockfile-only changes skip product
 CI. This does not waive publication's runtime diff or final release qualification.
-Portal source/Dockerfile changes run full source tests and the two native Portal jobs;
-shared inputs and uncertain changes retain all six image jobs. CI orchestration
+Component source/Dockerfile changes run full source tests and that image's two native
+jobs. Lockfile changes follow each consumer's resolved graph; shared inputs and
+uncertain changes retain the affected images or all six jobs. CI orchestration
 changes exercise native gates even when published runtime bytes are unchanged.
 See the [check selection table](../technical/testing-workflow.md).
-Publication compares runtime inputs with the pinned runtime release tag so a
-tooling release cannot accidentally omit pending container changes. A full release
-still uses the default `SCOPE=full` stamping and the complete existing gates.
+Publication compares each retained component's source and resolved dependencies
+with its pinned release tag. Missing tags and omitted changed components fail
+before builds/publication. A full release uses the default `SCOPE=full` stamping.
+
+Draft PRs run source checks but defer image builds, Linux AppImages and native
+desktop packaging until ready. For an authorized release, push the final stamped
+SHA to `release/*` **before** updating/readying the PR at that same SHA, so PR checks
+can wait for and reuse the canonical candidate. An ordinary PR branch can reuse
+that evidence too; its current base must already be in the candidate's ancestry.
 
 For the historical **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
 `-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
@@ -437,7 +450,9 @@ targets. Release validation reuses a successful canonical `release/*` push CI ru
 exact SHA and scope only while it is less than 24 hours old. It verifies
 the successful quality job, all six native image jobs and final native CLI/Admin
 artifact jobs for a full release, plus the complete immutable candidate artifact set.
-Same-repository release PRs reuse that exact-head candidate for native checks and
+Scoped releases require both native architectures for each selected image, plus
+the complete CLI/Admin artifacts. A partial matrix cannot qualify a full release.
+Same-repository PRs reuse that exact-head candidate for native checks and
 Linux Admin packaging only when their current base is already in the head.
 Base retargets and divergent bases retain PR merge-result validation. Product CI
 runs on PRs and `release/*` pushes, not on `main` pushes after merge. Direct pushes
@@ -468,6 +483,14 @@ and image publication is a separate operation. Registry ownership and publishing
 credentials must be configured before live publication. Verify signing, real
 artifacts and download instructions for every release. The CLI delivers a standalone Linux
 executable, not an npm bootstrap package.
+
+Release Assistant tests retain native harness/security, browser, core keep-alive,
+provider/scheduler, directory/blob recovery and upgrade checks. Extended idle/unload
+and historical import cases run in `assistant-endurance.yml` weekly or by manual
+dispatch against a published image, on native x64/ARM64, without building an image.
+Run these cases before merging changes to their behavior; unrelated dependency
+releases do not wait for the weekly job. Failures still need investigation, not
+silent suppression. Logs/timings remain downloadable artifacts.
 
 Published bytes/tags must not be overwritten. Matching retries are no-write;
 differing content requires a new version. Stable uses `latest`; alpha/beta/rc

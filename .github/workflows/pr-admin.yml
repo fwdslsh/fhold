@@ -45,7 +45,7 @@ jobs:
         run: bun scripts/release-qualification.mjs --pull-request
   appimage:
     needs: scope
-    if: needs.scope.outputs.admin == 'true' && needs.scope.outputs.reused != 'true'
+    if: ${{ !github.event.pull_request.draft && needs.scope.outputs.admin == 'true' && needs.scope.outputs.reused != 'true' }}
     name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit (AppImage)' || (needs.scope.outputs.reused == 'true' && 'Qualified candidate Admin reused' || 'Download Linux AppImage (x86_64)') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20

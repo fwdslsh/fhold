@@ -9,7 +9,7 @@ import { ensureRuntime, requireInstall } from './state.js';
 import { buildComposeArgs, composeConfigJson, ensureDockerReady, runComposeStreaming, runDocker } from './docker.js';
 import { buildComposeOptions } from './compose.js';
 import { activateComposeCommand, assertRecoveryImage } from './activation.js';
-import { FH_RELEASE_VERSION, FH_RUNTIME_VERSION } from './release.js';
+import { FH_RELEASE_VERSION, FH_IMAGE_VERSIONS } from './release.js';
 import { parseStackConfig, writeStackConfig } from './stack-config.js';
 import { assertSafePortablePath, nativePreferencesFile } from './provider-files.js';
 import { recordAppliedRuntime, rememberRuntimeBeforeChange } from './runtime-revision.js';
@@ -44,7 +44,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 		}
 		const candidateConfig = structuredClone(read.config);
 		for (const component of ['assistant', 'guardian', 'portal'] as const) {
-			if (candidateConfig.deployment.images[component] === managedImages[component]) candidateConfig.deployment.images[component] = FH_RUNTIME_VERSION;
+			if (candidateConfig.deployment.images[component] === managedImages[component]) candidateConfig.deployment.images[component] = FH_IMAGE_VERSIONS[component];
 		}
 		const parsedCandidate = parseStackConfig(candidateConfig);
 		if (!parsedCandidate.ok) throw new Error(parsedCandidate.error);
@@ -121,7 +121,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 			evidence = { ...evidence, runningContainersUpgraded: true, runningImages: rows };
 			recordAppliedRuntime(state.homeDir, revision);
 		}
-		writeFileAtomic(installationPath, `${JSON.stringify({ product: 'fhold', homeDir: state.homeDir, release: FH_RELEASE_VERSION, managedImages: Object.fromEntries(Object.entries(candidateConfig.deployment.images).filter(([component, tag]) => tag === FH_RUNTIME_VERSION && Object.hasOwn(managedImages, component))) }, null, 2)}\n`);
+		writeFileAtomic(installationPath, `${JSON.stringify({ product: 'fhold', homeDir: state.homeDir, release: FH_RELEASE_VERSION, managedImages: Object.fromEntries(Object.entries(candidateConfig.deployment.images).filter(([component, tag]) => tag === FH_IMAGE_VERSIONS[component as keyof typeof FH_IMAGE_VERSIONS] && Object.hasOwn(managedImages, component))) }, null, 2)}\n`);
 		phase = options.start ? 'completed' : 'files-refreshed-not-activated'; record();
 		return { receipt, activated: options.start };
 	} catch (error) {

@@ -5,17 +5,18 @@
 //   STAMP   — 'true' to write files in place; any other value = preview only
 //   VERSION — explicit semver to stamp (required)
 //             0.3: YYMMNN; 0.4+: MMNN, e.g. 0.4.1001-beta (January: 0.4.101)
-//   SCOPE   — 'tools' advances CLI/Admin only; 'full' (default) advances everything
+//   SCOPE   — full (default), tools, or comma-separated assistant,guardian,portal
 //
 // Preview locally: VERSION='<candidate-version>' node scripts/bump-release.mjs
 
 import { existsSync, readFileSync } from 'node:fs';
 import { assertReleaseAdvance, parseSemver, setComposeImageTags, setVersion } from './set-version.mjs';
+import { releaseImages, releaseManifests } from './release-scope.mjs';
 
 const RELEASE = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
 const scope = process.env.SCOPE ?? 'full';
-if (!['full', 'tools'].includes(scope)) throw new Error('SCOPE must be full or tools');
-const manifests = (scope === 'tools' ? RELEASE.toolingManifests : RELEASE.manifests) ?? [];
+const images = releaseImages(scope);
+const manifests = releaseManifests(RELEASE, scope) ?? [];
 if (!manifests.length) throw new Error(`No manifests configured for ${scope}`);
 const composeFiles = scope === 'tools' ? [] : RELEASE.compose ?? [];
 
@@ -37,7 +38,7 @@ for (const file of [...manifests, ...composeFiles]) {
 		if (!parseSemver(current)) throw new Error(`Invalid current release in ${file}`);
 		if (version !== current) assertReleaseAdvance(version, current);
 	}
-	else if (!/\$\{FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION:-[^}]*\}/.test(content))
+	else if (!new RegExp(`\\$\\{FH_(?:${images.map((name) => name.toUpperCase()).join('|')})_VERSION:-[^}]*\\}`).test(content))
 		throw new Error(`No image-tag defaults found to stamp in ${file}`);
 }
 for (const f of manifests) {
@@ -54,6 +55,6 @@ for (const f of composeFiles) {
 		console.error(`Error: Cannot stamp: file not found: ${f}`);
 		process.exit(1);
 	}
-	const count = doStamp ? setComposeImageTags(f, version) : '(preview)';
+	const count = doStamp ? setComposeImageTags(f, version, images) : '(preview)';
 	console.log(`  ${f} → image tags ${version} ${doStamp ? `(${count} refs)` : '(preview)'}`);
 }

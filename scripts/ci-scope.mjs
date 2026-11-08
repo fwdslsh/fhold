@@ -1,8 +1,9 @@
 /** Conservative input classification shared by PR CI and tooling publication. */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { componentVersions, imageComponents, inferReleaseScope, releaseImages } from './release-scope.mjs';
 
 const TOOLING_WORKSPACES = new Set(['packages/lib', 'packages/cli', 'packages/electron']);
 const NATIVE_CI_INPUTS = new Set([
@@ -13,14 +14,14 @@ const NATIVE_CI_INPUTS = new Set([
 	'scripts/release-qualification.mjs',
 	'scripts/release-candidate.mjs',
 	'scripts/release-candidate.test.ts',
+	'scripts/release-scope.mjs',
+	'.github/trivy-ignore.yaml',
 	'scripts/smoke-assistant-ci.mjs',
 	'scripts/smoke-assistant-ci.test.ts',
 	'scripts/ci-scope.test.ts',
 	'scripts/smoke-image.sh'
 ]);
 const ALL_IMAGES = ['assistant', 'guardian', 'portal'];
-const portalInput = (path) =>
-	path.startsWith('packages/portal/src/') || path === 'containers/portal/Dockerfile';
 const documentation = (path) =>
 	/^(?:docs\/|website\/)/.test(path) ||
 	[
@@ -35,7 +36,7 @@ const documentation = (path) =>
 // An Admin-only addition may rehoist YAML without changing any runtime dependency.
 // Bun's v1 text lock uses package-name paths (scoped names count as one segment).
 // Unknown formats still select full qualification; no package-specific exceptions.
-function toolingLockChange(beforeText, afterText) {
+function toolingLockChange(beforeText, afterText, consumers) {
 	const before = Bun.JSONC.parse(beforeText);
 	const after = Bun.JSONC.parse(afterText);
 	const metadata = (lock) => {
@@ -43,10 +44,11 @@ function toolingLockChange(beforeText, afterText) {
 			throw new Error('Unsupported lockfile');
 		const copy = structuredClone(lock);
 		delete copy.packages;
-		for (const path of TOOLING_WORKSPACES)
-			if (copy.workspaces?.[path])
-				for (const key of ['version', 'dependencies', 'devDependencies', 'optionalDependencies'])
-					delete copy.workspaces[path][key];
+		for (const [path, workspace] of Object.entries(copy.workspaces ?? {})) {
+			if (consumers) delete workspace.version;
+			if (consumers ? !consumers.includes(path) : TOOLING_WORKSPACES.has(path))
+				for (const key of ['version', 'dependencies', 'devDependencies', 'optionalDependencies']) delete workspace[key];
+		}
 		return JSON.stringify(copy);
 	};
 	if (metadata(before) !== metadata(after)) return false;
@@ -75,7 +77,7 @@ function toolingLockChange(beforeText, afterText) {
 		const workspace = record[0].split('@workspace:')[1];
 		const value = workspace ? structuredClone(lock.workspaces[workspace]) : (record[2] ?? {});
 		if (!value || value.bundled) throw new Error('Unsupported package metadata');
-		if (workspace && TOOLING_WORKSPACES.has(workspace)) delete value.version;
+		if (workspace && (consumers || TOOLING_WORKSPACES.has(workspace))) delete value.version;
 		return { record: JSON.stringify(workspace ? [record, value] : record), value };
 	};
 	const compared = new Set();
@@ -94,7 +96,7 @@ function toolingLockChange(beforeText, afterText) {
 		);
 	};
 	for (const [path, workspace] of Object.entries(before.workspaces)) {
-		if (TOOLING_WORKSPACES.has(path)) continue;
+		if (consumers ? !consumers.includes(path) : TOOLING_WORKSPACES.has(path)) continue;
 		for (const name of names(workspace))
 			if (!same(resolution(before, workspace.name, name), resolution(after, workspace.name, name)))
 				return false;
@@ -199,6 +201,10 @@ export function validationPlan(files, readBefore, readAfter) {
 		!files.length ||
 		files.some((path) => {
 			if (documentation(path)) return false;
+			try {
+				if (path.endsWith('package.json') && withoutVersion(readBefore(path)) === withoutVersion(readAfter(path))) return false;
+				if (path === 'bun.lock' && toolingLockChange(readBefore(path), readAfter(path), [...TOOLING_WORKSPACES])) return false;
+			} catch { /* Unknown declarations/resolutions retain desktop checks. */ }
 			if (/^packages\/(?:electron|cli|lib|skeleton)\//.test(path)) return true;
 			if (
 				[
@@ -219,12 +225,11 @@ export function validationPlan(files, readBefore, readAfter) {
 		});
 	// Portal source and Dockerfile belong only to Portal. No other image imports them.
 	// Manifests, lock changes, shared inputs and unknown files retain all images.
-	const portalOnly =
-		files.some(portalInput) && files.every((path) => documentation(path) || portalInput(path));
-	return { scope, images: scope === 'tools' ? [] : portalOnly ? ['portal'] : ALL_IMAGES, admin };
+	const images = !files.length || nativeCiChanged ? ALL_IMAGES : runtimeImpact(files, readBefore, readAfter).filter((name) => imageComponents.includes(name));
+	return { scope, images: scope === 'tools' ? [] : images, admin };
 }
 
-function gitInputs(base, head, mergeBase = false) {
+export function gitInputs(base, head, mergeBase = false) {
 	const git = (args) =>
 		execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 	// Resolve before interpolating revision:path and refuse missing/ambiguous refs.
@@ -239,6 +244,63 @@ function gitInputs(base, head, mergeBase = false) {
 		(path) => git(['show', `${base}:${path}`]),
 		(path) => git(['show', `${head}:${path}`])
 	];
+}
+
+const consumers = {
+	assistant: ['containers/assistant/tools', 'plugins/fhold'],
+	guardian: ['packages/guardian'],
+	portal: ['packages/portal'],
+	bridge: ['packages/claude-desktop']
+};
+const withoutVersion = (text) => {
+	const value = JSON.parse(text);
+	if (typeof value?.version !== 'string') throw new Error('Missing manifest version');
+	delete value.version;
+	return JSON.stringify(value);
+};
+
+/** Conservative proof for retaining published components. Unknown inputs affect all. */
+export function runtimeImpact(files, readBefore, readAfter) {
+	const affected = new Set();
+	const all = Object.keys(consumers);
+	const add = (names) => { for (const name of names) affected.add(name); };
+	for (const path of files) {
+		if (documentation(path)) continue;
+		if (path === 'bun.lock') {
+			for (const [name, roots] of Object.entries(consumers)) {
+				try { if (toolingLockChange(readBefore(path), readAfter(path), roots)) continue; } catch {}
+				affected.add(name);
+			}
+			continue;
+		}
+		if (path.endsWith('/package.json') || path === 'package.json' || path.endsWith('/plugin.json') || path === 'packages/claude-desktop/manifest.json') {
+			try { if (withoutVersion(readBefore(path)) === withoutVersion(readAfter(path))) continue; } catch {}
+		}
+		if (path === 'packages/skeleton/system/stack/stack.compose.yml') {
+			const normalized = (text) => text.replace(/\$\{(FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION):-[^}]*\}/g, '${$1:-VERSION}');
+			try { if (normalized(readBefore(path)) === normalized(readAfter(path))) continue; } catch {}
+			add(all); continue;
+		}
+		if (/^(?:containers\/assistant\/|plugins\/|packages\/skeleton\/)/.test(path) ||
+			['scripts/bake-assistant-assets.mjs', 'packages/lib/src/control-plane/seed-manifest.ts'].includes(path)) { affected.add('assistant'); continue; }
+		if (/^(?:containers\/guardian\/|packages\/guardian\/)/.test(path)) { affected.add('guardian'); continue; }
+		if (/^(?:containers\/portal\/|packages\/portal\/)/.test(path)) { affected.add('portal'); continue; }
+		if (path.startsWith('packages/claude-desktop/')) { affected.add('bridge'); continue; }
+		if (/^packages\/(?:lib|cli|electron)\//.test(path) || path.startsWith('scripts/') || path.startsWith('.github/')) continue;
+		add(all);
+	}
+	return all.filter((name) => affected.has(name));
+}
+
+export function assertRetainedComponents(scope, version, head = 'HEAD') {
+	const retained = Object.keys(consumers).filter((name) => !releaseImages(scope).includes(name) && !(scope === 'full' && name === 'bridge'));
+	const versions = componentVersions();
+	for (const component of retained) {
+		if (versions[component] === version) throw new Error(`Unselected ${component} is stamped with the new version`);
+		// Resolving the public release tag also refuses an unpublished retained pin.
+		if (runtimeImpact(...gitInputs(versions[component], head)).includes(component))
+			throw new Error(`${component} inputs changed since ${versions[component]}; include it in the release`);
+	}
 }
 
 export function gitScope(base, head = 'HEAD') {
@@ -256,11 +318,17 @@ export function gitValidationPlan(base, head = 'HEAD', mergeBase = false) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	const plan = gitValidationPlan(
+	let plan = gitValidationPlan(
 		process.env.BASE_SHA,
 		process.env.HEAD_SHA || 'HEAD',
 		process.env.GITHUB_EVENT_NAME === 'pull_request'
 	);
+	if (process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF?.startsWith('refs/heads/release/')) {
+		const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+		const scope = inferReleaseScope(version);
+		assertRetainedComponents(scope, version);
+		plan = { scope, images: releaseImages(scope), admin: true };
+	}
 	console.log(JSON.stringify(plan));
 	if (process.env.GITHUB_OUTPUT)
 		appendFileSync(

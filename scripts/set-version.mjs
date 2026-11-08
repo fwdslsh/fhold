@@ -17,7 +17,7 @@ export { SEMVER_RE, parseSemver, compareVersions, assertReleaseAdvance, releaseI
  * Throws when nothing matched, so an unstamped release fails the run instead
  * of shipping compose files pointing at the previous version.
  */
-export function setComposeImageTags(file, version) {
+export function setComposeImageTags(file, version, components = ['assistant', 'guardian', 'portal']) {
 	if (!parseSemver(version)) {
 		throw new Error(`version must be a valid fhold release, got '${version}'`);
 	}
@@ -26,6 +26,7 @@ export function setComposeImageTags(file, version) {
 	const after = before.replace(
 		/\$\{(FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION):-[^}]*\}/g,
 		(_match, key) => {
+			if (!components.some((name) => key === `FH_${name.toUpperCase()}_VERSION`)) return _match;
 			count += 1;
 			return `\${${key}:-${version}}`;
 		}

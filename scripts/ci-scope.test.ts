@@ -43,11 +43,11 @@ test('docs and lock-only policy cannot suppress runtime Markdown or unknown inpu
 	for (const files of [
 		[],
 		['new-build-input'],
-		['packages/skeleton/system/assistant/skills/example.md'],
-		['plugins/fhold/prompts/example.md'],
 		['bun.lock', 'containers/assistant/Dockerfile']
 	])
 		expect(plan(files).images).toEqual(all);
+	for (const file of ['packages/skeleton/system/assistant/skills/example.md', 'plugins/fhold/prompts/example.md'])
+		expect(plan([file]).images).toEqual(['assistant']);
 });
 test('Admin qualification includes shared code, embedded Skeleton, helpers and install inputs', () => {
 	for (const file of [
@@ -62,7 +62,7 @@ test('Admin qualification includes shared code, embedded Skeleton, helpers and i
 	expect(plan(['bun.lock', 'packages/electron/package.json']).admin).toBe(true);
 	expect(plan(['packages/portal/src/adapter.ts']).admin).toBe(false);
 });
-test('only isolated Portal source and Dockerfile select fewer runtime images', () => {
+test('component-owned sources select their images and unknown inputs retain all', () => {
 	expect(plan(['packages/portal/src/slack.ts', 'docs/portals/slack.md'])).toEqual({
 		scope: 'full',
 		images: ['portal'],
@@ -70,14 +70,14 @@ test('only isolated Portal source and Dockerfile select fewer runtime images', (
 	});
 	expect(plan(['containers/portal/Dockerfile']).images).toEqual(['portal']);
 	for (const file of [
-		'packages/portal/package.json',
 		'bun.lock',
-		'packages/guardian/src/server.ts',
 		'.github/trivy-ignore.yaml',
 		'scripts/smoke-image.sh',
 		'unknown'
 	])
 		expect(plan(['packages/portal/src/slack.ts', file]).images).toEqual(all);
+	expect(plan(['packages/portal/src/slack.ts', 'packages/guardian/src/server.ts']).images).toEqual(['guardian', 'portal']);
+	expect(plan(['packages/portal/package.json']).images).toEqual(['portal']);
 	// The ownership proof must be reconsidered if a new consumer imports Portal.
 	for (const packageName of ['lib', 'cli', 'electron', 'guardian', 'claude-desktop']) {
 		for (const file of new Bun.Glob('**/*.{ts,js,mjs,json}').scanSync({
@@ -222,11 +222,11 @@ type Workflow = {
 };
 const workflow = (name: string) =>
 	Bun.YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8')) as Workflow;
-test('native desktop qualifies drafts without repeating an unchanged ready transition', () => {
+test('native desktop waits for ready PRs and remains manually dispatchable', () => {
 	const yaml = workflow('admin-desktop-native');
-	expect(yaml.on.pull_request.types).toEqual(['opened', 'synchronize', 'reopened', 'edited']);
+	expect(yaml.on.pull_request.types).toEqual(['opened', 'synchronize', 'reopened', 'ready_for_review', 'edited']);
 	expect(Object.hasOwn(yaml.on, 'workflow_dispatch')).toBe(true);
-	expect(yaml.jobs.desktop.if).toBe("needs.scope.outputs.admin == 'true'");
+	expect(yaml.jobs.desktop.if).toContain('!github.event.pull_request.draft');
 });
 test('product CI runs before merge and for release candidates, never on a main push', () => {
 	const yaml = workflow('ci');
@@ -240,7 +240,7 @@ test('product CI runs before merge and for release candidates, never on a main p
 	expect(yaml.on.push.branches).toEqual(['release/**']);
 	// Publication without reusable evidence still runs the shared full gate.
 	expect(workflow('release').jobs.gates.with?.candidate).toBe(true);
-	expect(workflow('release').jobs.gates.with?.images).toBeUndefined();
+	expect(workflow('release').jobs.gates.with?.images).toBe('${{ needs.validate.outputs.images }}');
 });
 test('base retarget runs scope checks; title/body edits neither build nor cancel real checks', () => {
 	for (const name of ['ci', 'pr-admin', 'admin-desktop-native']) {
@@ -265,11 +265,8 @@ test('base retarget runs scope checks; title/body edits neither build nor cancel
 		['admin-desktop-native', 'desktop']
 	]) {
 		expect(workflow(name).jobs[job].needs).toBe('scope');
-		expect(workflow(name).jobs[job].if).toBe(
-			name === 'pr-admin'
-				? "needs.scope.outputs.admin == 'true' && needs.scope.outputs.reused != 'true'"
-				: "needs.scope.outputs.admin == 'true'"
-		);
+		expect(workflow(name).jobs[job].if).toContain("needs.scope.outputs.admin == 'true'");
+		expect(workflow(name).jobs[job].if).toContain('!github.event.pull_request.draft');
 		expect(workflow(name).jobs[job].name).toContain(
 			"github.event.action == 'edited' && !github.event.changes.base && 'Ignored text edit"
 		);
@@ -288,8 +285,8 @@ test('filtered image matrix does not reintroduce omitted images through include 
 		true
 	);
 	expect(workflow('ci').jobs.gates.with?.images).toBe('${{ needs.scope.outputs.images }}');
-	// Release deliberately uses the default full matrix, never the PR filter.
-	expect(workflow('release').jobs.gates.with?.images).toBeUndefined();
+	// Publication uses validated stamped scope, not an unchecked PR path filter.
+	expect(workflow('release').jobs.gates.with?.images).toBe('${{ needs.validate.outputs.images }}');
 	const steps = yaml.jobs.images.steps ?? [];
 	expect(steps.find((step) => step.run?.includes('smoke-assistant-ci.mjs'))?.if).toBe(
 		"matrix.image == 'assistant'"

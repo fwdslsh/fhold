@@ -206,8 +206,23 @@ release closeout or become a new acceptance gate.
 
 Docs and website-only changes use the documentation workflow rather than the
 full container matrix. Lockfile-only changes also skip product CI. Keep this
-separation when editing CI; root manifests and runtime Markdown skills/prompts
-still require full CI.
+separation when editing CI; runtime Markdown skills/prompts still require affected
+image checks. Draft PRs run source checks, deferring image builds and native desktop
+packaging until ready. Finish intended changes before that transition. For an
+authorized release, stamp once, push the final SHA to `release/*` first, then use
+that same SHA for the PR so it can await/reuse canonical candidate evidence.
+
+Release only changed images: use `SCOPE=assistant` for an AKM-only update when
+Guardian, Portal and the extension are unchanged, comma-separated image names for
+other combinations, `tools` for CLI/Admin only, and `full` when all components or
+the extension change. Retain unchanged components' published package versions;
+publication must prove their inputs and resolved dependencies match their release
+tags. Never retag old bytes with a new release number to simulate a component release.
+Keep native architecture, security, browser, scheduler/provider and recovery/upgrade
+checks in the release gates. Extended idle/unload and historical import cases run
+weekly/manually against published images without rebuilding; run those affected
+cases during development when changing their behavior. They are not automatic
+blockers for unrelated dependency releases. Do not add timing claims without measurements.
 
 Use AKM curate/show before inventing a workflow or unfamiliar configuration;
 record useful feedback. Use strict TypeScript, Web/Node/Bun built-ins and the

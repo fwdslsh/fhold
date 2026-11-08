@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Reduce release work by qualifying only selected images and retaining the published
+versions of unchanged components. Validate retained source/dependency inputs before
+publication, and use each image's own pin for installs and managed updates. Draft
+PRs defer image and desktop builds; ready PRs can reuse the same canonical release
+candidate even when their branch is not named `release/*`. Isolate Chromium's build
+cache from unrelated tool upgrades. Keep essential native release checks and move
+extended idle/unload and historical import checks to a weekly/manual workflow that
+uses published images without rebuilding them.
+
 ## 0.4.1103-beta — native AKM web and OpenCode fixes
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop

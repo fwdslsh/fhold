@@ -6,7 +6,7 @@ import { PassThrough, Readable, Writable } from 'node:stream';
 import { serveManagementSession } from './session.js';
 import { localInstanceManagement } from './instance.js';
 import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
-import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
+import { FH_RUNTIME_LABEL } from '../control-plane/release.js';
 import { installHome } from '../control-plane/install.js';
 import { defaultStackConfig, readStackConfig } from '../control-plane/stack-config.js';
 import { parseManagementArgs } from './wire-input.js';
@@ -80,7 +80,7 @@ test('snapshot reports the managing CLI runtime cohort locally and over the SSH 
 	const management = localInstanceManagement(home, { host: localDockerManagementHost(home) });
 	try {
 		const snapshot = await management.call('snapshot');
-		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_VERSION);
+		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_LABEL);
 		let output = '';
 		await serveManagementSession(
 			Readable.from([`${JSON.stringify({ id: 1, homeDir: home, method: 'snapshot' })}\n`]),
@@ -94,7 +94,7 @@ test('snapshot reports the managing CLI runtime cohort locally and over the SSH 
 		expect(JSON.parse(output)).toMatchObject({
 			id: 1,
 			ok: true,
-			value: { updateImageTag: FH_RUNTIME_VERSION }
+			value: { updateImageTag: FH_RUNTIME_LABEL }
 		});
 		expect(existsSync(home)).toBe(false);
 	} finally {

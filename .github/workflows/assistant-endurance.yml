@@ -1,0 +1,46 @@
+name: Assistant endurance checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Published Assistant image to test (no image build)
+        type: string
+        default: fwdslsh/fhold-assistant:beta
+  schedule:
+    - cron: '13 5 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assistant-endurance
+  cancel-in-progress: false
+
+jobs:
+  endurance:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Test published image without rebuilding
+        env:
+          IMAGE: ${{ inputs.image || 'fwdslsh/fhold-assistant:beta' }}
+          FH_CI_LOG_DIR: ${{ runner.temp }}/assistant-endurance
+        run: |
+          docker pull "$IMAGE"
+          node scripts/smoke-assistant-ci.mjs "$IMAGE" --endurance
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: assistant-endurance-${{ runner.arch }}
+          path: ${{ runner.temp }}/assistant-endurance
+          retention-days: 7
