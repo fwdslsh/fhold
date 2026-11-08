@@ -1,8 +1,9 @@
 # AKM dependency refresh — November 8, 2026
 
 Start from canonical main `907ceb9` (tooling 0.4.1002, runtime 0.4.1001).
-This change updates the built Assistant; no running installation, native consent,
-recovery setting or release identity is changed.
+The owner subsequently authorized full beta **0.4.1101-beta**. Stamp once before
+final candidate qualification and promote its retained artifacts after merge.
+No running installation, native consent or recovery setting is changed.
 
 | Dependency | Previous | Selected |
 | --- | --- | --- |
