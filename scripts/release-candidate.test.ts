@@ -54,6 +54,9 @@ test('immutable image retry reuses identical bytes and rejects changed or unknow
 test('candidate selection is exact, complete, immutable and attempt-specific', () => {
 	expect(selectArtifacts(artifacts(), 'full', 2)).toHaveLength(10);
 	expect(selectArtifacts(artifacts(), 'tools', 2)).toHaveLength(3);
+	expect(selectArtifacts(artifacts('assistant'), 'assistant', 2)).toHaveLength(5);
+	expect(() => selectArtifacts(artifacts('assistant'), 'full', 2)).toThrow();
+	expect(() => selectArtifacts(artifacts('assistant').filter((item) => !item.name.endsWith('arm64')), 'assistant', 2)).toThrow();
 	for (const values of [
 		artifacts().slice(1),
 		[...artifacts(), artifacts()[0]],
@@ -353,7 +356,7 @@ test('publication continues after reused gates are skipped but refuses failed pr
 	const canPublish = (validate: string, candidates: string, scope: string, cancelled = false) => {
 		if (!/\b(?:always|cancelled|success|failure)\(/.test(expression)) return false; // skipped ancestor
 		return Function('needs', 'cancelled', `return (${expression})`)(
-			{ validate: { result: validate, outputs: { scope } }, candidates: { result: candidates } },
+			{ validate: { result: validate, outputs: { scope, images: scope === 'tools' ? '[]' : '["assistant"]' } }, candidates: { result: candidates } },
 			() => cancelled
 		);
 	};

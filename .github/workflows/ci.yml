@@ -45,13 +45,14 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.4
       - id: scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bun scripts/ci-scope.mjs
       - id: candidate
         name: Reuse a qualified release candidate for its exact PR head
@@ -66,6 +67,7 @@ jobs:
     if: needs.scope.outputs.scope != 'none' && needs.scope.outputs.reused != 'true'
     uses: ./.github/workflows/gates.yml
     with:
-      candidate: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && (needs.scope.outputs.scope == 'tools' || needs.scope.outputs.images == '["assistant","guardian","portal"]') }}
+      candidate: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') }}
       scope: ${{ needs.scope.outputs.scope }}
       images: ${{ needs.scope.outputs.images }}
+      draft: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}

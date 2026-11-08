@@ -5,6 +5,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseSemver } from './set-version.mjs';
+import { releaseImages } from './release-scope.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ELECTRON_BUILDER_YML = join(REPO_ROOT, 'packages/electron/electron-builder.yml');
@@ -57,7 +58,7 @@ export function expectedClaudeExtensionAsset(version) {
 
 export function requiredReleaseAssets(version, productName = readElectronProductName(), scope = 'full') {
 	if (!parseSemver(version)) throw new Error('Invalid fhold release version');
-	if (!['full', 'tools'].includes(scope)) throw new Error('Invalid release scope');
+	releaseImages(scope);
 	return [
 		...CLI_BINARIES,
 		...expectedAdminAssets(version, productName),

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { pullRequestCandidate, qualifies, waitForCanonicalRuns } from './release-qualification.mjs';
 
-test('only a same-repository release PR containing the current base can reuse exact head evidence', () => {
+test('only a same-repository PR containing the current base can reuse exact head evidence', () => {
 	const repo = { full_name: 'fwdslsh/fhold' };
 	const head = { sha: 'a'.repeat(40), ref: 'release/beta', repo };
 	const base = { sha: 'b'.repeat(40), ref: 'main', repo };
@@ -21,13 +21,13 @@ test('only a same-repository release PR containing the current base can reuse ex
 		{ action: 'edited', changes: { title: {} } },
 		{ repository: { full_name: 'fork/fhold' } },
 		{ pull_request: { head: { ...head, repo: { full_name: 'fork/fhold' } }, base } },
-		{ pull_request: { head: { ...head, ref: 'feature' }, base } },
 		{ pull_request: { head: { ...head, sha: '--unsafe' }, base } },
 		{ pull_request: { head, base: { ...base, ref: 'other' } } },
 		{ pull_request: { head, base: { ...base, sha: '' } } }
 	])
 		expect(pullRequestCandidate({ ...event, ...changed }, () => true)).toBeNull();
 	expect(pullRequestCandidate(event, () => false)).toBeNull();
+	expect(pullRequestCandidate({ ...event, pull_request: { head: { ...head, ref: 'feature' }, base } }, () => true)).toBe(head.sha);
 });
 
 const now = Date.now();
@@ -54,6 +54,13 @@ const images = ['assistant', 'guardian', 'portal'].flatMap((image) =>
 	}))
 );
 const jobs = [quality, ...images];
+
+test('component qualification requires both native architectures and cannot qualify a full release', () => {
+	const selected = [quality, ...images.filter((job) => job.name.includes('assistant'))];
+	expect(qualifies(run, selected, 'abc', 'assistant', now)).toBe(true);
+	expect(qualifies(run, selected, 'abc', 'full', now)).toBe(false);
+	expect(qualifies(run, selected.slice(0, -1), 'abc', 'assistant', now)).toBe(false);
+});
 
 test('an in-progress exact candidate is awaited; API failure and timeout cannot launch duplicate gates', async () => {
 	let requests = 0;
@@ -192,8 +199,8 @@ test('native image success proves the same full-scope source-test condition', ()
 		};
 	};
 	expect(gates.jobs.images.needs).toBe('quality');
-	expect(gates.jobs.images.if).toBe("inputs.scope != 'tools'");
+	expect(gates.jobs.images.if).toContain("inputs.scope != 'tools'");
 	expect(gates.jobs.quality.steps.find((step) => step.name === 'Test active packages')?.if).toBe(
-		gates.jobs.images.if
+		"inputs.scope != 'tools'"
 	);
 });

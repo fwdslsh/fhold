@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	FH_BRIDGE_VERSION,
-	FH_RUNTIME_VERSION
+	FH_IMAGE_VERSIONS
 } from '../packages/lib/src/control-plane/release.js';
 import { defaultStackConfig } from '../packages/lib/src/control-plane/stack-config.js';
 import { changeScope, validationPlan } from './ci-scope.mjs';
@@ -227,11 +227,7 @@ test('tooling assets omit the bridge and fresh installs use the published runtim
 			name.endsWith('.mcpb')
 		)
 	).toBe(false);
-	expect(defaultStackConfig().deployment.images).toEqual({
-		assistant: FH_RUNTIME_VERSION,
-		guardian: FH_RUNTIME_VERSION,
-		portal: FH_RUNTIME_VERSION
-	});
+	expect(defaultStackConfig().deployment.images).toEqual(FH_IMAGE_VERSIONS);
 	expect(FH_BRIDGE_VERSION).toBe(
 		JSON.parse(
 			readFileSync(new URL('../packages/claude-desktop/package.json', import.meta.url), 'utf8')
@@ -250,14 +246,14 @@ test('tooling workflow skips image gates and publication without skipping artifa
 			{ if?: string; steps?: Array<{ name?: string; env?: Record<string, string> }> }
 		>;
 	};
-	expect(gates.jobs.images?.if).toBe("inputs.scope != 'tools'");
+	expect(gates.jobs.images?.if).toContain("inputs.scope != 'tools'");
 	expect(
 		gates.jobs.quality?.steps?.find((step) => step.name === 'Check and test tooling')?.run
 	).toContain('scripts/management-architecture.test.ts');
 	const qualified =
 		"always() && needs.validate.result == 'success' && (needs.gates.result == 'success' || (needs.gates.result == 'skipped' && needs.validate.outputs.qualified == 'true'))";
 	expect(release.jobs.candidates?.if).toBe(qualified);
-	expect(release.jobs.images?.if).toBe("${{ !cancelled() && needs.validate.result == 'success' && needs.candidates.result == 'success' && needs.validate.outputs.scope == 'full' }}");
+	expect(release.jobs.images?.if).toBe("${{ !cancelled() && needs.validate.result == 'success' && needs.candidates.result == 'success' && needs.validate.outputs.images != '[]' }}");
 	expect(gates.jobs.cli?.if).toBe('inputs.candidate');
 	expect(gates.jobs.admin?.if).toBe('inputs.candidate');
 	expect(release.jobs.gates?.if).toBe("needs.validate.outputs.qualified != 'true'");

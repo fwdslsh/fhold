@@ -100,7 +100,6 @@ test('suite inventory retains every native acceptance family and runs the full s
 	).toEqual([
 		'blob-recovery',
 		'directory-recovery',
-		'history',
 		'keepalive',
 		'native-policy',
 		'providers-guardian-scheduler',
@@ -113,7 +112,11 @@ test('suite inventory retains every native acceptance family and runs the full s
 	expect(
 		suites.find((item) => item.name === 'upgrade-surviving')?.env.FH_RECOVERY_TEST_SURVIVING_HOME
 	).toBe('1');
-	expect(suites.find((item) => item.name === 'history')?.env.FH_HISTORY_V2_SOURCE_IMAGE).toBe(
+	const endurance = assistantLanes('fixture-image', 'native-image', 'endurance').flat();
+	expect(endurance.map((item) => item.name)).toEqual(['history-v1-source', 'history-v2-source', 'history', 'keepalive']);
+	expect(endurance.find((item) => item.name === 'keepalive')?.command).toContain('--endurance');
+	expect(suites.find((item) => item.name === 'keepalive')?.command).not.toContain('--endurance');
+	expect(endurance.find((item) => item.name === 'history')?.env.FH_HISTORY_V2_SOURCE_IMAGE).toBe(
 		'fwdslsh/fhold-assistant:0.3.261006-beta'
 	);
 	const smoke = readFileSync(new URL('./smoke-image.sh', import.meta.url), 'utf8');

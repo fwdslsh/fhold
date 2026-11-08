@@ -504,7 +504,7 @@ describe('release completeness gate', () => {
 			gates.jobs.quality.steps.find(
 				(step: { name?: string }) => step.name === 'Retain the qualified extension candidate'
 			).if
-		).toBe("inputs.candidate && inputs.scope != 'tools'");
+		).toBe("inputs.candidate && inputs.scope == 'full'");
 	});
 
 	test('release calls the shared gates workflow', () => {

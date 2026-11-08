@@ -180,7 +180,7 @@ FH_RECOVERY_TEST_IMAGE=fhold/assistant:dependency-check node scripts/smoke-recov
 The Assistant startup smoke runs `smoke-akm-harnesses.mjs` inside the image
 and verifies real recall in OpenCode, Claude and Codex. Passing a build or
 `--version` alone does not establish native tool/plugin compatibility.
-Run the native-provider and history cases described in
+Run the native-provider cases and, when changing history behavior, the history cases described in
 [the scripts guide](../../scripts/README.md) with the newly built Assistant,
 and exercise upgrade/recovery from the previously published runtime using
 private copies. Use disposable accounts/data and explicit free ports.
@@ -199,11 +199,20 @@ ARM64 execution, security, real scheduler/provider behavior and recovery.
 Cross-building ARM64 is build evidence only. Record unrun gates honestly;
 successful unit tests do not waive image or release gates.
 
-## Prepare a full runtime release
+## Prepare a release of the affected components
 
-Dependency changes that affect containers require a **full** release. A
-tooling-only release retains the existing published runtime and cannot ship
-pending container or dependency-resolution changes.
+Select the images whose source or resolved dependencies changed. An AKM-only
+upgrade normally uses `SCOPE=assistant`; use comma-separated image names for other
+combinations, `tools` for CLI/Admin only, or `full` for all components (required
+when changing the Claude Desktop extension). The tooling version always advances;
+unchanged image/extension versions remain at their last published releases.
+Publication compares retained components with their individual release tags and
+refuses omitted changes, including shared transitive dependency changes.
+
+Keep the PR draft while iterating. Source checks run, but image builds and desktop
+packaging wait until ready. Chromium/system-library installation has its own
+Docker cache boundary based on the locked Playwright packages; changing AKM alone
+does not invalidate it. Caches accelerate builds and never replace final checks.
 
 For 0.3, use `X.Y.YYMMNN-beta` (or alpha/rc/stable), retaining its counter 00–99.
 Starting at 0.4, drop the year prefix: use `X.Y.MMNN[-alpha|-beta|-rc]`, for
@@ -225,8 +234,9 @@ git fetch origin --tags
 gh release list --repo fwdslsh/fhold --limit 20
 # Example only: select an unused month/counter/channel for the actual candidate.
 VERSION=0.4.1001-beta
-SCOPE=full VERSION="$VERSION" bun scripts/bump-release.mjs
-SCOPE=full VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
+SCOPE=assistant # AKM-only example; select the actual changed components.
+SCOPE="$SCOPE" VERSION="$VERSION" bun scripts/bump-release.mjs
+SCOPE="$SCOPE" VERSION="$VERSION" STAMP=true bun scripts/bump-release.mjs
 bun install --lockfile-only
 ```
 
@@ -253,15 +263,14 @@ routine release step. When publishing retained artifacts from a candidate whose
 SHA differs from the merge commit, verify the merged tree matches the qualified
 candidate and supply its explicit `candidate_sha` to the release workflow.
 
-Native Windows/macOS desktop checks run on draft opening, pushes, reopening and
-base changes. Marking an unchanged draft ready does not rerun them; retain the
-existing checks and rerun failed checks explicitly when needed. Manual workflow
-dispatch remains available. This does not waive any required qualification.
+Native Windows/macOS desktop checks and Linux AppImage previews wait until the PR
+is ready, then run for affected changes on pushes, reopening and base changes.
+Manual dispatch remains available. Avoid toggling ready/draft just to rerun checks.
 
 Push the stamped candidate to a canonical `release/*` branch and wait for that
 exact commit's GitHub CI to pass. Release validation can reuse this canonical
 push run for 24 hours, checking the SHA, workflow, successful quality job,
-all six native image jobs, final CLI/Admin jobs and complete candidate artifacts.
+both native jobs for each selected image, final CLI/Admin jobs and complete candidate artifacts.
 Those images require successful quality and run
 under the same full-scope condition as the source tests. Their complete success
 also proves full scope when GitHub omits reusable-job step metadata. Tooling
@@ -273,11 +282,12 @@ CI is still running, publication waits for it instead of starting duplicate gate
 An unavailable lookup fails without starting another build. If no eligible
 candidate exists, the release workflow prepares one with the shared gates.
 
-Use one stamped `release/*` candidate for the release PR and publication. A
+Use one stamped candidate for the release PR and publication. Push its SHA to
+`release/*` first, then update/ready the PR at the same SHA. A
 release-authorized fix should receive its final stamp before final PR qualification;
 do not qualify and merge the fix, then create a version-only PR that repeats the
 entire native matrix. Complete functional validation first, then qualify once.
-A same-repository release PR reuses its successful exact-head candidate instead of
+A same-repository PR (including an ordinary fix branch) reuses its successful exact-head candidate instead of
 starting another native matrix or Linux AppImage preview. This requires that the
 PR's current base commit is already in its head; a changed base, base retarget,
 fork, failed candidate or missing artifacts retains normal PR validation. Native
@@ -297,6 +307,14 @@ pushes and release-workflow fallback gates pay that cost. Partial component CI
 cannot qualify a full release.
 Caches only accelerate builds and never substitute for qualified artifacts.
 
+Essential native security/browser, scheduler/provider, core keep-alive and recovery/
+upgrade checks remain release gates. Extended idle/unload and historical import
+cases run weekly or manually through `assistant-endurance.yml`, testing published
+images on both native architectures without rebuilding. Run affected endurance
+cases during development when changing those behaviors. To investigate a released
+image, dispatch that workflow with its immutable version tag; unrelated releases
+do not wait for scheduled endurance work.
+
 Keep development regression, final candidate qualification and publication
 integrity checks distinct. Reuse eligible successful evidence unless relevant
 inputs changed or a concrete failure requires a rerun; preserve owner-approved
@@ -307,12 +325,13 @@ A separate nonpublishing run is optional when artifact inspection is needed:
 
 ```sh
 gh workflow run release.yml --repo fwdslsh/fhold --ref release/your-candidate \
-  -f version="$VERSION" -f scope=full -f dry_run=true
+  -f version="$VERSION" -f scope="$SCOPE" -f dry_run=true
 gh run list --repo fwdslsh/fhold --workflow release.yml --limit 5
 ```
 
-Inspect the chosen release run: both native architectures, CLI/AppImages, extension,
-container scans/smokes, checksums and asset manifest must pass. Include the
+Inspect the chosen release run: both native architectures for selected images,
+CLI/AppImages, the extension when selected, container scans/smokes, checksums and
+the asset manifest must pass. Include the
 rendered/packaged Admin and any live-provider qualification required by
 [the release runbook](release.md). A workflow dispatch is not proof it passed.
 
@@ -324,7 +343,7 @@ credentials and `FH_PUBLICATION_CONFIGURED=true`. With publication authorized:
 
 ```sh
 gh workflow run release.yml --repo fwdslsh/fhold --ref main \
-  -f version="$VERSION" -f scope=full -f dry_run=false
+  -f version="$VERSION" -f scope="$SCOPE" -f dry_run=false
 ```
 
 For a publication-only workflow repair, dispatch the reviewed workflow with

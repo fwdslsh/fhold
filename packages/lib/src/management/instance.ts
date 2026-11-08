@@ -50,7 +50,7 @@ import { mkdtempSync, rmSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { updateHome } from '../control-plane/update.js';
-import { FH_RUNTIME_VERSION } from '../control-plane/release.js';
+import { FH_RUNTIME_LABEL } from '../control-plane/release.js';
 import { packTransfer, unpackTransfer } from './transfer.js';
 import { publishedConnections } from './connections.js';
 import { withAssistantEndpoint } from '../control-plane/opencode.js';
@@ -111,7 +111,7 @@ export function localInstanceManagement(
 				homeDir: candidate.homeDir,
 				configPath: stackConfigFile(candidate.homeDir),
 				config,
-				updateImageTag: FH_RUNTIME_VERSION,
+				updateImageTag: FH_RUNTIME_LABEL,
 				services: [],
 				portalMappings: {},
 				portalSecrets: {}
@@ -152,7 +152,7 @@ export function localInstanceManagement(
 			homeDir: current.homeDir,
 			configPath: stackConfigFile(current.homeDir),
 			config: config.config,
-			updateImageTag: FH_RUNTIME_VERSION,
+			updateImageTag: FH_RUNTIME_LABEL,
 			services,
 			pendingRestart: hosting.pendingRestart,
 			recovery,

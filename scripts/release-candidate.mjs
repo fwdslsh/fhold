@@ -13,6 +13,7 @@ import {
 	existsSync
 } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { releaseImages } from './release-scope.mjs';
 
 export const components = ['assistant', 'guardian', 'portal'];
 export const architectures = ['amd64', 'arm64'];
@@ -25,17 +26,13 @@ const run = (command, args) =>
 	execFileSync(command, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 
 export function candidateKinds(scope) {
-	assert(['full', 'tools'].includes(scope), 'Unknown publication scope');
+	const images = releaseImages(scope);
 	return [
 		'cli-x64',
 		'cli-arm64',
 		'admin',
-		...(scope === 'full'
-			? [
-					'mcpb',
-					...components.flatMap((image) => architectures.map((arch) => `image-${image}-${arch}`))
-				]
-			: [])
+		...(scope === 'full' ? ['mcpb'] : []),
+		...images.flatMap((image) => architectures.map((arch) => `image-${image}-${arch}`))
 	];
 }
 

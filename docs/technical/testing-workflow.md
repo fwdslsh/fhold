@@ -34,30 +34,38 @@ their before/after commits). Missing or unreadable diffs select all checks.
 | --- | --- | --- | --- |
 | Docs/site or lockfile only | Separate docs workflow where applicable | None (repository policy) | None |
 | Admin, CLI or shared management library | Tooling checks | None, except runtime seed-manifest changes | Linux preview and Windows/macOS desktop checks |
-| Portal source/Dockerfile only, optionally docs | Full source checks | Portal on amd64 and arm64 | None |
-| Runtime/shared dependency, Skeleton, root manifest, security/harness/orchestration or unknown inputs | Full source checks | All three images on both native architectures | When Admin or shared/unknown build inputs change |
+| Component source/Dockerfile only, optionally docs | Full source checks | Affected image on amd64 and arm64 | When shared/embedded inputs change |
+| Runtime/shared dependency or Skeleton | Full source checks | Each affected consumer on both native architectures | When Admin inputs change |
+| Root build/install manifest, security/harness/orchestration or unknown inputs | Full source checks | All three images on both native architectures | When Admin or shared/unknown build inputs change |
 
 Mixed lock changes use the dependency graph, including workspace, peer, optional
-and integrity edges; runtime changes select all images. CI validation scope is
+and integrity edges; runtime changes select affected consumers. CI validation scope is
 separate from publication scope: editing orchestration exercises the native gates
 without requiring publication of unchanged container bytes. A full release still
 requires all six native image jobs on its exact final SHA. Partial or skipped CI
 cannot qualify it; the release workflow runs missing full qualification itself.
+Scoped releases require the two native jobs for each selected image and prove
+unselected source/dependency inputs match their published release tags. Draft PRs
+run source checks while deferring image builds and desktop packaging until ready.
 
 Assistant verification uses two lanes with separate disposable fixtures. Startup,
 security and native harness coverage runs once, with additional small explicit-on
 and explicit-off startup assertions. Keepalive and quiet-work observation periods
-are unchanged. The remaining workload, policy, history, provider/Guardian/scheduler,
+are unchanged for the core checks. The remaining workload, policy, provider/Guardian/scheduler,
 directory/Blob recovery and both upgrade cases remain required. Each suite gets a
 log and timing; failures wait for the other lane and make the job fail. Cancellation
 terminates the process groups; GitHub disposes the isolated runner and its Docker
 fixtures. Failed/cancelled jobs never qualify a release. Local runs should use a
 disposable Docker host if interruption could prevent suite cleanup.
+Extended unload/disable observation windows and historical import fixtures run in
+the weekly/manual endurance workflow against published images, without builds.
+Use `--endurance` with the lane runner to exercise them locally. Run these cases
+for relevant behavior changes; they do not automatically block unrelated releases.
 
 ## Download a PR's Admin for manual testing
 
 PRs targeting `main` with affected Admin inputs get an independent **PR Admin
-AppImage** build, including drafts. Admin inputs include its shared library, CLI
+AppImage** build once ready for review. Admin inputs include its shared library, CLI
 management helpers, embedded Skeleton and build/install configuration. Docs and
 unrelated Portal source changes skip the build. Opening, reopening, updating
 commits or retargeting a PR recomputes that scope; title/body edits do not rebuild

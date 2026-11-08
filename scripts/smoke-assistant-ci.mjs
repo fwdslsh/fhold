@@ -105,11 +105,12 @@ export async function runLanes(lanes, { directory, signal, env = process.env } =
 	return results;
 }
 
-export function assistantLanes(image, nativeImage) {
+export function assistantLanes(image, nativeImage, profile = 'release') {
+	if (!['release', 'endurance'].includes(profile)) throw new Error('Unknown Assistant test profile');
 	const suite = (name, command, env) => ({ name, command, env });
 	const recovery = { FH_RECOVERY_TEST_IMAGE: image };
 	const source = 'fwdslsh/fhold-assistant:0.3.261006-beta';
-	return [
+	const lanes = [
 		[
 			suite('startup-security-native-harnesses', [
 				'bash',
@@ -142,7 +143,7 @@ export function assistantLanes(image, nativeImage) {
 			suite('blob-recovery', ['node', 'scripts/smoke-blob-recovery.mjs'], recovery)
 		],
 		[
-			suite('keepalive', ['node', 'scripts/smoke-keepalive.mjs', image]),
+			suite('keepalive', ['node', 'scripts/smoke-keepalive.mjs', image, ...(profile === 'endurance' ? ['--endurance'] : [])]),
 			suite('directory-recovery', ['node', 'scripts/smoke-recovery.mjs'], recovery),
 			suite('upgrade-source', ['docker', 'pull', source]),
 			suite('upgrade-empty', ['node', 'scripts/smoke-recovery.mjs'], {
@@ -156,6 +157,10 @@ export function assistantLanes(image, nativeImage) {
 			})
 		]
 	];
+	if (profile === 'endurance') return lanes.map((lane) => lane.filter((suite) => suite.name.startsWith('history') || suite.name === 'keepalive'));
+	const release = lanes.flat().filter((suite) => !suite.name.startsWith('history'));
+	const first = new Set(['startup-security-native-harnesses', 'workload', 'directory-recovery']);
+	return [release.filter((suite) => first.has(suite.name)), release.filter((suite) => !first.has(suite.name))];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -166,7 +171,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	execFileSync('bun', ['run', '--cwd', 'packages/cli', 'build'], { stdio: 'inherit' });
 	const abort = new AbortController();
 	for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => abort.abort());
-	await runLanes(assistantLanes(image, nativeImage), {
+	await runLanes(assistantLanes(image, nativeImage, process.argv.includes('--endurance') ? 'endurance' : 'release'), {
 		directory: process.env.FH_CI_LOG_DIR || resolve('test-results/assistant-smokes'),
 		signal: abort.signal
 	});

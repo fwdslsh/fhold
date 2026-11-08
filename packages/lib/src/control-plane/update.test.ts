@@ -15,7 +15,7 @@ import { installHome } from './install.js';
 import { updateHome } from './update.js';
 import { MANAGED_FILES, SEEDED_FILES, skeletonRoot } from './seed.js';
 import { readStackConfig, writeStackConfig } from './stack-config.js';
-import { FH_RUNTIME_VERSION } from './release.js';
+import { FH_IMAGE_VERSIONS } from './release.js';
 
 const roots: string[] = [];
 const originalSkeleton = process.env.FH_SKELETON_DIR;
@@ -29,6 +29,10 @@ async function fixture() {
 	roots.push(root);
 	const home = join(root, 'home');
 	await installHome({ homeDir: home });
+	const installed = readStackConfig(home);
+	if (!installed.ok) throw new Error(installed.error);
+	expect(installed.config.deployment.images).toEqual(FH_IMAGE_VERSIONS);
+	expect(JSON.parse(readFileSync(join(home, 'state/installation.json'), 'utf8')).managedImages).toEqual(FH_IMAGE_VERSIONS);
 	return { root, home };
 }
 
@@ -146,8 +150,8 @@ test.each(['0.1.2610011200-alpha.1', '0.2.2610211-beta.13'])('update advances hi
 		projectName: 'reviewed-instance',
 		imageNamespace: 'local-review',
 		images: {
-			assistant: FH_RUNTIME_VERSION,
-			guardian: FH_RUNTIME_VERSION,
+			assistant: FH_IMAGE_VERSIONS.assistant,
+			guardian: FH_IMAGE_VERSIONS.guardian,
 			portal: 'reviewed-portal-pin'
 		}
 	});

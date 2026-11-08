@@ -17,9 +17,8 @@ on:
         type: boolean
         default: true
       scope:
-        description: 'auto uses stamped component versions; tools publishes CLI/Admin only'
-        type: choice
-        options: [auto, full, tools]
+        description: 'auto, full, tools, or comma-separated assistant,guardian,portal'
+        type: string
         default: auto
 
 concurrency:
@@ -39,6 +38,7 @@ jobs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       channel: ${{ steps.version.outputs.channel }}
       scope: ${{ steps.version.outputs.scope }}
+      images: ${{ steps.version.outputs.images }}
       qualified: ${{ steps.qualification.outputs.reused }}
       candidate_run: ${{ steps.qualification.outputs.run_id }}
       candidate_attempt: ${{ steps.qualification.outputs.attempt }}
@@ -73,7 +73,8 @@ jobs:
           bun - <<'NODE'
           import { appendFileSync, readFileSync } from 'node:fs';
           import { parseSemver } from './scripts/set-version.mjs';
-          import { gitScope } from './scripts/ci-scope.mjs';
+          import { assertRetainedComponents } from './scripts/ci-scope.mjs';
+          import { inferReleaseScope, releaseImages, releaseManifests } from './scripts/release-scope.mjs';
           const version = process.env.VERSION ?? '';
           if (process.env.ACTIONS_ORIGIN !== 'https://github.com' ||
               process.env.ACTIONS_REPOSITORY !== 'fwdslsh/fhold') {
@@ -90,17 +91,15 @@ jobs:
             throw new Error('Live releases require main/release/*');
           }
           const release = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
-          const runtimeVersion = JSON.parse(readFileSync('packages/skeleton/package.json', 'utf8')).version;
-          const scope = (process.env.SCOPE || 'auto') === 'auto' ? (runtimeVersion === version ? 'full' : 'tools') : process.env.SCOPE;
-          const manifests = scope === 'tools' ? release.toolingManifests : release.manifests;
-          if (scope === 'tools' && gitScope(runtimeVersion) !== 'tools') {
-            throw new Error('Runtime inputs changed since the pinned image release. Stamp a full release instead.');
-          }
+          const scope = (process.env.SCOPE || 'auto') === 'auto' ? inferReleaseScope(version) : process.env.SCOPE;
+          const images = releaseImages(scope);
+          const manifests = releaseManifests(release, scope);
+          assertRetainedComponents(scope, version);
           for (const manifest of manifests) {
             const actual = JSON.parse(readFileSync(manifest, 'utf8')).version;
             if (actual !== version) throw new Error(`${manifest} is ${actual}; expected ${version}`);
           }
-          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nimages=${JSON.stringify(images)}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
           NODE
 
       - id: qualification
@@ -125,6 +124,7 @@ jobs:
     uses: ./.github/workflows/gates.yml
     with:
       scope: ${{ needs.validate.outputs.scope }}
+      images: ${{ needs.validate.outputs.images }}
       candidate: true
 
   candidates:
@@ -153,7 +153,7 @@ jobs:
   images:
     if: >-
       ${{ !cancelled() && needs.validate.result == 'success' && needs.candidates.result == 'success' &&
-      needs.validate.outputs.scope == 'full' }}
+      needs.validate.outputs.images != '[]' }}
     name: Publish ${{ matrix.image }} image
     needs: [validate, candidates]
     runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [assistant, guardian, portal]
+        image: ${{ fromJSON(needs.validate.outputs.images) }}
     steps:
       # Publication tools may need repair after qualification. Execute the
       # reviewed workflow revision; receipts and image identity still use source_sha.
@@ -258,19 +258,20 @@ jobs:
           name: fhold-release-assets
           path: dist
       - uses: docker/setup-buildx-action@v4.4.1
-        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
+        if: inputs.dry_run != true && needs.validate.outputs.images != '[]'
       - uses: docker/login-action@v4.7.0
-        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
+        if: inputs.dry_run != true && needs.validate.outputs.images != '[]'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Point the release channel at the verified immutable images
-        if: inputs.dry_run != true && needs.validate.outputs.scope == 'full'
+        if: inputs.dry_run != true && needs.validate.outputs.images != '[]'
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           CHANNEL: ${{ needs.validate.outputs.channel }}
+          IMAGES: ${{ needs.validate.outputs.images }}
         run: |
-          for component in assistant guardian portal; do
+          for component in $(node -e 'console.log(JSON.parse(process.env.IMAGES).join(" "))'); do
             docker buildx imagetools create \
               --tag "fwdslsh/fhold-${component}:${CHANNEL}" \
               "fwdslsh/fhold-${component}:${VERSION}"
@@ -292,11 +293,11 @@ jobs:
           fi
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
+          import { componentVersions } from './scripts/release-scope.mjs';
           const sections = readFileSync('CHANGELOG.md', 'utf8').split(/^## /m);
           const section = sections.find((text) => text.startsWith(`${process.env.VERSION} —`));
           if (!section) throw new Error('Missing release notes in CHANGELOG.md');
-          const runtime = JSON.parse(readFileSync('packages/skeleton/package.json', 'utf8')).version;
-          const scopeNote = process.env.SCOPE === 'tools' ? `\nTooling-only release: CLI and Admin downloads. Container images remain pinned to ${runtime}; no runtime upgrade is required.\n` : '';
+          const scopeNote = `\nRelease scope: ${process.env.SCOPE}. Included component versions: ${Object.entries(componentVersions()).map(([name, version]) => `${name} ${version}`).join(', ')}. Components retained from earlier releases are not rebuilt or retagged.\n`;
           writeFileSync('release-notes.md', section.slice(section.indexOf('\n') + 1).trim() + '\n' + scopeNote);
           NODE
           args=(release create "${VERSION}" --repo "${GITHUB_REPOSITORY}" \

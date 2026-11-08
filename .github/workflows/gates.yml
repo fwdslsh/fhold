@@ -12,6 +12,9 @@ on:
       images:
         type: string
         default: '["assistant","guardian","portal"]'
+      draft:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,14 +56,14 @@ jobs:
           bun run lib:test
           bun run cli:test
           bun run --cwd packages/electron test
-          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/ci-scope.test.ts scripts/smoke-assistant-ci.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/release-candidate.test.ts scripts/management-architecture.test.ts
+          bun test scripts/bump-release.test.ts scripts/set-version.test.ts scripts/tooling-release.test.ts scripts/ci-scope.test.ts scripts/release-scope.test.ts scripts/smoke-assistant-ci.test.ts scripts/release-aggregates-hygiene.test.ts scripts/packaged-assets.test.ts scripts/admin-update-feeds.test.ts scripts/release-qualification.test.ts scripts/release-candidate.test.ts scripts/management-architecture.test.ts
       - name: Lint
         run: bun run lint
       - name: Build the standalone CLI
         if: inputs.candidate != true
         run: bun run --cwd packages/cli build
       - name: Build and validate the optional Claude Desktop extension
-        if: inputs.scope != 'tools'
+        if: inputs.scope == 'full'
         run: bun run --cwd packages/claude-desktop pack
       - name: Verify the embedded Skeleton
         run: bun test scripts/packaged-assets.test.ts
@@ -94,7 +97,7 @@ jobs:
         run: bun run audit
 
       - name: Retain the qualified extension candidate
-        if: inputs.candidate && inputs.scope != 'tools'
+        if: inputs.candidate && inputs.scope == 'full'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -102,7 +105,7 @@ jobs:
           cp "packages/claude-desktop/artifacts/fhold-claude-desktop-${VERSION}.mcpb" "${RUNNER_TEMP}/extension-candidate/"
           bun scripts/release-candidate.mjs seal "${RUNNER_TEMP}/extension-candidate" mcpb
       - uses: actions/upload-artifact@v7.0.2
-        if: inputs.candidate && inputs.scope != 'tools'
+        if: inputs.candidate && inputs.scope == 'full'
         with:
           name: candidate-${{ github.run_attempt }}-mcpb
           path: ${{ runner.temp }}/extension-candidate
@@ -110,7 +113,7 @@ jobs:
           retention-days: 2
 
   images:
-    if: inputs.scope != 'tools'
+    if: inputs.scope != 'tools' && inputs.images != '[]' && !inputs.draft
     name: Build ${{ matrix.image }} (${{ matrix.platform }})
     needs: quality
     runs-on: ${{ matrix.runner }}
