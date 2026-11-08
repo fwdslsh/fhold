@@ -84,7 +84,7 @@ export const guardianConfig = defineCommand({
 const assistant = defineCommand({
 	meta: {
 		name: 'assistant',
-		description: 'Set Assistant access, schedule timezone, or automatic memory'
+		description: 'Set Assistant access, schedule timezone, or plugin memory hooks'
 	},
 	args: {
 		bind: { type: 'string', description: 'exact IPv4 or IPv6 address' },
@@ -93,7 +93,11 @@ const assistant = defineCommand({
 			type: 'string',
 			description: 'IANA schedule timezone, for example America/Chicago'
 		},
-		memory: { type: 'string', description: 'automatic personal memory capture: on or off' },
+		memory: {
+			type: 'string',
+			description:
+				'managed plugin memory hooks: on uses native choices; off disables unless explicitly overridden'
+		},
 		apply: {
 			type: 'boolean',
 			description: 'Apply the stack immediately (use --no-apply to defer)',

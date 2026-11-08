@@ -171,6 +171,7 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 		'TZ',
 		'AKM_AUTO_MEMORY',
 		'AKM_AUTO_LEARNING',
+		'FH_AUTOMATIC_MEMORY',
 		'FH_CODEX_REMOTE',
 		'FH_CODEX_SANDBOX',
 		'FH_CLAUDE_REMOTE',
@@ -416,8 +417,8 @@ function auditCoreEnvironment(
 		}
 		if (!validTimezone(environment.TZ))
 			issues.push('service assistant must set a valid IANA timezone');
-		if (!['0', '1'].includes(String(environment.AKM_AUTO_MEMORY))) {
-			issues.push('service assistant automatic memory must be 0 or 1');
+		if (!['0', '1'].includes(String(environment.FH_AUTOMATIC_MEMORY))) {
+			issues.push('service assistant memory hooks setting must be 0 or 1');
 		}
 	}
 	if (name === 'guardian') {
@@ -699,7 +700,7 @@ export function auditCompose(
 					issues.push('assistant timezone must match StackConfig intent');
 				}
 				if (
-					environment.AKM_AUTO_MEMORY !==
+					environment.FH_AUTOMATIC_MEMORY !==
 					(stackConfig.config.assistant.automaticMemory ? '1' : '0')
 				) {
 					issues.push('assistant automatic memory must match StackConfig intent');

@@ -76,15 +76,6 @@ function atomicWrite(path, text) {
 	renameSync(temporary, path);
 }
 
-function setEnabled(id, enabled) {
-	const path = taskFile(id);
-	if (!existsSync(path) || !lstatSync(path).isFile()) fail(`task not found: ${id}`);
-	if (statSync(path).size > MAX_TASK_BYTES) fail(`task source is too large: ${id}`);
-	// AKM owns host-local scheduler.enabled; source YAML never authorizes runs.
-	runChecked('akm', ['task', enabled ? 'enable' : 'disable', id, '--quiet']);
-	console.log(`${id}: ${enabled ? 'scheduled' : 'paused'}`);
-}
-
 function validateImportedPromptSource(source) {
 	const task = Bun.YAML.parse(source);
 	if (
@@ -186,19 +177,21 @@ try {
 			run('akm', ['search', '--type', 'task', ...args]);
 			break;
 		case 'show':
-			run('akm', ['show', `tasks/${taskId(args[0])}`, ...args.slice(1)]);
+			// Preserve the short-id convenience; AKM owns full ref resolution.
+			if (!args[0]) fail('show requires a task id or native ref');
+			run('akm', ['show', args[0].includes('/') ? args[0] : `tasks/${args[0]}`, ...args.slice(1)]);
 			break;
 		case 'history':
 			run('akm', ['task', 'history', ...args]);
 			break;
 		case 'run':
-			run('akm', ['task', 'run', taskId(args[0])]);
+			run('akm', ['task', 'run', ...args]);
 			break;
 		case 'pause':
-			setEnabled(taskId(args[0]), false);
+			run('akm', ['task', 'disable', ...args]);
 			break;
 		case 'resume':
-			setEnabled(taskId(args[0]), true);
+			run('akm', ['task', 'enable', ...args]);
 			break;
 		case 'remove':
 			remove(taskId(args[0]));

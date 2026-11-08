@@ -50,7 +50,10 @@ const create = defineCommand({
 		id: { type: 'positional', required: true, description: 'stable task id' },
 		schedule: { type: 'string', required: true, description: 'cron schedule, such as 0 8 * * *' },
 		prompt: { type: 'string', required: true, description: 'plain-language request' },
-		harness: { type: 'string', description: 'native AKM harness (otherwise AKM selects its default)' }
+		harness: {
+			type: 'string',
+			description: 'native AKM harness (otherwise AKM selects its default)'
+		}
 	},
 	run: defineAction(async ({ args }) =>
 		runTask([
@@ -67,33 +70,41 @@ const create = defineCommand({
 
 const show = defineCommand({
 	meta: { name: 'show', description: 'Show one task definition' },
-	args: { id: { type: 'positional', required: true, description: 'task id' } },
-	run: defineAction(async ({ args }) => runTask(['show', id(positional(args))]))
+	args: { id: { type: 'positional', required: true, description: 'task id or native AKM ref' } },
+	run: defineAction(async ({ args }) => runTask(['show', String(positional(args))]))
 });
 
-function oneIdCommand(name: string, description: string) {
+function oneIdCommand(name: string, description: string, localFile = false) {
 	return defineCommand({
 		meta: { name, description },
-		args: { id: { type: 'positional', required: true, description: 'task id' } },
-		run: defineAction(async ({ args }) => runTask([name, id(positional(args))]))
+		args: {
+			id: {
+				type: 'positional',
+				required: true,
+				description: localFile ? 'task id' : 'task id or native AKM ref'
+			}
+		},
+		run: defineAction(async ({ args }) =>
+			runTask([name, localFile ? id(positional(args)) : String(positional(args))])
+		)
 	});
 }
 
 const pause = oneIdCommand('pause', 'Pause a task without deleting its history');
 const resume = oneIdCommand('resume', 'Enable a paused task');
 const run = oneIdCommand('run', 'Run a task now and retain its result');
-const remove = oneIdCommand('remove', 'Unschedule a task and preserve its definition');
+const remove = oneIdCommand('remove', 'Unschedule a task and preserve its definition', true);
 
 const history = defineCommand({
 	meta: { name: 'history', description: 'Show durable task run history' },
 	args: {
-		id: { type: 'positional', required: false, description: 'optional task id' },
+		id: { type: 'positional', required: false, description: 'optional task id or native AKM ref' },
 		limit: { type: 'string', description: 'maximum history entries' },
 		json: { type: 'boolean', description: 'print JSON' }
 	},
 	run: defineAction(async ({ args }) => {
 		const command = ['history'];
-		if (positional(args)) command.push(id(positional(args)));
+		if (positional(args)) command.push(String(positional(args)));
 		if (args.limit) command.push('--limit', String(args.limit));
 		if (args.json) command.push('--format', 'json');
 		await runTask(command);

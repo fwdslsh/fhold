@@ -24,8 +24,7 @@ const assistantEnvironment = {
 	AKM_CONFIG_DIR: '/etc/akm',
 	AKM_DATA_DIR: '/opt/akm/data',
 	AKM_STATE_DIR: '/opt/akm/data/state',
-	AKM_AUTO_MEMORY: '1',
-	AKM_AUTO_LEARNING: '1',
+	FH_AUTOMATIC_MEMORY: '1',
 	AKM_REDACT_HIGH_ENTROPY: '1',
 	AKM_REDACT_PII: '1',
 	FH_CODEX_REMOTE: '1',
@@ -272,7 +271,7 @@ describe('Compose security audit', () => {
 		);
 	});
 
-	it('prevents an overlay from silently re-enabling memory or changing schedule timezone', () => {
+	it('reports changed fhold intent without rejecting explicit native plugin choices', () => {
 		const home = auditHome();
 		const intent = defaultStackConfig();
 		intent.assistant.automaticMemory = false;
@@ -285,8 +284,13 @@ describe('Compose security audit', () => {
 		expect(auditCompose(config, home)).toContain(
 			'assistant timezone must match StackConfig intent'
 		);
-		config.services.assistant.environment.AKM_AUTO_MEMORY = '0';
+		config.services.assistant.environment.FH_AUTOMATIC_MEMORY = '0';
 		config.services.assistant.environment.TZ = 'America/Chicago';
+		expect(auditCompose(config, home)).toEqual([]);
+		Object.assign(config.services.assistant.environment, {
+			AKM_AUTO_MEMORY: '1',
+			AKM_AUTO_LEARNING: '0'
+		});
 		expect(auditCompose(config, home)).toEqual([]);
 	});
 

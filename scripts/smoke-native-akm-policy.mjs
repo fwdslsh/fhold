@@ -144,7 +144,8 @@ try {
 	// Native enabled defaults must also drive the real plugin lifecycle. Restart
 	// only this synthetic server so its process environment changes normally.
 	server.kill(); await server.exited;
-	env.AKM_AUTO_MEMORY = '1'; env.AKM_AUTO_LEARNING = '1';
+	// fhold's on choice defers to native defaults instead of forcing env flags.
+	delete env.AKM_AUTO_MEMORY; delete env.AKM_AUTO_LEARNING;
 	server = Bun.spawn(['opencode', 'serve', '--hostname', '127.0.0.1', '--port', '4097'], { cwd, env, stdout: logFile, stderr: logFile });
 	await until(async () => (await client.agent.list({ location })).data.some((agent) => agent.id === 'analyst'), 'Native enabled plugin activation');
 	const learned = await client.session.create({ location, agent: 'analyst', title: 'Native automatic learning' });

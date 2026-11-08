@@ -58,11 +58,14 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 	}
 	writeFileSync(script, isolated);
 	const writerCheck = `
+if [ "\${FIXTURE_MEMORY_CHECK:-0}" = 1 ]; then
+  printf 'memory-%s:%s:%s\\n' "$(basename "$0")" "\${AKM_AUTO_MEMORY-unset}" "\${AKM_AUTO_LEARNING-unset}" >>"$EVENTS"
+fi
 if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
   for name in FH_RECOVERY_URL FH_RECOVERY_INCLUDE_FILE FH_RECOVERY_PARENT_PID FH_INSTANCE_ID AZURE_CLIENT_ID IDENTITY_ENDPOINT MSI_ENDPOINT IMDS_ENDPOINT; do
     if printenv "$name" >/dev/null; then printf 'environment-leak\n' >>"$EVENTS"; exit 71; fi
   done
-  test "$AKM_AUTO_MEMORY" != 0
+  test "\${AKM_AUTO_MEMORY:-1}" != 0
   test -n "$OPENCODE_SERVER_PASSWORD"
   test "$AZURE_OPENAI_API_KEY" = synthetic-provider-value
 fi
@@ -194,6 +197,9 @@ while sleep 0.1; do :; done`
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0',
 			FH_OPENCODE_ENV_MAP: undefined,
+			FH_AUTOMATIC_MEMORY: undefined,
+			AKM_AUTO_MEMORY: undefined,
+			AKM_AUTO_LEARNING: undefined,
 			FH_SHUTDOWN_SECONDS: '2',
 			OPENCODE_SERVER_PASSWORD: 'fixture-only',
 			...extra
@@ -227,6 +233,46 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
+	for (const [name, settings, expected] of [
+		['native defaults', { FH_AUTOMATIC_MEMORY: '1' }, 'unset:unset'],
+		['explicit off', { FH_AUTOMATIC_MEMORY: '0' }, '0:0'],
+		[
+			'native off with fhold on',
+			{ FH_AUTOMATIC_MEMORY: '1', AKM_AUTO_MEMORY: '0', AKM_AUTO_LEARNING: '0' },
+			'0:0'
+		],
+		[
+			'explicit native overrides',
+			{ FH_AUTOMATIC_MEMORY: '0', AKM_AUTO_MEMORY: '1', AKM_AUTO_LEARNING: '' },
+			'1:'
+		]
+	] as const) {
+		it(`preserves ${name} for managed writers after recovery`, async () => {
+			const run = fixture({
+				...settings,
+				FIXTURE_MEMORY_CHECK: '1',
+				FH_RECOVERY_URL: 'file:///fixture',
+				FH_SCHEDULER_ENABLED: '1',
+				FH_CODEX_REMOTE: '1',
+				FH_CLAUDE_REMOTE: '1'
+			});
+			try {
+				const writers = ['akm', 'opencode', 'fhold-task', 'supercronic', 'fhold-remote'];
+				await until(() =>
+					writers.every((writer) => run.events().includes(`memory-${writer}:${expected}`)) &&
+					['remote-claude', 'remote-codex'].every((event) => run.events().includes(event))
+				);
+				expect(run.events().filter((event) => event.startsWith('memory-'))).toHaveLength(6);
+				expect(run.events().indexOf('restored')).toBeLessThan(
+					run.events().indexOf(`memory-akm:${expected}`)
+				);
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
+	}
+
 	it('bounds a stuck optional native migration before starting the core', async () => {
 		const run = fixture({ FIXTURE_MIGRATE_HANG: '1' });
 		try {
