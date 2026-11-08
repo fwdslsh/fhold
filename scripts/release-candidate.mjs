@@ -18,7 +18,7 @@ export const components = ['assistant', 'guardian', 'portal'];
 export const architectures = ['amd64', 'arm64'];
 export const copyImage =
 	// Upstream stable container: Skopeo 1.22.3, including CVE-2025-11395 fix.
-	'quay.io/skopeo/stable@sha256:ad1d2e25cf0234bb50476e753a8fc9debd4f0582cdd2ab6fd7bad9bacdfe3b9b';
+	'quay.io/skopeo/stable@sha256:2681eccb8b02c495b013c2669cbf7f41d5c0b0b0e644e7c69bd3ea9bcb20641f';
 const digest = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const json = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const run = (command, args) =>
