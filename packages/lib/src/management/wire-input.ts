@@ -30,7 +30,18 @@ const parsers: WireParsers = {
 	providers: () => [],
 	logs: () => [],
 	assistantPassword: () => [],
-	knowledgeUi: () => [],
+	knowledgeUi: (value) => {
+		if (value === undefined) return [undefined];
+		const { loopbackPort } = object(value);
+		if (
+			typeof loopbackPort !== 'number' ||
+			!Number.isInteger(loopbackPort) ||
+			loopbackPort < 1024 ||
+			loopbackPort > 65535
+		)
+			throw new Error('A valid AKM UI loopback port is required.');
+		return [{ loopbackPort }];
+	},
 	transferCreate: () => [],
 	directory: (value) => [value === undefined ? undefined : string(value)],
 	transferRelease: (value) => [string(value)],

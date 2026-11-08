@@ -40,6 +40,7 @@ bun install --frozen-lockfile
 bun outdated --recursive
 npm view akm-cli dist-tags --json
 npm view akm-cli@latest version engines --json
+npm view akm-web@latest version dependencies engines --json
 npm view akm-opencode-v2@latest version dependencies peerDependencies --json
 npm view @opencode/cli@latest version engines --json
 npm view @opencode/client@latest version --json
@@ -54,7 +55,10 @@ AKM's npm `latest` is stable; `next` carries prereleases and may lag a later sta
 release. The current pins use the matching prerelease pair selected under the
 owner's approval to use AKM betas; see the
 [November 8 review](dependency-refresh-2026-11-08.md). Select channels explicitly.
-Resolve the plugin's required CLI version before choosing that pin.
+Resolve the plugins' and `akm-web`'s required CLI version before choosing pins.
+Include `akm-web` in every Assistant release; keep its exact CLI dependency
+aligned with the image's CLI. Verify native web startup, browser authentication
+and local/SSH forwarding when updating its launch contract.
 Compare actual release provenance and published tags,
 not just numeric patches: upstream AKM has changed its prerelease naming.
 Write exact resolved versions into runtime manifests, never moving dist-tags.
@@ -80,6 +84,7 @@ compatibility decision, not an automatic `--latest` bulk update.
 | Dependency | Source of truth and matching inputs |
 | --- | --- |
 | AKM CLI and OpenCode 2 plugin | `containers/assistant/tools/package.json`; matching `akm-opencode-v2` in `plugins/fhold/package.json` |
+| AKM web interface | `akm-web` in Assistant tools; matching CLI dependency, ordinary binary link in Dockerfile, native Admin launcher and image browser smoke |
 | Claude/Codex AKM plugins | Immutable archive commit, SHA-256 and extraction paths in `containers/assistant/Dockerfile` |
 | OpenCode | Assistant's `@opencode/cli`, `@opencode/client`, `@opencode/plugin`; Guardian client; fhold plugin SDK and Effect dependency |
 | Claude Code and Codex | Assistant tools manifest |

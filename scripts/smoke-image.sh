@@ -348,6 +348,8 @@ assistant)
 	verify_runtime_versions
 	docker exec -i "$container" node --input-type=module < scripts/smoke-browser.mjs
 	docker exec -i "$container" node --input-type=module < scripts/smoke-model-picker.mjs
+	docker exec --workdir /work "$container" bash --login -c 'test "$(command -v akm-web)" = /usr/local/bin/akm-web'
+	docker exec -i "$container" node --input-type=module < scripts/smoke-akm-web.mjs
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
 	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null

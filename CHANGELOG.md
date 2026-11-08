@@ -9,8 +9,10 @@ Preserved native AKM harness invocations also work without the previous manual
 argument repair; upgrade tests now require success and unchanged operator settings.
 Add a real-browser image regression for this behavior. Avoid repeating native
 desktop qualification when an unchanged draft PR is marked ready, and clarify
-release merge planning and native AKM indexing behavior. AKM UI integration is
-deferred until the upstream `akm-web` package is available.
+release merge planning and native AKM indexing behavior. Include the published
+**akm-web 0.10.261113-beta** in Assistant and reconnect Admin's Knowledge action
+to its native browser UI, preserving session lifetime and native cookie, Host
+and Origin checks for local Linux Docker and SSH access.
 
 ## 0.4.1102-beta — patched AKM and native controls
 

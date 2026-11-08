@@ -54,7 +54,34 @@ explicitly selected isolated test directory. Keep SQLite/index state on local
 storage; a shared content/lock test does not authorize network-hosted SQLite,
 live-instance changes, recovery changes or a restore.
 
-## Deferred work
+After the owner selected an existing Azure Files share, a new isolated synthetic
+directory exercised real SMB 3.1.1 semantics. Hard links failed with EOPNOTSUPP;
+AKM's unmodified fallback preserved 80 concurrent writes and passed live-owner
+exclusion, killed-owner reclaim, fresh-empty grace and release cleanup. Native
+retry handled Azure's delayed metadata refresh (two attempts in all three fresh
+crash cases). CLI remember/show/index/search/feedback passed with content on Azure
+and SQLite kept local. The synthetic directory was removed and the share
+unmounted. This does not qualify cross-host PID ownership or network SQLite.
+[Detailed evidence](https://github.com/fwdslsh/fhold/pull/103#issuecomment-6726168329).
+
+## Native AKM web interface
+
+The published `akm-web` **0.10.261113-beta** now joins Assistant's exact image
+pins. Its required CLI matches **0.10.261113-beta**; no extra CLI copy or
+dependency override is needed. The ordinary `akm-web` executable replaces the
+removed `akm ui` command in Admin's session-owned launcher.
+
+Use upstream's JSON readiness message, `desktop_session` bootstrap and native
+HttpOnly cookie. Local access binds the container bridge address. SSH selects
+a loopback port before launch and supplies that exact browser `--origin`, then
+uses the existing native SSH TCP forward. There is no header-rewriting proxy,
+new authentication service, published port or persistent UI daemon.
+
+The image browser smoke covers the published application over direct and
+forwarded TCP routes, authenticated page/reload, token removal from the URL,
+and rejection of unauthenticated, wrong-Host and wrong-Origin requests.
+
+## Validation and deferred work
 
 Local development checks passed: type checks; 1,236 source tests with nine opt-in
 skips; the updated workflow suite (10 tests); lint (existing repository warnings);
@@ -64,7 +91,6 @@ The PR's native image matrix remains the authority for the final image/plugin,
 provider, scheduler, recovery and security checks; local source/browser success
 does not substitute for those gates.
 
-Defer AKM UI integration until the upstream `akm-web` package is published.
 Workspace API changes remain excluded. Native learning, cache-contract and
 offline-marketplace follow-ups remain dependent on AKM issues
 [#1506](https://github.com/itlackey/akm/issues/1506),

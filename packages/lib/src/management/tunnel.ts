@@ -11,7 +11,7 @@ import {
 } from '../control-plane/process.js';
 import type { HostingConnection } from '../hosting/types.js';
 
-async function availablePort(): Promise<number> {
+export async function availablePort(): Promise<number> {
 	const server = createServer();
 	await new Promise<void>((resolve, reject) => {
 		server.once('error', reject);

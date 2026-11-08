@@ -20,7 +20,7 @@ import type {
 	ManagementRequestArgs,
 	ManagementRequestMap
 } from './types.js';
-import { SshTunnel } from './tunnel.js';
+import { availablePort, SshTunnel } from './tunnel.js';
 
 export type ManagementRequest = {
 	id: number;
@@ -48,6 +48,7 @@ export class SshInstanceManagement implements InstanceManagement {
 	private imports = new Map<string, { root: string; source: string }>();
 	private tunnel?: SshTunnel;
 	private knowledgeTunnel?: SshTunnel;
+	private knowledgePort?: Promise<number>;
 	constructor(
 		readonly connection: Extract<HostingConnection, { kind: 'ssh-docker' }>,
 		readonly homeDir: string,
@@ -196,14 +197,16 @@ export class SshInstanceManagement implements InstanceManagement {
 	): Promise<ManagementRequestMap[M]['result']>;
 	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
 		if (method === 'knowledgeUi') {
-			const result = await this.rpc('knowledgeUi');
+			this.knowledgePort ??= availablePort();
+			const port = await this.knowledgePort;
+			const result = await this.rpc('knowledgeUi', { loopbackPort: port });
 			if (this.closing) throw new Error('This instance connection is closed.');
 			const url = new URL(result.url);
-			if (url.protocol !== 'http:' || isIP(url.hostname) !== 4 || !url.port || url.username || url.password)
+			if (url.protocol !== 'http:' || isIP(url.hostname) !== 4 || Number(url.port) !== port || url.pathname !== '/' || !url.searchParams.get('desktop_session') || url.username || url.password)
 				throw new Error('The selected Assistant returned an invalid AKM UI address.');
 			this.knowledgeTunnel ??= new SshTunnel(this.connection);
-			// AKM validates Host against its native listening port. Keep that port
-			// on loopback rather than rewriting headers or bypassing native guards.
+			// The server was started with this exact loopback browser origin.
+			// Preserve native Host, Origin and session-cookie validation end to end.
 			await this.knowledgeTunnel.ensure([{ bind: url.hostname, port: Number(url.port), localPort: Number(url.port) }]);
 			if (this.closing) { await this.knowledgeTunnel.close(); throw new Error('This instance connection is closed.'); }
 			url.hostname = '127.0.0.1';

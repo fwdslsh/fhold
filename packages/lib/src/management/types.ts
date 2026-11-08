@@ -162,7 +162,7 @@ export type ManagementRequestMap = {
 		extra: [];
 	};
 	assistantPassword: { input: undefined; result: { password: string }; extra: [] };
-	knowledgeUi: { input: undefined; result: { url: string }; extra: [] };
+	knowledgeUi: { input: { loopbackPort: number } | undefined; result: { url: string }; extra: [] };
 	credential: {
 		input:
 			| ({ action: 'create' } & CredentialCreateRequest)
