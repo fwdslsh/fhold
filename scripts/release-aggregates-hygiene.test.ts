@@ -319,7 +319,7 @@ describe('release workflows', () => {
 		const scans = images.steps.filter((step) =>
 			step.uses?.startsWith('aquasecurity/trivy-action@')
 		);
-		expect(scans.every((step) => step.with?.version === 'v0.76.1')).toBe(true);
+		expect(scans.every((step) => step.with?.version === 'v0.76.2')).toBe(true);
 		expect(
 			scans.some(
 				(step) =>

@@ -15,7 +15,8 @@ promptly and keeps the selected Assistant's knowledge separate from host-local
 libraries.
 
 Update npm to **12.2.2**, which bundles patched Undici **6.29.1**, and remove
-the three expired runtime image exceptions. Independent source-audit findings
+the three expired runtime image exceptions. Update the image scanner to the
+Trivy **0.76.2** security patch. Independent source-audit findings
 remain tracked in issue #63. Includes the experimental Azure management changes
 from tooling 0.4.1002. Publishing or updating CLI/Admin does not upgrade existing
 instances or change their recovery settings.
