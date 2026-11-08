@@ -13,8 +13,11 @@ No Docker Hub account is needed to pull them.
 
 Publishing uses the repository's Docker Hub credentials and the explicit
 `FH_PUBLICATION_CONFIGURED=true` repository variable. Run the workflow from
-`main` with the stamped version and `dry_run=false` to publish; the default
-dry run builds and validates without publishing. No npm bootstrap package or
+`main` with the stamped version and `dry_run=false` to publish. The default
+dry run builds and validates without publishing release tags, channel aliases or
+release downloads. It can write shared build caches and stage digest-bound
+candidate images in Docker Hub; these are candidate evidence, not a release.
+No npm bootstrap package or
 cross-host publishing bridge is required. Previous local qualification records
 remain historical; each public release must pass its own workflow gates.
 
@@ -69,6 +72,9 @@ Component source/Dockerfile changes run full source tests and that image's two n
 jobs. Lockfile changes follow each consumer's resolved graph; shared inputs and
 uncertain changes retain the affected images or all six jobs. CI orchestration
 changes exercise native gates even when published runtime bytes are unchanged.
+Shared native-pipeline changes retain all six image jobs on a stamped release
+branch, including when publication selects only Assistant or tools. Publication
+scope cannot override that validation requirement.
 See the [check selection table](../technical/testing-workflow.md).
 Publication compares each retained component's source and resolved dependencies
 with its pinned release tag. Missing tags and omitted changed components fail
@@ -458,18 +464,26 @@ Base retargets and divergent bases retain PR merge-result validation. Product CI
 runs on PRs and `release/*` pushes, not on `main` pushes after merge. Direct pushes
 to `main` also do not run product CI; use a PR for pre-merge checks. Publication
 still requires exact-SHA candidate qualification, including for a new merge SHA.
-Their shared workflow conditions prove full source testing even when GitHub
-omits reusable-job step metadata. Tooling reuse needs explicit tooling-test evidence,
+Source quality, image and final binary jobs run concurrently; publication requires
+all selected jobs to pass. Successful image jobs alone do not prove source quality.
+Tooling reuse needs explicit tooling-test evidence,
 or a complete full candidate with successful Admin renderer evidence.
 Partial image matrices, skipped docs/lock-only CI and PR runs cannot qualify a
 full release. Exact-commit CI in progress is awaited instead of duplicated;
 lookup failure stops publication. Absent or invalid candidate evidence runs the
 shared gates in candidate mode. Candidate images include the final version,
-revision, SBOM and provenance, and their OCI graph/rootfs must match the native
-tested image. Final CLI/Admin startup checks run before those files are retained.
-Publication selects exact run/attempt artifact IDs, verifies receipts and hashes,
-promotes unchanged OCI manifests/attestations, signs the combined index and uploads
-the qualified final binaries. It does not rebuild images or application artifacts.
+revision, SBOM and provenance. A local OCI export binds the graph/rootfs to the
+native tested image. Once native checks pass, trusted candidate jobs stage that
+graph in the component's Docker Hub repository using a unique SHA/run/attempt/
+architecture tag. Staging never moves public version or stable/beta channel tags.
+After staging is verified, the local OCI archive is removed. GitHub retains the
+image descriptor and sealed receipt, without the image archive.
+Final CLI/Admin startup checks run before their actual files are retained.
+Publication selects exact run/attempt artifact IDs, verifies receipts/hashes and
+the staged digest-addressed index, then uses Buildx to compose the release index
+from unchanged manifests/attestations. It signs that index and uploads the
+qualified final binaries. It does not rebuild images or application artifacts or
+download/re-upload complete candidate image archives.
 Checksum, feed, signature and download verification remain publication checks.
 A separate dry run is optional. Stamp once before final candidate qualification;
 changed stamped bytes require new evidence, while successful eligible checks are
@@ -483,6 +497,13 @@ and image publication is a separate operation. Registry ownership and publishing
 credentials must be configured before live publication. Verify signing, real
 artifacts and download instructions for every release. The CLI delivers a standalone Linux
 executable, not an npm bootstrap package.
+
+Trusted canonical release pushes and dispatches from `main` or `release/*` share a Docker Hub
+BuildKit cache per component/native architecture across release branches. PR and
+fork builds cannot write registry caches or stage candidates; GitHub Actions
+cache remains available as a fallback. Cache hits are build acceleration, never
+qualification evidence. Measure successful end-to-end runs before claiming a
+release-time improvement.
 
 Release Assistant tests retain native harness/security, browser, core keep-alive,
 provider/scheduler, directory/blob recovery and upgrade checks. Extended idle/unload

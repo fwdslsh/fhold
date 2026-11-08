@@ -3,6 +3,11 @@ set -euo pipefail
 
 image=${1:?usage: smoke-image.sh IMAGE assistant|guardian|portal}
 kind=${2:?usage: smoke-image.sh IMAGE assistant|guardian|portal}
+phase=${3:-all}
+case "$kind:$phase" in
+assistant:all|assistant:cache|assistant:runtime|assistant:activity|assistant:lifecycle|guardian:all|portal:all) ;;
+*) echo 'Unsupported image smoke phase' >&2; exit 1 ;;
+esac
 remote=${FH_SMOKE_REMOTE:-default}
 case "$remote" in default|0|1) ;; *) echo 'FH_SMOKE_REMOTE must be default, 0 or 1' >&2; exit 1 ;; esac
 sandbox=${FH_SMOKE_CODEX_SANDBOX:-workspace-write}
@@ -251,6 +256,7 @@ assistant)
 	# empty mount hides image-layer files; initialization must make assets usable.
 	mkdir -p "$root/akm-cache"
 	chmod a+rwx "$root/akm-cache"
+	if [ "$phase" = all ] || [ "$phase" = cache ]; then
 	docker run -d --name "$container" --network none --read-only \
 		--tmpfs /tmp:rw,mode=1777 --tmpfs /home/fhold:rw,mode=0777 \
 		--tmpfs /etc/akm:rw,mode=0777 --tmpfs /opt/akm/data:rw,mode=0777 \
@@ -302,6 +308,8 @@ assistant)
 		if(previous.modelHash)assert.equal(createHash("sha256").update(readFileSync("/opt/akm/cache/models/Xenova/bge-small-en-v1.5/config.json")).digest("hex"),previous.modelHash);
 		console.log("Existing cache bytes and native symlink preserved through offline restart");'
 	docker rm -f "$container" >/dev/null
+	fi
+	if [ "$phase" = cache ]; then exit 0; fi
 	mkdir -p \
 		"$root/data/.cache/opencode" \
 		"$root/data/.config/opencode" \
@@ -345,6 +353,12 @@ assistant)
 		-v "$root/password:/run/fhold/password:ro" \
 		"$image" >/dev/null
 	wait_for_health
+	if [ "$phase" = activity ]; then
+		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
+		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
+		exit 0
+	fi
+	if [ "$phase" = all ] || [ "$phase" = runtime ]; then
 	verify_runtime_versions
 	docker exec -i "$container" node --input-type=module < scripts/smoke-browser.mjs
 	docker exec -i "$container" node --input-type=module < scripts/smoke-model-picker.mjs
@@ -368,8 +382,10 @@ assistant)
 		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
-	docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
-	docker exec "$container" bun /tmp/smoke-codex-activity.mjs
+	if [ "$phase" = all ]; then
+		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
+		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
+	fi
 	docker cp scripts/smoke-native-akm-policy.mjs "$container:/tmp/smoke-native-akm-policy.mjs"
 	docker exec "$container" bun /tmp/smoke-native-akm-policy.mjs
 	verify_workspace_runtime_boundary
@@ -399,9 +415,12 @@ CONFIG
 	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null
 	verify_builtin_skills without-catalog
 	printf '%s\n' 'Older AKM catalog preserved; native API and built-in skills remain available'
+	fi
+	if [ "$phase" = all ] || [ "$phase" = lifecycle ]; then
 	verify_optional_failure_isolation
 	verify_explicit_remote_modes
 	verify_environment_upgrade
+	fi
 	;;
 guardian)
 	mkdir -p "$root/credentials/owner" "$root/config" "$root/logs" "$root/workspace" "$root/auth"

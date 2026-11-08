@@ -3,9 +3,30 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { changeScope, validationPlan } from './ci-scope.mjs';
+import { changeScope, validationPlan, releaseValidationPlan } from './ci-scope.mjs';
 
 const all = ['assistant', 'guardian', 'portal'];
+test('container README changes do not change shipped runtime inputs', () => {
+	expect(validationPlan(['containers/guardian/README.md'], () => '', () => '')).toEqual({ scope: 'none', images: [], admin: false });
+});
+test('release stamps never reduce validation of changes to shared native gates', () => {
+	for (const scope of ['assistant', 'tools', 'full'])
+		expect(releaseValidationPlan(scope, ['.github/workflows/gates.yml'])).toEqual({
+			scope: 'full',
+			images: all,
+			admin: true
+		});
+	expect(releaseValidationPlan('assistant', ['containers/assistant/tools/package.json'])).toEqual({
+		scope: 'assistant',
+		images: ['assistant'],
+		admin: true
+	});
+	expect(releaseValidationPlan('tools', ['packages/cli/src/main.ts'])).toEqual({
+		scope: 'tools',
+		images: [],
+		admin: true
+	});
+});
 const plan = (files: string[]) =>
 	validationPlan(
 		files,
@@ -40,13 +61,12 @@ test('CI validation and published runtime scope are independent', () => {
 test('docs and lock-only policy cannot suppress runtime Markdown or unknown input checks', () => {
 	for (const files of [['docs/guide.md'], ['bun.lock'], ['bun.lock', 'website/index.html']])
 		expect(plan(files)).toEqual({ scope: 'none', images: [], admin: false });
-	for (const files of [
-		[],
-		['new-build-input'],
-		['bun.lock', 'containers/assistant/Dockerfile']
-	])
+	for (const files of [[], ['new-build-input'], ['bun.lock', 'containers/assistant/Dockerfile']])
 		expect(plan(files).images).toEqual(all);
-	for (const file of ['packages/skeleton/system/assistant/skills/example.md', 'plugins/fhold/prompts/example.md'])
+	for (const file of [
+		'packages/skeleton/system/assistant/skills/example.md',
+		'plugins/fhold/prompts/example.md'
+	])
 		expect(plan([file]).images).toEqual(['assistant']);
 });
 test('Admin qualification includes shared code, embedded Skeleton, helpers and install inputs', () => {
@@ -69,14 +89,12 @@ test('component-owned sources select their images and unknown inputs retain all'
 		admin: false
 	});
 	expect(plan(['containers/portal/Dockerfile']).images).toEqual(['portal']);
-	for (const file of [
-		'bun.lock',
-		'.github/trivy-ignore.yaml',
-		'scripts/smoke-image.sh',
-		'unknown'
-	])
+	for (const file of ['bun.lock', '.github/trivy-ignore.yaml', 'scripts/smoke-image.sh', 'unknown'])
 		expect(plan(['packages/portal/src/slack.ts', file]).images).toEqual(all);
-	expect(plan(['packages/portal/src/slack.ts', 'packages/guardian/src/server.ts']).images).toEqual(['guardian', 'portal']);
+	expect(plan(['packages/portal/src/slack.ts', 'packages/guardian/src/server.ts']).images).toEqual([
+		'guardian',
+		'portal'
+	]);
 	expect(plan(['packages/portal/package.json']).images).toEqual(['portal']);
 	// The ownership proof must be reconsidered if a new consumer imports Portal.
 	for (const packageName of ['lib', 'cli', 'electron', 'guardian', 'claude-desktop']) {
@@ -225,7 +243,13 @@ const workflow = (name: string) =>
 	Bun.YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8')) as Workflow;
 test('native desktop waits for ready PRs and remains manually dispatchable', () => {
 	const yaml = workflow('admin-desktop-native');
-	expect(yaml.on.pull_request.types).toEqual(['opened', 'synchronize', 'reopened', 'ready_for_review', 'edited']);
+	expect(yaml.on.pull_request.types).toEqual([
+		'opened',
+		'synchronize',
+		'reopened',
+		'ready_for_review',
+		'edited'
+	]);
 	expect(Object.hasOwn(yaml.on, 'workflow_dispatch')).toBe(true);
 	expect(yaml.jobs.desktop.if).toContain('!github.event.pull_request.draft');
 });

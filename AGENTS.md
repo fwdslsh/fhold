@@ -212,17 +212,32 @@ packaging until ready. Finish intended changes before that transition. For an
 authorized release, stamp once, push the final SHA to `release/*` first, then use
 that same SHA for the PR so it can await/reuse canonical candidate evidence.
 
+Source quality, image and final binary jobs run concurrently; publication still
+requires all selected jobs to pass. Only trusted canonical `release/*` pushes and
+dispatches from `main` or `release/*` write shared registry build caches or stage
+candidate images. PR/fork jobs may read the cache but must not receive registry
+write credentials. Native tests must match the locally exported OCI graph/rootfs.
+After native checks, stage that exact graph under a unique SHA/run/attempt/arch
+tag and retain the digest-bound descriptor/receipt in GitHub. Promote its exact
+manifests/attestations without rebuilding or downloading/re-uploading image archives.
+A release dry run may write candidate tags and caches, but must not create release
+tags/downloads or move public channels. Candidate tags do not consume release counters.
+
 Release only changed images: use `SCOPE=assistant` for an AKM-only update when
 Guardian, Portal and the extension are unchanged, comma-separated image names for
 other combinations, `tools` for CLI/Admin only, and `full` when all components or
 the extension change. Retain unchanged components' published package versions;
 publication must prove their inputs and resolved dependencies match their release
 tags. Never retag old bytes with a new release number to simulate a component release.
+Publication scope never narrows shared-pipeline validation: changes to the native
+CI pipeline require all six image jobs even for an Assistant-only or tools stamp.
 Keep native architecture, security, browser, scheduler/provider and recovery/upgrade
-checks in the release gates. Extended idle/unload and historical import cases run
-weekly/manually against published images without rebuilding; run those affected
-cases during development when changing their behavior. They are not automatic
-blockers for unrelated dependency releases. Do not add timing claims without measurements.
+checks in the release gates. Release Assistant verification uses three bounded
+lanes with independent cache/runtime/activity/lifecycle fixtures. Extended idle/unload and
+historical import cases run in two endurance lanes weekly/manually against
+published images without rebuilding. Run affected endurance cases during
+development when changing their behavior. They are not automatic blockers for
+unrelated dependency releases. Do not add timing claims without measurements.
 
 Use AKM curate/show before inventing a workflow or unfamiliar configuration;
 record useful feedback. Use strict TypeScript, Web/Node/Bun built-ins and the

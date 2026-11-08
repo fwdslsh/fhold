@@ -25,6 +25,9 @@ Guardian authenticates named credentials or verified OAuth identities, selects
 It exposes MCP at `/mcp`, health and protected-resource metadata. It is not a
 model proxy or arbitrary OpenCode route passthrough. Portal contains Discord
 and Slack adapters and receives only their explicitly needed credential keys.
+Guardian has no separate OpenCode server or AKM installation. It uses Assistant's
+authenticated, tool-free native generation API for suspicious-input moderation;
+provider credentials remain in Assistant.
 
 CLI and Admin call the same host library for install, configuration, credential
 changes and own-backup restore. Per-home locks serialize mutations. Inspection

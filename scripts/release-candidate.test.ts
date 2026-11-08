@@ -6,10 +6,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	assertLoadedImage,
+	assertRegistryImage,
+	candidateTag,
 	candidateKinds,
 	combinedIndex,
 	inspectOCI,
 	publicationAction,
+	promotionBytes,
 	seal,
 	selectArtifacts,
 	verify
@@ -56,7 +59,13 @@ test('candidate selection is exact, complete, immutable and attempt-specific', (
 	expect(selectArtifacts(artifacts(), 'tools', 2)).toHaveLength(3);
 	expect(selectArtifacts(artifacts('assistant'), 'assistant', 2)).toHaveLength(5);
 	expect(() => selectArtifacts(artifacts('assistant'), 'full', 2)).toThrow();
-	expect(() => selectArtifacts(artifacts('assistant').filter((item) => !item.name.endsWith('arm64')), 'assistant', 2)).toThrow();
+	expect(() =>
+		selectArtifacts(
+			artifacts('assistant').filter((item) => !item.name.endsWith('arm64')),
+			'assistant',
+			2
+		)
+	).toThrow();
 	for (const values of [
 		artifacts().slice(1),
 		[...artifacts(), artifacts()[0]],
@@ -185,6 +194,51 @@ test('OCI verification binds platform, config, rootfs, labels and both attestati
 	expect(combinedIndex([info, { ...info, platform: 'linux/arm64' }]).manifests).toHaveLength(4);
 });
 
+test('registry candidates reject mutable refs, wrong repositories and changed descriptor graphs', () => {
+	const info = inspectOCI(ociFixture(), 'linux/amd64', identity);
+	const staged = { ...info, reference: `fwdslsh/fhold-assistant@${info.index}` };
+	const remote = { digest: info.index, manifests: info.descriptors };
+	expect(() => assertRegistryImage(staged, 'assistant', 'amd64', remote)).not.toThrow();
+	for (const reference of [
+		'fwdslsh/fhold-assistant:beta',
+		`other/assistant@${info.index}`,
+		`fwdslsh/fhold-portal@${info.index}`
+	])
+		expect(() =>
+			assertRegistryImage({ ...staged, reference }, 'assistant', 'amd64', remote)
+		).toThrow();
+	expect(() => assertRegistryImage(staged, 'assistant', 'arm64', remote)).toThrow();
+	expect(() =>
+		assertRegistryImage(staged, 'assistant', 'amd64', { ...remote, digest: hash('other') })
+	).toThrow();
+	expect(() =>
+		assertRegistryImage(staged, 'assistant', 'amd64', {
+			...remote,
+			manifests: info.descriptors.slice(0, 1)
+		})
+	).toThrow();
+	expect(candidateTag('assistant', 'amd64', identity)).toBe(
+		`fwdslsh/fhold-assistant:candidate-${identity.sha}-123-2-amd64`
+	);
+	expect(candidateTag('assistant', 'amd64', { ...identity, attempt: 3 })).not.toBe(
+		candidateTag('assistant', 'amd64', identity)
+	);
+	for (const changed of [{ sha: 'main' }, { run: 0 }, { attempt: -1 }])
+		expect(() => candidateTag('assistant', 'amd64', { ...identity, ...changed })).toThrow();
+	const images = [info, { ...info, platform: 'linux/arm64' }];
+	const bytes = JSON.stringify(combinedIndex(images), null, 2);
+	expect(promotionBytes(`${bytes}\n`, images)).toBe(bytes);
+	const reordered = JSON.stringify({
+		...combinedIndex(images),
+		manifests: [...combinedIndex(images).manifests].reverse()
+	});
+	expect(promotionBytes(`${reordered}\n`, images)).toBe(reordered);
+	expect(() => promotionBytes(bytes, images)).toThrow();
+	expect(() =>
+		promotionBytes(`${JSON.stringify({ ...combinedIndex(images), manifests: [] })}\n`, images)
+	).toThrow();
+});
+
 test('full native success alone cannot qualify missing, failed or preview final artifacts', () => {
 	const now = Date.now();
 	const run = {
@@ -306,6 +360,32 @@ test('publication only promotes exact candidate IDs; ordinary PR gates do not ex
 	expect(gates.jobs.cli.if).toBe('inputs.candidate');
 	expect(gates.jobs.admin.if).toBe('inputs.candidate');
 	expect(gates.permissions).toEqual({ contents: 'read' });
+	for (const job of ['images', 'cli', 'admin']) expect(gates.jobs[job].needs).toBeUndefined();
+	const registry = gates.jobs.images.steps.find((step: any) => step.id === 'registry');
+	const expression = registry.env.TRUSTED.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
+	const trusted = (candidate: boolean, event: string, ref: string, repository = 'fwdslsh/fhold') =>
+		Function(
+			'inputs',
+			'github',
+			'startsWith',
+			`return (${expression})`
+		)({ candidate }, { repository, event_name: event, ref }, (s: string, prefix: string) =>
+			s.startsWith(prefix)
+		);
+	expect(trusted(true, 'push', 'refs/heads/release/test')).toBe(true);
+	expect(trusted(true, 'workflow_dispatch', 'refs/heads/main')).toBe(true);
+	for (const [event, ref, repository] of [
+		['pull_request', 'refs/pull/1/merge', 'fwdslsh/fhold'],
+		['push', 'refs/heads/main', 'fwdslsh/fhold'],
+		['push', 'refs/heads/release/test', 'fork/fhold'],
+		['workflow_dispatch', 'refs/heads/feature', 'fwdslsh/fhold']
+	])
+		expect(trusted(true, event, ref, repository)).toBe(false);
+	expect(trusted(false, 'push', 'refs/heads/release/test')).toBe(false);
+	const login = gates.jobs.images.steps.find((step: any) =>
+		step.uses?.startsWith('docker/login-action@')
+	);
+	expect(login.if).toBe("steps.registry.outputs.trusted == 'true'");
 	expect(
 		gates.jobs.quality.steps.find(
 			(step: { name?: string }) => step.name === 'Qualify the Admin renderer in Chromium'
@@ -328,6 +408,15 @@ test('publication only promotes exact candidate IDs; ordinary PR gates do not ex
 	expect(build.with.push).toBe(false);
 	expect(build.with.outputs).toContain("inputs.candidate && format('type=oci");
 	expect(build.with.provenance).toContain("inputs.candidate && 'mode=max'");
+	expect(build.with['cache-from']).toContain('type=registry,ref=fwdslsh/fhold-');
+	expect(build.with['cache-to']).toContain("steps.registry.outputs.trusted == 'true'");
+	const staging = gates.jobs.images.steps.find((step: any) =>
+		step.run?.includes('release-candidate.mjs stage')
+	);
+	expect(staging.if).toBe('inputs.candidate');
+	expect(gates.jobs.images.steps.indexOf(staging)).toBeGreaterThan(
+		gates.jobs.images.steps.findIndex((step: any) => step.run?.includes('smoke-assistant-ci.mjs'))
+	);
 	for (const job of Object.values(release.jobs) as Array<{
 		steps?: Array<{ uses?: string; run?: string }>;
 	}>)
@@ -350,13 +439,25 @@ test('publication only promotes exact candidate IDs; ordinary PR gates do not ex
 });
 
 test('publication continues after reused gates are skipped but refuses failed prerequisites', () => {
-	const release = Bun.YAML.parse(readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')) as any;
+	const release = Bun.YAML.parse(
+		readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
+	) as any;
 	const expression = release.jobs.images.if.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
 	// GitHub implicitly adds success() unless an explicit status function exists.
 	const canPublish = (validate: string, candidates: string, scope: string, cancelled = false) => {
 		if (!/\b(?:always|cancelled|success|failure)\(/.test(expression)) return false; // skipped ancestor
-		return Function('needs', 'cancelled', `return (${expression})`)(
-			{ validate: { result: validate, outputs: { scope, images: scope === 'tools' ? '[]' : '["assistant"]' } }, candidates: { result: candidates } },
+		return Function(
+			'needs',
+			'cancelled',
+			`return (${expression})`
+		)(
+			{
+				validate: {
+					result: validate,
+					outputs: { scope, images: scope === 'tools' ? '[]' : '["assistant"]' }
+				},
+				candidates: { result: candidates }
+			},
 			() => cancelled
 		);
 	};
@@ -371,13 +472,30 @@ test('publication continues after reused gates are skipped but refuses failed pr
 	const source = steps.find((step: any) => step.id === 'source');
 	for (const selected of ['', 'b'.repeat(40)]) {
 		const output = join(temporary(), 'source-output');
-		execFileSync('bash', ['-e', '-c', source.run], { env: { ...process.env, CANDIDATE_SHA: selected, GITHUB_SHA: 'a'.repeat(40), GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: join(temporary(), 'summary') } });
+		execFileSync('bash', ['-e', '-c', source.run], {
+			env: {
+				...process.env,
+				CANDIDATE_SHA: selected,
+				GITHUB_SHA: 'a'.repeat(40),
+				GITHUB_OUTPUT: output,
+				GITHUB_STEP_SUMMARY: join(temporary(), 'summary')
+			}
+		});
 		expect(readFileSync(output, 'utf8')).toBe(`sha=${selected || 'a'.repeat(40)}\n`);
 	}
 	for (const invalid of ['main', 'abc', 'a'.repeat(41), 'A'.repeat(40)])
-		expect(() => execFileSync('bash', ['-e', '-c', source.run], { env: { ...process.env, CANDIDATE_SHA: invalid }, stdio: 'pipe' })).toThrow();
-	const guard = steps.find((step: any) => step.name === 'Require retained qualification for an explicitly selected source');
-	expect(guard.if).toBe("inputs.candidate_sha != '' && steps.qualification.outputs.reused != 'true'");
+		expect(() =>
+			execFileSync('bash', ['-e', '-c', source.run], {
+				env: { ...process.env, CANDIDATE_SHA: invalid },
+				stdio: 'pipe'
+			})
+		).toThrow();
+	const guard = steps.find(
+		(step: any) => step.name === 'Require retained qualification for an explicitly selected source'
+	);
+	expect(guard.if).toBe(
+		"inputs.candidate_sha != '' && steps.qualification.outputs.reused != 'true'"
+	);
 	expect(guard.run).toContain('exit 1');
 	expect(release.jobs.validate.outputs.source_sha).toBe('${{ steps.source.outputs.sha }}');
 	for (const name of ['candidates', 'release'])
@@ -386,9 +504,15 @@ test('publication continues after reused gates are skipped but refuses failed pr
 	// Only the publisher code follows the trusted workflow revision.
 	expect(release.jobs.images.steps[0].with.ref).toBe('${{ github.sha }}');
 	for (const name of ['images', 'release']) {
-		const command = release.jobs[name].steps.find((step: any) => step.run?.includes('scripts/release-candidate.mjs'));
+		const command = release.jobs[name].steps.find((step: any) =>
+			step.run?.includes('scripts/release-candidate.mjs')
+		);
 		expect(command.run).toStartWith('GITHUB_SHA="$RELEASE_SOURCE_SHA" ');
 		expect(command.env.RELEASE_SOURCE_SHA).toBe('${{ needs.validate.outputs.source_sha }}');
 	}
-	expect(release.jobs.release.steps.find((step: any) => step.name === 'Publish the verified GitHub release').env.RELEASE_SHA).toBe('${{ needs.validate.outputs.source_sha }}');
+	expect(
+		release.jobs.release.steps.find(
+			(step: any) => step.name === 'Publish the verified GitHub release'
+		).env.RELEASE_SHA
+	).toBe('${{ needs.validate.outputs.source_sha }}');
 });

@@ -15,7 +15,11 @@ from the library manifest; the Skeleton and Claude Desktop manifests retain the
 last published runtime and extension versions. Tooling-only releases preserve
 those image/download defaults and run tooling/artifact gates, not unchanged
 container gates. Runtime source or runtime dependency-resolution changes require
-a full release. Tooling-only dependency changes may rehoist unchanged packages;
+qualification and publication of each affected image on both native architectures.
+Scoped releases retain unchanged components' published versions and prove their
+inputs and resolved dependencies match their individual release tags. A full
+release advances all components and is required when the extension changes.
+Tooling-only dependency changes may rehoist unchanged packages;
 compare non-tooling consumers' resolved dependencies rather than lockfile paths.
 
 ## Primary product rule

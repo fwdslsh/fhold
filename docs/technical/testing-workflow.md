@@ -41,24 +41,35 @@ their before/after commits). Missing or unreadable diffs select all checks.
 Mixed lock changes use the dependency graph, including workspace, peer, optional
 and integrity edges; runtime changes select affected consumers. CI validation scope is
 separate from publication scope: editing orchestration exercises the native gates
-without requiring publication of unchanged container bytes. A full release still
+without requiring publication of unchanged container bytes. Shared native-pipeline
+changes require all six image jobs, even when the stamped publication scope is
+Assistant-only or tools. A full release still
 requires all six native image jobs on its exact final SHA. Partial or skipped CI
 cannot qualify it; the release workflow runs missing full qualification itself.
 Scoped releases require the two native jobs for each selected image and prove
 unselected source/dependency inputs match their published release tags. Draft PRs
 run source checks while deferring image builds and desktop packaging until ready.
 
-Assistant verification uses two lanes with separate disposable fixtures. Startup,
-security and native harness coverage runs once, with additional small explicit-on
+Source quality runs concurrently with image and final binary jobs; publication
+requires every selected job to pass. Trusted candidates reuse a shared registry
+build cache and stage tested images by digest. Neither a cache hit nor a staged
+image substitutes for complete candidate qualification.
+
+Assistant release verification uses three bounded lanes with separate disposable
+fixtures. Cache, runtime, activity and lifecycle smoke cases can run independently;
+the unchanged Codex activity observer has its own fixture rather than extending
+the runtime suite. The default full startup smoke still runs all four phases. Security
+and native harness coverage remains required, with additional small explicit-on
 and explicit-off startup assertions. Keepalive and quiet-work observation periods
 are unchanged for the core checks. The remaining workload, policy, provider/Guardian/scheduler,
 directory/Blob recovery and both upgrade cases remain required. Each suite gets a
-log and timing; failures wait for the other lane and make the job fail. Cancellation
+log and timing; failures wait for the other lanes and make the job fail. Cancellation
 terminates the process groups; GitHub disposes the isolated runner and its Docker
 fixtures. Failed/cancelled jobs never qualify a release. Local runs should use a
 disposable Docker host if interruption could prevent suite cleanup.
 Extended unload/disable observation windows and historical import fixtures run in
-the weekly/manual endurance workflow against published images, without builds.
+the weekly/manual endurance workflow against published images, without builds,
+using two lanes.
 Use `--endurance` with the lane runner to exercise them locally. Run these cases
 for relevant behavior changes; they do not automatically block unrelated releases.
 
@@ -137,4 +148,5 @@ verify upstream v1-to-v2 history and credential migration on private copies.
 Release gates must run image cases, not silently skip them. Real provider,
 MCP/portal, scheduling and all three AKM harness checks are separate integration
 evidence; mocked tests cannot certify them. Record exact commands/results,
-skips and prerequisites. Windows/macOS native packaging remains deferred.
+skips and prerequisites. Windows/macOS preview packaging has separate native
+checks; public distribution, signing and update feeds remain unqualified.

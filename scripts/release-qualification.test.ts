@@ -27,7 +27,12 @@ test('only a same-repository PR containing the current base can reuse exact head
 	])
 		expect(pullRequestCandidate({ ...event, ...changed }, () => true)).toBeNull();
 	expect(pullRequestCandidate(event, () => false)).toBeNull();
-	expect(pullRequestCandidate({ ...event, pull_request: { head: { ...head, ref: 'feature' }, base } }, () => true)).toBe(head.sha);
+	expect(
+		pullRequestCandidate(
+			{ ...event, pull_request: { head: { ...head, ref: 'feature' }, base } },
+			() => true
+		)
+	).toBe(head.sha);
 });
 
 const now = Date.now();
@@ -189,7 +194,7 @@ test('sparse reusable-job steps require the complete native full-scope evidence'
 	).toBe(false);
 });
 
-test('native image success proves the same full-scope source-test condition', () => {
+test('parallel native images retain the same full-scope condition and independent source gate', () => {
 	const gates = Bun.YAML.parse(
 		readFileSync(new URL('../.github/workflows/gates.yml', import.meta.url), 'utf8')
 	) as {
@@ -198,7 +203,7 @@ test('native image success proves the same full-scope source-test condition', ()
 			images: { if: string; needs: string };
 		};
 	};
-	expect(gates.jobs.images.needs).toBe('quality');
+	expect(gates.jobs.images.needs).toBeUndefined();
 	expect(gates.jobs.images.if).toContain("inputs.scope != 'tools'");
 	expect(gates.jobs.quality.steps.find((step) => step.name === 'Test active packages')?.if).toBe(
 		"inputs.scope != 'tools'"

@@ -10,7 +10,7 @@ const suite = (name: string, script: string, timeoutMs = 5000) => ({
 	command: [process.execPath, '-e', script],
 	timeoutMs
 });
-test('both lanes finish and persist evidence for every successful suite', async () => {
+test('three lanes finish and persist evidence for every successful suite', async () => {
 	const directory = fixture();
 	try {
 		const result = await runLanes(
@@ -19,13 +19,14 @@ test('both lanes finish and persist evidence for every successful suite', async 
 					suite('first', 'console.log("first evidence")'),
 					suite('second', 'console.log("second evidence")')
 				],
-				[suite('parallel', 'setTimeout(() => console.log("parallel evidence"), 50)')]
+				[suite('parallel', 'setTimeout(() => console.log("parallel evidence"), 50)')],
+				[suite('third', 'console.log("third evidence")')]
 			],
 			{ directory }
 		);
-		expect(result).toHaveLength(3);
+		expect(result).toHaveLength(4);
 		expect(JSON.parse(readFileSync(join(directory, 'timings.json'), 'utf8')).passed).toBe(true);
-		for (const name of ['first', 'second', 'parallel'])
+		for (const name of ['first', 'second', 'parallel', 'third'])
 			expect(readFileSync(join(directory, `${name}.log`), 'utf8')).toContain(`${name} evidence`);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
@@ -88,9 +89,9 @@ test('timeout and cancellation wait for process-group cleanup and cannot produce
 		}
 	}
 }, 10000);
-test('suite inventory retains every native acceptance family and runs the full startup smoke once', () => {
+test('suite inventory partitions startup coverage across independent fixtures without dropping acceptance families', () => {
 	const lanes = assistantLanes('fixture-image', 'native-image');
-	expect(lanes).toHaveLength(2);
+	expect(lanes).toHaveLength(3);
 	const suites = lanes.flat();
 	expect(
 		suites
@@ -103,17 +104,37 @@ test('suite inventory retains every native acceptance family and runs the full s
 		'keepalive',
 		'native-policy',
 		'providers-guardian-scheduler',
-		'startup-security-native-harnesses',
+		'startup-activity',
+		'startup-cache',
+		'startup-lifecycle',
+		'startup-runtime',
 		'upgrade-empty',
 		'upgrade-surviving',
 		'workload'
 	]);
-	expect(suites.filter((item) => item.command.includes('scripts/smoke-image.sh'))).toHaveLength(1);
+	expect(
+		suites
+			.filter((item) => item.command.includes('scripts/smoke-image.sh'))
+			.map((item) => item.command.at(-1))
+			.sort()
+	).toEqual(['activity', 'cache', 'lifecycle', 'runtime']);
+	const upgrades = lanes.find((lane) => lane.some((item) => item.name === 'upgrade-source'))!;
+	expect(upgrades.findIndex((item) => item.name === 'upgrade-source')).toBeLessThan(
+		upgrades.findIndex((item) => item.name === 'upgrade-empty')
+	);
+	expect(upgrades.findIndex((item) => item.name === 'upgrade-empty')).toBeLessThan(
+		upgrades.findIndex((item) => item.name === 'upgrade-surviving')
+	);
 	expect(
 		suites.find((item) => item.name === 'upgrade-surviving')?.env.FH_RECOVERY_TEST_SURVIVING_HOME
 	).toBe('1');
 	const endurance = assistantLanes('fixture-image', 'native-image', 'endurance').flat();
-	expect(endurance.map((item) => item.name)).toEqual(['history-v1-source', 'history-v2-source', 'history', 'keepalive']);
+	expect(endurance.map((item) => item.name)).toEqual([
+		'history-v1-source',
+		'history-v2-source',
+		'history',
+		'keepalive'
+	]);
 	expect(endurance.find((item) => item.name === 'keepalive')?.command).toContain('--endurance');
 	expect(suites.find((item) => item.name === 'keepalive')?.command).not.toContain('--endurance');
 	expect(endurance.find((item) => item.name === 'history')?.env.FH_HISTORY_V2_SOURCE_IMAGE).toBe(

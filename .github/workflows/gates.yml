@@ -15,6 +15,11 @@ on:
       draft:
         type: boolean
         default: false
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -102,7 +107,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p "${RUNNER_TEMP}/extension-candidate"
-          cp "packages/claude-desktop/artifacts/fhold-claude-desktop-${VERSION}.mcpb" "${RUNNER_TEMP}/extension-candidate/"
+          extension_version=$(node -p 'require("./packages/claude-desktop/package.json").version')
+          cp "packages/claude-desktop/artifacts/fhold-claude-desktop-${extension_version}.mcpb" "${RUNNER_TEMP}/extension-candidate/"
           bun scripts/release-candidate.mjs seal "${RUNNER_TEMP}/extension-candidate" mcpb
       - uses: actions/upload-artifact@v7.0.2
         if: inputs.candidate && inputs.scope == 'full'
@@ -115,7 +121,6 @@ jobs:
   images:
     if: inputs.scope != 'tools' && inputs.images != '[]' && !inputs.draft
     name: Build ${{ matrix.image }} (${{ matrix.platform }})
-    needs: quality
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -130,6 +135,23 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
+      - id: version
+        run: echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+      - id: registry
+        name: Select trusted registry writes
+        env:
+          TRUSTED: ${{ inputs.candidate && github.repository == 'fwdslsh/fhold' && ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')) || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))) }}
+        run: |
+          echo "trusted=$TRUSTED" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.candidate }}" = true ] && [ "$TRUSTED" != true ]; then
+            echo 'Registry candidates require a trusted release push or dispatch' >&2
+            exit 1
+          fi
+      - uses: docker/login-action@v4.7.0
+        if: steps.registry.outputs.trusted == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Assert native architecture for runtime tests
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -157,17 +179,19 @@ jobs:
           load: true
           push: false
           tags: fhold/${{ matrix.image }}:ci
-          build-args: ${{ format('{0}={1}', matrix.image == 'guardian' && 'GUARDIAN_VERSION' || 'PLATFORM_VERSION', inputs.candidate && needs.quality.outputs.version || 'ci') }}
+          build-args: ${{ format('{0}={1}', matrix.image == 'guardian' && 'GUARDIAN_VERSION' || 'PLATFORM_VERSION', inputs.candidate && steps.version.outputs.version || 'ci') }}
           labels: ${{ inputs.candidate && format('org.opencontainers.image.revision={0}', github.sha) || '' }}
           provenance: ${{ inputs.candidate && 'mode=max' || 'false' }}
           sbom: ${{ inputs.candidate }}
           outputs: ${{ inputs.candidate && format('type=oci,dest={0}/candidate/image.tar', runner.temp) || '' }}
-          cache-from: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
-          cache-to: type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }},mode=max
+          cache-from: |
+            type=registry,ref=fwdslsh/fhold-${{ matrix.image }}:buildcache-${{ runner.arch }}
+            type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: ${{ steps.registry.outputs.trusted == 'true' && format('type=registry,ref=fwdslsh/fhold-{0}:buildcache-{1},mode=max', matrix.image, runner.arch) || format('type=gha,scope=fhold-{0}-{1},mode=max', matrix.image, matrix.platform) }}
       - name: Bind the OCI candidate to the tested image
         if: inputs.candidate
         env:
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           COMPONENT: ${{ matrix.image }}
           PLATFORM: ${{ matrix.platform }}
         run: node scripts/release-candidate.mjs image "${RUNNER_TEMP}/candidate" "${COMPONENT}" "${PLATFORM}"
@@ -221,7 +245,7 @@ jobs:
       - name: Install locked workspace for native history verification
         if: matrix.image == 'assistant'
         run: bun install --frozen-lockfile
-      - name: Verify all native Assistant suites in two isolated lanes
+      - name: Verify all native Assistant suites in three isolated lanes
         if: matrix.image == 'assistant'
         env:
           FH_CI_LOG_DIR: ${{ runner.temp }}/assistant-smokes
@@ -237,10 +261,12 @@ jobs:
       - name: Seal the successfully qualified image candidate
         if: inputs.candidate
         env:
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           COMPONENT: ${{ matrix.image }}
           PLATFORM: ${{ matrix.platform }}
-        run: node scripts/release-candidate.mjs seal "${RUNNER_TEMP}/candidate" "image-${COMPONENT}-${PLATFORM#linux/}"
+        run: |
+          node scripts/release-candidate.mjs stage "${RUNNER_TEMP}/candidate" "${COMPONENT}" "${PLATFORM#linux/}"
+          node scripts/release-candidate.mjs seal "${RUNNER_TEMP}/candidate" "image-${COMPONENT}-${PLATFORM#linux/}"
       - uses: actions/upload-artifact@v7.0.2
         if: inputs.candidate
         with:
@@ -253,7 +279,6 @@ jobs:
   cli:
     if: inputs.candidate
     name: Build CLI ${{ matrix.asset }}
-    needs: quality
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -267,6 +292,8 @@ jobs:
             asset: fhold-cli-linux-arm64
     steps:
       - uses: actions/checkout@v7.0.1
+      - id: version
+        run: echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.4
@@ -276,7 +303,7 @@ jobs:
         shell: bash
         env:
           ASSET: ${{ matrix.asset }}
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           arch="$(node -p 'process.arch')"
           case "${ASSET}" in
@@ -290,7 +317,7 @@ jobs:
         run: node scripts/smoke-management-helper.mjs
       - name: Seal the qualified CLI candidate
         env:
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           ASSET: ${{ matrix.asset }}
         run: |
           mkdir -p "${RUNNER_TEMP}/cli-candidate"
@@ -306,7 +333,6 @@ jobs:
   admin:
     if: inputs.candidate
     name: Build optional admin for ${{ matrix.platform }}
-    needs: quality
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -317,6 +343,8 @@ jobs:
             script: build:linux
     steps:
       - uses: actions/checkout@v7.0.1
+      - id: version
+        run: echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.4
@@ -324,11 +352,11 @@ jobs:
       - run: bun run --cwd packages/electron ${{ matrix.script }}
       - name: Smoke the fresh native Admin package
         env:
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: node scripts/smoke-admin-artifact.mjs
       - name: Seal the qualified Admin candidate
         env:
-          VERSION: ${{ needs.quality.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p "${RUNNER_TEMP}/admin-candidate"
           cp packages/electron/dist/packages/*.AppImage packages/electron/dist/packages/latest-linux*.yml "${RUNNER_TEMP}/admin-candidate/"

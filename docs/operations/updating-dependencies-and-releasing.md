@@ -153,8 +153,11 @@ in [the release runbook](release.md). Recheck whether upstream has fixed them.
 Only the existing approved scope may be ignored; new findings require resolution
 or an explicit review. Runtime image scans remain separate.
 
-Build all three images from the changed lockfile. Use unique local tags and
-`ci` metadata for development qualification; published version tags are immutable.
+Build the affected images for focused development checks, using their resolved
+dependency graphs to determine scope. The commands below are the full inventory;
+run the cases relevant to the change, then use canonical candidate CI for the
+required native architecture coverage. Use unique local tags and `ci` metadata;
+published version tags are immutable.
 
 ```sh
 docker build --pull -f containers/assistant/Dockerfile \
@@ -208,11 +211,19 @@ when changing the Claude Desktop extension). The tooling version always advances
 unchanged image/extension versions remain at their last published releases.
 Publication compares retained components with their individual release tags and
 refuses omitted changes, including shared transitive dependency changes.
+Shared native-pipeline changes still require all six image jobs, regardless of
+the stamped publication scope; unchanged images are validated without publishing
+new versions for them.
 
 Keep the PR draft while iterating. Source checks run, but image builds and desktop
 packaging wait until ready. Chromium/system-library installation has its own
 Docker cache boundary based on the locked Playwright packages; changing AKM alone
-does not invalidate it. Caches accelerate builds and never replace final checks.
+does not invalidate it. Trusted canonical release pushes and release workflow
+dispatches from `main` or `release/*` write a shared Docker Hub build cache per
+image and native architecture,
+so a new release branch can reuse layers from previous releases. PR and fork builds
+do not write registry caches or stage candidates; their GitHub Actions cache remains
+a fallback. Caches accelerate builds and never replace final checks.
 
 For 0.3, use `X.Y.YYMMNN-beta` (or alpha/rc/stable), retaining its counter 00–99.
 Starting at 0.4, drop the year prefix: use `X.Y.MMNN[-alpha|-beta|-rc]`, for
@@ -271,9 +282,9 @@ Push the stamped candidate to a canonical `release/*` branch and wait for that
 exact commit's GitHub CI to pass. Release validation can reuse this canonical
 push run for 24 hours, checking the SHA, workflow, successful quality job,
 both native jobs for each selected image, final CLI/Admin jobs and complete candidate artifacts.
-Those images require successful quality and run
-under the same full-scope condition as the source tests. Their complete success
-also proves full scope when GitHub omits reusable-job step metadata. Tooling
+Source checks run concurrently with image and binary jobs. Every required job must
+pass before publication; an image build or staged digest alone is not qualification.
+Tooling
 reuse needs explicit tooling-test evidence, or a complete full candidate with
 the successful Admin renderer check; version-only root stamps commonly select
 that full candidate. Fork/PR runs, different commits, stale runs,
@@ -296,15 +307,22 @@ cover them. Product CI does not run again after merging to `main`. Direct `main`
 pushes also do not trigger product CI; use a PR for pre-merge checks. Publication
 of a different merge SHA still requires its own exact-SHA candidate qualification.
 
-Candidate mode retains final-version OCI archives with SBOM/provenance and the
-actual final CLI/Admin/MCPB files. Native tests run the image from the same build;
-its OCI graph and rootfs are checked before qualification. Publication downloads
-immutable artifact IDs from the selected run/attempt, verifies receipts/hashes,
-copies the exact OCI manifests and attestations, and signs the combined index.
-It uploads the retained binaries without rebuilding. Ordinary PR checks keep
-their existing fast image path. Only explicit `release/*` candidate
-pushes and release-workflow fallback gates pay that cost. Partial component CI
-cannot qualify a full release.
+Candidate mode exports an OCI archive locally with the final version, revision,
+SBOM and provenance. Native tests run the image from the same build; its OCI graph
+and rootfs are checked before qualification. After native checks pass, the trusted
+candidate job stages that graph in the component's Docker Hub repository under a
+unique SHA/run/attempt/architecture tag. Staging does not publish a release tag or
+move a stable/beta channel. After staging is verified, the local OCI archive is
+removed. GitHub retains only the image descriptor and sealed receipt for each
+staged image, plus the actual final CLI/Admin/MCPB files.
+
+Publication downloads immutable artifact IDs from the selected run/attempt and
+verifies receipts and hashes. It validates the staged index by digest and uses
+Buildx to compose the final multi-architecture index from those exact manifests
+and attestations, then signs it. It does not download and re-upload image archives.
+The retained binaries are uploaded without rebuilding. Ordinary PR checks keep
+their existing local image path; only trusted candidate jobs stage registry
+images. Partial component CI cannot qualify a full release.
 Caches only accelerate builds and never substitute for qualified artifacts.
 
 Essential native security/browser, scheduler/provider, core keep-alive and recovery/
@@ -315,13 +333,22 @@ cases during development when changing those behaviors. To investigate a release
 image, dispatch that workflow with its immutable version tag; unrelated releases
 do not wait for scheduled endurance work.
 
+Release Assistant suites use three bounded lanes, including independent cache,
+runtime, activity and lifecycle fixtures. The Codex activity observer retains its
+existing checks in its own fixture. Source/image overlap, shared caching and registry
+promotion reduce repeated work; actual savings depend on cache hits, runner load
+and the affected components. Record measured job timings rather than promising a
+fixed release duration.
+
 Keep development regression, final candidate qualification and publication
 integrity checks distinct. Reuse eligible successful evidence unless relevant
 inputs changed or a concrete failure requires a rerun; preserve owner-approved
 coverage exclusions. Once the published-artifact checklist below passes, finish
 and report. Optional diagnostics do not add blockers or prolong release closeout.
 
-A separate nonpublishing run is optional when artifact inspection is needed:
+A separate dry run is optional when artifact inspection is needed. It does not
+publish release tags, channel aliases or downloads, but trusted candidate builds
+can write shared registry caches and stage candidate images:
 
 ```sh
 gh workflow run release.yml --repo fwdslsh/fhold --ref release/your-candidate \

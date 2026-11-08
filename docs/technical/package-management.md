@@ -11,8 +11,10 @@ Native Node.js 22.12 or newer is required for Electron developer/build tooling;
 do not use a shell alias or compatibility shim in place of the native binary.
 
 Exact tool versions belong in `package.json`, the image tools manifests and
-Dockerfiles. Assistant/Guardian OpenCode pins must match. AKM native integration
-is installed at image build, not startup; runtime trust stays explicit.
+Dockerfiles. Keep Assistant's OpenCode CLI and the OpenCode client/plugin SDKs
+compatible; Guardian uses the client SDK to call Assistant and has no separate
+OpenCode server or AKM installation. AKM and its native integrations are installed
+in Assistant at image build, not startup; runtime trust stays explicit.
 
 ```bash
 bun install --frozen-lockfile
