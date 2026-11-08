@@ -222,6 +222,12 @@ type Workflow = {
 };
 const workflow = (name: string) =>
 	Bun.YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8')) as Workflow;
+test('native desktop qualifies drafts without repeating an unchanged ready transition', () => {
+	const yaml = workflow('admin-desktop-native');
+	expect(yaml.on.pull_request.types).toEqual(['opened', 'synchronize', 'reopened', 'edited']);
+	expect(Object.hasOwn(yaml.on, 'workflow_dispatch')).toBe(true);
+	expect(yaml.jobs.desktop.if).toBe("needs.scope.outputs.admin == 'true'");
+});
 test('product CI runs before merge and for release candidates, never on a main push', () => {
 	const yaml = workflow('ci');
 	expect(yaml.on.pull_request.types).toEqual([

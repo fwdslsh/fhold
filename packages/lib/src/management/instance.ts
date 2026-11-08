@@ -278,7 +278,7 @@ export function localInstanceManagement(
 		providerOAuthFinish: (value) => agent.oauthFinish(value),
 		readiness: (value) => agent.readiness(value),
 		assistantPassword: () => agent.password(),
-		knowledgeUi: () => knowledgeUi.open(),
+		knowledgeUi: (input) => knowledgeUi.open(input),
 		credential: async (value) => {
 			const current = state();
 			if (value.action === 'create')

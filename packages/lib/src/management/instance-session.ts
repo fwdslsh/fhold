@@ -500,7 +500,7 @@ export function rpcManagementBindings(
 		data: {
 			knowledgeUi: operation('knowledgeUi', async () => {
 				lifetime.signal.throwIfAborted();
-				const result = await manager.call('knowledgeUi');
+				const result = await manager.call('knowledgeUi', undefined);
 				lifetime.signal.throwIfAborted();
 				return result;
 			}),

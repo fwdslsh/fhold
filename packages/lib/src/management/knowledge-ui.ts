@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { get } from 'node:http';
 import { isIP } from 'node:net';
 import { buildComposeOptions } from '../control-plane/compose.js';
 import {
@@ -15,7 +16,7 @@ import { requireInstall } from '../control-plane/state.js';
 // stdin is the management session's lifetime. EOF (including SSH disconnect)
 // stops only this native UI child. No detached daemon, PID file or startup edit.
 const UI_COMMAND =
-	'akm ui --host 0.0.0.0 --no-open & pid=$!; trap \'kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null\' EXIT; read -r _';
+	'command -v "$1" >/dev/null || exit 127; "$@" & pid=$!; trap \'kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null\' EXIT; read -r _';
 
 /** Explicit, session-owned access to the selected Linux Docker Assistant's AKM. */
 export class KnowledgeUi {
@@ -23,12 +24,13 @@ export class KnowledgeUi {
 	private opening?: Promise<{ url: string }>;
 	private closed = false;
 	private url?: string;
+	private origin?: string;
 	constructor(private readonly homeDir: string) {}
 
-	async open(): Promise<{ url: string }> {
+	async open(input?: { loopbackPort: number }): Promise<{ url: string }> {
 		if (this.closed) throw new Error('This instance session is closed. Open it again.');
 		if (this.opening) return this.opening;
-		this.opening = this.start();
+		this.opening = this.start(input);
 		try {
 			return await this.opening;
 		} finally {
@@ -36,7 +38,7 @@ export class KnowledgeUi {
 		}
 	}
 
-	private async start(): Promise<{ url: string }> {
+	private async start(input?: { loopbackPort: number }): Promise<{ url: string }> {
 		if (this.child && this.url) {
 			try {
 				await this.probe(new URL(this.url));
@@ -93,7 +95,22 @@ export class KnowledgeUi {
 				'AKM UI requires a reachable Linux Docker bridge. Host-network and Docker Desktop instances are not supported.'
 			);
 		if (this.closed) throw new Error('This instance session is closed. Open it again.');
-		const child = await spawnDocker(['exec', '-i', id, 'sh', '-c', UI_COMMAND]);
+		const browserOrigin = input ? `http://127.0.0.1:${input.loopbackPort}` : undefined;
+		const child = await spawnDocker([
+			'exec',
+			'-i',
+			id,
+			'sh',
+			'-c',
+			UI_COMMAND,
+			'sh',
+			'akm-web',
+			'--host',
+			address,
+			...(input && browserOrigin
+				? ['--port', String(input.loopbackPort), '--origin', browserOrigin]
+				: [])
+		]);
 		this.child = child;
 		child.stdin.on('error', () => {
 			/* Exit/startup handles the failure. */
@@ -104,16 +121,14 @@ export class KnowledgeUi {
 				this.url = undefined;
 			}
 		});
-		let unavailable = false;
 		try {
 			const native = await new Promise<URL>((resolve, reject) => {
 				let output = '';
-				let diagnostics = '';
 				const timer = setTimeout(
 					() =>
 						reject(
 							new Error(
-								'AKM UI did not start. Check that this Assistant includes a working akm ui command.'
+								'AKM UI did not start. Update the Assistant to an image containing akm-web.'
 							)
 						),
 					15_000
@@ -126,37 +141,36 @@ export class KnowledgeUi {
 				};
 				child.once('error', fail);
 				child.once('close', fail);
-				child.stderr.on('data', (chunk) => {
-					// Consume only the native error code; private diagnostics never leave
-					// this process. New AKM releases replaced `akm ui` with Desktop.
-					diagnostics = (diagnostics + String(chunk)).slice(-8192);
-					try {
-						if (JSON.parse(diagnostics).code !== 'UNKNOWN_COMMAND') return;
-						unavailable = true;
-						fail();
-					} catch {
-						/* Wait for a complete native response, without logging it. */
-					}
-				});
+				// Drain private native diagnostics without forwarding them to Admin.
+				child.stderr.resume();
 				child.stdout.on('data', (chunk) => {
 					output = (output + String(chunk)).slice(-8192);
-					const match = /(?:^|\n)akm ui: (http:\/\/[^\s]+)\r?\n/.exec(output);
-					if (!match) return;
-					try {
-						const url = new URL(match[1]!);
-						if (
-							url.hostname !== '0.0.0.0' ||
-							!url.port ||
-							url.pathname !== '/' ||
-							!url.searchParams.get('token') ||
-							url.username ||
-							url.password
-						)
+					const lines = output.split('\n');
+					output = lines.pop() ?? '';
+					for (const line of lines) {
+						try {
+							const ready = JSON.parse(line);
+							if (ready.type !== 'ready') continue;
+							const url = new URL(ready.url);
+							if (
+								url.protocol !== 'http:' ||
+								url.hostname !== (input ? '127.0.0.1' : address) ||
+								(input && url.origin !== browserOrigin) ||
+								ready.origin !== url.origin ||
+								!url.port ||
+								url.pathname !== '/' ||
+								!url.searchParams.get('desktop_session') ||
+								url.username ||
+								url.password
+							)
+								continue;
+							clearTimeout(timer);
+							this.origin = url.origin;
+							resolve(url);
 							return;
-						clearTimeout(timer);
-						resolve(url);
-					} catch {
-						/* Wait for complete native output. */
+						} catch {
+							/* Wait for complete native output. */
+						}
 					}
 				});
 			});
@@ -170,21 +184,32 @@ export class KnowledgeUi {
 		} catch {
 			await this.stop();
 			throw new Error(
-				unavailable
-					? 'This Assistant’s AKM version no longer provides the browser UI; newer AKM releases use AKM Desktop. Manage this Assistant’s knowledge with AKM commands inside the Assistant.'
-					: 'Could not open this Assistant’s AKM UI. It needs AKM UI support and a host-reachable Linux Docker bridge; Docker Desktop is not supported.'
+				'Could not open this Assistant’s AKM UI. Update to an image containing akm-web and check the host-reachable Linux Docker bridge; Docker Desktop is not supported.'
 			);
 		}
 	}
 
 	private async probe(native: URL): Promise<void> {
-		const response = await fetch(new URL('/api/meta', native), {
-			headers: { 'X-Akm-Ui-Token': native.searchParams.get('token')! },
-			signal: AbortSignal.timeout(5_000),
-			redirect: 'error'
+		if (!this.origin) throw new Error('AKM UI is unavailable.');
+		const host = new URL(this.origin).host;
+		// Probe the native session bootstrap at its configured browser origin,
+		// connecting directly to the bridge before the SSH forward is opened.
+		await new Promise<void>((resolve, reject) => {
+			const request = get(
+				native,
+				{
+					headers: { Host: host },
+					signal: AbortSignal.timeout(5_000)
+				},
+				(response) => {
+					response.resume();
+					if (response.statusCode !== 200 || !response.headers['set-cookie'] || this.closed)
+						reject(new Error('AKM UI is unavailable.'));
+					else resolve();
+				}
+			);
+			request.once('error', reject);
 		});
-		await response.body?.cancel();
-		if (!response.ok || this.closed) throw new Error('AKM UI is unavailable.');
 	}
 
 	private async stop(): Promise<void> {

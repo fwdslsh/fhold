@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+## 0.4.1103-beta — native AKM web and OpenCode fixes
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Stable channels remain unchanged. Publishing does not upgrade live
+instances or change recovery settings.
+
+Update OpenCode to **2.2.6** and fhold's plugin Effect dependency to **4.1.0**.
+Configured models without a release date now appear in fresh browser model
+pickers through the upstream fix, while explicit hide/show choices are preserved.
+Preserved native AKM harness invocations also work without the previous manual
+argument repair; upgrade tests now require success and unchanged operator settings.
+Add a real-browser image regression for this behavior. Avoid repeating native
+desktop qualification when an unchanged draft PR is marked ready, and clarify
+release merge planning and native AKM indexing behavior. Include the published
+**akm-web 0.10.261113-beta** in Assistant and reconnect Admin's Knowledge action
+to its native browser UI, preserving session lifetime and native cookie, Host
+and Origin checks for local Linux Docker and SSH access.
+
+Refresh compatible stable Claude Code, Codex, Playwright/Chromium, Electron,
+builder/updater, jose, discord.js and Biome releases. Record the available glob
+13.0.7 cancellation backport and its unresolved parent/resolution constraints. Keep upstream-required
+Effect, Zod and remaining glob/minimatch versions pending compatible parent
+updates; document those holds without forcing dependency overrides.
+
 ## 0.4.1102-beta — patched AKM and native controls
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
@@ -7,7 +33,8 @@ extension. Update AKM CLI to **0.10.261113-beta** and all three AKM plugins to
 **0.10.261112-beta**, including the matching immutable native marketplace.
 The upstream CLI fixes locking on filesystems without hard links and cleanup of
 orphaned usage events. It also improves bundle sync and removes curate reranking
-and read-time index rebuilding. Actual SMB/Azure deployment verification remains
+and the index freshness walker. Native first-use indexing remains; an existing
+usable index no longer triggers a freshness walk on reads. Actual SMB/Azure deployment verification remains
 separate from upstream simulated-filesystem tests and container qualification.
 
 Let native plugin settings control automatic memory and learning when fhold's

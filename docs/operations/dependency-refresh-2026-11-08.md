@@ -12,8 +12,11 @@ are unchanged, so the same native harness qualification remains required.
 
 The published CLI contains AKM PR #1510's hard-link-free locking and orphaned
 usage-event deletion fixes. It also includes native sync fixes, removes curate
-reranking and read-time index rebuilding, and retains the build-time runtime
+reranking and the index freshness walker, and retains the build-time runtime
 acquisition API. No fhold consumer of those removed internals was found.
+Native first-use indexing still builds a missing/uninitialized index or one for
+a different stash. Reads reuse an existing usable index; explicit indexing uses
+native incremental updates. This is not removal of all read-triggered indexing.
 The lockfile update changes only the selected AKM packages and workspace pins.
 The raw audit still reports the same three approved source findings; the reviewed
 audit passes. No exception is added or widened. The full review and unrelated

@@ -216,14 +216,10 @@ settings snapshot is rejected so concurrent changes are not silently lost.
 
 ### Knowledge
 
-The current Assistant's AKM prerelease replaces `akm ui` with the standalone
-AKM Desktop application. **Open AKM UI** reports this limitation promptly;
-manage the selected Assistant's knowledge with AKM commands inside that
-Assistant. A host-local AKM Desktop uses its own library, not the selected
-container's bundles. fhold does not substitute another service or bypass
-upstream browser protections.
-
-For an Assistant whose installed AKM still provides the native browser UI:
+Assistant includes the native `akm-web` package alongside its matching AKM CLI.
+It replaces the removed `akm ui` command. Update older Assistant images before
+using this action; a host-local AKM Desktop manages its own library, not the
+selected container's bundles.
 
 Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
 Assistant's native AKM interface in your default browser, using that instance's
@@ -235,7 +231,7 @@ Local Linux Docker and SSH connections to a Linux Docker host are supported when
 the host can reach its container bridge. SSH uses a private loopback forward and
 requires native OpenSSH multiplexing on the Admin computer (Linux/macOS).
 Docker Desktop, host-network containers, ACA and direct HTTPS agent connections
-do not provide this route. AKM's native token and request checks remain enabled;
+do not provide this route. AKM's native session cookie, Host and Origin checks remain enabled;
 keep its launch link private. If the selected SSH port is occupied, Admin reports
 a connection failure instead of opening an unrelated service.
 
@@ -444,8 +440,9 @@ Assistant, run an agent/task, apply migrations or write proposals. Legacy
 connected endpoints can also work without credentials.
 
 AKM configuration and executable availability do not prove successful agent
-execution. Use the [documented native harness repair](managed-harness-configuration.md#existing-beta-installations)
-when an old operator-selected invocation no longer works. Proposal write-target
+execution. Review [native migration and harness selection](managed-harness-configuration.md#existing-beta-installations)
+when a custom executable is no longer available. OpenCode 2.2.6 no longer requires
+the previous argument repair for a preserved native invocation. Proposal write-target
 readiness and aggregate extraction success remain explicitly not checked pending
 [AKM #1289](https://github.com/itlackey/akm/issues/1289) and
 [AKM #1290](https://github.com/itlackey/akm/issues/1290). No successful learning is

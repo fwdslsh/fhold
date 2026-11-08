@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { parseManagementArgs } from './wire-input.js';
 
+test('knowledge UI accepts only a valid native loopback port', () => {
+	expect(parseManagementArgs('knowledgeUi', undefined)).toEqual([undefined]);
+	expect(parseManagementArgs('knowledgeUi', { loopbackPort: 4444 })).toEqual([
+		{ loopbackPort: 4444 }
+	]);
+	for (const loopbackPort of [0, 80, 65536, 4000.5, '4444', null])
+		expect(() => parseManagementArgs('knowledgeUi', { loopbackPort })).toThrow('port');
+});
+
 test('native wire inputs use the same typed parsers as Admin and cannot supply transport limits', () => {
 	expect(
 		parseManagementArgs('readiness', {

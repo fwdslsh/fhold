@@ -13,7 +13,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function fixture(native: string) {
+async function fixture(native: string, address = '127.0.0.1') {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-knowledge-ui-'));
 	roots.push(root);
 	const homeDir = join(root, 'home');
@@ -27,7 +27,7 @@ if (args[0] === 'ps') process.exit(0);
 if (args[0] === 'compose' && args.includes('ps'))
  console.log(JSON.stringify({Service:'assistant',ID:'synthetic-assistant',State:'running'}));
 if (args[0] === 'inspect')
- console.log(JSON.stringify({default:{IPAddress:'127.0.0.1',NetworkID:'synthetic-network'}}));
+ console.log(JSON.stringify({default:{IPAddress:${JSON.stringify(address)},NetworkID:'synthetic-network'}}));
 if (args[0] === 'network') console.log('bridge');
 if (args[0] === 'exec') {
  ${native}
@@ -41,18 +41,16 @@ if (args[0] === 'exec') {
 	return new KnowledgeUi(homeDir);
 }
 
-test('removed native UI fails promptly with guidance and does not expose private diagnostics', async () => {
+test('missing native UI fails promptly with guidance and does not expose private diagnostics', async () => {
 	const ui = await fixture(`
- const response = JSON.stringify({ok:false,code:'UNKNOWN_COMMAND',error:'Unknown command ui',private:'synthetic-private-path'});
- process.stderr.write(response.slice(0,18));
- setTimeout(() => process.stderr.write(response.slice(18)), 10);
+ process.stderr.write('synthetic-private-path: akm-web not found');
+ process.exit(127);
 `);
 	try {
 		const failure = await ui.open().catch((error: Error) => error);
 		expect(failure).toBeInstanceOf(Error);
 		const message = (failure as Error).message;
-		expect(message).toContain('AKM Desktop');
-		expect(message).toContain('inside the Assistant');
+		expect(message).toContain('image containing akm-web');
 		expect(message).not.toContain('synthetic-private-path');
 	} finally {
 		await ui.close();
@@ -60,27 +58,60 @@ test('removed native UI fails promptly with guidance and does not expose private
 }, 5_000);
 
 test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
-	'an Assistant that still provides the UI retains native token probing and session ownership',
+	'akm-web readiness uses its native session bootstrap and reuses the running session',
 	async () => {
 		let probes = 0;
 		const server = Bun.serve({
 			hostname: '127.0.0.1',
 			port: 0,
 			fetch(request) {
-				expect(request.headers.get('X-Akm-Ui-Token')).toBe('synthetic-token');
-				expect(new URL(request.url).pathname).toBe('/api/meta');
+				expect(new URL(request.url).searchParams.get('desktop_session')).toBe('synthetic-token');
+				expect(new URL(request.url).pathname).toBe('/');
 				probes++;
-				return Response.json({});
+				return new Response('', { headers: { 'set-cookie': 'synthetic=token; HttpOnly' } });
 			}
 		});
 		const ui = await fixture(
-			`console.log('akm ui: http://0.0.0.0:${server.port}/?token=synthetic-token');`
+			`const ready = JSON.stringify({type:'ready', origin:'http://127.0.0.1:${server.port}',url:'http://127.0.0.1:${server.port}/?desktop_session=synthetic-token'}) + '\\n'; process.stdout.write(ready.slice(0,20)); setTimeout(() => process.stdout.write(ready.slice(20)), 10);`
 		);
 		try {
 			expect(await ui.open()).toEqual({
-				url: `http://127.0.0.1:${server.port}/?token=synthetic-token`
+				url: `http://127.0.0.1:${server.port}/?desktop_session=synthetic-token`
 			});
 			expect(probes).toBe(1);
+			await ui.open();
+			expect(probes).toBe(2);
+		} finally {
+			await ui.close();
+			server.stop(true);
+		}
+	}
+);
+
+test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
+	'SSH launch supplies the exact browser origin without publishing ports',
+	async () => {
+		const server = Bun.serve({
+			hostname: '127.0.0.2',
+			port: 0,
+			fetch(request) {
+				expect(request.headers.get('host')).toBe(`127.0.0.1:${server.port}`);
+				return new Response('', { headers: { 'set-cookie': 'synthetic=token; HttpOnly' } });
+			}
+		});
+		const ui = await fixture(
+			`
+ const expected = ['akm-web','--host','127.0.0.2','--port','${server.port}','--origin','http://127.0.0.1:${server.port}'];
+ if (JSON.stringify(args.slice(-expected.length)) !== JSON.stringify(expected)) process.exit(1);
+ console.log(JSON.stringify({type:'ready',origin:'http://127.0.0.1:${server.port}',url:'http://127.0.0.1:${server.port}/?desktop_session=synthetic-token'}));
+ `,
+			'127.0.0.2'
+		);
+		try {
+			if (!server.port) throw new Error('Test server did not bind a port');
+			expect((await ui.open({ loopbackPort: server.port })).url).toBe(
+				`http://127.0.0.2:${server.port}/?desktop_session=synthetic-token`
+			);
 		} finally {
 			await ui.close();
 			server.stop(true);

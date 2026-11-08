@@ -1,6 +1,6 @@
 {
   "name": "@fhold/electron",
-  "version": "0.4.1102-beta",
+  "version": "0.4.1103-beta",
   "private": true,
   "type": "module",
   "description": "Optional static desktop administration tool for fhold stacks",
@@ -22,13 +22,13 @@
     "build:mac": "bun run bundle && electron-builder --config electron-builder.yml --mac --publish never"
   },
   "dependencies": {
-    "electron-updater": "6.8.11"
+    "electron-updater": "6.8.12"
   },
   "devDependencies": {
     "@fhold/lib": "workspace:*",
     "axe-core": "4.14.0",
-    "electron": "45.1.0",
-    "electron-builder": "^26.18.0",
+    "electron": "45.2.3",
+    "electron-builder": "^26.18.1",
     "typescript": "^7.0.2",
     "@types/node": "^26.6.6"
   }

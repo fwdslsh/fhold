@@ -82,7 +82,7 @@ async function verifyAgentAndProposal() {
 			type: 'knowledge', name: marker, description: 'Native upgrade retains writable proposal ownership.',
 			when_to_use: '', body: 'The synthetic upgrade preserved native configuration and bundle ownership. Native agent execution and a persisted reviewable proposal independently verified the migrated environment.',
 			confidence: 0.99, evidence: 'The operator explicitly requested independent verification of the upgraded native environment.'
-		}], rationale_if_empty: '' }) : 'FH_UPGRADE_AGENT_COMPLETE. We fixed the native harness failure because standalone execution avoids writing service state to the read-only product configuration directory. The upgrade preserved bundle ownership and user settings.';
+		}], rationale_if_empty: '' }) : 'FH_UPGRADE_AGENT_COMPLETE. Native harness execution works with the preserved invocation. The upgrade retained bundle ownership and user settings without a configuration repair.';
 		const chunk = (delta, finish_reason) => ({ id: 'upgrade-fixture', object: 'chat.completion.chunk', model: 'model', choices: [{ index: 0, delta, finish_reason }] });
 		return body.stream ? new Response(`data: ${JSON.stringify(chunk({ role: 'assistant', content }, null))}\n\ndata: ${JSON.stringify(chunk({}, 'stop'))}\n\ndata: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } })
 			: Response.json({ id: 'upgrade-fixture', object: 'chat.completion', model: 'model', choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
@@ -94,29 +94,29 @@ async function verifyAgentAndProposal() {
 		package: '@opencode/ai/providers/openai-compatible', settings: { baseURL: `http://127.0.0.1:${model.port}/v1`, apiKey: 'synthetic' },
 		models: { model: { capabilities: { tools: true, input: ['text'], output: ['text'] } } }
 	} } });
-	async function native(args, expectedCode = 0) {
+	async function native(args) {
 		const child = Bun.spawn(args, { cwd: '/work', env: { ...process.env, OPENCODE_CONFIG: providerConfig, AKM_AUTO_MEMORY: '0', AKM_AUTO_LEARNING: '0' }, stdout: 'pipe', stderr: 'pipe', timeout: 90_000 });
 		const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-		assert.equal(code, expectedCode, `${args.slice(0, 3).join(' ')}: ${err}\n${out}`);
+		assert.equal(code, 0, `${args.slice(0, 3).join(' ')}: ${err}\n${out}`);
 		return out;
 	}
 	try {
 		const prompt = `Verify the upgraded native environment. ${'We fixed the root cause of the old harness failure, migrated configuration, retained operator settings and verified the writable bundle owner before extracting a reviewable proposal. '.repeat(30)}`;
 		// Format migration must not silently rewrite an operator's invocation.
-		// The old selection starts OpenCode's background service, which cannot
-		// write service.json in the read-only product configuration directory.
+		// Current OpenCode runs the preserved native invocation successfully;
+		// do not retain an expected vendor failure or repair the test environment.
+		const preservedConfig = readFileSync(configPath, 'utf8');
 		assert.equal(read(configPath).harnesses.opencode.args, undefined);
-		assert.match(await native(['akm', 'agent', '--prompt', 'Inspect the upgraded environment.', '--quiet'], 1), /service\.json|PermissionDenied/);
-		console.log('Preserved old harness invocation fails as expected; applying the documented explicit native operator repair.');
-		await native(['akm', 'config', 'set', 'harnesses.opencode', '{"args":["run","--standalone"]}', '--silent']);
 		assert.match(await native(['akm', 'agent', '--prompt', prompt, '--quiet']), /FH_UPGRADE_AGENT_COMPLETE/);
-		// Retain a second turn with the repair explanation in native history.
+		assert.equal(readFileSync(configPath, 'utf8'), preservedConfig, 'Native execution changed operator AKM configuration');
+		// Retain a second turn with the verification evidence in native history.
 		assert.match(await native(['opencode', 'run', '--standalone', '--continue', '--', prompt]), /FH_UPGRADE_AGENT_COMPLETE/);
 		const extracted = await native(['akm', 'proposal', 'extract', '--type', 'opencode', '--force', '--timeout-ms', '30000', '--quiet']);
 		assert.ok(requests.some((request) => JSON.stringify(request.messages).includes('extracting durable engineering insights')), extracted);
 		// Do not trust the extraction aggregate alone: upstream #1290 can report
 		// success when persistence failed. The proposal must actually be present.
 		assert.match(await native(['akm', 'proposal', 'list', '--quiet']), new RegExp(marker));
+		assert.equal(readFileSync(configPath, 'utf8'), preservedConfig, 'Native proposal extraction changed operator AKM configuration');
 		console.log('Upgraded native AKM agent execution and persisted proposal passed using a loopback model.');
 	} finally { model.stop(true); }
 }
