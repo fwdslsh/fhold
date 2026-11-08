@@ -21,11 +21,12 @@ SCHEDULER_ENABLED="${FH_SCHEDULER_ENABLED:-1}"
 configuration_degraded=0
 export FH_RUNTIME_DIR="$RUNTIME_DIR"
 
-# Existing instance intent controls the native features, never a fhold extractor.
-# Explicit native AKM options take precedence; absent options use native defaults.
-if [ -n "${FH_AUTOMATIC_MEMORY:-}" ]; then
-  export AKM_AUTO_MEMORY="${AKM_AUTO_MEMORY:-$FH_AUTOMATIC_MEMORY}"
-  export AKM_AUTO_LEARNING="${AKM_AUTO_LEARNING:-$FH_AUTOMATIC_MEMORY}"
+# Preserve explicit off intent for managed harnesses. On leaves native plugin
+# settings/defaults in charge; exporting "1" would shadow Claude's plugin choices.
+# Explicit native environment options still take precedence.
+if [ "${FH_AUTOMATIC_MEMORY:-1}" = 0 ]; then
+  export AKM_AUTO_MEMORY="${AKM_AUTO_MEMORY-0}"
+  export AKM_AUTO_LEARNING="${AKM_AUTO_LEARNING-0}"
 fi
 
 # Invalid optional settings disable only that feature; never grant extra access.

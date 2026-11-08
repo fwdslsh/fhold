@@ -91,7 +91,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_ENABLED_ADDONS` | Derived profiles: `gateway,discord,slack` |
 | `FH_ASSISTANT_BIND_ADDRESS` | Derived native OpenCode host bind |
 | `FH_ASSISTANT_PORT` | Derived native OpenCode host port |
-| `FH_TIMEZONE`, `FH_AUTOMATIC_MEMORY` | Derived schedule timezone and automatic memory intent |
+| `FH_TIMEZONE`, `FH_AUTOMATIC_MEMORY` | Derived schedule timezone and managed plugin hook intent: memory `1` defers to native choices; `0` defaults entrypoint-managed writers' `AKM_AUTO_MEMORY`/`AKM_AUTO_LEARNING` to off without replacing explicit native environment options. Does not control all AKM learning or separately launched `docker exec` processes. |
 | `FH_CODEX_REMOTE`, `FH_CLAUDE_REMOTE` | Independent native supervisor startup switches, both default `1`; optional `0` keeps a worker off without removing account state. Native sign-in/consent is still required. |
 | `FH_CODEX_SANDBOX` | Native Codex isolation: `workspace-write` default, `read-only`, or explicit `danger-full-access` container isolation; task approvals follow native policy |
 | `FH_GUARDIAN_BIND_ADDRESS` | Derived Guardian host bind |

@@ -458,11 +458,28 @@ are documented in [OpenCode configuration](technical/opencode-configuration.md).
 Ask the trusted agent to remember facts or schedule work in ordinary language:
 “Every weekday at 8 AM, check my project news and save the result to my inbox.”
 Every run retains durable AKM history and uses the operator-selected native
-engine/agent without a fhold tool ceiling. AKM and automatic memory are enabled for fresh installations;
+engine/agent without a fhold tool ceiling. Fresh installations use native AKM plugin defaults;
 the scheduler uses the host OS timezone by default. Existing explicit choices
 remain unchanged. Advanced operators can configure these through the CLI/config,
 not Agent settings. Automatic context, learning and memory proposals use the native AKM plugins
 for all native/custom agents, subject to native settings and consent. Never paste credentials into conversations.
+
+`fhold config assistant --memory on` leaves native plugin settings and defaults in
+charge; it does not force learning on or rewrite AKM configuration. `--memory off`
+sets `AKM_AUTO_MEMORY=0` and `AKM_AUTO_LEARNING=0` for entrypoint-managed agents and
+scheduler processes unless you explicitly supply those native environment options.
+This controls plugin memory/proposal hooks, not every AKM learning operation:
+native improvement tasks, manual commands and core learning configuration remain
+AKM-owned. Commands launched separately with `docker exec` use the container's
+environment and native settings; they do not inherit entrypoint exports. Use native
+plugin settings or explicit native environment options in your Compose overlay
+when those separate processes also need an off choice. Headless controls for the
+broader native learning settings are tracked in [AKM #1506](https://github.com/itlackey/akm/issues/1506).
+
+For project-specific knowledge, use AKM's native `projects` configuration and run
+the agent in the corresponding project directory (normally under `/work`). The
+bundled plugins pass the working directory to AKM, which owns project selection,
+bundle search filters and write targets. fhold does not add a project routing layer.
 
 ```bash
 fhold task list
@@ -474,6 +491,11 @@ fhold task pause project-news
 fhold task resume project-news
 fhold task remove project-news
 ```
+
+Show, run, history, pause and resume also accept native bundle-qualified task refs,
+for example `fhold task pause stash//tasks/project-news`. Copy refs from AKM output;
+AKM resolves and validates them. Create, remove and adopt retain fhold's local
+task-file handling; remove takes a local task name, not a bundle-qualified ref.
 
 Timezone is explicit Assistant intent; daylight saving follows that IANA zone.
 Downtime does not replay missed slots. Remove preserves the definition in

@@ -89,9 +89,9 @@ describe('Assistant task helper', () => {
 
 		expect(run(root, ['pause', 'morning-news']).exitCode).toBe(0);
 		const original = readFileSync(join(root.knowledge, 'tasks', 'morning-news.yml'), 'utf8');
-		expect(calls(root.calls).at(-1)).toEqual(['task', 'disable', 'morning-news', '--quiet']);
+		expect(calls(root.calls).at(-1)).toEqual(['task', 'disable', 'morning-news']);
 		expect(run(root, ['resume', 'morning-news']).exitCode).toBe(0);
-		expect(calls(root.calls).at(-1)).toEqual(['task', 'enable', 'morning-news', '--quiet']);
+		expect(calls(root.calls).at(-1)).toEqual(['task', 'enable', 'morning-news']);
 		expect(readFileSync(join(root.knowledge, 'tasks', 'morning-news.yml'), 'utf8')).toBe(original);
 	});
 

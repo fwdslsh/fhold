@@ -1,5 +1,27 @@
 # AKM dependency refresh — November 8, 2026
 
+## Follow-up for 0.4.1102-beta
+
+The patched CLI **0.10.261113-beta** and plugins **0.10.261112-beta** are now
+published on npm. The OpenCode plugin pins that CLI exactly; native Claude/Codex
+hooks accept it under their existing minimum-version rule. The immutable native
+marketplace is `52ebbec608fb33fb4fe19814db0ece5baa2674f2`, archive SHA256
+`9e01dc88d80805d36f3584f27ac54dd366e8091e981f85ab5fcb43fca7806ea9`.
+Both native manifests report 0.10.261112-beta. The SDK/Effect peer declarations
+are unchanged, so the same native harness qualification remains required.
+
+The published CLI contains AKM PR #1510's hard-link-free locking and orphaned
+usage-event deletion fixes. It also includes native sync fixes, removes curate
+reranking and read-time index rebuilding, and retains the build-time runtime
+acquisition API. No fhold consumer of those removed internals was found.
+The lockfile update changes only the selected AKM packages and workspace pins.
+The raw audit still reports the same three approved source findings; the reviewed
+audit passes. No exception is added or widened. The full review and unrelated
+holds recorded below remain applicable; this follow-up is the awaited AKM patch.
+See the [candidate plan](patched-akm-beta-plan.md) for qualification and release.
+
+## Earlier 0.4.1101-beta review
+
 Start from canonical main `907ceb9` (tooling 0.4.1002, runtime 0.4.1001).
 The owner subsequently authorized full beta **0.4.1101-beta**. Stamp once before
 final candidate qualification and promote its retained artifacts after merge.

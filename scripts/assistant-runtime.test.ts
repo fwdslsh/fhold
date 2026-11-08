@@ -225,9 +225,13 @@ describe('published AKM scheduler compatibility', () => {
 		const source = readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8');
 		expect(source).not.toContain('enabled:');
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toHaveLength(1);
-		expect(run('pause', 'published-check').exitCode).toBe(0);
+		const ref = 'stash//tasks/published-check';
+		const shown = run('show', ref);
+		expect(shown.exitCode).toBe(0);
+		expect(shown.stdout.toString()).toContain('Return an acceptance marker');
+		expect(run('pause', ref).exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
-		expect(run('resume', 'published-check').exitCode).toBe(0);
+		expect(run('resume', ref).exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toHaveLength(1);
 		expect(readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8')).toBe(source);
 		mkdirSync(join(knowledge, 'imported-tasks'));
