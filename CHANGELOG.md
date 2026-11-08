@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.4.1104-beta — AKM session context and scoped releases
+
+Update Assistant to **akm-cli/akm-web 0.10.261114-beta** and all three AKM
+plugins to **0.10.261113-beta**, with the matching immutable native marketplace.
+Use upstream project rules and most-used asset context at session start/compaction,
+configured-source-aware recall and informational workflow/proposal notices.
+AKM owns this behavior; fhold adds no duplicate session machinery or restrictions.
+Retain the existing native web launcher and its authentication/Host/Origin checks.
+
+Publish Assistant and Linux CLI/Admin. Guardian, Portal and the Claude Desktop
+extension retain **0.4.1103-beta**. Stable channels and live instances are unchanged.
+
 Reduce release work by qualifying only selected images and retaining the published
 versions of unchanged components. Validate retained source/dependency inputs before
 publication, and use each image's own pin for installs and managed updates. Draft
