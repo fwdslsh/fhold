@@ -18,14 +18,14 @@
         "@opencode/cli": "2.2.1",
         "@opencode/client": "2.2.1",
         "@opencode/plugin": "2.2.1",
-        "akm-cli": "0.10.261112-beta",
-        "akm-opencode-v2": "0.10.261111-beta",
+        "akm-cli": "0.10.261113-beta",
+        "akm-opencode-v2": "0.10.261112-beta",
         "playwright": "1.64.1",
       },
     },
     "packages/claude-desktop": {
       "name": "@fhold/claude-desktop",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@modelcontextprotocol/server": "2.4.0",
@@ -38,7 +38,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.6",
@@ -50,7 +50,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "dependencies": {
         "electron-updater": "6.8.11",
       },
@@ -65,7 +65,7 @@
     },
     "packages/guardian": {
       "name": "@fhold/guardian",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "dependencies": {
         "@modelcontextprotocol/server": "2.4.0",
         "@opencode/client": "2.2.1",
@@ -81,7 +81,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "dependencies": {
         "@azure/arm-appcontainers": "4.0.0",
         "@azure/arm-resources": "8.0.0",
@@ -97,7 +97,7 @@
     },
     "packages/portal": {
       "name": "@fhold/portal",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
       "dependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@slack/bolt": "5.1.0",
@@ -110,13 +110,13 @@
     },
     "packages/skeleton": {
       "name": "@fhold/skeleton",
-      "version": "0.4.1101-beta",
+      "version": "0.4.1102-beta",
     },
     "plugins/fhold": {
       "name": "@fhold/harness-hooks",
       "dependencies": {
         "@opencode/plugin": "2.2.1",
-        "akm-opencode-v2": "0.10.261111-beta",
+        "akm-opencode-v2": "0.10.261112-beta",
         "effect": "4.0.1",
       },
     },
@@ -675,9 +675,9 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.10.261112-beta", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-VBrScJmpDGqCaS7ryNkKtqMk4C7zTOLo25VszALixa8N02ZEMd4mEzW3t44Pv12INGnuqlOYRjAB9X1ku5Fa2g=="],
+    "akm-cli": ["akm-cli@0.10.261113-beta", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-GHXDUAopULp2+6S7Nb0GlHsIpFyPDXqhYScyAysaDAKvVVQloS3U8vLUOy8ocVRRt7mdmzxBueNb2fV4BxiUwg=="],
 
-    "akm-opencode-v2": ["akm-opencode-v2@0.10.261111-beta", "", { "dependencies": { "akm-cli": "0.10.261112-beta" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-0VOZsJcgIVwfxv8VaBHz9LzZHNvwm4Xzdco2/aN6XwJMdC4zhh9yFM8JmRd9bWMrMGwYnvdWIgvj7sVBBzNN+A=="],
+    "akm-opencode-v2": ["akm-opencode-v2@0.10.261112-beta", "", { "dependencies": { "akm-cli": "0.10.261113-beta" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-3TjLks5IUdlt+V9yR1eOMofPYP5MzouBY7mang074SKzSShrs91Kzh4auU39j5dlLsXwAAyB3ZtUfTH763fKGw=="],
 
     "ansi-escapes": ["ansi-escapes@4.3.2", "", { "dependencies": { "type-fest": "^0.21.3" } }, "sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ=="],
 

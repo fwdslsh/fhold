@@ -1,8 +1,8 @@
-# Patched AKM beta — draft release plan
+# Patched AKM beta — release plan
 
-Target **0.4.1102-beta**, subject to a final unused-counter check. This is an
-unpublished draft: component versions and dependency pins have not been advanced.
-The release is waiting for the patched upstream AKM beta.
+Target **0.4.1102-beta**. Public Git tags, GitHub releases and all three Docker
+Hub image repositories were checked on November 8; counter 02 was unused.
+Qualification and publication remain separate steps below.
 
 ## Included fhold changes
 
@@ -20,19 +20,24 @@ index-cache recovery and offline pinned-plugin refresh are requested upstream in
 [#1507](https://github.com/itlackey/akm/issues/1507), and
 [#1508](https://github.com/itlackey/akm/issues/1508).
 
-## Pending upstream dependency update
+## Published upstream dependency update
 
 [AKM PR #1510](https://github.com/itlackey/akm/pull/1510) addresses locks on
 filesystems without hard links, such as SMB, and deletion of usage events whose
-entry has been removed. Wait for the reviewed fixes to be merged and published;
-do not vendor the patch or pin an unreleased commit.
+entry has been removed. Both implementations were verified in the published
+CLI tarball, rather than relying only on its release tag.
 
-The current published selections are CLI **0.10.261112-beta** and plugins
-**0.10.261111-beta**. Replace these with the actual patched releases after
-checking plugin CLI requirements and release notes. Update both OpenCode plugin
-manifests, the root lockfile, and the native Claude/Codex marketplace archive
-revision/checksum when their new release is available. All runtime pins remain
-exact and image-baked.
+The selected npm releases are CLI **0.10.261113-beta** and plugins
+**0.10.261112-beta**. OpenCode's plugin requires exactly that CLI. Native
+Claude/Codex plugins accept it under their 0.10.261111 minimum-version rule.
+Both OpenCode plugin manifests, the root lockfile and the native marketplace
+archive are updated together. All runtime pins remain exact and image-baked.
+
+Native marketplace commit: `52ebbec608fb33fb4fe19814db0ece5baa2674f2`.
+Archive SHA256: `9e01dc88d80805d36f3584f27ac54dd366e8091e981f85ab5fcb43fca7806ea9`.
+Both native manifests report 0.10.261112-beta. The release also includes native
+bundle-sync fixes and removal of curate reranking/read-time index rebuilding;
+fhold does not recreate that removed machinery.
 
 The [same-day dependency review](dependency-refresh-2026-11-08.md) records the
 other selected versions, explicit holds and audit exceptions. Recheck required
@@ -42,11 +47,11 @@ Azure deployment test.
 
 ## Before merge and publication
 
-- [ ] Verify the patched CLI and compatible plugins are published; record exact
+- [x] Verify the patched CLI and compatible plugins are published; record exact
   versions, provenance and the included upstream fixes.
-- [ ] Apply the pins and regenerate the lockfile; run affected native regressions
+- [x] Apply the pins and regenerate the lockfile; run affected native regressions
   and review audit results.
-- [ ] Confirm the release counter is unused, stamp every component, and write the
+- [x] Confirm the release counter is unused, stamp every component, and write the
   final changelog entry and dependency review.
 - [ ] Push the final candidate in a commit without a CI-skip marker. Run the full
   canonical release-branch qualification once, including all six images and
@@ -65,5 +70,13 @@ architectures, docs, Linux AppImage and Windows/macOS checks. That evidence does
 not qualify future dependency changes or a new release stamp. Draft preparation
 skips duplicate CI while the upstream release is unavailable; final qualification
 is required before merge and publication.
+
+With the new AKM pair installed, local development validation passed 1,236 tests
+(nine opt-in image tests skipped), type checks, lint, documentation checks and
+the reviewed audit. The raw audit retains the three approved findings. Final
+candidate CI must supply the six native image jobs, provider/scheduler/history/
+recovery checks, security scans and retained final CLI/Admin/MCPB artifacts.
+The PR records the exact final SHA and successful run; this document does not
+predeclare that qualification or publication succeeded.
 
 Publishing does not update running instances or change recovery settings.

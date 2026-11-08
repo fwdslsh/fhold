@@ -59,17 +59,17 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:e55933c47a7ee842ffbebbd9cc6861c462d8f2a79a87463b3370360cd91c1a07 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/2f81278c7e9acb7a83c4d50f733f19a2d0a2e587 /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:9e01dc88d80805d36f3584f27ac54dd366e8091e981f85ab5fcb43fca7806ea9 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/52ebbec608fb33fb4fe19814db0ece5baa2674f2 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/claude \
+    && plugin_root=akm-plugins-52ebbec608fb33fb4fe19814db0ece5baa2674f2/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/.agents/plugins/marketplace.json \
-      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/.claude-plugin/marketplace.json \
-      akm-plugins-2f81278c7e9acb7a83c4d50f733f19a2d0a2e587/LICENSE
+      akm-plugins-52ebbec608fb33fb4fe19814db0ece5baa2674f2/.agents/plugins/marketplace.json \
+      akm-plugins-52ebbec608fb33fb4fe19814db0ece5baa2674f2/.claude-plugin/marketplace.json \
+      akm-plugins-52ebbec608fb33fb4fe19814db0ece5baa2674f2/LICENSE
 # Node's official Linux binaries require libatomic on both native architectures.
 RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
     && rm -rf /var/lib/apt/lists/*

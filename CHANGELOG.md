@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1102-beta — patched AKM and native controls
+
+Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
+extension. Update AKM CLI to **0.10.261113-beta** and all three AKM plugins to
+**0.10.261112-beta**, including the matching immutable native marketplace.
+The upstream CLI fixes locking on filesystems without hard links and cleanup of
+orphaned usage events. It also improves bundle sync and removes curate reranking
+and read-time index rebuilding. Actual SMB/Azure deployment verification remains
+separate from upstream simulated-filesystem tests and container qualification.
+
+Let native plugin settings control automatic memory and learning when fhold's
+memory hooks are enabled. Explicit fhold off intent supplies defaults for
+entrypoint-managed writers while preserving native environment overrides.
+Delegate ordinary task references, including bundle-qualified refs, to AKM;
+retain reviewed adoption and preserved removal of local task files.
+
+Workspace API changes are excluded. Existing source-audit exceptions remain
+tracked in issue #63. Stable release channels remain unchanged. Publishing does
+not upgrade live instances or change recovery settings.
+
 ## 0.4.1101-beta — current AKM and patched npm
 
 Full beta for Assistant, Guardian, Portal, Linux CLI/Admin and the Claude Desktop
