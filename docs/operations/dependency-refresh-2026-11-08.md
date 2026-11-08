@@ -1,5 +1,35 @@
 # AKM dependency refresh — November 8, 2026
 
+## Follow-up for 0.4.1104-beta
+
+Verified npm tarballs select **akm-cli/akm-web 0.10.261114-beta** and
+**akm-opencode-v2 0.10.261113-beta**. The OpenCode plugin and web package require
+that CLI exactly. Native Claude/Codex manifests both report 0.10.261113-beta and
+their minimum CLI 0.10.261111 accepts the selected version. Marketplace commit:
+`f43a21547b9ad124119979a0a1382092abbde253`; archive SHA256:
+`d948f272980fa418bcc0f8b8b40fc7d2a89ee461c32f2f306b49bd05b021f9b1`.
+
+Reviewed AKM PRs #1511, #1512, #1514 and plugin PRs #162–164 and the published
+code. Session-start/compaction project rules and most-used assets, removal of
+automatic hints, configured-source-aware recall and informational proposal/workflow
+context belong to the upstream plugins. Search/curate no longer prepend rules.
+No fhold adapter or duplicated rule loader is needed. Native runtime acquisition,
+index-cache APIs and the web launch/readiness contract remain available.
+
+Only these three npm resolutions and release workspace versions change in the
+lockfile. The plugin's existing OpenCode/Effect peer declarations are unchanged;
+retain the already-qualified OpenCode 2.2.6 / Effect 4.1.0 integration and run
+native harness checks on the final image. Do not force transitive overrides.
+The reviewed audit passes with the same three explicit source exceptions; issue
+#63 and the previously documented upstream dependency holds remain unchanged.
+The full stable dependency review performed for 0.4.1103-beta remains applicable;
+this follow-up is scoped to the newly published AKM beta.
+
+Use `SCOPE=assistant`: Guardian, Portal and the extension retain their published
+0.4.1103-beta pins. PR #104 supplies scoped publication, browser caching and the
+reduced release smoke profile. Final candidate CI and the release PR record actual
+native results; this document does not predeclare publication success.
+
 ## Follow-up for 0.4.1102-beta
 
 The patched CLI **0.10.261113-beta** and plugins **0.10.261112-beta** are now
