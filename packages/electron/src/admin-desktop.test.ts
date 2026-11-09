@@ -180,7 +180,7 @@ test('brand assets include native desktop sizes and builds never redraw the old 
 	expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
 	// The opt-in Linux menu installer copies this exact file into hicolor/512x512.
 	expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([512, 512]);
-	expect(png[25]).toBe(6); // RGBA: preserve transparent corners.
+	expect(png[25]).toBe(6); // RGBA: preserve the supplied artwork's transparency.
 	const ico = await asset('icon.ico');
 	expect(ico.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
 	const sizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => {

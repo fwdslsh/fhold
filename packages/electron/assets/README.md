@@ -1,9 +1,10 @@
 # Admin app artwork
 
-`icon-source.png` is the high-resolution master derived from the owner's supplied
-green f/h mark (`2701.png`). The built-in image editor preserved the monogram and
-prepared a centered black tile with transparent corners. This changes the app
-identity artwork, not the Admin navigation icons or instance selector.
+`icon-source.png` is a byte-for-byte copy of the owner's supplied transparent
+green f/h mark (`2701.png`). Use this artwork directly: do not redraw it with AI,
+add a tile/background, or change its shape, color, proportions or original padding.
+The native exports below only resize and encode the original. This changes the
+app identity artwork, not the Admin navigation icons or instance selector.
 
 Committed native exports:
 
@@ -50,7 +51,4 @@ installed copy refreshes its cached icon without replacing the running AppImage.
 Linux AppImage and native Windows/macOS preview checks exercise package startup;
 Windows/macOS public distribution remains outside this change.
 
-Image-editor brief: preserve the supplied green monogram, diagonal slash, curves
-and pointed top-right corner; reduce outer margins and center it on a flat black
-rounded square with transparent exterior; no text, gradients, shadows or added
-decoration. Inspect small exports and light/dark desktop backgrounds after edits.
+Inspect small exports and light/dark desktop backgrounds after updating artwork.
