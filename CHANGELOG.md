@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.4.1105-beta — Admin app icons
+
+Use the supplied transparent green f/h artwork for Admin's Linux, Windows and
+macOS desktop icons, without redrawing the mark or adding a background. Retain
+native icon formats and stable desktop identities. Remove the obsolete generator
+that recreated the old logo on each build. Existing Linux menu installations can
+refresh the cached icon through **Settings → Refresh menu entry**.
+
+Publish Linux CLI/Admin only. Assistant retains **0.4.1104-beta**; Guardian, Portal
+and the Claude Desktop extension retain **0.4.1103-beta**. No container images or
+channel tags are published or moved. Stable downloads and live instances remain
+unchanged. Windows/macOS icons are included in their native preview packages;
+their public distribution remains unqualified.
+
 Reuse trusted registry build caches across release branches. Stage qualified native
 images by digest and retain small receipts instead of transferring OCI archives
 through GitHub artifacts; publication composes the tested registry manifests.
