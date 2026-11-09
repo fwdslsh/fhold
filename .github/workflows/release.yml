@@ -12,7 +12,7 @@ on:
         required: false
         type: string
       dry_run:
-        description: 'Build and validate without publishing'
+        description: 'Validate without release tags/downloads; may stage candidates and registry caches'
         required: false
         type: boolean
         default: true
@@ -122,6 +122,9 @@ jobs:
     if: needs.validate.outputs.qualified != 'true'
     needs: validate
     uses: ./.github/workflows/gates.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       scope: ${{ needs.validate.outputs.scope }}
       images: ${{ needs.validate.outputs.images }}

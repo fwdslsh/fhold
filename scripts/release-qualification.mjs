@@ -41,15 +41,22 @@ export function qualifies(run, jobs, sha, scope, now = Date.now()) {
 	if (quality.steps?.length && !tested) return false;
 	if (scope === 'tools') return tested === true;
 	let images;
-	try { images = releaseImages(scope); } catch { return false; }
+	try {
+		images = releaseImages(scope);
+	} catch {
+		return false;
+	}
 	// GitHub can omit step metadata for successful reusable jobs. In this
-	// workflow, all six images require quality and run under the same != tools
-	// condition as the full source tests. Their success proves full scope.
-	return images.length > 0 && images.every((image) =>
-		['amd64', 'arm64'].every((arch) =>
-			jobs.some(
-				(job) =>
-					job.name === `gates / Build ${image} (linux/${arch})` && job.conclusion === 'success'
+	// workflow, quality must succeed independently and uses the same != tools
+	// condition as image jobs. Overlapping jobs never waive the source gate.
+	return (
+		images.length > 0 &&
+		images.every((image) =>
+			['amd64', 'arm64'].every((arch) =>
+				jobs.some(
+					(job) =>
+						job.name === `gates / Build ${image} (linux/${arch})` && job.conclusion === 'success'
+				)
 			)
 		)
 	);

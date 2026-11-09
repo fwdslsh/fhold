@@ -159,7 +159,13 @@ describe('release workflows', () => {
 		expect(ci.jobs.gates.if).toBe(
 			"needs.scope.outputs.scope != 'none' && needs.scope.outputs.reused != 'true'"
 		);
-		expect(ci.jobs.gates.secrets).toBeUndefined();
+		const secrets = ci.jobs.gates.secrets as Record<string, string>;
+		expect(Object.keys(secrets).sort()).toEqual(['DOCKERHUB_TOKEN', 'DOCKERHUB_USERNAME']);
+		for (const expression of Object.values(secrets)) {
+			expect(expression).toContain("github.repository == 'fwdslsh/fhold'");
+			expect(expression).toContain("github.event_name == 'push'");
+			expect(expression).toContain("startsWith(github.ref, 'refs/heads/release/')");
+		}
 		expect(ci.jobs.gates.uses).toBe('./.github/workflows/gates.yml');
 	});
 
@@ -391,9 +397,11 @@ describe('portal image source boundary', () => {
 describe('release completeness gate', () => {
 	const productName = readElectronProductName();
 
-	test('the mandatory audit runs after source qualification and still gates images', () => {
+	test('the mandatory audit runs after source tests and remains an independent release gate', () => {
 		const audit = readJson('package.json').scripts?.audit;
-		expect(audit).toBe('bun audit --ignore GHSA-mrhx-c7xc-m3w5 --ignore GHSA-3g3m-2fjr-6pw4 --ignore GHSA-g3hv-75wg-m249');
+		expect(audit).toBe(
+			'bun audit --ignore GHSA-mrhx-c7xc-m3w5 --ignore GHSA-3g3m-2fjr-6pw4 --ignore GHSA-g3hv-75wg-m249'
+		);
 		const gates = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
 		const steps = gates.jobs.quality.steps;
 		const auditIndex = steps.findIndex((step: { run?: string }) => step.run === 'bun run audit');
@@ -407,7 +415,7 @@ describe('release completeness gate', () => {
 		);
 		expect(steps[auditIndex]['continue-on-error']).not.toBe(true);
 		expect(steps[auditIndex].if).toBeUndefined();
-		expect(gates.jobs.images.needs).toBe('quality');
+		expect(gates.jobs.images.needs).toBeUndefined();
 	});
 
 	test('the builder declares the optional Admin product', () => {
@@ -701,8 +709,12 @@ describe('release completeness gate', () => {
 		for (const version of ['0.4.1001-beta', '0.4.1002', '0.4.1101-rc', '0.5.101']) {
 			withDir((dir) => {
 				writeCompleteDist(dir, version);
-				expect(requiredReleaseAssets(version, productName)).toContain(`fhold-admin-${version}-x86_64-linux.AppImage`);
-				expect(requiredReleaseAssets(version, productName)).toContain(`fhold-claude-desktop-${version}.mcpb`);
+				expect(requiredReleaseAssets(version, productName)).toContain(
+					`fhold-admin-${version}-x86_64-linux.AppImage`
+				);
+				expect(requiredReleaseAssets(version, productName)).toContain(
+					`fhold-claude-desktop-${version}.mcpb`
+				);
 				expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
 				expect(() => writeReleaseAssetManifest(dir, version, productName)).not.toThrow();
 			});

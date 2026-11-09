@@ -66,6 +66,9 @@ jobs:
     needs: scope
     if: needs.scope.outputs.scope != 'none' && needs.scope.outputs.reused != 'true'
     uses: ./.github/workflows/gates.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && secrets.DOCKERHUB_USERNAME || '' }}
+      DOCKERHUB_TOKEN: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') && secrets.DOCKERHUB_TOKEN || '' }}
     with:
       candidate: ${{ github.repository == 'fwdslsh/fhold' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/') }}
       scope: ${{ needs.scope.outputs.scope }}

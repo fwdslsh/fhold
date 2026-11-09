@@ -10,6 +10,7 @@ import {
 	mkdirSync,
 	copyFileSync,
 	appendFileSync,
+	unlinkSync,
 	existsSync
 } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -255,6 +256,81 @@ export function publicationAction(existing, expectedDigest) {
 	return 'reuse';
 }
 
+export function candidateTag(component, arch, expected = identity()) {
+	assert(components.includes(component) && architectures.includes(arch), 'Unknown image target');
+	assert(/^[a-f0-9]{40}$/.test(expected.sha), 'Invalid candidate SHA');
+	assert(
+		Number.isSafeInteger(expected.run) &&
+			expected.run > 0 &&
+			Number.isSafeInteger(expected.attempt) &&
+			expected.attempt > 0,
+		'Invalid candidate run'
+	);
+	return `fwdslsh/fhold-${component}:candidate-${expected.sha}-${expected.run}-${expected.attempt}-${arch}`;
+}
+
+const registryManifest = (reference) =>
+	JSON.parse(
+		run('docker', ['buildx', 'imagetools', 'inspect', reference, '--format', '{{json .Manifest}}'])
+	);
+
+export function assertRegistryImage(info, component, arch, manifest) {
+	assert(components.includes(component) && architectures.includes(arch), 'Unknown image target');
+	assert.equal(info.platform, `linux/${arch}`);
+	assert(/^sha256:[a-f0-9]{64}$/.test(info.index), 'Invalid image index');
+	assert.equal(
+		info.reference,
+		`fwdslsh/fhold-${component}@${info.index}`,
+		'Unexpected candidate registry'
+	);
+	assert.equal(manifest.digest, info.index, 'Staged index changed');
+	assert.deepEqual(manifest.manifests, info.descriptors, 'Staged descriptors changed');
+}
+
+function stage(directory, component, arch) {
+	const info = json(join(directory, 'image.json'));
+	const target = candidateTag(component, arch);
+	assert.equal(info.platform, `linux/${arch}`);
+	// The image command bound this OCI graph to the locally tested rootfs before
+	// the suites ran. Preserve every digest when staging it in its final repository.
+	assertLoadedImage(
+		info,
+		JSON.parse(run('docker', ['image', 'inspect', `fhold/${component}:ci`]))[0]
+	);
+	let existing = null;
+	try {
+		existing = registryManifest(target);
+	} catch (error) {
+		if (!/manifest unknown|not found/i.test(String(error.stderr))) throw error;
+	}
+	if (publicationAction(existing, info.index) === 'copy')
+		console.log(
+			skopeo(directory, ['oci-archive:/candidate/image.tar', `docker://${target}`], true)
+		);
+	info.reference = `fwdslsh/fhold-${component}@${info.index}`;
+	assertRegistryImage(info, component, arch, registryManifest(info.reference));
+	writeFileSync(join(directory, 'image.json'), `${JSON.stringify(info)}\n`);
+	// Only the small digest-bound receipt crosses the Actions artifact boundary.
+	unlinkSync(join(directory, 'image.tar'));
+}
+
+export function promotionBytes(output, images) {
+	// Buildx prints the exact bytes it would push followed by one newline.
+	assert(output.endsWith('\n'), 'Expected buildx manifest output');
+	const bytes = output.slice(0, -1);
+	const manifest = JSON.parse(bytes);
+	const expected = combinedIndex(images);
+	// Buildx places attestations after executable manifests. Descriptor order
+	// may change; the complete descriptor objects and multiplicity must not.
+	const ordered = (entries) => [...entries].sort((a, b) => a.digest.localeCompare(b.digest));
+	assert.deepEqual(
+		{ ...manifest, manifests: ordered(manifest.manifests) },
+		{ ...expected, manifests: ordered(expected.manifests) },
+		'Promotion changed the qualified OCI graph'
+	);
+	return bytes;
+}
+
 async function promote(directory, component, dryRun) {
 	assert(components.includes(component), 'Unknown component');
 	const expected = identity();
@@ -263,34 +339,26 @@ async function promote(directory, component, dryRun) {
 		const kind = `image-${component}-${arch}`;
 		const name = `candidate-${expected.attempt}-${kind}`;
 		const path = join(directory, name);
-		await verify(path, kind, expected);
-		const info = inspectOCI(join(path, 'image.tar'), `linux/${arch}`, expected);
-		assert.deepEqual(json(join(path, 'image.json')), info);
-		images.push(info);
-		console.log(
-			skopeo(directory, [
-				`oci-archive:/candidate/${name}/image.tar`,
-				`oci:/candidate/combined:${arch}`
-			])
+		const receipt = await verify(path, kind, expected);
+		assert.deepEqual(
+			Object.keys(receipt.files),
+			['image.json'],
+			'Expected a registry candidate receipt'
 		);
+		const info = json(join(path, 'image.json'));
+		// Refuse mutable tags, other registries, or a graph different from the
+		// sealed, native-tested candidate. Buildx fetches manifests, not rootfs tarballs.
+		assert.equal(info.reference, `fwdslsh/fhold-${component}@${info.index}`);
+		assert(/^sha256:[a-f0-9]{64}$/.test(info.index), 'Invalid candidate index');
+		assertRegistryImage(info, component, arch, registryManifest(info.reference));
+		images.push(info);
 	}
-	const bytes = JSON.stringify(combinedIndex(images));
-	const expectedDigest = digest(bytes);
-	writeFileSync(join(directory, 'combined', 'blobs', 'sha256', expectedDigest.slice(7)), bytes);
-	writeFileSync(
-		join(directory, 'combined', 'index.json'),
-		JSON.stringify({
-			schemaVersion: 2,
-			manifests: [
-				{
-					mediaType: 'application/vnd.oci.image.index.v1+json',
-					digest: expectedDigest,
-					size: Buffer.byteLength(bytes),
-					annotations: { 'org.opencontainers.image.ref.name': 'release' }
-				}
-			]
-		})
+	const sources = images.map((image) => image.reference);
+	const bytes = promotionBytes(
+		run('docker', ['buildx', 'imagetools', 'create', '--dry-run', ...sources]),
+		images
 	);
+	const expectedDigest = digest(bytes);
 	const target = `fwdslsh/fhold-${component}:${expected.version}`;
 	if (!dryRun) {
 		let existing = null;
@@ -302,9 +370,7 @@ async function promote(directory, component, dryRun) {
 			if (!/manifest unknown|not found/i.test(String(error.stderr))) throw error;
 		}
 		if (publicationAction(existing, expectedDigest) === 'copy')
-			console.log(
-				skopeo(directory, ['oci:/candidate/combined:release', `docker://${target}`], true)
-			);
+			console.log(run('docker', ['buildx', 'imagetools', 'create', '--tag', target, ...sources]));
 		assert.equal(
 			JSON.parse(
 				run('docker', ['buildx', 'imagetools', 'inspect', target, '--format', '{{json .Manifest}}'])
@@ -316,7 +382,7 @@ async function promote(directory, component, dryRun) {
 	if (process.env.GITHUB_OUTPUT)
 		appendFileSync(process.env.GITHUB_OUTPUT, `digest=${expectedDigest}\n`);
 	console.log(
-		`${component}: ${expectedDigest}${dryRun ? ' (verified local candidate; not published)' : ''}`
+		`${component}: ${expectedDigest}${dryRun ? ' (verified registry candidate; no release tag published)' : ''}`
 	);
 }
 
@@ -341,7 +407,8 @@ if (import.meta.main) {
 		const info = inspectOCI(join(directory, 'image.tar'), platform);
 		assertLoadedImage(info, JSON.parse(run('docker', ['image', 'inspect', `fhold/${kind}:ci`]))[0]);
 		writeFileSync(join(directory, 'image.json'), `${JSON.stringify(info)}\n`);
-	} else if (command === 'promote') await promote(directory, kind, process.env.DRY_RUN !== 'false');
+	} else if (command === 'stage') stage(directory, kind, platform);
+	else if (command === 'promote') await promote(directory, kind, process.env.DRY_RUN !== 'false');
 	else if (command === 'assemble') await assemble(directory, kind, process.env.SCOPE);
-	else throw new Error('Expected seal, verify, image, promote or assemble');
+	else throw new Error('Expected seal, verify, image, stage, promote or assemble');
 }

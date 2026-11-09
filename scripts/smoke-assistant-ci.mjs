@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Run existing black-box suites against one built image, with at most two
+// Run existing black-box suites against one built image, with at most three
 // concurrent suites. Each suite owns its own disposable homes and containers.
 import { execFileSync, spawn } from 'node:child_process';
 import {
@@ -14,7 +14,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export async function runLanes(lanes, { directory, signal, env = process.env } = {}) {
-	if (lanes.length !== 2) throw new Error('Assistant verification requires exactly two lanes');
+	if (lanes.length < 1 || lanes.length > 3)
+		throw new Error('Assistant verification requires one to three lanes');
 	const expected = lanes.flat().map((suite) => suite.name);
 	if (!expected.length || new Set(expected).size !== expected.length)
 		throw new Error('Assistant suite names must be nonempty and unique');
@@ -106,7 +107,8 @@ export async function runLanes(lanes, { directory, signal, env = process.env } =
 }
 
 export function assistantLanes(image, nativeImage, profile = 'release') {
-	if (!['release', 'endurance'].includes(profile)) throw new Error('Unknown Assistant test profile');
+	if (!['release', 'endurance'].includes(profile))
+		throw new Error('Unknown Assistant test profile');
 	const suite = (name, command, env) => ({ name, command, env });
 	const recovery = { FH_RECOVERY_TEST_IMAGE: image };
 	const source = 'fwdslsh/fhold-assistant:0.3.261006-beta';
@@ -143,7 +145,12 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 			suite('blob-recovery', ['node', 'scripts/smoke-blob-recovery.mjs'], recovery)
 		],
 		[
-			suite('keepalive', ['node', 'scripts/smoke-keepalive.mjs', image, ...(profile === 'endurance' ? ['--endurance'] : [])]),
+			suite('keepalive', [
+				'node',
+				'scripts/smoke-keepalive.mjs',
+				image,
+				...(profile === 'endurance' ? ['--endurance'] : [])
+			]),
 			suite('directory-recovery', ['node', 'scripts/smoke-recovery.mjs'], recovery),
 			suite('upgrade-source', ['docker', 'pull', source]),
 			suite('upgrade-empty', ['node', 'scripts/smoke-recovery.mjs'], {
@@ -157,10 +164,35 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 			})
 		]
 	];
-	if (profile === 'endurance') return lanes.map((lane) => lane.filter((suite) => suite.name.startsWith('history') || suite.name === 'keepalive'));
-	const release = lanes.flat().filter((suite) => !suite.name.startsWith('history'));
-	const first = new Set(['startup-security-native-harnesses', 'workload', 'directory-recovery']);
-	return [release.filter((suite) => first.has(suite.name)), release.filter((suite) => !first.has(suite.name))];
+	if (profile === 'endurance')
+		return lanes.map((lane) =>
+			lane.filter((suite) => suite.name.startsWith('history') || suite.name === 'keepalive')
+		);
+	const release = lanes
+		.flat()
+		.filter(
+			(suite) =>
+				!suite.name.startsWith('history') && suite.name !== 'startup-security-native-harnesses'
+		);
+	const select = (...names) => names.map((name) => release.find((suite) => suite.name === name));
+	const smoke = (phase) =>
+		suite(`startup-${phase}`, ['bash', 'scripts/smoke-image.sh', image, 'assistant', phase]);
+	// Keep dependent upgrade cases after their source pull. Other suites own
+	// separate homes/containers; no mutable native harness state crosses lanes.
+	return [
+		[smoke('runtime'), ...select('workload', 'native-policy', 'directory-recovery')],
+		[smoke('cache'), smoke('activity'), ...select('blob-recovery')],
+		[
+			smoke('lifecycle'),
+			...select(
+				'providers-guardian-scheduler',
+				'upgrade-source',
+				'upgrade-empty',
+				'upgrade-surviving',
+				'keepalive'
+			)
+		]
+	];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -171,8 +203,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	execFileSync('bun', ['run', '--cwd', 'packages/cli', 'build'], { stdio: 'inherit' });
 	const abort = new AbortController();
 	for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => abort.abort());
-	await runLanes(assistantLanes(image, nativeImage, process.argv.includes('--endurance') ? 'endurance' : 'release'), {
-		directory: process.env.FH_CI_LOG_DIR || resolve('test-results/assistant-smokes'),
-		signal: abort.signal
-	});
+	await runLanes(
+		assistantLanes(
+			image,
+			nativeImage,
+			process.argv.includes('--endurance') ? 'endurance' : 'release'
+		),
+		{
+			directory: process.env.FH_CI_LOG_DIR || resolve('test-results/assistant-smokes'),
+			signal: abort.signal
+		}
+	);
 }

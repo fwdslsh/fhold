@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+Reuse trusted registry build caches across release branches. Stage qualified native
+images by digest and retain small receipts instead of transferring OCI archives
+through GitHub artifacts; publication composes the tested registry manifests.
+Run source checks alongside image/binary builds, retaining every publication gate.
+Split startup/cache/activity/lifecycle smoke fixtures across three bounded lanes
+without removing security, recovery or native-harness coverage.
+
+Correct Guardian documentation: it uses Assistant's tool-free OpenCode generation
+API for moderation and no longer runs a separate OpenCode or AKM installation.
+
 ## 0.4.1104-beta — AKM session context and scoped releases
 
 Update Assistant to **akm-cli/akm-web 0.10.261114-beta** and all three AKM

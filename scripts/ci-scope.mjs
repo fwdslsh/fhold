@@ -24,6 +24,7 @@ const NATIVE_CI_INPUTS = new Set([
 const ALL_IMAGES = ['assistant', 'guardian', 'portal'];
 const documentation = (path) =>
 	/^(?:docs\/|website\/)/.test(path) ||
+	/^containers\/(?:assistant|guardian|portal)\/README\.md$/.test(path) ||
 	[
 		'README.md',
 		'CHANGELOG.md',
@@ -317,6 +318,14 @@ export function gitValidationPlan(base, head = 'HEAD', mergeBase = false) {
 	}
 }
 
+export function releaseValidationPlan(scope, files) {
+	// A release stamp selects publication scope, but cannot waive validation
+	// of changes to the shared image pipeline itself.
+	return files.some((path) => NATIVE_CI_INPUTS.has(path))
+		? { scope: 'full', images: ALL_IMAGES, admin: true }
+		: { scope, images: releaseImages(scope), admin: true };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	let plan = gitValidationPlan(
 		process.env.BASE_SHA,
@@ -327,7 +336,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 		const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
 		const scope = inferReleaseScope(version);
 		assertRetainedComponents(scope, version);
-		plan = { scope, images: releaseImages(scope), admin: true };
+		let files;
+		try { [files] = gitInputs('origin/main', process.env.HEAD_SHA || 'HEAD'); }
+		catch { files = [...NATIVE_CI_INPUTS]; } // No trustworthy base: qualify every image.
+		plan = releaseValidationPlan(scope, files);
 	}
 	console.log(JSON.stringify(plan));
 	if (process.env.GITHUB_OUTPUT)
