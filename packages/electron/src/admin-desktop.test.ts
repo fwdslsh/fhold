@@ -68,6 +68,18 @@ test('installed menu survives native self-update at the stable path; repair neve
 	expect((await updated.status()).installed).toBe(true);
 });
 
+test('repair installs updated artwork without replacing the running installed AppImage', async () => {
+	const { env, desktop } = await fixture();
+	await desktop.install();
+	await writeFile(desktop.paths.appImage, 'self-updated AppImage');
+	await writeFile(env.icon, 'new brand icon');
+	const updated = new AdminDesktop({ ...env, appImage: desktop.paths.appImage });
+	await updated.install(() => { throw Error('An installed copy must not prompt for replacement'); });
+	expect(await readFile(desktop.paths.appImage, 'utf8')).toBe('self-updated AppImage');
+	expect(await readFile(desktop.paths.icon, 'utf8')).toBe('new brand icon');
+	expect((await updated.status()).installed).toBe(true);
+});
+
 test('another download can explicitly replace the menu copy; failed staging retains the old copy', async () => {
 	const { env, desktop } = await fixture();
 	await desktop.install();
@@ -150,8 +162,9 @@ test('native packages use the same identity and OS installers own Windows/macOS 
 		shortcutName: 'fhold Admin'
 	});
 	expect(config.mac.target).toEqual(['dmg', 'zip']);
-	for (const platform of ['linux', 'win', 'mac'])
-		expect(config[platform].icon).toBe('assets/icon.png');
+	expect(config.linux.icon).toBe('assets/icon.png');
+	expect(config.win.icon).toBe('assets/icon.ico');
+	expect(config.mac.icon).toBe('assets/icon.icns');
 	const { env } = await fixture();
 	for (const platform of ['win32', 'darwin']) {
 		const desktop = new AdminDesktop({ ...env, platform });
@@ -159,4 +172,35 @@ test('native packages use the same identity and OS installers own Windows/macOS 
 		await expect(desktop.install()).rejects.toThrow('Linux AppImage');
 	}
 	expect(await stat(join(env.home, '.local')).catch(() => undefined)).toBeUndefined();
+});
+
+test('brand assets include native desktop sizes and builds never redraw the old mark', async () => {
+	const asset = (name: string) => readFile(join(import.meta.dir, '../assets', name));
+	const png = await asset('icon.png');
+	expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+	// The opt-in Linux menu installer copies this exact file into hicolor/512x512.
+	expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([512, 512]);
+	expect(png[25]).toBe(6); // RGBA: preserve transparent corners.
+	const ico = await asset('icon.ico');
+	expect(ico.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
+	const sizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => {
+		const offset = 6 + i * 16;
+		expect(ico.readUInt32LE(offset + 12) + ico.readUInt32LE(offset + 8)).toBeLessThanOrEqual(ico.length);
+		return ico[offset] || 256;
+	});
+	for (const size of [16, 32, 48, 256]) expect(sizes).toContain(size);
+	const icns = await asset('icon.icns');
+	expect(icns.toString('ascii', 0, 4)).toBe('icns');
+	expect(icns.readUInt32BE(4)).toBe(icns.length);
+	const frames: string[] = [];
+	for (let offset = 8; offset < icns.length;) {
+		frames.push(icns.toString('ascii', offset, offset + 4));
+		const length = icns.readUInt32BE(offset + 4);
+		expect(length).toBeGreaterThanOrEqual(8);
+		offset += length;
+		expect(offset).toBeLessThanOrEqual(icns.length);
+	}
+	for (const frame of ['ic07', 'ic08', 'ic09', 'ic10']) expect(frames).toContain(frame);
+	const pkg = JSON.parse(await readFile(join(import.meta.dir, '../package.json'), 'utf8'));
+	expect(pkg.scripts.bundle).not.toContain('generate-icon');
 });
