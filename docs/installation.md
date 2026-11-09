@@ -140,6 +140,11 @@ working. Launch the menu copy for everyday use. From another download,
 confirmation. The menu copy may have updated itself and be newer; replacement
 can downgrade it. Cancel to keep it. When running the menu copy,
 **Refresh menu entry** repairs its launcher/icon without copying the executable.
+After an automatic update, the installed copy refreshes changed menu/taskbar
+artwork on its next launch. Native-size icons are installed for small title bars
+and larger launchers; the desktop's icon/menu caches are notified without clearing
+user caches or restarting the desktop. Separate downloads do not change the
+installed menu until you explicitly replace its copy. Custom launchers are preserved.
 A previously pinned shortcut
 to a downloaded AppImage may need to be unpinned and replaced with the menu entry.
 

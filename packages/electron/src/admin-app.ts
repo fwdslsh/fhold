@@ -149,8 +149,11 @@ export function registerAdminIpc(): void {
 		appImage: process.env.APPIMAGE,
 		home: app.getPath('home'),
 		dataHome: process.env.XDG_DATA_HOME,
-		icon: join(app.getAppPath(), 'assets/icon.png'),
+		icons: join(app.getAppPath(), 'assets/icons'),
 		version: app.getVersion()
+	});
+	void desktop.refresh().catch((error: unknown) => {
+		console.warn('[admin-desktop] Could not refresh installed menu artwork:', error);
 	});
 	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
 		version: app.getVersion(),

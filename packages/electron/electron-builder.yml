@@ -11,6 +11,7 @@ files:
   - dist/admin-preload.cjs
   - admin/**/*
   - assets/icon.png
+  - assets/icons/*.png
   - package.json
 
 extraResources:

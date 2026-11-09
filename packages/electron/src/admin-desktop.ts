@@ -1,14 +1,81 @@
-import { copyFile, chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+	copyFile,
+	chmod,
+	mkdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	utimes,
+	writeFile
+} from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 
 export const ADMIN_DESKTOP_ID = 'dev.fwdslsh.fhold.admin';
+export const ADMIN_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256, 512] as const;
+const runFile = promisify(execFile);
+type DesktopCommand = (
+	file: string,
+	args: string[],
+	options: { timeout: number; env: NodeJS.ProcessEnv }
+) => Promise<unknown>;
+
+/** Let the desktop invalidate its own caches; never delete a user's cache or restart their shell. */
+export async function refreshDesktopIcons(
+	dataHome: string,
+	environment = process.env,
+	run: DesktopCommand = runFile
+): Promise<void> {
+	const now = new Date();
+	// freedesktop icon-theme implementations watch the top-level directory, not individual PNGs.
+	await utimes(join(dataHome, 'icons/hicolor'), now, now);
+	await utimes(join(dataHome, 'icons'), now, now);
+	const options = { timeout: 5000, env: { ...environment, XDG_DATA_HOME: dataHome } };
+	try {
+		await run('xdg-icon-resource', ['forceupdate', '--mode', 'user'], options);
+	} catch {
+		console.warn(
+			'[admin-desktop] Native icon-cache refresh unavailable; directory changes are published.'
+		);
+	}
+	if (environment.XDG_CURRENT_DESKTOP?.split(':').includes('KDE')) {
+		try {
+			await run('kbuildsycoca6', [], options);
+		} catch {
+			console.warn(
+				'[admin-desktop] KDE menu refresh unavailable; reopen the menu to reload its entry.'
+			);
+		}
+		try {
+			// Native KIconLoader::emitChange(Desktop): also invalidate the running panel's pixmaps.
+			await run(
+				'dbus-send',
+				[
+					'--session',
+					'--type=signal',
+					'/KIconLoader',
+					'org.kde.KIconLoader.iconChanged',
+					'int32:0'
+				],
+				options
+			);
+		} catch {
+			console.warn(
+				'[admin-desktop] KDE icon notification unavailable; icons refresh on next login.'
+			);
+		}
+	}
+}
+
 type DesktopEnvironment = {
 	platform: string;
 	packaged: boolean;
 	appImage?: string;
 	home: string;
 	dataHome?: string;
-	icon: string;
+	icons: string;
 	version: string;
 };
 export type DesktopStatus = {
@@ -34,21 +101,29 @@ export function desktopEntry(appImage: string): string {
 	return `[Desktop Entry]\nVersion=1.0\nType=Application\nName=fhold Admin\nComment=Manage your fhold agents\nExec=${argument}\nIcon=${ADMIN_DESKTOP_ID}\nTerminal=false\nCategories=Utility;\nStartupNotify=true\nStartupWMClass=${ADMIN_DESKTOP_ID}\n`;
 }
 
-/** Opt-in per-user integration. No host tools, shell launchers or instance access. */
+/** Opt-in per-user integration. Native desktop refresh only; no instance access. */
 export class AdminDesktop {
 	readonly paths: { appImage: string; entry: string; icon: string };
+	private readonly dataHome: string;
 	private pending?: Promise<DesktopStatus>;
-	constructor(private readonly environment: DesktopEnvironment) {
+	constructor(
+		private readonly environment: DesktopEnvironment,
+		private readonly notify: (dataHome: string) => Promise<void> = refreshDesktopIcons
+	) {
 		const data =
 			environment.dataHome && isAbsolute(environment.dataHome)
 				? environment.dataHome
 				: join(environment.home, '.local/share');
+		this.dataHome = data;
 		this.paths = {
 			// A versionless filename is preserved by electron-updater.
 			appImage: join(environment.home, '.local/bin/fhold-admin.AppImage'),
 			entry: join(data, `applications/${ADMIN_DESKTOP_ID}.desktop`),
 			icon: join(data, `icons/hicolor/512x512/apps/${ADMIN_DESKTOP_ID}.png`)
 		};
+	}
+	private iconPath(size: number): string {
+		return join(this.dataHome, `icons/hicolor/${size}x${size}/apps/${ADMIN_DESKTOP_ID}.png`);
 	}
 	async status(): Promise<DesktopStatus> {
 		const env = this.environment;
@@ -84,20 +159,54 @@ export class AdminDesktop {
 		});
 		return this.pending;
 	}
+	/** Maintain an existing opt-in installation after native AppImage self-update. */
+	refresh(): Promise<DesktopStatus> {
+		this.pending ??= this.performInstall(async () => false, true).finally(() => {
+			this.pending = undefined;
+		});
+		return this.pending;
+	}
 	busy(): boolean {
 		return this.pending !== undefined;
 	}
 	async finish(): Promise<void> {
 		await this.pending?.catch(() => undefined);
 	}
-	private async performInstall(confirmReplacement: () => Promise<boolean>): Promise<DesktopStatus> {
+	private async performInstall(
+		confirmReplacement: () => Promise<boolean>,
+		refreshOnly = false
+	): Promise<DesktopStatus> {
 		const status = await this.status();
 		const env = this.environment;
 		const appImage = env.appImage;
+		const entry = await readFile(this.paths.entry, 'utf8').catch(() => '');
+		// Downloads/previews must not silently replace installed assets, and custom launchers stay untouched.
+		if (
+			refreshOnly &&
+			(!status.runningInstalledCopy || entry !== desktopEntry(this.paths.appImage))
+		)
+			return status;
 		if (!status.supported || !appImage)
 			throw Error('Menu installation is available in the Linux AppImage.');
 		if (status.replacesExistingCopy && !(await confirmReplacement())) return status;
-		const icon = await readFile(env.icon);
+		const icons = await Promise.all(
+			ADMIN_ICON_SIZES.map(async (size) => ({
+				path: this.iconPath(size),
+				bytes: await readFile(join(env.icons, `${size}x${size}.png`))
+			}))
+		);
+		if (
+			refreshOnly &&
+			(
+				await Promise.all(
+					icons.map(
+						async ({ path, bytes }) =>
+							(await readFile(path).catch(() => undefined))?.equals(bytes) ?? false
+					)
+				)
+			).every(Boolean)
+		)
+			return status;
 		const staged: { temporary: string; destination: string }[] = [];
 		const stage = async (
 			destination: string,
@@ -113,9 +222,8 @@ export class AdminDesktop {
 		try {
 			if (!status.runningInstalledCopy)
 				await stage(this.paths.appImage, 0o755, (temporary) => copyFile(appImage, temporary));
-			await stage(this.paths.icon, 0o644, (temporary) =>
-				writeFile(temporary, icon, { flag: 'wx' })
-			);
+			for (const { path, bytes } of icons)
+				await stage(path, 0o644, (temporary) => writeFile(temporary, bytes, { flag: 'wx' }));
 			await stage(this.paths.entry, 0o644, (temporary) =>
 				writeFile(temporary, desktopEntry(this.paths.appImage), { flag: 'wx' })
 			);
@@ -123,6 +231,11 @@ export class AdminDesktop {
 			for (const { temporary, destination } of staged) await rename(temporary, destination);
 		} finally {
 			await Promise.all(staged.map(({ temporary }) => rm(temporary, { force: true })));
+		}
+		try {
+			await this.notify(this.dataHome);
+		} catch {
+			console.warn('[admin-desktop] Menu files updated, but the desktop could not be notified.');
 		}
 		return this.status();
 	}
