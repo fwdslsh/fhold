@@ -10,7 +10,7 @@ const { runIconsTool } = require('app-builder-lib/out/toolsets/icons.js');
 for (const outputFormat of ['set', 'ico', 'icns']) {
 	const outDir = resolve(root, 'dist/icon-exports', outputFormat);
 	await mkdir(outDir, { recursive: true });
-	await runIconsTool({ inputFile: resolve(root, 'assets/admin-mark.svg'), outputFormat, outDir });
+	await runIconsTool({ inputFile: resolve(root, 'assets/icon-source.png'), outputFormat, outDir });
 	if (outputFormat === 'set') {
 		await mkdir(resolve(root, 'assets/icons'), { recursive: true });
 		for (const size of [16, 24, 32, 48, 64, 128, 256, 512])

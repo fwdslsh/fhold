@@ -1,15 +1,18 @@
 # Admin app artwork
 
-`icon-source.png` preserves the owner's original f/h artwork (`2701.png`). It
-contains both transparent pixels and a large opaque-black matte; it is a reference,
-not a desktop-ready icon. `admin-mark.svg` is the optical-size vector master:
-the same green f/h motif and slash, with open transparent counters, tighter framing
-and heavier outlines for small desktop sizes. Do not add a background tile, texture,
-glow or black matte. This changes app artwork, not navigation icons or the selector.
+`icon-source.jpg` is the owner's approved artwork (`2698.jpg`), copied byte-for-byte
+from the supplied image. Use it exactly as supplied: no tracing, redrawing,
+cropping, recoloring, background removal or added effects. Only native-format
+conversion and proportional resizing are allowed. Its dark background, margins,
+navy mark and teal highlights are intentional. This changes app artwork, not
+navigation icons or the selector. `icon-source.png` is the full-resolution PNG
+conversion needed by electron-builder (its converter does not accept JPEG).
+The earlier `admin-mark.svg` is superseded and is not used to export or package
+the current icon.
 
 Committed native exports:
 
-- `icon.png`: 512 × 512 RGBA, used by Electron windows and Linux packaging.
+- `icon.png`: 512 × 512 PNG, used by Electron windows and Linux packaging.
 - `icons/`: native 16, 24, 32, 48, 64, 128, 256 and 512 px PNGs, installed into
   the corresponding per-user `hicolor` directories for menu/taskbar lookup.
 - `icon.ico`: Windows multi-resolution icon, including 16–256 px frames.
@@ -21,10 +24,19 @@ without redrawing the artwork. PNG is included in the packaged application;
 electron-builder embeds ICO/ICNS in the native Windows/macOS packages. Application
 IDs and desktop filenames remain unchanged, preserving shortcut/taskbar grouping.
 
-To update the exports after editing the vector master, run from `packages/electron`
+To export the approved source image, run from `packages/electron`
 with native Node.js and the repository's locked dependencies installed:
 
 ```sh
+node scripts/export-icons.mjs
+```
+
+If the owner supplies a replacement JPEG, preserve that file as `icon-source.jpg`
+and convert it without filters before exporting (FFmpeg is only an asset-authoring
+tool, not a build or runtime dependency):
+
+```sh
+ffmpeg -hide_banner -loglevel error -y -i assets/icon-source.jpg -frames:v 1 -pix_fmt rgba -update 1 assets/icon-source.png
 node scripts/export-icons.mjs
 ```
 
