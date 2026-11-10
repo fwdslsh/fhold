@@ -12,6 +12,21 @@ off` after restore and before agents start. Default/on preserves native choices.
 Update Admin's real Knowledge click-through test to exercise `akm-web` bootstrap
 and HttpOnly cookie authentication, including an authenticated page reload.
 
+Embed native AKM web directly in Admin's Knowledge view. Put Open AKM UI in the
+page header and give AKM the remaining content area. Preserve native cookie
+authentication and SSH forwarding, and close the embedded session when changing
+instances. Prevent status polling from reopening a connection during teardown.
+
+Use AKM's native read-only health API in `fhold doctor`, preserving its statuses
+and keeping optional diagnostics separate from agent readiness. Keep private
+native evidence in AKM's own Health view.
+
+Replace experimental whole-index recovery snapshots with native vector
+export/import. AKM rebuilds from current sources and reuses matching embeddings;
+fhold retains recovery integrity, ownership and optional-work bounds. Lexical-only
+indexes create no cache artifact. Network source scans can exceed the unchanged
+five-second budget and safely fall back to ordinary native indexing.
+
 ## 0.4.1105-beta — Admin app icons
 
 Use the supplied transparent green f/h artwork for Admin's Linux, Windows and
