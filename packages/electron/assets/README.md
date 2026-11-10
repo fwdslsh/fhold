@@ -1,14 +1,12 @@
 # Admin app artwork
 
-`icon-source.jpg` is the owner's approved artwork (`2698.jpg`), copied byte-for-byte
+`icon-source.png` is the owner's approved artwork (`fhold-icon.png`), copied byte-for-byte
 from the supplied image. Use it exactly as supplied: no tracing, redrawing,
 cropping, recoloring, background removal or added effects. Only native-format
-conversion and proportional resizing are allowed. Its dark background, margins,
-navy mark and teal highlights are intentional. This changes app artwork, not
-navigation icons or the selector. `icon-source.png` is the full-resolution PNG
-conversion needed by electron-builder (its converter does not accept JPEG).
-The earlier `admin-mark.svg` is superseded and is not used to export or package
-the current icon.
+conversion and proportional resizing are allowed. Preserve its supplied alpha,
+margins, navy mark and teal highlights. This changes app artwork, not navigation
+icons or the selector. The earlier `icon-source.jpg` and `admin-mark.svg` are
+superseded references and are not used to export or package the current icon.
 
 Committed native exports:
 
@@ -28,15 +26,6 @@ To export the approved source image, run from `packages/electron`
 with native Node.js and the repository's locked dependencies installed:
 
 ```sh
-node scripts/export-icons.mjs
-```
-
-If the owner supplies a replacement JPEG, preserve that file as `icon-source.jpg`
-and convert it without filters before exporting (FFmpeg is only an asset-authoring
-tool, not a build or runtime dependency):
-
-```sh
-ffmpeg -hide_banner -loglevel error -y -i assets/icon-source.jpg -frames:v 1 -pix_fmt rgba -update 1 assets/icon-source.png
 node scripts/export-icons.mjs
 ```
 

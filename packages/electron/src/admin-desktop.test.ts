@@ -291,12 +291,12 @@ test('native packages use the same identity and OS installers own Windows/macOS 
 
 test('brand assets include native desktop sizes and builds never redraw the old mark', async () => {
 	const asset = (name: string) => readFile(join(import.meta.dir, '../assets', name));
-	// Preserve the owner's exact 2698.jpg; never substitute a traced/generated interpretation.
+	// Preserve the owner's exact fhold-icon.png; never substitute a traced/generated interpretation.
 	expect(
 		createHash('sha256')
-			.update(await asset('icon-source.jpg'))
+			.update(await asset('icon-source.png'))
 			.digest('hex')
-	).toBe('b40f3a9e5d922d87169c6ac2c8a06b2eab000087b81c50477e56a78e4309768e');
+	).toBe('d0a54720211a3a4f7486ec6d16fd3f530e3a3777f6c54c3fd985d3320bfd11cf');
 	const exporter = await readFile(join(import.meta.dir, '../scripts/export-icons.mjs'), 'utf8');
 	expect(exporter).toContain("'assets/icon-source.png'");
 	expect(exporter).not.toContain('admin-mark.svg');
@@ -304,7 +304,7 @@ test('brand assets include native desktop sizes and builds never redraw the old 
 	expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
 	// The opt-in Linux menu installer copies this exact file into hicolor/512x512.
 	expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([512, 512]);
-	expect(png[25]).toBe(6); // Native exports use RGBA; the supplied JPEG background stays opaque.
+	expect(png[25]).toBe(6); // Native exports preserve the source image's RGBA channels.
 	for (const size of ADMIN_ICON_SIZES) {
 		const frame = await asset(`icons/${size}x${size}.png`);
 		expect([frame.readUInt32BE(16), frame.readUInt32BE(20)]).toEqual([size, size]);
