@@ -474,7 +474,7 @@ switching off is not erasure. Settings have no effect without ordinary recovery.
 
 Capture-only produces optional artifacts without restoring them. Restore-only
 can consume and carry forward an already accepted eligible reference without
-creating a new cache snapshot. Both off omit the optional reference from future
+creating a new vector artifact. Both off omit the optional reference from future
 checkpoints. Native first use can build an absent index as usual. Explicit custom
 SQLite selection of `index.db` retains its ordinary **required** semantics; remove
 that selection if the intent is best-effort caching.
@@ -488,71 +488,85 @@ read-only source mounts are supported. Inherited AKM configuration, other source
 adapters, missing/unreadable roots, and source roots overlapping explicit recovery
 `excludePaths` skip the optional cache. Ordinary `externalMounts` and automatic
 network-mount exclusion do not prohibit the cache. Opting in explicitly permits
-copying indexed document/Markdown content, paths and embeddings from those
-independently persistent bundles into private recovery artifacts. Review their
+copying native vector artifacts from those independently persistent bundles into
+private recovery storage. AKM's format carries model fingerprints, hashes of
+embedding input and vectors; it does not carry document text or source paths.
+Vectors can still be sensitive. Review their
 data sensitivity and backup access/retention policies first.
 
-Candidates bind to this instance and current enabled source IDs, roots,
-components, adapters, indexing/redaction and semantic profile, plus the recovery
-selection policy. Credentials are not fingerprinted; equivalent embedding
-endpoint/credential relocation alone does not invalidate the semantic identity.
-Source/configuration revocation or a changed embedding profile rejects the old
-reference. Supported older SQLite layouts can migrate through the native CLI;
-newer/incompatible layouts rebuild without an exact package-version requirement.
+Artifacts bind to this instance and current enabled source IDs, roots,
+components, adapters and redaction settings, plus the recovery selection policy.
+Source revocation or an explicit source exclusion rejects the old reference.
+AKM owns vector format and model/text matching: a changed model or document is
+an ordinary import miss and uses normal native embedding behavior. fhold neither
+fingerprints semantic configuration nor reads AKM's vector/index schemas.
+Older experimental whole-index references are ignored; essential backups still
+restore normally. There is no exact AKM package-version admission requirement.
 Cache age is recorded as artifact provenance, never evidence of freshness or
 permission. There is no separate maximum-age setting.
 
-Capture uses consistent SQLite snapshots and runs the shipped native
-`akm index --clean --format json` against private candidate data/state/config.
-It never refreshes or rewrites live databases or source configuration and never
-starts a build when the live index is absent, empty or not initialized for this
-source. Only an actual completed source scan, clean and successful native
-verification produces a cache; `builtAt` and successful lock skips are not
-completion proof. Configured semantic indexing may make ordinary embedding
-requests; it does not run extract/improve/LLM enrichment or hydrate remote bundle
-providers. A failed/incomplete candidate is discarded, and later checkpoint
-attempts retry through the existing recovery timer, independently of scheduling.
+Capture runs the shipped native `akm index --export-vectors FILE` against the
+existing local index. It does not rescan sources, make embedding requests, copy
+AKM state databases or rewrite live databases/configuration. No index or no
+vectors means no optional artifact, so lexical-only installations gain no cache
+startup work. An unchanged artifact reuses its existing content-addressed object.
+Export still has command/read/transfer overhead; this is not a delta transfer.
+Immutable artifacts increase retained storage when their bytes change.
 
-An unchanged completed candidate can reuse the latest accepted object when its
-live source-snapshot hash, source/profile identity and counts also match. Capture
-still performs a bounded snapshot and native validation before deciding to reuse;
-it does not promise free unchanged checkpoints or delta database transfer.
-Immutable whole-cache objects increase retained storage whenever their contents
-change. Native first-use/indexing can run concurrently against its own live DB;
-private candidates use native coordination without a second lock or scheduler.
-
-After essential restoration, an eligible cache is downloaded, verified and
-incrementally cleaned in private before any cached result is admitted. Only the
-completed standalone database is published with exclusive atomic creation. A
+After essential restoration, an eligible artifact is downloaded and its recovery
+checksum verified. The shipped native `akm index --clean --import-vectors FILE`
+builds a fresh private index from current sources, reusing only matching vectors.
+AKM reads its own configuration and stored provider credentials in place; only
+derived data/state are isolated. fhold does not parse/copy provider credentials.
+These operations preserve native config/credential bytes. Native transient
+coordination files remain AKM-owned and are not durable configuration changes.
+Deleted or changed cached documents cannot be restored from the vector artifact.
+Only a completed source scan, clean and successful native verification admits
+the new database; successful lock skips are not completion proof. A
 surviving local database or WAL/SHM is preserved. Invalid/missing/corrupt/oversized
 caches and incomplete refreshes leave the core able to start without a restored
-index; native first use can rebuild. This prevents deleted/revoked cached content
-being exposed while a background refresh is pending. Cache admission adds a
+index; native first use can rebuild. Invalid or model-incompatible vector content
+uses AKM's native fallback to normal embedding where it completes within the
+budget. Native fallback can make ordinary embedding requests; recovery does not
+run extract/improve/LLM enrichment or hydrate remote bundle providers.
+Cache admission adds a
 bounded startup delay; no cache means no full index build in core startup.
 Surviving local indexes retain native AKM migration/freshness behavior; these
 switches do not repair, replace or erase them.
 
-Experimental limits are 64 MiB for each SQLite input including its WAL/SHM and
-for each artifact, and a separate five-second normal-operation budget per cache
+Experimental limits are 64 MiB for each local index including its WAL/SHM and
+each artifact, and a separate five-second normal-operation budget per cache
 capture/admission attempt. Essential work keeps its configured operation allowance.
+The input bound conservatively skips large lexical indexes even when their
+vectors would be small: AKM currently materializes export rows before writing
+the artifact, so checking only the eventual output would not bound that work.
+Native bounded/streaming export is tracked upstream in
+[AKM #1608](https://github.com/itlackey/akm/issues/1608).
 Ownership renewal checks the actual owner and mount topology independently of
 that work budget. A checkpoint timeout fails the checkpoint; it cannot by itself
 turn valid ownership into an Assistant shutdown during optional cache work.
 Capture-enabled managed shutdown therefore adds ten seconds to the existing
 derived termination grace, covering an in-flight and a final capture. Standalone
 hosts must do the same. These limits bound accepted data and subprocess work,
-not total RAM/disk or kernel-hung filesystem I/O: private candidate/state copies,
+not total RAM/disk or kernel-hung filesystem I/O: private candidate databases,
 native temporary files, buffers and application growth need external resource
 headroom/quotas. Cleanup or uncancellable filesystem I/O can exceed wall-clock
 budgets. Optional cache errors warn through existing recovery/health diagnostics;
 actual ownership loss, topology changes and essential-state failures still retain
 their existing protection.
 
-Small local lexical fixtures demonstrate correctness and an unchanged-index
-benefit, not hosted performance or embedding/CIFS/Blob capacity qualification.
-The native semantic fixture uses a local fake endpoint and an environment-referenced
-key; it verifies vector reuse, changed-document refresh and profile rejection,
-without qualifying other native credential-store configurations.
+The native integration fixture reports cold indexing, checkpoint/admission time,
+artifact size and provider calls for 96 synthetic documents with 384-dimensional
+vectors and a deterministic endpoint with 100 ms request latency. It also verifies
+changed/deleted sources, native model mismatch, credential references, corruption,
+exclusions and lexical-only skipping. These measurements describe the fixture,
+not production latency, throughput or real-provider behavior. Set
+`FH_AKM_CACHE_TEST_BUNDLE_ROOT` to an existing disposable network directory to run
+the same native cases with source files on that filesystem; configuration, state
+and SQLite remain local. No existing bundle or stack is adopted by this test.
+The external benchmark explicitly records safe deadline fallback when a source
+scan exceeds the five-second admission budget; that adds startup work before
+ordinary native first use, so opting into caching can be slower for that workload.
 Measure core-ready and first-correct-knowledge-ready time separately, including
 full artifact transfer, provider requests, checkpoint duration and retained-object
 growth before enabling this optimization for a workload.

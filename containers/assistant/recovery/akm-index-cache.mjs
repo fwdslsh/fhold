@@ -23,29 +23,22 @@ const pick = (object, names) =>
 export function validAkmIndexCache(value, instanceId, maximum = AKM_INDEX_CACHE_LIMITS.bytes) {
 	return Boolean(
 		value &&
-			value.format === 1 &&
+			value.format === 2 &&
 			value.instanceId === instanceId &&
 			/^[a-f0-9]{64}$/.test(value.profile) &&
 			/^[a-f0-9]{64}$/.test(value.hash) &&
 			Number.isSafeInteger(value.bytes) &&
 			value.bytes > 0 &&
 			value.bytes <= maximum &&
-			Number.isSafeInteger(value.schema) &&
-			value.schema > 0 &&
 			Number.isSafeInteger(value.capturedAt) &&
 			value.capturedAt > 0 &&
-			value.complete === true &&
-			/^[a-f0-9]{64}$/.test(value.sourceHash) &&
-			Number.isSafeInteger(value.entries) &&
-			value.entries >= 0 &&
-			Number.isSafeInteger(value.embeddings) &&
-			value.embeddings >= 0
+			Number.isSafeInteger(value.vectors) &&
+			value.vectors >= 0
 	);
 }
 
-/** Native CLI completion, rather than index_meta.builtAt, is the admission
- * authority. Native writers only touch a private candidate and disposable
- * state/config; no live DB, source configuration or process lock is replaced. */
+/** AKM owns vector format, model/text matching and rebuilding from current
+ * sources. fhold owns only bounded private staging and recovery integrity. */
 export function createAkmIndexCache({
 	roots,
 	privateDir,
@@ -211,62 +204,42 @@ export function createAkmIndexCache({
 			primary: sources[0],
 			sources: sourceStats,
 			selection: catalog.selection,
-			semanticSearchMode: config.semanticSearchMode ?? 'off',
-			embedding: pick(config.embedding, [
-				'provider',
-				'model',
-				'dimension',
-				'localModel',
-				'documentTemplate',
-				'queryTemplate',
-				'maxInputTokens'
-			]),
-			index: Object.fromEntries(
-				Object.entries(config.index ?? {}).map(([name, value]) => [
-					name,
-					pick(value, ['enabled', 'engine', 'model', 'timeoutMs'])
-				])
-			),
 			redaction: pick(env, ['AKM_REDACT_HIGH_ENTROPY', 'AKM_REDACT_PII'])
 		};
-		return { hash: hash(JSON.stringify(identity)), config, bytes };
+		return { hash: hash(JSON.stringify(identity)) };
 	}
 
-	async function freshCandidate(stage, catalog, signal, input, before) {
-		const data = path.join(stage, 'data');
-		const configDir = path.join(stage, 'config');
-		await fs.mkdir(data, { recursive: true, mode: 0o700 });
-		await fs.mkdir(configDir, { mode: 0o700 });
-		const candidate = path.join(data, 'index.db');
-		if (input) await fs.writeFile(candidate, input, { flag: 'wx', mode: 0o600, signal });
-		else await sqlite('capture', path.join(roots.akmData, 'index.db'), candidate, signal);
-		const sourceHash = hash(await readRegular(candidate, limits.bytes, signal));
-		const description = JSON.parse(
-			(await sqlite('describe', candidate, undefined, signal)).toString()
-		);
-		if (!description.entries) throw new Error('empty-index');
-		if (!description.builtAt || description.stashDir !== (env.AKM_BUNDLE_DIR || roots.stash))
-			throw new Error('uninitialized-index');
-		const stateDb = path.join(roots.akmData, 'state.db');
-		if (await exists(stateDb))
-			await sqlite('capture', stateDb, path.join(data, 'state.db'), signal);
-		await fs.writeFile(path.join(configDir, 'config.json'), before.bytes, {
-			flag: 'wx',
-			mode: 0o600,
-			signal
-		});
-		const candidateEnv = {
+	function candidateEnvironment(stage) {
+		return {
 			...nativeEnv,
 			AKM_BUNDLE_DIR: env.AKM_BUNDLE_DIR || roots.stash,
-			AKM_CONFIG_DIR: configDir,
-			AKM_DATA_DIR: data,
+			// Native config/credentials remain native-owned and are read in place.
+			// Explicit adapters above avoid native detection writes; only derived
+			// data/state are isolated. No credential copying or parsing is needed.
+			AKM_CONFIG_DIR: roots.akmConfig,
+			AKM_DATA_DIR: path.join(stage, 'data'),
 			AKM_STATE_DIR: path.join(stage, 'state'),
 			BUN_OPTIONS: '--no-env-file --config=/dev/null'
 		};
+	}
+
+	async function freshCandidate(stage, catalog, signal, input, before) {
+		const candidateEnv = candidateEnvironment(stage);
+		const vectors = path.join(stage, 'vectors');
+		await fs.writeFile(vectors, input, { flag: 'wx', mode: 0o600, signal });
 		const result = JSON.parse(
 			(
 				await command(
-					[...akmCommand, 'index', '--clean', '--format', 'json', '-q'],
+					[
+						...akmCommand,
+						'index',
+						'--clean',
+						'--import-vectors',
+						vectors,
+						'--format',
+						'json',
+						'-q'
+					],
 					candidateEnv,
 					signal
 				)
@@ -283,12 +256,8 @@ export function createAkmIndexCache({
 		if ((await profile(catalog, signal)).hash !== before.hash)
 			throw new Error('source-policy-changed');
 		const snapshot = path.join(stage, 'complete.sqlite');
-		await sqlite('capture', candidate, snapshot, signal);
-		const bytes = await readRegular(snapshot, limits.bytes, signal);
-		const finalDescription = JSON.parse(
-			(await sqlite('describe', snapshot, undefined, signal)).toString()
-		);
-		return { bytes, result, sourceHash, schema: finalDescription.schema };
+		await sqlite('capture', path.join(candidateEnv.AKM_DATA_DIR, 'index.db'), snapshot, signal);
+		return snapshot;
 	}
 
 	async function attempt(action) {
@@ -309,8 +278,7 @@ export function createAkmIndexCache({
 							'source-policy-changed',
 							'refresh-incomplete',
 							'size-limit',
-							'empty-index',
-							'uninitialized-index'
+							'empty-index'
 						].includes(error.message)
 					? error.message
 					: 'cache-unavailable';
@@ -343,37 +311,60 @@ export function createAkmIndexCache({
 			set('capturing');
 			return attempt(async (stage, signal) => {
 				const before = await profile(catalog, signal);
-				if (!(await exists(path.join(roots.akmData, 'index.db')))) throw new Error('empty-index');
-				const completed = await freshCandidate(stage, catalog, signal, null, before);
-				// A complete unchanged scan under the same source/profile policy can
-				// reuse the latest accepted object, without builtAt-based guesswork.
+				const index = path.join(roots.akmData, 'index.db');
+				if (!(await exists(index))) throw new Error('empty-index');
+				await checkStorage(index);
+				let size = 0;
+				for (const suffix of ['', '-wal', '-shm']) {
+					const file = `${index}${suffix}`;
+					await assertNoLinks(file);
+					const stat = await exists(file);
+					if (stat && !stat.isFile()) throw new Error('sqlite-type');
+					size += stat?.size ?? 0;
+				}
+				if (size > limits.bytes) throw new Error('size-limit');
+				const candidateEnv = candidateEnvironment(stage);
+				const vectors = path.join(stage, 'vectors');
+				const result = JSON.parse(
+					(
+						await command(
+							[...akmCommand, 'index', '--export-vectors', vectors, '--format', 'json', '-q'],
+							{ ...candidateEnv, AKM_DATA_DIR: roots.akmData },
+							signal
+						)
+					).toString()
+				);
+				if (
+					result.ok !== true ||
+					!Number.isSafeInteger(result.exported?.vectors) ||
+					result.exported.vectors < 0
+				)
+					throw new Error('refresh-incomplete');
+				if ((await profile(catalog, signal)).hash !== before.hash)
+					throw new Error('source-policy-changed');
+				if (result.exported.vectors === 0) {
+					set('skipped', 'no-vectors');
+					return null;
+				}
+				const bytes = await readRegular(vectors, limits.bytes, signal);
 				if (
 					metadata(previous) &&
 					previous.profile === before.hash &&
-					previous.sourceHash === completed.sourceHash &&
-					completed.result.directoriesScanned === 0 &&
-					completed.result.clean.removed === 0 &&
-					previous.schema === completed.schema &&
-					previous.entries === completed.result.totalEntries &&
-					previous.embeddings === completed.result.verification.embeddingCount
+					previous.hash === hash(bytes)
 				) {
 					set('captured');
 					return previous;
 				}
 				const reference = {
-					format: 1,
+					format: 2,
 					instanceId,
 					profile: before.hash,
-					schema: completed.schema,
-					sourceHash: completed.sourceHash,
-					hash: hash(completed.bytes),
-					bytes: completed.bytes.length,
+					hash: hash(bytes),
+					bytes: bytes.length,
 					capturedAt: Date.now(),
-					complete: true,
-					entries: completed.result.totalEntries,
-					embeddings: completed.result.verification.embeddingCount
+					vectors: result.exported.vectors
 				};
-				await store.createImmutable(`objects/${reference.hash}`, completed.bytes, ownership, {
+				await store.createImmutable(`objects/${reference.hash}`, bytes, ownership, {
 					signal
 				});
 				signal.throwIfAborted();
@@ -403,14 +394,13 @@ export function createAkmIndexCache({
 				const input = await store.read(`objects/${reference.hash}`, reference.bytes, { signal });
 				if (input.length !== reference.bytes || hash(input) !== reference.hash)
 					throw new Error('cache-checksum');
-				const completed = await freshCandidate(stage, catalog, signal, input, before);
+				const snapshot = await freshCandidate(stage, catalog, signal, input, before);
 				await checkStorage(target);
 				await assertNoLinks(target);
 				signal.throwIfAborted();
 				await fs.mkdir(roots.akmData, { recursive: true, mode: 0o700 });
 				// Copy to the destination filesystem, then publish exclusively: the
 				// private recovery directory may be on a different local mount.
-				const snapshot = path.join(stage, 'complete.sqlite');
 				const temporary = `${target}.cache-${randomUUID()}`;
 				try {
 					await fs.copyFile(snapshot, temporary, constants.COPYFILE_EXCL);
@@ -434,7 +424,7 @@ export function createAkmIndexCache({
 					await fs.rm(temporary, { force: true });
 				}
 				set('restored');
-				return { bytes: completed.bytes.length };
+				return { bytes: (await fs.stat(snapshot)).size };
 			});
 		}
 	};
