@@ -69,7 +69,7 @@ verify_remote_state() {
 }
 
 verify_explicit_remote_modes() {
-	# Only enablement differs from the default-on fixture already qualified.
+	# Explicit remote and learning switches share these disposable startup fixtures.
 	# Do not repeat browser, AKM, lifecycle, history or quiet-work qualification.
 	local mode expected
 	for mode in 1 0; do
@@ -77,12 +77,22 @@ verify_explicit_remote_modes() {
 		docker run -d --name "$container" --network none \
 			--init --cap-drop=ALL --security-opt no-new-privileges:true \
 			-e OPENCODE_SERVER_PASSWORD=assistant-explicit-remotes-fixture \
-			-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE="$mode" -e FH_CLAUDE_REMOTE="$mode" \
+			-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE="$mode" -e FH_CLAUDE_REMOTE="$mode" -e FH_AUTOMATIC_MEMORY="$mode" \
 			"$image" >/dev/null
 		wait_for_health
 		expected=sign-in-needed
 		if [ "$mode" = 0 ]; then expected=not-started; fi
 		verify_remote_state "$expected"
+		docker exec "$container" sh -ec "akm info --format json -q | jq -e '.learning.on == $([ "$mode" = 1 ] && echo true || echo false)'" >/dev/null
+		if [ "$mode" = 1 ]; then
+			# Default/on must preserve a native off choice across normal restart.
+			docker exec "$container" akm setup --learning off --format json -q >/dev/null
+			docker restart "$container" >/dev/null
+			wait_for_health
+			docker exec "$container" sh -ec 'akm info --format json -q | jq -e ".learning.on == false"' >/dev/null
+			docker exec "$container" akm setup --learning on --format json -q >/dev/null
+			docker exec "$container" sh -ec 'akm info --format json -q | jq -e ".learning.on == true"' >/dev/null
+		fi
 		printf 'Explicit native remote mode %s: %s, healthy Assistant\n' "$mode" "$expected"
 	done
 }

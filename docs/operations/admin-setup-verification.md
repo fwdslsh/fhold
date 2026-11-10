@@ -418,6 +418,25 @@ Missing display, Docker, image or provider prerequisites are blocked integration
 gates, not passes. Static DOM/CSP tests and bundle checks remain useful but cannot
 replace rendered verification.
 
+For a focused Knowledge check, build `bun run --cwd packages/electron bundle:e2e`
+and prepare Electron with `node packages/electron/node_modules/electron/install.js`.
+With an already running **disposable** local instance and desktop display, run:
+
+```bash
+FH_HOME=/absolute/disposable-home FH_ADMIN_E2E_OUTPUT=/tmp/knowledge-check \
+  packages/electron/node_modules/electron/dist/electron --disable-gpu \
+  packages/electron/dist/admin-e2e.js --verify-knowledge
+```
+
+Use a fresh output directory for each run. This opens the real Admin renderer,
+selects the test home through the native folder picker, clicks Knowledge and
+consumes AKM's `desktop_session` link in a separate browser session. It checks
+anonymous rejection, HttpOnly/SameSite cookie authentication, token removal,
+rendered Library and an authenticated reload. Only the human picker response
+and OS browser dispatch are intercepted. It does not start containers or change
+stack settings. Real SSH-host verification is tracked separately in
+[issue #112](https://github.com/fwdslsh/fhold/issues/112).
+
 On a host whose default Docker address pools are exhausted, an operator may first
 check existing Docker IPAM and host routes, then set
 `FH_ADMIN_E2E_INGRESS_SUBNET` to an explicit unused CIDR for this test only. The

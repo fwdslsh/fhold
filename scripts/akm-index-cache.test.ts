@@ -55,8 +55,6 @@ async function fixture() {
 		AKM_DATA_DIR: roots.akmData,
 		AKM_STATE_DIR: path.join(roots.akmData, 'state'),
 		AKM_CACHE_DIR: path.join(dir, 'cache'),
-		AKM_AUTO_MEMORY: '0',
-		AKM_AUTO_LEARNING: '0',
 		BUN_OPTIONS: '--no-env-file --config=/dev/null'
 	};
 	const options = { roots, env, bunPath: process.execPath, akmCommand: [process.execPath, cli] };

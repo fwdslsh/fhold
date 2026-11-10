@@ -261,8 +261,6 @@ export function createAkmIndexCache({
 			AKM_CONFIG_DIR: configDir,
 			AKM_DATA_DIR: data,
 			AKM_STATE_DIR: path.join(stage, 'state'),
-			AKM_AUTO_MEMORY: '0',
-			AKM_AUTO_LEARNING: '0',
 			BUN_OPTIONS: '--no-env-file --config=/dev/null'
 		};
 		const result = JSON.parse(

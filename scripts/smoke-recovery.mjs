@@ -61,7 +61,10 @@ const customSelection = {
 		'/tmp/fhold-independent.sqlite',
 		'/work/custom.sqlite'
 	],
-	excludePaths: ['/work/volatile'],
+	// Explicit home selections opt into normally excluded caches. Native plugin
+	// caches now contain bundled dependencies and executable links; keep the
+	// normal image-reseeded cache boundary while testing native durable homes.
+	excludePaths: ['/work/volatile', '/home/fhold/.claude/plugins/cache', '/home/fhold/.codex/plugins/cache'],
 	externalMounts: ['/work/drive-ro', '/stash/drive', '/mounted-drive'],
 	autoExcludeNetworkMounts: false,
 	recoverMounts: []
@@ -324,7 +327,7 @@ async function released(checkpointImage = image) {
 		version: 1,
 		paths: [...customSelection.paths].sort(),
 		sqlite: [...customSelection.sqlite].sort(),
-		excludePaths: customSelection.excludePaths,
+		excludePaths: [...customSelection.excludePaths].sort(),
 		externalMounts: [...customSelection.externalMounts].sort(),
 		recoverMounts: [],
 		autoExcludeNetworkMounts: false

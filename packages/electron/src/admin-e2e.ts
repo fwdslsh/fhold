@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, shell, type BrowserWindow } from 'electron';
+import { app, clipboard, dialog, shell, BrowserWindow } from 'electron';
 import axe from 'axe-core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -801,6 +801,62 @@ async function connectProviderUi(
 		);
 	}
 	return readiness;
+}
+
+async function verifyKnowledgeBrowser(window: BrowserWindow, url: string): Promise<void> {
+	const knowledge = new URL(url);
+	const token = knowledge.searchParams.get('desktop_session');
+	assert(token, 'AKM did not provide its native browser session bootstrap.');
+	assert(
+		(await fetch(knowledge.origin)).status === 401,
+		'AKM knowledge was exposed without native authentication.'
+	);
+	// A separate real browser session consumes the bootstrap and retains the
+	// native HttpOnly cookie. Never send the token into Admin's renderer.
+	const knowledgeWindow = new BrowserWindow({
+		show: false,
+		webPreferences: {
+			nodeIntegration: false,
+			contextIsolation: true,
+			sandbox: true,
+			partition: `akm-web-e2e-${Date.now()}`
+		}
+	});
+	try {
+		await knowledgeWindow.loadURL(knowledge.href);
+		await waitForRenderer(
+			knowledgeWindow,
+			"!new URL(location.href).searchParams.has('desktop_session') && !![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')",
+			'native AKM web hydration and bootstrap removal',
+			30_000
+		);
+		const cookies = await knowledgeWindow.webContents.session.cookies.get({
+			url: knowledge.origin
+		});
+		assert(
+			cookies.some((cookie) => cookie.httpOnly && cookie.sameSite === 'strict'),
+			'Native AKM session cookie missing.'
+		);
+		assert(
+			await knowledgeWindow.webContents.executeJavaScript(
+				`!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')`
+			),
+			'AKM web Library did not render.'
+		);
+		await knowledgeWindow.loadURL(knowledge.origin);
+		await waitForRenderer(
+			knowledgeWindow,
+			"!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')",
+			'cookie-authenticated AKM web reload',
+			30_000
+		);
+	} finally {
+		knowledgeWindow.destroy();
+	}
+	const adminHtml = await window.webContents.executeJavaScript(
+		'document.documentElement.outerHTML'
+	);
+	assert(!adminHtml.includes(token), 'The native AKM token entered the Admin renderer.');
 }
 
 async function run(): Promise<Record<string, unknown>> {
@@ -1645,19 +1701,15 @@ async function run(): Promise<Record<string, unknown>> {
 			assert(openedUrls.length === count, 'OpenCode link did not dispatch to the browser.');
 		};
 		try {
-			await window.webContents.executeJavaScript("document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()");
+			await window.webContents.executeJavaScript(
+				"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+			);
 			await waitForBrowserOpen(1);
-			const knowledge = new URL(openedUrls.pop()!);
-			assert(knowledge.searchParams.has('token'), 'AKM did not provide its native browser token.');
-			const meta = new URL('/api/meta', knowledge);
-			assert((await fetch(meta)).status === 401, 'AKM knowledge was exposed without native authentication.');
-			const authenticated = await fetch(meta, { headers: { 'X-Akm-Ui-Token': knowledge.searchParams.get('token')! } });
-			assert(authenticated.status === 200, 'The selected Assistant’s native AKM UI was unreachable.');
-			await authenticated.body?.cancel();
-			const adminHtml = await window.webContents.executeJavaScript('document.documentElement.outerHTML');
-			assert(!adminHtml.includes(knowledge.searchParams.get('token')!), 'The native AKM token entered the Admin renderer.');
+			await verifyKnowledgeBrowser(window, openedUrls.pop()!);
 			await capture(window, outputDir, '05a-knowledge-browser.png');
-			await window.webContents.executeJavaScript("document.querySelector('[data-view=system]').click()");
+			await window.webContents.executeJavaScript(
+				"document.querySelector('[data-view=system]').click()"
+			);
 			await window.webContents.executeJavaScript(
 				"document.querySelector('#assistant-url-detail').focus()"
 			);
@@ -3376,11 +3428,72 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 	}
 }
 
+// Focused real renderer/IPC/browser test against an explicitly supplied disposable
+// running home. It changes no stack settings and never starts/stops containers.
+async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
+	const homeDir = requiredEnvironment('FH_HOME');
+	const outputDir = requiredEnvironment('FH_ADMIN_E2E_OUTPUT');
+	mkdirSync(outputDir, { recursive: true });
+	app.setPath('userData', join(outputDir, 'knowledge-electron-profile'));
+	process.env.XDG_CONFIG_HOME = join(outputDir, 'knowledge-host-config');
+	await waitForAppReady();
+	registerAdminIpc();
+	const window = createAdminWindow({ show: true });
+	const originalPicker = dialog.showOpenDialog;
+	const originalOpen = shell.openExternal;
+	const openedUrls: string[] = [];
+	try {
+		await waitForLoad(window);
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'welcome');
+		// Replace only the human folder selection and OS browser dispatch.
+		dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [homeDir] });
+		await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+		await waitForRenderer(
+			window,
+			"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy !== 'true'",
+			'folder picker'
+		);
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#choose-instance').click()"
+		);
+		await waitForRenderer(
+			window,
+			"document.body.dataset.phase === 'ready' && document.body.dataset.busy !== 'true'",
+			'running instance'
+		);
+		shell.openExternal = async (url) => {
+			openedUrls.push(url);
+		};
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+		);
+		const deadline = Date.now() + 30_000;
+		while (!openedUrls.length && Date.now() < deadline)
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		assert(openedUrls.length === 1, 'Knowledge action did not dispatch a native browser session.');
+		await verifyKnowledgeBrowser(window, openedUrls[0]!);
+		return {
+			ok: true,
+			knowledgeClickThrough: true,
+			cookieAuthenticatedReload: true,
+			screenshots: [await capture(window, outputDir, 'knowledge.png')]
+		};
+	} finally {
+		dialog.showOpenDialog = originalPicker;
+		shell.openExternal = originalOpen;
+		window.destroy();
+	}
+}
+
 async function main(): Promise<void> {
 	const outputDir = process.env.FH_ADMIN_E2E_OUTPUT?.trim();
 	const reopenedLaunch = process.argv.includes('--verify-reopened-launch');
 	try {
-		const report = await (reopenedLaunch ? verifyReopenedLaunch() : run());
+		const report = await (process.argv.includes('--verify-knowledge')
+			? verifyKnowledgeLaunch()
+			: reopenedLaunch
+				? verifyReopenedLaunch()
+				: run());
 		if (outputDir)
 			writeFileSync(
 				join(outputDir, reopenedLaunch ? 'reopen-report.json' : 'report.json'),

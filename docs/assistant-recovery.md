@@ -611,6 +611,12 @@ For example, mount it read-only; it contains paths, not authentication keys:
   These exclusions cover transient native state, not plugin/account data. Ordinary native control
   metadata and operator-selected plugin caches remain recoverable; arbitrary links
   elsewhere are still refused, never dereferenced as a shortcut.
+  Bundled native plugin caches contain executable symlinks. Keep their default
+  exclusion; when explicitly selecting `.claude` or `.codex`, also list
+  `/home/fhold/.claude/plugins/cache` and `/home/fhold/.codex/plugins/cache` in
+  `excludePaths`. The image reseeds these caches; account settings and plugin
+  selections remain covered. A custom cache can be selected only if its files
+  meet the same regular-file and size rules as other recovery content.
   For the image's AKM data/state layout, the reserved transient paths are
   `/opt/akm/data/index.db.write.lock`, `index.rebuild.lock`, `akm.lock.lck`,
   `state/locks/`, `secret-locks/`, `extract-locks/`, `workflow-run-locks/`, and

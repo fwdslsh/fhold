@@ -7,6 +7,11 @@ Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins
 Claude/Codex hooks. Native verification uses AKM's current configuration settings
 for learning instead of retired plugin environment switches.
 
+Preserve fhold's explicit learning-off setting with native `akm setup --learning
+off` after restore and before agents start. Default/on preserves native choices.
+Update Admin's real Knowledge click-through test to exercise `akm-web` bootstrap
+and HttpOnly cookie authentication, including an authenticated page reload.
+
 ## 0.4.1105-beta — Admin app icons
 
 Use the supplied transparent green f/h artwork for Admin's Linux, Windows and

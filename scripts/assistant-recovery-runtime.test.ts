@@ -58,9 +58,6 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 	}
 	writeFileSync(script, isolated);
 	const writerCheck = `
-if [ "\${FIXTURE_MEMORY_CHECK:-0}" = 1 ]; then
-  printf 'memory-%s:%s:%s\\n' "$(basename "$0")" "\${AKM_AUTO_MEMORY-unset}" "\${AKM_AUTO_LEARNING-unset}" >>"$EVENTS"
-fi
 if [ "$FIXTURE_CHECK_ENV" = 1 ]; then
   for name in FH_RECOVERY_URL FH_RECOVERY_INCLUDE_FILE FH_RECOVERY_PARENT_PID FH_INSTANCE_ID AZURE_CLIENT_ID IDENTITY_ENDPOINT MSI_ENDPOINT IMDS_ENDPOINT; do
     if printenv "$name" >/dev/null; then printf 'environment-leak\n' >>"$EVENTS"; exit 71; fi
@@ -105,7 +102,12 @@ fi
 	};
 	stub(
 		'akm',
-		`test "$1 $2" = 'migrate apply'
+		`if [ "$1" = setup ]; then
+  test "$*" = 'setup --learning off --format json -q'
+  printf 'learning-off\\n' >>"$EVENTS"
+  exit "\${FIXTURE_LEARNING_EXIT:-0}"
+fi
+test "$1 $2" = 'migrate apply'
 printf 'migrate\\n' >>"$EVENTS"
 if [ "\${FIXTURE_MIGRATE_HANG:-0}" = 1 ]; then trap '' TERM; sleep 10; fi
 printf '{"status":"current"}\\n'
@@ -233,45 +235,41 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
-	for (const [name, settings, expected] of [
-		['native defaults', { FH_AUTOMATIC_MEMORY: '1' }, 'unset:unset'],
-		['explicit off', { FH_AUTOMATIC_MEMORY: '0' }, '0:0'],
-		[
-			'native off with fhold on',
-			{ FH_AUTOMATIC_MEMORY: '1', AKM_AUTO_MEMORY: '0', AKM_AUTO_LEARNING: '0' },
-			'0:0'
-		],
-		[
-			'explicit native overrides',
-			{ FH_AUTOMATIC_MEMORY: '0', AKM_AUTO_MEMORY: '1', AKM_AUTO_LEARNING: '' },
-			'1:'
-		]
-	] as const) {
-		it(`preserves ${name} for managed writers after recovery`, async () => {
+	for (const mode of ['0', '1']) {
+		it(`applies native learning off only for explicit off (${mode}) after restore and before writers`, async () => {
 			const run = fixture({
-				...settings,
-				FIXTURE_MEMORY_CHECK: '1',
+				FH_AUTOMATIC_MEMORY: mode,
 				FH_RECOVERY_URL: 'file:///fixture',
 				FH_SCHEDULER_ENABLED: '1',
 				FH_CODEX_REMOTE: '1',
 				FH_CLAUDE_REMOTE: '1'
 			});
 			try {
-				const writers = ['akm', 'opencode', 'fhold-task', 'supercronic', 'fhold-remote'];
 				await until(() =>
-					writers.every((writer) => run.events().includes(`memory-${writer}:${expected}`)) &&
-					['remote-claude', 'remote-codex'].every((event) => run.events().includes(event))
+					['native', 'sync', 'remote-claude', 'remote-codex'].every((event) =>
+						run.events().includes(event)
+					)
 				);
-				expect(run.events().filter((event) => event.startsWith('memory-'))).toHaveLength(6);
-				expect(run.events().indexOf('restored')).toBeLessThan(
-					run.events().indexOf(`memory-akm:${expected}`)
-				);
+				const events = run.events();
+				if (mode === '0') {
+					expect(events.filter((event) => event === 'learning-off')).toHaveLength(1);
+					expect(events.indexOf('restored')).toBeLessThan(events.indexOf('learning-off'));
+					expect(events.indexOf('migrate')).toBeLessThan(events.indexOf('learning-off'));
+					for (const writer of ['native', 'sync', 'remote-claude', 'remote-codex'])
+						expect(events.indexOf('learning-off')).toBeLessThan(events.indexOf(writer));
+				} else expect(events).not.toContain('learning-off');
 			} finally {
 				run.child.kill('SIGTERM');
 				await finished(run.child);
 			}
 		});
 	}
+	it('does not start writers when an explicit native learning-off request cannot be applied', async () => {
+		const run = fixture({ FH_AUTOMATIC_MEMORY: '0', FIXTURE_LEARNING_EXIT: '1' });
+		expect(await finished(run.child)).toBe(1);
+		expect(run.stderr()).toContain('Could not preserve the explicit learning-off setting');
+		for (const writer of ['native', 'sync', 'remote']) expect(run.events()).not.toContain(writer);
+	});
 
 	it('bounds a stuck optional native migration before starting the core', async () => {
 		const run = fixture({ FIXTURE_MIGRATE_HANG: '1' });
@@ -561,9 +559,11 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 				writeFileSync(join(run.root, 'native-ready'), 'ready');
 				await until(() => run.events().includes('workspace-init'));
 				await Bun.sleep(150);
-				expect(run.events().filter(event => event === 'workspace-init')).toHaveLength(1);
+				expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
 				expect(run.child.exitCode).toBeNull();
-				expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(Boolean(recovery));
+				expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(
+					Boolean(recovery)
+				);
 				// Only the actual native plugin may establish activity coverage.
 				expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
 			} finally {
@@ -582,7 +582,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			expect(run.child.exitCode).toBeNull();
 			expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(true);
 			expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
-			expect(run.events().filter(event => event === 'workspace-init')).toHaveLength(1);
+			expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
 			run.child.kill('SIGTERM');
 			expect(await finished(run.child)).toBe(0);
 			expect(run.events()).toContain('final-complete');
