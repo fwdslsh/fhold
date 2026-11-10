@@ -26,6 +26,7 @@ import electronUpdater from 'electron-updater';
 import { AdminSettingsStore } from './admin-settings.js';
 import { AdminUpdates } from './admin-updates.js';
 import { AdminDesktop } from './admin-desktop.js';
+import { AdminKnowledge } from './admin-knowledge.js';
 
 import { ADMIN_CHANNELS, type AdminSnapshot, type StackAction } from './admin-types.js';
 import {
@@ -42,11 +43,15 @@ let instances: AdminInstances;
 let updates: AdminUpdates;
 let desktop: AdminDesktop;
 let activeSession: { key: string; api: ComposedInstanceSession } | undefined;
+let knowledge: { owner: BrowserWindow; url: string; browser: AdminKnowledge } | undefined;
+let closingSession: Promise<void> | undefined;
 // A native sign-in flow can request that Admin opens a browser after its IPC call
 // has completed. Keep that callback bound to the selected session rather than the
 // mutable current instance so a late event cannot escape to a newly selected host.
 let managementGeneration = 0;
 function session() {
+	if (closingSession)
+		throw new Error('The instance connection is changing. Try again when it finishes.');
 	const target = instances.current();
 	const key = JSON.stringify(target);
 	if (activeSession?.key === key) return activeSession.api;
@@ -76,11 +81,27 @@ function session() {
 	activeSession = { key, api };
 	return api;
 }
-async function discardSession() {
+function discardSession(changeSelection?: () => void): Promise<void> {
+	if (closingSession) {
+		if (changeSelection) throw new Error('The instance connection is already changing.');
+		return closingSession;
+	}
 	managementGeneration++;
 	const old = activeSession;
 	activeSession = undefined;
-	await old?.api.close();
+	closingSession = Promise.resolve().then(async () => {
+		try {
+			knowledge?.browser.close();
+			knowledge = undefined;
+			await old?.api.close();
+			// No status read may reopen the old target while native SSH closes.
+			// Mutate the selection in this same lifetime before releasing it.
+			changeSelection?.();
+		} finally {
+			closingSession = undefined;
+		}
+	});
+	return closingSession;
 }
 
 function selectedConnection(id: string) {
@@ -102,11 +123,15 @@ function handleAdmin(
 ): void {
 	ipcMain.handle(channel, (event, value: unknown) => {
 		requireAdminSender(event);
+		if (closingSession)
+			throw new Error('The instance connection is changing. Try again when it finishes.');
 		return instances.run(() => handler(event, value));
 	});
 }
 
 function requireSwitchable(): void {
+	if (closingSession)
+		throw new Error('The instance connection is changing. Try again when it finishes.');
 	instances.assertIdle();
 	if (activeSession?.api.busy())
 		throw new Error('Finish or cancel native remote setup before switching instances.');
@@ -280,18 +305,13 @@ export function registerAdminIpc(): void {
 				if (action === 'resume') {
 					if (typeof input.reference !== 'string' || !input.reference.trim())
 						throw new Error('Choose the saved installation reference.');
-					if (
-						input.retryFailedStep !== undefined &&
-						typeof input.retryFailedStep !== 'boolean'
-					)
+					if (input.retryFailedStep !== undefined && typeof input.retryFailedStep !== 'boolean')
 						throw new Error('Choose whether to retry the failed installation step.');
 					return invoke(
 						provisioning.resume,
 						{
 							reference: input.reference,
-							...(input.retryFailedStep === true
-								? { retryFailedStep: true }
-								: {})
+							...(input.retryFailedStep === true ? { retryFailedStep: true } : {})
 						},
 						confirmationContext(value)
 					);
@@ -385,16 +405,31 @@ export function registerAdminIpc(): void {
 	handleAdmin(ADMIN_CHANNELS.connectAgent, (_event, value) =>
 		invoke(session().agent.connect, parseInput('agent.connect', value ?? {}))
 	);
-	handleAdmin(ADMIN_CHANNELS.openKnowledge, async () => {
+	handleAdmin(ADMIN_CHANNELS.openKnowledge, async (event) => {
 		const selected = session();
 		const { url } = await invoke(selected.data.knowledgeUi, undefined);
 		if (activeSession?.api !== selected)
 			throw new Error('The selected instance changed. Try again.');
-		try {
-			await shell.openExternal(externalAdminUrl(url));
-		} catch {
-			throw new Error('Could not open your browser. Check your default browser and try again.');
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		if (!owner || owner.isDestroyed()) throw new Error('The Admin window is closed.');
+		const origin = new URL(url).origin;
+		if (knowledge?.owner !== owner || knowledge.url !== url) {
+			knowledge?.browser.close();
+			const browser = new AdminKnowledge(owner, origin);
+			knowledge = { owner, url, browser };
+			try {
+				await browser.open(url);
+			} catch (error) {
+				if (knowledge?.browser === browser) knowledge = undefined;
+				throw error;
+			}
+		} else {
+			await knowledge.browser.sync();
 		}
+	});
+	ipcMain.handle(ADMIN_CHANNELS.syncKnowledge, async (event) => {
+		requireAdminSender(event);
+		if (knowledge?.owner.webContents === event.sender) await knowledge.browser.sync();
 	});
 	handleAdmin(ADMIN_CHANNELS.openOpenCode, async () => {
 		const selected = session();
@@ -554,7 +589,7 @@ export function registerAdminIpc(): void {
 		return adminSnapshot();
 	});
 	app.on('before-quit', (event) => {
-		if (!activeSession && !desktop.busy()) return;
+		if (!activeSession && !closingSession && !desktop.busy()) return;
 		event.preventDefault();
 		void Promise.all([discardSession(), desktop.finish()]).finally(() => app.quit());
 	});
@@ -597,8 +632,9 @@ export function registerAdminIpc(): void {
 			requireSwitchable();
 			const result = instances.hosting.updateConnection(id, next);
 			if (retarget) {
-				if (selectedConnection(id)) await discardSession();
-				instances.forgetConnectionTargets(id);
+				if (selectedConnection(id))
+					await discardSession(() => instances.forgetConnectionTargets(id));
+				else instances.forgetConnectionTargets(id);
 			}
 			return result;
 		}
@@ -616,9 +652,12 @@ export function registerAdminIpc(): void {
 		)
 			return false;
 		requireSwitchable();
-		if (selectedConnection(id)) await discardSession();
-		instances.hosting.removeConnection(id);
-		instances.forgetConnectionTargets(id);
+		const remove = () => {
+			instances.hosting.removeConnection(id);
+			instances.forgetConnectionTargets(id);
+		};
+		if (selectedConnection(id)) await discardSession(remove);
+		else remove();
 		return true;
 	});
 	ipcMain.handle(ADMIN_CHANNELS.hostingCheckConnection, (event, id: string) => {
@@ -663,20 +702,17 @@ export function registerAdminIpc(): void {
 	ipcMain.handle(ADMIN_CHANNELS.openInstance, async (event, target: unknown) => {
 		requireAdminSender(event);
 		requireSwitchable();
-		await discardSession();
-		instances.open(target);
+		await discardSession(() => instances.open(target));
 	});
 	ipcMain.handle(ADMIN_CHANNELS.prepareNewInstance, async (event, target: unknown) => {
 		requireAdminSender(event);
 		requireSwitchable();
-		await discardSession();
-		instances.prepareNew(target);
+		await discardSession(() => instances.prepareNew(target));
 	});
 	ipcMain.handle(ADMIN_CHANNELS.closeInstance, async (event) => {
 		requireAdminSender(event);
 		requireSwitchable();
-		await discardSession();
-		instances.close();
+		await discardSession(() => instances.close());
 	});
 
 	ipcMain.handle(ADMIN_CHANNELS.selectedHome, (event) => {

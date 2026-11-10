@@ -2849,3 +2849,9 @@ body[data-admin-settings="true"]
 		padding: 20px 16px;
 	}
 }
+#knowledge-viewport {
+	min-height: 480px;
+	height: calc(100vh - 280px);
+	border-radius: 12px;
+	overflow: hidden;
+}

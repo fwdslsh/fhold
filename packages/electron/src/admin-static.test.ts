@@ -972,7 +972,14 @@ describe('Admin static security boundary', () => {
 			.filter((name) => name.endsWith('.js'))
 			.map((name) => join(admin, name));
 		for (const path of [...productionSources, ...rendererSources]) {
-			expect(readFileSync(path, 'utf8')).not.toMatch(
+			// Native embedded content follows its placeholder; it never resizes
+			// the owning window. Keep every other production resize prohibited.
+			const source = readFileSync(path, 'utf8');
+			expect(
+				path.endsWith('/admin-knowledge.ts')
+					? source.replace('this.view.setBounds(bounds);', '')
+					: source
+			).not.toMatch(
 				/\.\s*(?:setSize|setContentSize|setBounds|resizeTo|resizeBy|maximize|unmaximize|setFullScreen)\s*\(/
 			);
 		}

@@ -68,6 +68,7 @@ const api: AdminApi = {
 	connectAgent: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.connectAgent, value),
 	openOpenCode: () => ipcRenderer.invoke(ADMIN_CHANNELS.openOpenCode),
 	openKnowledge: () => ipcRenderer.invoke(ADMIN_CHANNELS.openKnowledge),
+	syncKnowledge: () => ipcRenderer.invoke(ADMIN_CHANNELS.syncKnowledge),
 	assistantPassword: () => ipcRenderer.invoke(ADMIN_CHANNELS.assistantPassword),
 	copyText: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.copyText, value),
 	openExternal: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.openExternal, value),
