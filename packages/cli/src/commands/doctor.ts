@@ -137,7 +137,7 @@ export default defineCommand({
 			console.log(JSON.stringify(result, null, 2));
 		} else {
 			for (const check of result.checks) {
-				console.log(`${check.status === 'not-checked' ? 'NOT CHECKED' : check.status === 'off' ? 'OFF' : check.ok ? 'ok' : check.advisory ? 'WARN' : 'FAIL'}  ${check.name}: ${check.detail}`);
+				console.log(`${check.status === 'not-checked' ? 'NOT CHECKED' : check.status === 'off' ? 'OFF' : check.status === 'fail' ? 'FAIL' : check.ok ? 'ok' : check.advisory ? 'WARN' : 'FAIL'}  ${check.name}: ${check.detail}`);
 			}
 		}
 		if (!result.ok) throw new Error('One or more checks failed.');

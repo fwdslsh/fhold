@@ -4,7 +4,7 @@ import type { InstanceManagement, ManagedSnapshot } from './types.js';
 import { defaultStackConfig } from '../control-plane/stack-config.js';
 import { operationDescription, supportedOperation, unsupportedOperation } from './contracts.js';
 import type { HostingSnapshot } from '../hosting/types.js';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openInstanceSession } from '../hosting/provider.js';
@@ -146,8 +146,25 @@ test('checkpoint inspection stays an engine operation rather than a saved-settin
 	expect(calls).toEqual([['recovery', { action: 'inspect' }]]);
 });
 
-test('a new local folder reaches the shared install view without requiring an installed host', async () => {
-	const homeDir = join(mkdtempSync(join(tmpdir(), 'fhold-session-install-')), 'new-agent');
+test.each([true, false])('a new local folder reaches the shared install view with Docker available=%s', async (dockerReady) => {
+	const root = mkdtempSync(join(tmpdir(), 'fhold-session-install-'));
+	const homeDir = join(root, 'new-agent');
+	const calls = join(root, 'docker-calls');
+	const docker = join(root, 'docker');
+	// This composition test observes installation readiness, not the runner's
+	// Docker daemon/context. Keep both host states deterministic and read-only.
+	writeFileSync(docker, `#!${process.execPath}
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
+if (args[0] === 'info') {
+  if (!${dockerReady}) { console.error('Docker daemon unavailable (synthetic)'); process.exit(1); }
+  console.log('"fixture-version"');
+} else if (JSON.stringify(args) === JSON.stringify(['compose', 'version'])) console.log('Docker Compose fixture');
+else throw Error('Unexpected Docker operation');
+`, { mode: 0o700 });
+	const previousDocker = process.env.FH_DOCKER_BIN;
+	process.env.FH_DOCKER_BIN = docker;
 	const session = openInstanceSession(
 		LOCAL_CONNECTION,
 		{ kind: 'local-docker', connectionId: 'local', homeDir },
@@ -157,6 +174,11 @@ test('a new local folder reaches the shared install view without requiring an in
 		const snapshot = await session.inspect();
 		expect(snapshot.lifecycle).toMatchObject({ state: 'known', value: 'not-installed' });
 		expect(snapshot.docker?.config.deployment.projectName).toBe('new-agent');
+		expect(snapshot.docker?.installationReadiness).toMatchObject({ ok: dockerReady });
+		expect(existsSync(homeDir)).toBe(false);
+		expect(readFileSync(calls, 'utf8').trim().split('\n').map(line => JSON.parse(line))).toEqual([
+			['info', '--format', '{{json .ServerVersion}}'], ...(dockerReady ? [['compose', 'version']] : [])
+		]);
 		expect(snapshot.operations['docker.install']).toMatchObject({
 			support: 'supported',
 			availability: { state: 'ready' }
@@ -167,7 +189,12 @@ test('a new local folder reaches the shared install view without requiring an in
 			value: { lifecycleCapabilities: { start: { state: 'unavailable' } } }
 		});
 	} finally {
-		await session.close();
+		try { await session.close(); }
+		finally {
+			if (previousDocker === undefined) delete process.env.FH_DOCKER_BIN;
+			else process.env.FH_DOCKER_BIN = previousDocker;
+			rmSync(root, { recursive: true, force: true });
+		}
 	}
 });
 

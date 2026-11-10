@@ -9,7 +9,7 @@ export type DiagnosticCheck = {
 	ok: boolean;
 	detail: string;
 	advisory?: boolean;
-	status?: 'pass' | 'warn' | 'not-checked' | 'off';
+	status?: 'pass' | 'warn' | 'fail' | 'not-checked' | 'off';
 };
 
 function check(name: string, status: NonNullable<DiagnosticCheck['status']>, detail: string): DiagnosticCheck {
@@ -22,9 +22,29 @@ function record(value: unknown): Record<string, unknown> {
 function rows(value: unknown): Record<string, unknown>[] {
 	return Array.isArray(value) ? value.map(record) : [];
 }
-const names = ['Assistant native API', 'OpenCode providers', 'AKM configuration', 'AKM harnesses', 'AKM migrations', 'AKM tasks', 'AKM proposal persistence'];
+const names = ['Assistant native API', 'OpenCode providers', 'AKM health', 'AKM migrations', 'AKM tasks'];
 export function unavailableNativeDiagnostics(detail: string): DiagnosticCheck[] {
 	return names.map((name) => check(name, 'not-checked', detail));
+}
+
+// The public native workspace operation is read-only. `akm health --no-probe`
+// alone still opens/migrates state.db and performs a write/read round-trip.
+// Resolve the public export from the image-baked package without changing the
+// container's working directory (which can select native project settings).
+const healthCommand = 'import { createRequire } from "node:module"; const { activity } = await import(createRequire("/opt/fhold/tools/package.json").resolve("akm-cli/workspace")); console.log(JSON.stringify(await activity.health({ probe: false })));';
+
+function healthChecks(health: Record<string, unknown>): DiagnosticCheck[] {
+	const statuses = ['pass', 'warn', 'fail', 'unknown'];
+	const native = [...rows(health.hardChecks), ...rows(health.advisories)];
+	const valid = health.schemaVersion === 3 && ['pass', 'warn', 'fail'].includes(String(health.status))
+		&& Array.isArray(health.hardChecks) && health.hardChecks.length > 0 && Array.isArray(health.advisories)
+		&& native.every((row) => typeof row.name === 'string' && /^[a-z][a-z0-9-]{0,79}$/.test(row.name) && statuses.includes(String(row.status)));
+	if (!valid) return [check('AKM health', 'not-checked', 'Native read-only AKM health is unavailable or returned an unsupported response. Open Knowledge → Health or inspect Assistant diagnostics; no health success is inferred.')];
+	return [
+		check('AKM health', health.status as 'pass' | 'warn' | 'fail', `Native AKM reported ${health.status}. Read-only inspection; network and harness probes disabled. Open Knowledge → Health for full diagnostics.`),
+		...native.map((row) => check(`AKM ${row.name}`, row.status === 'unknown' ? 'not-checked' : row.status as 'pass' | 'warn' | 'fail',
+			`Native AKM reported ${row.status}. Open Knowledge → Health for details; network and harness probes were disabled.`))
+	];
 }
 
 /** Explicit doctor inspection only. Never starts a container, model, task or migration. */
@@ -41,18 +61,20 @@ export async function diagnoseNativeRuntime(
 		if (options.readiness) result.push({ name: 'live provider readiness', ok: false, status: 'not-checked', detail: 'Assistant is stopped or unavailable; no model request was sent.' });
 		return result;
 	}
-	async function akm(command: string[]): Promise<Record<string, unknown>> {
+	async function nativeReport(command: string[], acceptBlockedMigration = false): Promise<Record<string, unknown>> {
 		// The in-container timeout also stops AKM if the Docker client disconnects.
-		const result = await runDocker([...args, 'exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s', 'akm', ...command, '--format', 'json', '--quiet'], {
+		const result = await runDocker([...args, 'exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s', ...command], {
 			env, timeoutMs: 15_000, maxOutputBytes: 256 * 1024
 		});
 		// migrate status uses exit 1 for a valid blocked plan; other failures are unknown.
-		if (result.code !== 0 && !(command[0] === 'migrate' && result.code === 1)) return {};
+		if (result.code !== 0 && !(acceptBlockedMigration && result.code === 1)) return {};
 		try { return record(JSON.parse(result.stdout)); } catch { return {}; }
 	}
-	const [providers, info, migration, tasks] = await Promise.all([
+	const [providers, health, migration, tasks] = await Promise.all([
 		listProviders(home, { timeoutMs: 10_000, signal: AbortSignal.timeout(10_000), maxResponseBytes: 256 * 1024 }).catch(() => undefined),
-		akm(['info']), akm(['migrate', 'status']), akm(['task', 'doctor'])
+		nativeReport(['bun', '-e', healthCommand]),
+		nativeReport(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], true),
+		nativeReport(['akm', 'task', 'doctor', '--format', 'json', '--quiet'])
 	]);
 	const checks: DiagnosticCheck[] = [check('Assistant native API', providers === undefined ? 'not-checked' : 'pass',
 		providers === undefined ? 'Native API observation failed; core agent availability is unknown.' : 'Native provider API responded; model execution is checked only with --readiness.')];
@@ -63,24 +85,10 @@ export async function diagnoseNativeRuntime(
 		checks.push(check('OpenCode providers', connected.length ? 'pass' : 'warn',
 			`${connected.length} connected native provider(s), ${connected.filter((provider) => provider.authenticated).length} with native credentials. Model response is not checked; use fhold doctor --readiness.`));
 	}
-	const validInfo = info.schemaVersion === 1 && typeof info.version === 'string' && Array.isArray(info.connectionsAndHarnesses);
-	const configBad = Boolean(info.configError || info.error);
-	checks.push(check('AKM configuration', configBad ? 'warn' : validInfo ? 'pass' : 'not-checked',
-		configBad ? 'Native AKM rejected the effective configuration. Inspect akm info and akm migrate status inside Assistant.'
-			: validInfo ? 'Native AKM loaded the effective configuration; this does not verify agent execution or proposal writes.'
-				: 'Native AKM info is unavailable or returned an unsupported response.'));
-	if (validInfo && !configBad) {
-		const targets = rows(info.connectionsAndHarnesses);
-		const harnesses = targets.filter((row) => row.type === 'harness');
-		const missing = harnesses.filter((row) => row.installed === false).length;
-		const unresolved = targets.filter((row) => row.type === 'process' && row.problem).length;
-		checks.push(check('AKM harnesses', missing || unresolved ? 'warn' : harnesses.length ? 'pass' : 'not-checked',
-			`${harnesses.length} native harness(es); ${missing} missing executable(s); ${unresolved} unresolved work target(s). Inspect akm info for target details; no agent was run.`));
-		if (info.bundleDirError || info.dataDirError || record(info.indexStats).unavailable) {
-			checks.push(check('AKM catalog', 'warn', 'Native AKM reports an unavailable bundle, data directory or index. Inspect akm info inside Assistant.'));
-		}
-		if (record(info.semanticSearch).status === 'disabled') checks.push(check('AKM semantic search', 'off', 'Disabled in native AKM configuration.'));
-	} else checks.push(check('AKM harnesses', 'not-checked', 'Effective native configuration could not be inspected.'));
+	// Native checks own plugin versions, state integrity, proposal/extraction and
+	// harness diagnostics. Never echo their arbitrary messages/evidence (private
+	// paths, endpoints, model outputs or credentials) into fhold's status envelope.
+	checks.push(...healthChecks(health));
 	const migrationStatus = migration.schemaVersion === 1 ? migration.status : undefined;
 	checks.push(check('AKM migrations', migrationStatus === 'current' ? 'pass' : migrationStatus === 'ready' || migrationStatus === 'blocked' ? 'warn' : 'not-checked',
 		migrationStatus === 'current' ? 'Native migration status is current.'
@@ -92,7 +100,6 @@ export async function diagnoseNativeRuntime(
 		!validTasks ? 'Native task diagnostics are unavailable.' : taskWarnings ? 'Native scheduler diagnostics report warnings. Inspect akm task doctor; no tasks were changed or run.'
 			: 'Native scheduler bindings inspected; task execution and historical outcomes are not checked.'));
 	if (validTasks && record(tasks.improveAutonomy).enabled === false) checks.push(check('AKM improve autonomy', 'off', 'Disabled by native AKM policy; preserved.'));
-	checks.push(check('AKM proposal persistence', 'not-checked', 'AKM does not yet expose read-only proposal write-target readiness or reliable aggregate extraction outcomes (itlackey/akm#1289, #1290). No learning or proposal-write success is inferred.'));
 	if (options.readiness) {
 		const readiness = await testAssistantReadiness(home, { timeoutMs: 120_000 });
 		checks.push({ name: 'live provider readiness', ok: readiness.ok, detail: readiness.ok ? 'Native model responded.' : 'Native model request failed. Use fhold provider test for diagnostics.' });
