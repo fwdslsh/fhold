@@ -282,6 +282,8 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
+	// The fixture permits up to 4s for startup, 2s for TERM and 2s to reap
+	// descendants. A 5s harness cutoff can kill cleanup before final checkpoint.
 	it('runs native migration after restore and before agent/task writers, retaining optional failures privately', async () => {
 		const run = fixture({
 			FH_RECOVERY_URL: 'file:///synthetic',
@@ -304,7 +306,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			run.child.kill('SIGTERM');
 			await finished(run.child);
 		}
-	});
+	}, 10_000);
 
 	it('maps exact capability names only into OpenCode and its normal subprocesses', async () => {
 		const header = 'synthetic value with spaces\nand $literal; not shell code';
