@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, shell } from 'electron';
+import { type BrowserWindow, WebContentsView, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { externalAdminUrl } from './admin-domain.js';
 
