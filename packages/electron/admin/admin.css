@@ -2849,9 +2849,62 @@ body[data-admin-settings="true"]
 		padding: 20px 16px;
 	}
 }
+#instance-page-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 16px;
+}
+#instance-page-header > div:first-child {
+	flex: 1 1 240px;
+	min-inline-size: 0;
+}
+#knowledge-header-actions {
+	flex: none;
+	max-width: 100%;
+	margin-left: auto;
+}
+body[data-view="knowledge"] .app-shell {
+	height: 100dvh;
+	min-height: 0;
+}
+body[data-view="knowledge"] .workspace {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	padding-bottom: 0;
+}
+body[data-view="knowledge"] #instance-page-header {
+	flex-shrink: 0;
+}
+body[data-view="knowledge"] #main-content {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	margin: 0;
+}
+#view-knowledge {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	gap: 0;
+}
 #knowledge-viewport {
-	min-height: 480px;
-	height: calc(100vh - 280px);
-	border-radius: 12px;
+	min-width: 0;
+	min-height: 0;
 	overflow: hidden;
+}
+@media (max-width: 900px) {
+	body[data-view="knowledge"] .app-shell {
+		display: flex;
+		flex-direction: column;
+	}
+	body[data-view="knowledge"] .sidebar {
+		flex-shrink: 0;
+	}
+	body[data-view="knowledge"] .workspace {
+		flex: 1;
+	}
 }

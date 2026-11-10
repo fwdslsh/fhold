@@ -313,7 +313,7 @@ export async function loadDirectPassword(copyOnly) {
 
 export function bindConnectionsEvents() {
 	byId('open-knowledge').addEventListener('click', () =>
-		operation('Opening AKM UI', () => state.api.openKnowledge(), 'AKM UI opened below.')
+		operation('Opening AKM UI', () => state.api.openKnowledge(), '')
 	);
 	for (const id of ['gateway', 'discord', 'slack'])
 		byId(id).addEventListener('change', updateConditionalConnections);

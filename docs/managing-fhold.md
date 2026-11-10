@@ -221,7 +221,7 @@ It replaces the removed `akm ui` command. Update older Assistant images before
 using this action; a host-local AKM Desktop manages its own library, not the
 selected container's bundles.
 
-Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
+Select an instance, then choose **Knowledge → Open AKM UI** in the page header. Admin opens the
 Assistant's native AKM interface inside Admin, using that instance's
 bundles, configuration and index. Keep Admin open with that instance selected;
 switching instances or closing Admin ends this temporary UI session. Opening it

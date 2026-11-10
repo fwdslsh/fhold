@@ -678,12 +678,15 @@ describe('Admin static security boundary', () => {
 		renderInstanceCapabilities(snapshot);
 		showView('knowledge');
 		expect(control('view-knowledge').hidden).toBe(false);
+		expect(control('knowledge-header-actions').hidden).toBe(false);
 		expect(control('knowledge-fields').disabled).toBe(false);
 		await control('open-knowledge').listeners.get('click')?.();
 		expect(opened).toBe(1);
 		renderInstanceCapabilities(normalizedSnapshot());
 		expect(control('knowledge-fields').disabled).toBe(true);
 		expect(control('knowledge-fields-unavailable').hidden).toBe(false);
+		showView('overview');
+		expect(control('knowledge-header-actions').hidden).toBe(true);
 	});
 	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({

@@ -3571,6 +3571,9 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript('window.fholdAdmin.syncKnowledge()');
 		assert(embedded.getVisible(), 'Embedded AKM did not become visible.');
 		const assertBounds = async () => {
+			await window.webContents.executeJavaScript(
+				'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+			);
 			await window.webContents.executeJavaScript('window.fholdAdmin.syncKnowledge()');
 			const bounds = embedded.getBounds();
 			const [width, height] = window.getContentSize();
@@ -3589,11 +3592,31 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 					Math.min(width, Math.max(0, Math.ceil(rect.x * window.webContents.getZoomFactor()))),
 				'Embedded browser missed its zoomed placeholder.'
 			);
+			const layout = await window.webContents.executeJavaScript(`(() => {
+				const header = document.getElementById('instance-page-header').getBoundingClientRect();
+				const button = document.getElementById('open-knowledge').getBoundingClientRect();
+				const slot = document.getElementById('knowledge-viewport').getBoundingClientRect();
+				const workspace = document.querySelector('.workspace').getBoundingClientRect();
+				return {ok: document.documentElement.scrollWidth <= innerWidth + 1 &&
+					button.left >= header.left && button.right <= header.right + 1 &&
+					button.top >= header.top && button.bottom <= header.bottom + 1 &&
+					slot.top >= header.bottom - 1 && slot.height > 0 &&
+					Math.abs(slot.width - workspace.width) < 1 &&
+					Math.abs(slot.bottom - innerHeight) < 1,
+					header:header.toJSON(),button:button.toJSON(),slot:slot.toJSON(),workspace:workspace.toJSON(), width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth};
+			})()`);
+			assert(layout.ok, `Knowledge viewport/header layout mismatch: ${JSON.stringify(layout)}`);
 		};
+		const layoutScreenshots: string[] = [];
 		await assertBounds();
-		window.webContents.setZoomFactor(1.5);
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-header.png'));
+		window.webContents.setZoomFactor(2);
 		await assertBounds();
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-200pct.png'));
 		window.webContents.setZoomFactor(1);
+		window.setSize(640, 780);
+		await assertBounds();
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-narrow.png'));
 		window.setSize(1000, 720);
 		await assertBounds();
 		await window.webContents.executeJavaScript(
@@ -3729,6 +3752,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 			screenshots: [
 				screenshot,
 				guestScreenshot,
+				...layoutScreenshots,
 				...(nativeWindowCaptured ? [windowScreenshot] : [])
 			]
 		};
