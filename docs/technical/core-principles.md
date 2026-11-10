@@ -67,6 +67,10 @@ unqualified; native update checks stay unavailable until feeds are published.
 Linux menu installation requires
 no system installer, background agent or instance changes;
 native AppImage updates preserve that stable launcher target.
+The installed copy refreshes changed desktop artwork after self-update using native
+icon-theme/menu notifications. Standalone downloads and custom launchers remain
+untouched; no desktop restart or cache deletion is required. Optional notification
+failures are warnings, not Admin startup gates.
 Optional failures remain local to the updater. The optional
 Claude Desktop MCPB bridge is local stdio-to-Guardian.
 Portal runs on Node LTS, the supported runtime for the Slack/Discord SDKs,
