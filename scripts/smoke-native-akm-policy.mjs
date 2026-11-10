@@ -39,7 +39,7 @@ const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: join(ro
 	XDG_DATA_HOME: join(root, 'home/.local/share'), XDG_STATE_HOME: join(root, 'state'), XDG_CACHE_HOME: join(root, 'cache'),
 	AKM_BUNDLE_DIR: join(root, 'bundle'), AKM_CONFIG_DIR: join(root, 'akm'),
 	AKM_STATE_DIR: join(root, 'akm-state'), AKM_DATA_DIR: join(root, 'akm-data'), AKM_CACHE_DIR: join(root, 'akm-cache'),
-	FH_RUNTIME_DIR: join(root, 'runtime'), AKM_AUTO_MEMORY: '0', AKM_AUTO_LEARNING: '0', AKM_CURATE_MIN_SCORE: '0',
+	FH_RUNTIME_DIR: join(root, 'runtime'),
 	OPENCODE_SERVER_PASSWORD: 'synthetic-native-policy', OPENCODE_CONFIG_DIR: join(root, 'system'),
 	OPENCODE_CONFIG: join(root, 'config/opencode/opencode.json') };
 for (const path of ['home', 'config/opencode', 'data', 'state', 'cache', 'bundle/knowledge', 'akm', 'runtime', 'project/.opencode/skills/project-native'])
@@ -52,6 +52,7 @@ writeFileSync(join(root, 'project/opencode.json'), JSON.stringify({ agents: {
 } }));
 const config = JSON.parse(readFileSync('/assistant-defaults/config/akm/config.json', 'utf8'));
 config.bundles.stash.path = env.AKM_BUNDLE_DIR;
+config.improve = { enabled: false };
 writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(config));
 writeFileSync(env.OPENCODE_CONFIG, JSON.stringify({ model: 'fixture/model', default_agent: 'analyst',
 	providers: { fixture: { package: '@opencode/ai/providers/openai-compatible', settings: {
@@ -128,10 +129,14 @@ try {
 	// The shipped native harness owns bounded model work and reuses native auth.
 	await turn(sessions[0], `Investigation evidence: the independently verified native bundle ownership remained intact after the recovery fix. ${'We inspected native configuration, reproduced the failure, verified ownership and preserved the operator settings. '.repeat(30)}`);
 	assert.doesNotMatch(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/, 'Explicit off must prevent automatic extraction');
+	assert.match(await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '-q']), /extract is disabled/, 'Native host-wide off also blocks explicit extraction');
+	const enabled = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8'));
+	delete enabled.improve;
+	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(enabled));
 	const extraction = await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout-ms', '30000', '-q']);
 	assert.match(extraction, /opencode/);
 	writeFileSync(join(root, 'extraction.json'), extraction);
-	assert.ok(requests.some((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')), 'Native extraction did not reach configured model');
+	assert.ok(requests.some((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')), `Native extraction did not reach configured model: ${extraction}`);
 	assert.match(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/);
 	assert.ok(requests.filter((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')).length <= 2, 'Native utility inference recursed');
 	const before = readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8');
@@ -142,10 +147,9 @@ try {
 	assert.ok(await turn(sessions[1], 'Optional learning failed; complete this native prompt normally.'), 'Missing engine blocked the primary agent');
 	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), before);
 	// Native enabled defaults must also drive the real plugin lifecycle. Restart
-	// only this synthetic server so its process environment changes normally.
+	// only this synthetic server so its native settings are loaded normally.
 	server.kill(); await server.exited;
 	// fhold's on choice defers to native defaults instead of forcing env flags.
-	delete env.AKM_AUTO_MEMORY; delete env.AKM_AUTO_LEARNING;
 	server = Bun.spawn(['opencode', 'serve', '--hostname', '127.0.0.1', '--port', '4097'], { cwd, env, stdout: logFile, stderr: logFile });
 	await until(async () => (await client.agent.list({ location })).data.some((agent) => agent.id === 'analyst'), 'Native enabled plugin activation');
 	const learned = await client.session.create({ location, agent: 'analyst', title: 'Native automatic learning' });

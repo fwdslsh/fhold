@@ -111,7 +111,12 @@ tar -tzf /tmp/fhold-akm-plugins.tar.gz
 
 Update the Dockerfile's archive URL, `ADD --checksum`, `plugin_root` and all
 archive extraction prefixes together. Inspect the manifests and hook source
-inside the archive. The native plugin installers run at build time against that
+inside the archive. Retain the native plugin's published `bun.lock` and
+`node_modules`: hooks and skills invoke that bundled CLI directly, and local
+marketplace installation does not install its dependencies. Verify its CLI version
+matches the image and OpenCode plugin. The image selects Codex's native local
+source for the extracted plugin directory instead of the release catalog's Git
+source, keeping image installation and runtime refresh offline. The native plugin installers run at build time against that
 baked marketplace; do not copy its hooks into a second registration path.
 Personal plugin updates or a `git pull` in an unrelated AKM checkout do not
 change this image.

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins
+**0.10.261119**. Retain the published native plugins' bundled CLI for offline
+Claude/Codex hooks. Native verification uses AKM's current configuration settings
+for learning instead of retired plugin environment switches.
+
 ## 0.4.1105-beta — Admin app icons
 
 Use the supplied transparent green f/h artwork for Admin's Linux, Windows and
