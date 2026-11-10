@@ -14,7 +14,8 @@ Committed native exports:
 - `icons/`: native 16, 24, 32, 48, 64, 128, 256 and 512 px PNGs, installed into
   the corresponding per-user `hicolor` directories for menu/taskbar lookup.
 - `icon.ico`: Windows multi-resolution icon, including 16–256 px frames.
-- `icon.icns`: macOS multi-resolution icon, including the 1024 px Retina frame.
+- `icon.icns`: macOS multi-resolution icon with Retina frames up to 512 px.
+  The supplied 932 × 960 raster is not upscaled to manufacture a 1024 px frame.
 
 The exports were produced with the locked electron-builder 26.18.1 icon toolset
 (`icons@1.2.3`), not a hand-written encoder. Application builds consume these files

@@ -296,7 +296,7 @@ test('brand assets include native desktop sizes and builds never redraw the old 
 		createHash('sha256')
 			.update(await asset('icon-source.png'))
 			.digest('hex')
-	).toBe('d0a54720211a3a4f7486ec6d16fd3f530e3a3777f6c54c3fd985d3320bfd11cf');
+	).toBe('a0acfe437ba50ece39373997e4491e20940f9c232593175b97a676b5f881d394');
 	const exporter = await readFile(join(import.meta.dir, '../scripts/export-icons.mjs'), 'utf8');
 	expect(exporter).toContain("'assets/icon-source.png'");
 	expect(exporter).not.toContain('admin-mark.svg');
@@ -331,7 +331,13 @@ test('brand assets include native desktop sizes and builds never redraw the old 
 		offset += length;
 		expect(offset).toBeLessThanOrEqual(icns.length);
 	}
-	for (const frame of ['ic07', 'ic08', 'ic09', 'ic10']) expect(frames).toContain(frame);
+	for (const frame of ['ic07', 'ic08', 'ic09', 'ic11', 'ic12', 'ic13', 'ic14'])
+		expect(frames).toContain(frame);
+	// electron-builder omits ICNS frames larger than the supplied raster; it does not upscale them.
+	const source = await asset('icon-source.png');
+	expect(frames.includes('ic10')).toBe(
+		Math.max(source.readUInt32BE(16), source.readUInt32BE(20)) >= 1024
+	);
 	const pkg = JSON.parse(await readFile(join(import.meta.dir, '../package.json'), 'utf8'));
 	expect(pkg.scripts.bundle).not.toContain('generate-icon');
 });
