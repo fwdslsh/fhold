@@ -1,10 +1,19 @@
-import { app, clipboard, dialog, shell, BrowserWindow } from 'electron';
+import {
+	app,
+	clipboard,
+	dialog,
+	shell,
+	BrowserWindow,
+	WebContentsView,
+	desktopCapturer
+} from 'electron';
 import axe from 'axe-core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:net';
+import { get as httpGet } from 'node:http';
 
 import {
 	createBackup,
@@ -15,7 +24,8 @@ import {
 	createFholdState,
 	deactivateComposeCommand,
 	runDocker,
-	testAssistantReadiness
+	testAssistantReadiness,
+	configureSshHelperDirectory
 } from '@fhold/lib';
 import { installFromAdmin } from './admin-domain.js';
 
@@ -803,60 +813,116 @@ async function connectProviderUi(
 	return readiness;
 }
 
-async function verifyKnowledgeBrowser(window: BrowserWindow, url: string): Promise<void> {
-	const knowledge = new URL(url);
-	const token = knowledge.searchParams.get('desktop_session');
-	assert(token, 'AKM did not provide its native browser session bootstrap.');
+async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContentsView> {
+	const deadline = Date.now() + 30_000;
+	let embedded: WebContentsView | undefined;
+	while (Date.now() < deadline) {
+		embedded = window.contentView.children.find(
+			(view) => view instanceof WebContentsView && view.webContents !== window.webContents
+		) as WebContentsView | undefined;
+		if (
+			embedded &&
+			(await embedded.webContents
+				.executeJavaScript(
+					"!new URL(location.href).searchParams.has('desktop_session') && !![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')"
+				)
+				.catch(() => false))
+		)
+			break;
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	assert(embedded, 'Knowledge did not attach a native embedded browser.');
+	const contents = embedded.webContents;
+	assert(
+		await contents.executeJavaScript(
+			"!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')"
+		),
+		'Embedded AKM Library did not hydrate.'
+	);
+	const knowledge = new URL(contents.getURL());
+	assert(
+		!knowledge.searchParams.has('desktop_session'),
+		'AKM bootstrap stayed in the embedded URL.'
+	);
 	assert(
 		(await fetch(knowledge.origin)).status === 401,
 		'AKM knowledge was exposed without native authentication.'
 	);
-	// A separate real browser session consumes the bootstrap and retains the
-	// native HttpOnly cookie. Never send the token into Admin's renderer.
-	const knowledgeWindow = new BrowserWindow({
-		show: false,
-		webPreferences: {
-			nodeIntegration: false,
-			contextIsolation: true,
-			sandbox: true,
-			partition: `akm-web-e2e-${Date.now()}`
-		}
+	const cookies = await contents.session.cookies.get({
+		url: knowledge.origin
 	});
-	try {
-		await knowledgeWindow.loadURL(knowledge.href);
-		await waitForRenderer(
-			knowledgeWindow,
-			"!new URL(location.href).searchParams.has('desktop_session') && !![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')",
-			'native AKM web hydration and bootstrap removal',
-			30_000
-		);
-		const cookies = await knowledgeWindow.webContents.session.cookies.get({
-			url: knowledge.origin
-		});
-		assert(
-			cookies.some((cookie) => cookie.httpOnly && cookie.sameSite === 'strict'),
-			'Native AKM session cookie missing.'
-		);
-		assert(
-			await knowledgeWindow.webContents.executeJavaScript(
-				`!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')`
-			),
-			'AKM web Library did not render.'
-		);
-		await knowledgeWindow.loadURL(knowledge.origin);
-		await waitForRenderer(
-			knowledgeWindow,
-			"!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')",
-			'cookie-authenticated AKM web reload',
-			30_000
-		);
-	} finally {
-		knowledgeWindow.destroy();
+	assert(
+		cookies.some((cookie) => cookie.httpOnly && cookie.sameSite === 'strict'),
+		'Native AKM session cookie missing.'
+	);
+	const invalidHost = await new Promise<number | undefined>((resolve, reject) => {
+		httpGet(knowledge.origin, { headers: { Host: 'untrusted.invalid' } }, (response) => {
+			response.resume();
+			resolve(response.statusCode);
+		}).once('error', reject);
+	});
+	assert(invalidHost === 403, 'Native AKM accepted a forged Host.');
+	const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
+	assert(
+		(
+			await fetch(knowledge.origin, {
+				method: 'POST',
+				headers: { Cookie: cookie, Origin: 'http://untrusted.invalid' }
+			})
+		).status === 403,
+		'Native AKM accepted a forged Origin.'
+	);
+	await contents.loadURL(knowledge.origin);
+	const reloadDeadline = Date.now() + 30_000;
+	while (
+		!(await contents.executeJavaScript(
+			"!![...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Library')"
+		)) &&
+		Date.now() < reloadDeadline
+	)
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	assert(
+		await contents.executeJavaScript(
+			"typeof window.fholdAdmin === 'undefined' && typeof require === 'undefined'"
+		),
+		'Embedded AKM inherited Admin IPC or Node access.'
+	);
+	if (await contents.executeJavaScript("typeof navigator.clipboard?.writeText === 'function'")) {
+		const previous = await clipboard.readText();
+		try {
+			contents.focus();
+			await contents.executeJavaScript(
+				"navigator.clipboard.writeText('fhold-knowledge-copy-test')",
+				true
+			);
+			const copyDeadline = Date.now() + 2000;
+			while (
+				(await clipboard.readText()) !== 'fhold-knowledge-copy-test' &&
+				Date.now() < copyDeadline
+			)
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			assert(
+				(await clipboard.readText()) === 'fhold-knowledge-copy-test',
+				'Native AKM browser could not copy text with a user gesture.'
+			);
+		} finally {
+			await clipboard.writeText(previous);
+		}
 	}
 	const adminHtml = await window.webContents.executeJavaScript(
 		'document.documentElement.outerHTML'
 	);
-	assert(!adminHtml.includes(token), 'The native AKM token entered the Admin renderer.');
+	assert(
+		!adminHtml.includes('desktop_session='),
+		'The native AKM bootstrap entered the Admin renderer.'
+	);
+	await waitForRenderer(
+		window,
+		"document.body.dataset.busy !== 'true'",
+		'Knowledge operation completion',
+		30_000
+	);
+	return embedded;
 }
 
 async function run(): Promise<Record<string, unknown>> {
@@ -1704,8 +1770,8 @@ async function run(): Promise<Record<string, unknown>> {
 			await window.webContents.executeJavaScript(
 				"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
 			);
-			await waitForBrowserOpen(1);
-			await verifyKnowledgeBrowser(window, openedUrls.pop()!);
+			await verifyKnowledgeBrowser(window);
+			assert(openedUrls.length === 0, 'Knowledge launched an external browser.');
 			await capture(window, outputDir, '05a-knowledge-browser.png');
 			await window.webContents.executeJavaScript(
 				"document.querySelector('[data-view=system]').click()"
@@ -1721,7 +1787,7 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			await waitForBrowserOpen(2);
 			assert(
-				openedUrls.length === 2 &&
+				Number(openedUrls.length) === 2 &&
 					openedUrls.every(
 						(url) =>
 							new URL(url).origin === `http://127.0.0.1:${assistantPort}` &&
@@ -3437,6 +3503,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 	app.setPath('userData', join(outputDir, 'knowledge-electron-profile'));
 	process.env.XDG_CONFIG_HOME = join(outputDir, 'knowledge-host-config');
 	await waitForAppReady();
+	configureSshHelperDirectory(join(import.meta.dirname, '../../cli/embedded'));
 	registerAdminIpc();
 	const window = createAdminWindow({ show: true });
 	const originalPicker = dialog.showOpenDialog;
@@ -3445,17 +3512,38 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 	try {
 		await waitForLoad(window);
 		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'welcome');
-		// Replace only the human folder selection and OS browser dispatch.
-		dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [homeDir] });
-		await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-		await waitForRenderer(
-			window,
-			"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy !== 'true'",
-			'folder picker'
-		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#choose-instance').click()"
-		);
+		// Replace only the human folder selection. Remote mode uses the same
+		// native connection/instance IPC as the host picker, never a fake tunnel.
+		const sshHost = process.env.FH_ADMIN_E2E_SSH_HOST?.trim();
+		if (sshHost) {
+			const connection = {
+				kind: 'ssh-docker',
+				id: 'knowledge-e2e',
+				label: 'Disposable SSH test',
+				host: sshHost,
+				roots: [dirname(homeDir)]
+			};
+			const target = {
+				kind: 'hosted',
+				ref: { kind: 'ssh-docker', connectionId: 'knowledge-e2e', remoteHome: homeDir }
+			};
+			await window.webContents.executeJavaScript(`(async () => {
+				await window.fholdAdmin.hostingSaveConnection(${JSON.stringify(connection)});
+				await window.fholdAdmin.openInstance(${JSON.stringify(target)});
+			})()`);
+			await window.webContents.reload();
+		} else {
+			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [homeDir] });
+			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+			await waitForRenderer(
+				window,
+				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy !== 'true'",
+				'folder picker'
+			);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#choose-instance').click()"
+			);
+		}
 		await waitForRenderer(
 			window,
 			"document.body.dataset.phase === 'ready' && document.body.dataset.busy !== 'true'",
@@ -3467,16 +3555,206 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
 		);
-		const deadline = Date.now() + 30_000;
-		while (!openedUrls.length && Date.now() < deadline)
+		let embedded = await verifyKnowledgeBrowser(window);
+		assert(openedUrls.length === 0, 'Knowledge launched an external browser.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=overview]').click(); window.fholdAdmin.syncKnowledge()"
+		);
+		assert(!embedded.getVisible(), 'Knowledge remained over another Admin section.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+		);
+		assert(
+			(await verifyKnowledgeBrowser(window)) === embedded,
+			'Knowledge did not reuse the native browser session.'
+		);
+		await window.webContents.executeJavaScript('window.fholdAdmin.syncKnowledge()');
+		assert(embedded.getVisible(), 'Embedded AKM did not become visible.');
+		const assertBounds = async () => {
+			await window.webContents.executeJavaScript(
+				'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+			);
+			await window.webContents.executeJavaScript('window.fholdAdmin.syncKnowledge()');
+			const bounds = embedded.getBounds();
+			const [width, height] = window.getContentSize();
+			assert(
+				bounds.x >= 0 &&
+					bounds.y >= 0 &&
+					bounds.x + bounds.width <= width &&
+					bounds.y + bounds.height <= height,
+				'Embedded browser escaped its owner window.'
+			);
+			const rect = await window.webContents.executeJavaScript(
+				"document.getElementById('knowledge-viewport').getBoundingClientRect().toJSON()"
+			);
+			assert(
+				bounds.x ===
+					Math.min(width, Math.max(0, Math.ceil(rect.x * window.webContents.getZoomFactor()))),
+				'Embedded browser missed its zoomed placeholder.'
+			);
+			const layout = await window.webContents.executeJavaScript(`(() => {
+				const header = document.getElementById('instance-page-header').getBoundingClientRect();
+				const button = document.getElementById('open-knowledge').getBoundingClientRect();
+				const slot = document.getElementById('knowledge-viewport').getBoundingClientRect();
+				const workspace = document.querySelector('.workspace').getBoundingClientRect();
+				return {ok: document.documentElement.scrollWidth <= innerWidth + 1 &&
+					button.left >= header.left && button.right <= header.right + 1 &&
+					button.top >= header.top && button.bottom <= header.bottom + 1 &&
+					slot.top >= header.bottom - 1 && slot.height > 0 &&
+					Math.abs(slot.width - workspace.width) < 1 &&
+					Math.abs(slot.bottom - innerHeight) < 1,
+					header:header.toJSON(),button:button.toJSON(),slot:slot.toJSON(),workspace:workspace.toJSON(), width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth};
+			})()`);
+			assert(layout.ok, `Knowledge viewport/header layout mismatch: ${JSON.stringify(layout)}`);
+		};
+		const layoutScreenshots: string[] = [];
+		await assertBounds();
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-header.png'));
+		window.webContents.setZoomFactor(2);
+		await assertBounds();
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-200pct.png'));
+		window.webContents.setZoomFactor(1);
+		window.setSize(640, 780);
+		await assertBounds();
+		layoutScreenshots.push(await capture(window, outputDir, 'knowledge-narrow.png'));
+		window.setSize(1000, 720);
+		await assertBounds();
+		await window.webContents.executeJavaScript(
+			"document.getElementById('knowledge-viewport').scrollIntoView(); window.fholdAdmin.syncKnowledge()"
+		);
+		await assertBounds();
+		await window.webContents.executeJavaScript(
+			"const modal = document.createElement('dialog'); modal.id = 'knowledge-e2e-modal'; document.body.append(modal); modal.showModal(); window.fholdAdmin.syncKnowledge()"
+		);
+		assert(!embedded.getVisible(), 'Embedded browser covered an Admin modal.');
+		await window.webContents.executeJavaScript(
+			"document.getElementById('knowledge-e2e-modal').remove(); window.fholdAdmin.syncKnowledge()"
+		);
+		assert(embedded.getVisible(), 'Embedded browser did not return after modal dismissal.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('.sidebar [data-admin-settings]').click(); window.fholdAdmin.syncKnowledge()"
+		);
+		assert(!embedded.getVisible(), 'Embedded browser covered Admin settings.');
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#admin-settings-back').click(); window.fholdAdmin.syncKnowledge()"
+		);
+		assert(embedded.getVisible(), 'Embedded browser did not return from Admin settings.');
+		await embedded.webContents.executeJavaScript(
+			"[...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Activity').click()"
+		);
+		const healthDeadline = Date.now() + 30_000;
+		while (
+			!(await embedded.webContents.executeJavaScript(
+				"location.pathname.startsWith('/activity') && document.body.textContent.includes('Health')"
+			)) &&
+			Date.now() < healthDeadline
+		)
 			await new Promise((resolve) => setTimeout(resolve, 50));
-		assert(openedUrls.length === 1, 'Knowledge action did not dispatch a native browser session.');
-		await verifyKnowledgeBrowser(window, openedUrls[0]!);
+		assert(
+			await embedded.webContents.executeJavaScript(
+				"location.pathname.startsWith('/activity') && document.body.textContent.includes('Health')"
+			),
+			'Native AKM Health page did not render.'
+		);
+		const origin = new URL(embedded.webContents.getURL()).origin;
+		await embedded.webContents.executeJavaScript(
+			"const link = document.createElement('a'); link.href = 'https://example.invalid/'; document.body.append(link); link.click(); link.remove();"
+		);
+		assert(
+			new URL(embedded.webContents.getURL()).origin === origin && openedUrls.length === 0,
+			'AKM navigated outside its native origin.'
+		);
+		await embedded.webContents.executeJavaScript(
+			"window.open('https://example.invalid/help', '_blank')",
+			true
+		);
+		assert(
+			Number(openedUrls.length) === 1 && openedUrls[0] === 'https://example.invalid/help',
+			'Native external web link did not use the validated OS launcher.'
+		);
+		openedUrls.length = 0;
+		await embedded.webContents.executeJavaScript(
+			"window.open('file:///tmp/private', '_blank'); window.open('https://private:credential@example.invalid/', '_blank')",
+			true
+		);
+		assert(
+			openedUrls.length === 0,
+			'Native external link accepted a file URL or embedded credentials.'
+		);
+		const restartContainer = process.env.FH_ADMIN_E2E_RESTART_WEB_CONTAINER;
+		if (restartContainer) {
+			assert(
+				/^[a-f0-9]{12,64}$/.test(restartContainer),
+				'Choose an exact disposable container ID.'
+			);
+			const previous = embedded;
+			const pattern = '^node /usr/local/bin/akm-web( |$)';
+			if (sshHost)
+				await promisify(execFile)('ssh', [
+					sshHost,
+					`docker exec ${restartContainer} pkill -f '${pattern}'`
+				]);
+			else await promisify(execFile)('docker', ['exec', restartContainer, 'pkill', '-f', pattern]);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#open-knowledge').click()"
+			);
+			const restartDeadline = Date.now() + 30_000;
+			while (window.contentView.children.includes(previous) && Date.now() < restartDeadline)
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			embedded = await verifyKnowledgeBrowser(window);
+			assert(embedded !== previous, 'A new native bootstrap reused a stale browser.');
+			if (sshHost)
+				assert(
+					new URL(embedded.webContents.getURL()).origin === origin,
+					'SSH restart did not exercise the fixed browser origin.'
+				);
+		}
+		const screenshot = await capture(window, outputDir, 'knowledge-admin.png');
+		const guestScreenshot = join(outputDir, 'knowledge-native.png');
+		writeFileSync(guestScreenshot, (await embedded.webContents.capturePage()).toPNG());
+		const { width, height } = window.getBounds();
+		const nativeWindow = (
+			process.env.FH_ADMIN_E2E_CAPTURE_WINDOW === '1'
+				? await desktopCapturer
+						.getSources({ types: ['window'], thumbnailSize: { width, height } })
+						.catch(() => [])
+				: []
+		).find((source) => source.id.split(':')[1] === window.getMediaSourceId().split(':')[1]);
+		const windowScreenshot = join(outputDir, 'knowledge-window.png');
+		const nativeWindowCaptured = !!nativeWindow && !nativeWindow.thumbnail.isEmpty();
+		if (nativeWindowCaptured) writeFileSync(windowScreenshot, nativeWindow.thumbnail.toPNG());
+		const guest = embedded.webContents;
+		const concurrentRead = await window.webContents.executeJavaScript(`(async () => {
+			const closing = window.fholdAdmin.closeInstance();
+			const read = window.fholdAdmin.snapshot().then(() => false, () => true);
+			await closing;
+			return await read;
+		})()`);
+		assert(concurrentRead, 'A concurrent status read reopened the instance during disconnect.');
+		assert(guest.isDestroyed(), 'Knowledge browser survived instance disconnect.');
+		assert(
+			await fetch(origin, { signal: AbortSignal.timeout(2000) }).then(
+				() => false,
+				() => true
+			),
+			'Native AKM server/tunnel survived instance disconnect.'
+		);
 		return {
 			ok: true,
 			knowledgeClickThrough: true,
+			transport: sshHost ? 'native-ssh' : 'local-docker',
 			cookieAuthenticatedReload: true,
-			screenshots: [await capture(window, outputDir, 'knowledge.png')]
+			embedded: true,
+			reused: true,
+			disconnectCleanup: true,
+			nativeServerRestart: !!restartContainer,
+			nativeWindowCaptured,
+			screenshots: [
+				screenshot,
+				guestScreenshot,
+				...layoutScreenshots,
+				...(nativeWindowCaptured ? [windowScreenshot] : [])
+			]
 		};
 	} finally {
 		dialog.showOpenDialog = originalPicker;

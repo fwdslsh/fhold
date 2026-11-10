@@ -153,6 +153,7 @@ export type AdminApi = {
 	connectAgent(value?: { password?: string }): Promise<{ endpoint: string; username?: string }>;
 	openOpenCode(): Promise<void>;
 	openKnowledge(): Promise<void>;
+	syncKnowledge(): Promise<void>;
 	assistantPassword(): Promise<{ password: string }>;
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
@@ -264,6 +265,7 @@ export const ADMIN_CHANNELS = {
 	connectAgent: 'admin:connect-agent',
 	openOpenCode: 'admin:open-opencode',
 	openKnowledge: 'admin:open-knowledge',
+	syncKnowledge: 'admin:sync-knowledge',
 	assistantPassword: 'admin:assistant-password',
 	copyText: 'admin:copy-text',
 	openExternal: 'admin:open-external',

@@ -221,8 +221,8 @@ It replaces the removed `akm ui` command. Update older Assistant images before
 using this action; a host-local AKM Desktop manages its own library, not the
 selected container's bundles.
 
-Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
-Assistant's native AKM interface in your default browser, using that instance's
+Select an instance, then choose **Knowledge → Open AKM UI** in the page header. Admin opens the
+Assistant's native AKM interface inside Admin, using that instance's
 bundles, configuration and index. Keep Admin open with that instance selected;
 switching instances or closing Admin ends this temporary UI session. Opening it
 does not restart the Assistant, change its configuration or publish another port.
@@ -231,8 +231,9 @@ Local Linux Docker and SSH connections to a Linux Docker host are supported when
 the host can reach its container bridge. SSH uses a private loopback forward and
 requires native OpenSSH multiplexing on the Admin computer (Linux/macOS).
 Docker Desktop, host-network containers, ACA and direct HTTPS agent connections
-do not provide this route. AKM's native session cookie, Host and Origin checks remain enabled;
-keep its launch link private. If the selected SSH port is occupied, Admin reports
+do not provide this route. AKM's native session cookie, Host and Origin checks remain enabled.
+The embedded browser has no Admin preload or Node access; its private bootstrap
+stays outside Admin's renderer. If the selected SSH port is occupied, Admin reports
 a connection failure instead of opening an unrelated service.
 
 ### App permissions
