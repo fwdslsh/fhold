@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { chmod, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -33,7 +34,8 @@ const credentialFile = process.env.FH_RECOVERY_TEST_CREDENTIAL_FILE;
 const instance = `smoke-${randomUUID().slice(0, 8)}`;
 const password = 'synthetic-recovery-smoke-only';
 const lockMarker = `synthetic-process-lock-${randomUUID()}`;
-const claudeSpawnFile = '/home/fhold/.claude/bridge-spawn/fhold-recovery-fixture/append-system-prompt.txt';
+const claudeSpawnFile =
+	'/home/fhold/.claude/bridge-spawn/fhold-recovery-fixture/append-system-prompt.txt';
 const processLockFiles = [
 	claudeSpawnFile,
 	'/opt/akm/data/index.rebuild.lock',
@@ -64,7 +66,11 @@ const customSelection = {
 	// Explicit home selections opt into normally excluded caches. Native plugin
 	// caches now contain bundled dependencies and executable links; keep the
 	// normal image-reseeded cache boundary while testing native durable homes.
-	excludePaths: ['/work/volatile', '/home/fhold/.claude/plugins/cache', '/home/fhold/.codex/plugins/cache'],
+	excludePaths: [
+		'/work/volatile',
+		'/home/fhold/.claude/plugins/cache',
+		'/home/fhold/.codex/plugins/cache'
+	],
 	externalMounts: ['/work/drive-ro', '/stash/drive', '/mounted-drive'],
 	autoExcludeNetworkMounts: false,
 	recoverMounts: []
@@ -99,6 +105,7 @@ await writeFile(
 	{ mode: 0o600 }
 );
 const created = new Set();
+let embeddingServer;
 const report = {
 	image,
 	sourceImage,
@@ -351,7 +358,11 @@ async function released(checkpointImage = image) {
 		(member) => member.root === 'home' && member.path.startsWith('.claude/bridge-spawn/')
 	);
 	if (checkpointImage === image) {
-		assert.equal(capturedClaudeSpawn, false, 'candidate checkpoints must exclude Claude spawn files');
+		assert.equal(
+			capturedClaudeSpawn,
+			false,
+			'candidate checkpoints must exclude Claude spawn files'
+		);
 		report.checks.candidateCheckpointsExcludeClaudeSpawn = true;
 	} else {
 		// Historical source images predate this exclusion. The replacement must
@@ -368,6 +379,30 @@ async function released(checkpointImage = image) {
 }
 
 async function qualifyAkmIndexCache() {
+	// A deterministic disposable provider exercises real native vector import.
+	// No external service, model credentials or provider readiness are assumed.
+	embeddingServer = createServer(async (request, response) => {
+		const chunks = [];
+		for await (const chunk of request) chunks.push(chunk);
+		const body = JSON.parse(Buffer.concat(chunks).toString());
+		const documents = Array.isArray(body.input) ? body.input : [body.input];
+		response.setHeader('Content-Type', 'application/json');
+		response.end(
+			JSON.stringify({
+				object: 'list',
+				data: documents.map((_text, index) => ({
+					object: 'embedding',
+					index,
+					embedding: [1, 0.5, 0.25, 0.125, 0.1, 0.05, 0.025, 0.01]
+				}))
+			})
+		);
+	});
+	await new Promise((resolve, reject) => {
+		embeddingServer.once('error', reject);
+		embeddingServer.listen(0, '0.0.0.0', resolve);
+	});
+	const embeddingEndpoint = `http://host.docker.internal:${embeddingServer.address().port}/v1/embeddings`;
 	const cacheBackup = join(root, 'akm-cache-backup');
 	const cacheBundle = join(root, 'akm-cache-bundle');
 	await mkdir(cacheBackup, { mode: 0o700 });
@@ -381,6 +416,8 @@ async function qualifyAkmIndexCache() {
 	await knowledge('cache-keep', 'Synthetic cache smoke surviving original content');
 	await knowledge('cache-deleted', 'Synthetic cache smoke deleted original content');
 	const cacheCommon = [
+		'--add-host',
+		'host.docker.internal:host-gateway',
 		'--user',
 		runtimeUser,
 		'--mount',
@@ -471,6 +508,20 @@ async function qualifyAkmIndexCache() {
 		'-q'
 	]);
 	await docker(['exec', first.id, 'akm', 'index', '--clean', '--format', 'json', '-q']);
+	await docker([
+		'exec',
+		first.id,
+		'bun',
+		'-e',
+		`
+		const file = '/etc/akm/config.json';
+		const config = await Bun.file(file).json();
+		config.semanticSearchMode = 'auto';
+		config.embedding = { endpoint: ${JSON.stringify(embeddingEndpoint)}, model: 'recovery-smoke', dimension: 8 };
+		await Bun.write(file, JSON.stringify(config));
+	`
+	]);
+	await docker(['exec', first.id, 'akm', 'index', '--clean', '--format', 'json', '-q']);
 	await poll(
 		async () =>
 			JSON.parse(await docker(['exec', first.id, 'fhold-recovery', 'status'])).akmIndexCache
@@ -519,7 +570,7 @@ async function qualifyAkmIndexCache() {
 		firstCorrectKnowledgeQueryMs: Date.now() - beganKnowledge,
 		restored: true,
 		qualification:
-			'synthetic native image/read-only bind only; no embedding provider or CIFS performance qualification'
+			'synthetic native image/read-only bind and deterministic embedding endpoint; no real-provider or CIFS performance qualification'
 	};
 	await stopCache(second.id);
 	report.checks.experimentalAkmCacheNativeReplacement = true;
@@ -621,15 +672,22 @@ async function qualifyRuntimeRecovery() {
 	}
 	await verifyNativeFiles(first);
 	async function nativeCodexInventory(container) {
-		return JSON.parse(await execBun(container.id,
-			`import{readFile}from'node:fs/promises';import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);const userConfig=await readFile('/home/fhold/.codex/config.toml','utf8').catch(()=>null);console.log(JSON.stringify({status:review.status,digest:review.digest,hooks:review.hooks,userConfig}));`
-		));
+		return JSON.parse(
+			await execBun(
+				container.id,
+				`import{readFile}from'node:fs/promises';import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);const userConfig=await readFile('/home/fhold/.codex/config.toml','utf8').catch(()=>null);console.log(JSON.stringify({status:review.status,digest:review.digest,hooks:review.hooks,userConfig}));`
+			)
+		);
 	}
 	const codexInventory = await nativeCodexInventory(first);
 	assert.ok(codexInventory.hooks.length > 0, 'real native hooks must be discoverable');
 	assert.ok(codexInventory.hooks.every((hook) => hook.enabled));
 	if (sourceImage === image) {
-		assert.equal(codexInventory.status, 'approval-needed', 'fresh native hooks require explicit consent');
+		assert.equal(
+			codexInventory.status,
+			'approval-needed',
+			'fresh native hooks require explicit consent'
+		);
 	} else {
 		// The published source may have used system-managed registration. The
 		// current image must still honor its own native consent after upgrade.
@@ -798,12 +856,19 @@ async function qualifyRuntimeRecovery() {
 	);
 	report.checks.nativeCodexInitializedDatabasesRecovered = true;
 	const restoredCodexInventory = await nativeCodexInventory(second);
-	assert.equal(restoredCodexInventory.status, 'approval-needed', 'recovery must not silently approve native hooks');
+	assert.equal(
+		restoredCodexInventory.status,
+		'approval-needed',
+		'recovery must not silently approve native hooks'
+	);
 	assert.ok(restoredCodexInventory.hooks.length > 0);
 	assert.ok(restoredCodexInventory.hooks.every((hook) => hook.enabled));
 	if (codexInventory.userConfig !== null) {
-		assert.equal(restoredCodexInventory.userConfig, codexInventory.userConfig,
-			'recovery preserves existing native user settings/consent bytes');
+		assert.equal(
+			restoredCodexInventory.userConfig,
+			codexInventory.userConfig,
+			'recovery preserves existing native user settings/consent bytes'
+		);
 	}
 	if (sourceImage === image) {
 		assert.equal(restoredCodexInventory.digest, codexInventory.digest);
@@ -917,6 +982,7 @@ try {
 			process.exitCode = 1;
 		}
 	}
+	if (embeddingServer) await new Promise((resolve) => embeddingServer.close(resolve));
 	await writeFile(join(root, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, {
 		mode: 0o600
 	});
