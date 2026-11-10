@@ -92,7 +92,7 @@ export async function diagnoseNativeRuntime(
 		!validTasks ? 'Native task diagnostics are unavailable.' : taskWarnings ? 'Native scheduler diagnostics report warnings. Inspect akm task doctor; no tasks were changed or run.'
 			: 'Native scheduler bindings inspected; task execution and historical outcomes are not checked.'));
 	if (validTasks && record(tasks.improveAutonomy).enabled === false) checks.push(check('AKM improve autonomy', 'off', 'Disabled by native AKM policy; preserved.'));
-	checks.push(check('AKM proposal persistence', 'not-checked', 'AKM does not yet expose read-only proposal write-target readiness or reliable aggregate extraction outcomes (itlackey/akm#1289, #1290). No learning or proposal-write success is inferred.'));
+	checks.push(check('AKM proposal persistence', 'not-checked', 'This doctor summary does not inspect proposal write targets or extraction outcomes. Open Knowledge → Health for native AKM diagnostics; no successful learning or proposal write is inferred here.'));
 	if (options.readiness) {
 		const readiness = await testAssistantReadiness(home, { timeoutMs: 120_000 });
 		checks.push({ name: 'live provider readiness', ok: readiness.ok, detail: readiness.ok ? 'Native model responded.' : 'Native model request failed. Use fhold provider test for diagnostics.' });

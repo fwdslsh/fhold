@@ -443,10 +443,17 @@ AKM configuration and executable availability do not prove successful agent
 execution. Review [native migration and harness selection](managed-harness-configuration.md#existing-beta-installations)
 when a custom executable is no longer available. OpenCode 2.2.6 no longer requires
 the previous argument repair for a preserved native invocation. Proposal write-target
-readiness and aggregate extraction success remain explicitly not checked pending
-[AKM #1289](https://github.com/itlackey/akm/issues/1289) and
-[AKM #1290](https://github.com/itlackey/akm/issues/1290). No successful learning is
-inferred from configuration, file presence or a running process.
+readiness and aggregate extraction success remain explicitly not checked by this
+doctor summary. Open **Knowledge → Health** for AKM's native plugin CLI-version,
+state-database, proposal queue and extraction diagnostics. Native warnings,
+failures and unknown checks describe their own evidence; configuration, file
+presence and a running process do not prove successful learning.
+
+`akm health --no-probe` skips network and harness probes, but its current CLI
+still opens/migrates state.db and runs a temporary write/read round-trip. It is
+not a read-only status command. The native web health view uses AKM's read-only
+API; `fhold doctor` does not invoke the mutating health CLI. A supported CLI
+read-only mode is tracked in [AKM #1607](https://github.com/itlackey/akm/issues/1607).
 
 Native v2 credentials persist in the OpenCode database under
 `data/assistant/.local/share/opencode/`. Advanced native settings
