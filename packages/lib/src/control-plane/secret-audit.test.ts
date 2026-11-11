@@ -25,8 +25,6 @@ const assistantEnvironment = {
 	AKM_DATA_DIR: '/opt/akm/data',
 	AKM_STATE_DIR: '/opt/akm/data/state',
 	FH_AUTOMATIC_MEMORY: '1',
-	AKM_REDACT_HIGH_ENTROPY: '1',
-	AKM_REDACT_PII: '1',
 	FH_CODEX_REMOTE: '1',
 	FH_CODEX_SANDBOX: 'workspace-write',
 	FH_CLAUDE_REMOTE: '1',

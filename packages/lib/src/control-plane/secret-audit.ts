@@ -123,8 +123,6 @@ const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>
 		AKM_CONFIG_DIR: '/etc/akm',
 		AKM_DATA_DIR: '/opt/akm/data',
 		AKM_STATE_DIR: '/opt/akm/data/state',
-		AKM_REDACT_HIGH_ENTROPY: '1',
-		AKM_REDACT_PII: '1',
 		HOME: '/home/fhold',
 		OPENCODE_CONFIG_DIR: '/etc/opencode',
 		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',

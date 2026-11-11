@@ -6,6 +6,12 @@ Update Assistant to AKM CLI/web **0.10.261118** and all three native AKM plugins
 **0.10.261120**, including their matching bundled CLI. This includes upstream
 health diagnostics, migration-scope, bundle-update and plugin-settings fixes.
 
+Use native read-only AKM health CLI diagnostics instead of importing its workspace
+API. Preserve warning/failure reports and keep passive inspection free of writes
+and probes. Store plugin redaction defaults in native AKM configuration, retire
+the image/Compose environment switches, preserve explicit operator values and
+include native redaction settings in the optional vector-cache fingerprint.
+
 Use Assistant checkpoints for manual backup packages as well as automatic
 recovery. Export an accepted generation without claiming source ownership, or
 capture once through the same native pipeline when repeating backups are off.

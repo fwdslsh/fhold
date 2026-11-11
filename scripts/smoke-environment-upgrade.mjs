@@ -45,6 +45,20 @@ function verifyReadOnlyDiagnostics() {
 	function inspect() {
 		const before = snapshot();
 		const info = JSON.parse(run(['akm', 'info', '--format', 'json', '--quiet']));
+		const inspected = Bun.spawnSync(['akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet'], {
+			stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 30000
+		});
+		if (info.configError) {
+			assert.equal(inspected.exitCode, 78);
+			assert.equal(inspected.stdout.length, 0);
+			assert.equal(JSON.parse(inspected.stderr.toString()).code, 'INVALID_CONFIG_FILE');
+		} else {
+			assert.ok([0, 4, 1].includes(inspected.exitCode));
+			const health = JSON.parse(inspected.stdout.toString());
+			assert.equal(health.schemaVersion, 3);
+			assert.ok(['pass', 'warn', 'fail'].includes(health.status));
+			assert.ok(health.hardChecks.length > 0);
+		}
 		run(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], [0, 1]);
 		run(['akm', 'task', 'doctor', '--format', 'json', '--quiet'], [0, 1, 78]);
 		assert.deepEqual(snapshot(), before, 'Read-only diagnostics changed AKM config, catalog or state');
@@ -202,6 +216,7 @@ if (process.argv[2] === 'prepare') {
 	});
 
 	const config = read(configPath);
+	config.plugins = { curateLimit: 9, redact: { pii: false } };
 	delete config.harnesses;
 	config.engines = { opencode: { kind: 'agent', platform: 'opencode-sdk', bin: 'opencode' } };
 	config.bundles.external = {
@@ -260,6 +275,7 @@ if (process.argv[2] === 'prepare') {
 	while (!existsSync(`${fixture}/task-ran`) && Date.now() < deadline) await Bun.sleep(250);
 	assert.equal(readFileSync(`${fixture}/task-ran`, 'utf8'), 'native scheduler');
 	const config = readFileSync(configPath, 'utf8');
+	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false, highEntropy: true } });
 	run(['akm', 'migrate', 'apply', '--format', 'json'], [0, 1]);
 	assert.equal(readFileSync(configPath, 'utf8'), config);
 	// The scheduled command has been verified. Quiesce this synthetic writer

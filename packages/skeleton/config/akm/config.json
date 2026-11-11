@@ -10,6 +10,9 @@
 	},
 	"defaultBundle": "stash",
 	"defaultWriteTarget": "stash",
+	"plugins": {
+		"redact": { "pii": true, "highEntropy": true }
+	},
 	"harnesses": {
 		"opencode": { "args": ["run", "--standalone"] }
 	},

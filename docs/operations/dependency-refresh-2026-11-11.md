@@ -25,8 +25,8 @@ The [CLI release](https://github.com/itlackey/akm/releases/tag/v0.10.261118)
 fixes migration scope, bundle fast-forward updates, retention of native plugin
 configuration through migration, and health readiness/failure/usage reporting.
 It also adds native `health --read-only` and independent `--no-probe` options.
-The existing fhold integration already uses the supported read-only health API;
-this dependency update does not introduce a second diagnostic implementation.
+The follow-up cleanup uses this native read-only CLI command in fhold diagnostics,
+removing the previous workspace API import and package-resolution snippet.
 The plugin release changes the exact required CLI; no fhold wrapper or additional
 agent restriction is needed.
 
@@ -44,7 +44,7 @@ No release is stamped or published by this update. Guardian and Portal do not
 install AKM and require no direct pin changes. No running instance, native
 consent, recovery setting or backup is changed.
 
-## Verification
+## Dependency-only verification (`ad29a31`)
 
 - Frozen-lockfile install, all six typechecks, configured lint, standalone CLI
   build and Admin bundle passed. Lint retains 321 existing warnings.
@@ -67,3 +67,48 @@ consent, recovery setting or backup is changed.
 These are dependency-development checks, not final release or native ARM64
 qualification. The previous live ACA record keeps its original image digest;
 it is not relabeled as evidence for the new dependency bytes.
+
+## Native integration cleanup
+
+`fhold doctor` now invokes `akm health --read-only --no-probe --format json
+--quiet`. Valid native warning/failure reports survive exit codes 4/1; launch
+errors, timeouts, malformed output and configuration errors remain unavailable.
+No fallback performs a writable health check. Native statuses remain advisory,
+with private details retained in AKM rather than copied to host status output.
+
+Redaction defaults live in native `plugins.redact.pii` and
+`plugins.redact.highEntropy`. Remove the retired Dockerfile/Compose defaults and
+their fixed-environment audit requirements. Startup asks AKM for its config path
+and fills only absent keys with the native config setter after restore/migration,
+before agent/task writers. This preserves the prior effective redaction-on default
+for existing homes and leaves explicit values, unrelated settings and native
+fail-closed behavior untouched. An unreadable/malformed config is not repaired or
+made a new core gate; native plugins already redact fail-closed. If an absent key
+cannot be persisted, startup refuses to silently turn redaction off. Operators
+disable a setting explicitly with `false`; no format converter or vendor patch
+is introduced.
+
+The optional vector-cache profile uses native redaction configuration instead of
+retired environment variables. A policy change discards an incompatible optional
+artifact; unrelated plugin preferences leave it reusable. Essential checkpoints
+remain independent of optional vectors.
+
+Native recall tests retain enabled redaction. Their short synthetic ref avoids
+mistaking native high-entropy scrubbing of a long telemetry identifier for a
+recall failure. Populated-upgrade checks include an explicit redaction-off value,
+a missing counterpart, an unrelated plugin preference and repeated migration.
+Read-only health checks compare durable config/catalog/state bytes before and
+after inspection, including malformed config's native stderr error response.
+
+Cleanup verification passed all six typechecks, configured lint (321 existing
+warnings), CLI/Admin builds, shell syntax and all three materialized Compose
+profiles. The full regression run passed 1,286 tests with 19 opt-in skips; a final
+57-test lifecycle run also covered the added malformed-config isolation case.
+The final production Dockerfile AMD64 image is
+`sha256:29cb5e9d5626f43b20358da4b8284b4eb5e427c6eb3cb3d3eeb913a89192c7d3`.
+Its runtime and lifecycle lanes passed real recall/tools, native redaction
+defaults, web authentication, populated upgrades, native scheduled execution,
+operator settings/consent, repeated migration and unchanged durable bytes during
+read-only health inspection. Its image-backed optional vector-cache replacement
+case passed as well. Full checkpoint upgrade evidence above keeps its
+original digest; final release/native ARM64 qualification remains separate.

@@ -52,8 +52,6 @@ services:
       AZURE_CLIENT_ID: ${FH_RECOVERY_CLIENT_ID:-}
       # On defers to native plugin settings; startup preserves explicit off.
       FH_AUTOMATIC_MEMORY: ${FH_AUTOMATIC_MEMORY:-1}
-      AKM_REDACT_HIGH_ENTROPY: "1"
-      AKM_REDACT_PII: "1"
       OPENCODE_API_URL: http://127.0.0.1:4096
       TERM: xterm-256color
     ports:

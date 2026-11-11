@@ -432,6 +432,25 @@ prepare_opencode_environment
 if ! env "${writer_env[@]}" timeout --kill-after=5s 60s akm migrate apply --format json >"$RUNTIME_DIR/akm-migration.json" 2>"$RUNTIME_DIR/akm-migration.log"; then
   mark_degraded akm-migration 'AKM migration needs attention. Run akm migrate status for remaining blockers; native backups and private startup diagnostics are retained.'
 fi
+# Native plugin defaults replace the retired image/Compose environment switches.
+# Fill only absent keys after restore; explicit values (including false or an
+# invalid value that AKM handles fail-closed) remain entirely operator-owned.
+if ! (
+  config_file=$(env "${writer_env[@]}" akm config path) || exit 1
+  missing=$(jq -r '
+    if type == "object" and ((has("plugins") | not) or (.plugins | type) == "object") then
+      (.plugins // {}) | if (has("redact") | not) or (.redact | type) == "object" then
+        (.redact // {}) | ["pii", "highEntropy"][] as $key | select(has($key) | not) | $key
+      else empty end
+    else empty end
+  ' "$config_file") || exit 0 # Native plugins redact fail-closed on unreadable/invalid config.
+  for key in $missing; do
+    env "${writer_env[@]}" timeout --kill-after=5s 30s akm config set "plugins.redact.$key" true --silent || exit 1
+  done
+) >"$RUNTIME_DIR/akm-redaction.log" 2>&1; then
+  echo 'assistant: Could not preserve native redaction defaults. Check AKM config permissions and private akm-redaction.log before restarting.' >&2
+  exit 1
+fi
 # Preserve explicit off intent through AKM's own stored switch. Apply it after
 # restore/migration, before any agent or task writer. On defers to native choices;
 # it must never undo an operator's `akm setup --learning off`.

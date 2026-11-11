@@ -37,7 +37,7 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 const state = JSON.parse(readFileSync(${JSON.stringify(statePath)}, 'utf8'));
 let value;
 if (args.includes('ps')) value = [{Service:'assistant',State:state.running ? 'running' : 'exited',ID:'fixture'}];
-else if (args.includes('-e')) { value = state.health; process.exitCode=state.healthExit; process.stderr.write('synthetic-secret-native-stderr'); }
+else if (args.includes('health')) { value = state.health; process.exitCode=state.healthExit; process.stderr.write('synthetic-secret-native-stderr'); }
 else if (args.includes('migrate')) { value = state.migration; if(value.status==='blocked') process.exitCode=1; }
 else if (args.includes('task')) value = state.tasks;
 else throw Error('Unexpected Docker command');
@@ -82,10 +82,10 @@ test.each([undefined, '{}', '{"not-a-provider":"not-a-credential"}', '{broken'])
 	expect(f.commands().filter((args) => args.includes('akm')).map((args) => args.slice(args.indexOf('akm') + 1))).toEqual(expect.arrayContaining([
 		['migrate', 'status', '--format', 'json', '--quiet'], ['task', 'doctor', '--format', 'json', '--quiet']
 	]));
-	const health = f.commands().find((args) => args.includes('-e')) ?? [];
+	const health = f.commands().find((args) => args.includes('health')) ?? [];
 	expect(health.slice(health.indexOf('--project-directory'), health.indexOf('--project-directory') + 2)).toEqual(['--project-directory', f.root]);
-	expect(health.slice(health.indexOf('exec'))).toEqual(['exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s', 'bun', '-e',
-		'import { createRequire } from "node:module"; const { activity } = await import(createRequire("/opt/fhold/tools/package.json").resolve("akm-cli/workspace")); console.log(JSON.stringify(await activity.health({ probe: false })));']);
+	expect(health.slice(health.indexOf('exec'))).toEqual(['exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s',
+		'akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet']);
 	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
 	expect(f.commands()).toHaveLength(4);
 });
@@ -128,12 +128,13 @@ test('unavailable native health and migration/task blockers degrade independentl
 	expect(checks.find((check) => check.name === 'AKM health')?.status).toBe('not-checked');
 	expect(checks.find((check) => check.name === 'AKM migrations')?.status).toBe('warn');
 	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
-	f.state.healthExit = 0;
+	f.state.healthExit = 4;
 	f.state.health = healthReport('warn', [{ name: 'connections-and-harnesses', status: 'warn' }]);
 	f.state.tasks.warnings = ['synthetic-secret'];
 	checks = await f.diagnose();
 	expect(checks.find((check) => check.name === 'AKM connections-and-harnesses')?.status).toBe('warn');
 	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('warn');
+	f.state.healthExit = 0;
 	f.state.health = healthReport();
 	f.state.migration.status = 'current'; f.state.tasks.warnings = [];
 	checks = await f.diagnose();
@@ -157,11 +158,20 @@ test('native plugin mismatch and unknown proposal outcomes retain native statuse
 
 test.each(['state-db-readable', 'state-db-integrity'])('native unavailable/corrupt state stays failed and advisory: %s', async (name) => {
 	const f = fixture(); f.state.health = healthReport('fail', [{ name, status: 'fail' }], []);
+	f.state.healthExit = 1;
 	const checks = await f.diagnose();
 	expect(checks.find((check) => check.name === `AKM ${name}`)).toMatchObject({ status: 'fail', ok: false, advisory: true });
 	expect(checks.find((check) => check.name === 'AKM health')).toMatchObject({ status: 'fail', ok: false, advisory: true });
 	expect(checks.every((check) => check.ok || check.advisory)).toBe(true);
 	expect(f.commands().every((args) => !args.some((arg) => ['start', 'restart', 'up', 'apply'].includes(arg)))).toBe(true);
+});
+
+test.each([1, 4, 124, 137])('native command errors never become healthy reports: exit %s', async (code) => {
+	const f = fixture(); f.state.healthExit = code;
+	f.state.health = { ok: false, code: 'CONFIG_INVALID', error: 'synthetic-secret' };
+	const checks = await f.diagnose();
+	expect(checks.find((check) => check.name === 'AKM health')?.status).toBe('not-checked');
+	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
 });
 
 test.each([{}, '{truncated', healthReport('pass', []), healthReport('pass', [{ name: 'unexpected/private-path', status: 'pass' }]), healthReport('pass', [{ name: 'state-db-integrity', status: 'unrecognized' }])])('unrecognized or truncated native reports never pass: %j', async (report) => {

@@ -20,7 +20,9 @@ import { bootstrapCodexActivity } from '/usr/local/bin/fhold-remote.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
 const prompt = 'Find the lean release verification knowledge for the personal agent rollout';
-const expectedRef = 'knowledge/lean-release-verification';
+// Keep the synthetic ref short: native high-entropy redaction can legitimately
+// scrub long identifiers in telemetry. Exercise recall with redaction enabled.
+const expectedRef = 'knowledge/release';
 const tools = JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8')).dependencies;
 const pluginRequire = createRequire('/opt/fhold/tools/node_modules/akm-opencode-v2/package.json');
 assert.equal(
@@ -48,8 +50,8 @@ function fixture(harness) {
 		`import {writeFileSync} from "node:fs"; writeFileSync(${JSON.stringify(preloadMarker)}, "unsafe"); process.exit(73);\n`
 	);
 	writeFileSync(
-		join(dir, 'bundle/knowledge/lean-release-verification.md'),
-		'---\nname: lean-release-verification\ndescription: Lean release verification knowledge for the personal agent rollout\n---\n\n# Lean release verification\n\nVerify the personal agent rollout using all three native harnesses.\n'
+		join(dir, 'bundle/knowledge/release.md'),
+		'---\nname: release\ndescription: Lean release verification knowledge for the personal agent rollout\n---\n\n# Lean release verification\n\nVerify the personal agent rollout using all three native harnesses.\n'
 	);
 	const env = {
 		PATH: process.env.PATH,
@@ -82,6 +84,7 @@ function fixture(harness) {
 	// switches no longer control learning or select the test bundle.
 	mkdirSync(env.AKM_CONFIG_DIR, { recursive: true });
 	const config = JSON.parse(readFileSync('/assistant-defaults/config/akm/config.json', 'utf8'));
+	assert.deepEqual(config.plugins.redact, { pii: true, highEntropy: true });
 	config.bundles = { stash: { ...config.bundles.stash, path: join(dir, 'bundle') } };
 	config.improve = { enabled: false };
 	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(config));
@@ -293,7 +296,7 @@ function recalled(file, harness) {
 				'Native ' + plan[index][0] + ' failed'
 			);
 		}
-		assert.match(JSON.stringify(results[0].content), /lean-release-verification/);
+		assert.ok(JSON.stringify(results[0].content).includes(expectedRef));
 		assert.match(JSON.stringify(results[1].content), /Verify the personal agent rollout/);
 		assert.match(
 			f.run(['akm', 'show', 'memories/harness-verification']),

@@ -200,8 +200,6 @@ ENV HOME=/home/fhold \
     AKM_CACHE_DIR=/opt/akm/cache \
     AKM_DATA_DIR=/opt/akm/data \
     AKM_STATE_DIR=/opt/akm/data/state \
-    AKM_REDACT_HIGH_ENTROPY=1 \
-    AKM_REDACT_PII=1 \
     FH_SCHEDULER_ENABLED=1 \
     DISABLE_AUTOUPDATER=1 \
     BUN_OPTIONS="--no-env-file --config=/dev/null" \

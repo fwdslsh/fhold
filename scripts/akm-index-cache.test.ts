@@ -496,10 +496,26 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		await source.acquireRestore();
 		await source.checkpoint();
 		await source.release();
+		// A later checkpoint with capture disabled must drop an old artifact when
+		// native redaction changes, while unrelated plugin preferences retain it.
+		const edited = f.engine({ akmIndexCapture: false });
+		await edited.acquireRestore();
+		await fs.writeFile(path.join(f.roots.akmConfig, 'config.json'), JSON.stringify({
+			...f.config, plugins: { autoFeedback: false }
+		}));
+		await edited.checkpoint();
+		expect(edited.status().akmIndexCache.state).toBe('retained');
+		await fs.writeFile(path.join(f.roots.akmConfig, 'config.json'), JSON.stringify({
+			...f.config, plugins: { redact: { pii: true, highEntropy: false } }
+		}));
+		await edited.checkpoint();
+		expect(edited.status().akmIndexCache.reason).toBe('source-policy-changed');
+		expect((await f.saved()).manifest.akmIndexCache).toBeUndefined();
+		await edited.release();
 		await f.replacement();
-		const target = f.engine({}, { env: { ...f.env, AKM_REDACT_PII: '1' } });
+		const target = f.engine();
 		await target.acquireRestore();
-		expect(target.status().akmIndexCache.reason).toBe('source-policy-changed');
+		expect(target.status().akmIndexCache.reason).toBe('absent-or-incompatible');
 		expect(await fs.stat(path.join(f.roots.akmData, 'index.db')).catch(() => null)).toBeNull();
 		await target.release();
 		const excluded = f.engine({ selection: { version: 1, excludePaths: [f.bundle] } });
