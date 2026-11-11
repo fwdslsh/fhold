@@ -89,6 +89,7 @@ export function updateRecoveryFields() {
 	]
 		.filter(Boolean)
 		.join(' ');
+	updateCheckpointPackageActions();
 }
 
 export function renderRecovery(snapshot) {
@@ -217,6 +218,7 @@ export function renderRecoveryStatus(status) {
 }
 
 export function bindRecoveryEvents() {
+	bindCheckpointPackageEvents();
 	for (const suffix of ['enabled', 'storage', 'auth'])
 		byId(id(suffix)).addEventListener('change', updateRecoveryFields);
 	byId('choose-recovery-directory').addEventListener('click', () => {
@@ -319,4 +321,119 @@ export function bindRecoveryEvents() {
 			updateRecoveryFields();
 		});
 	}
+}
+
+function checkpointRequest() {
+	return {
+		directory: byId('checkpoint-source').value.trim(),
+		destinationHome: byId('checkpoint-home').value.trim(),
+		backupDirectory: byId('checkpoint-backups').value.trim()
+	};
+}
+function updateCheckpointPackageActions() {
+	const target = JSON.stringify(state.currentSnapshot?.identity?.ref);
+	if (state.checkpointPackageTarget !== target) {
+		state.checkpointPackageTarget = target;
+		state.checkpointPackagePreview = null;
+		for (const name of ['export-directory', 'source', 'home', 'backups'])
+			byId(`checkpoint-${name}`).value = '';
+		byId('checkpoint-package-result').value =
+			'No checkpoint package operation has run for this instance.';
+	}
+	const supported = instanceCapability('data.recovery.package').supported;
+	byId('export-checkpoint').disabled = !supported || state.operationInFlight;
+	byId('preview-checkpoint').disabled = !supported || state.operationInFlight;
+	byId('import-checkpoint').disabled =
+		!supported ||
+		state.operationInFlight ||
+		!state.checkpointPackagePreview ||
+		state.checkpointPackagePreview.signature !== JSON.stringify(checkpointRequest());
+}
+function bindCheckpointPackageEvents() {
+	for (const [button, purpose, input] of [
+		['choose-checkpoint-export', 'recovery', 'checkpoint-export-directory'],
+		['choose-checkpoint-source', 'recovery', 'checkpoint-source'],
+		['choose-checkpoint-home', 'new-instance', 'checkpoint-home'],
+		['choose-checkpoint-backups', 'recovery', 'checkpoint-backups']
+	])
+		byId(button).addEventListener('click', () => void chooseDirectory(purpose, input));
+	for (const name of ['source', 'home', 'backups'])
+		byId(`checkpoint-${name}`).addEventListener('input', () => {
+			state.checkpointPackagePreview = null;
+			updateCheckpointPackageActions();
+		});
+	byId('checkpoint-export-form').addEventListener('submit', async (event) => {
+		event.preventDefault();
+		if (!instanceCapability('data.recovery.package').supported) return;
+		const result = await operation(
+			'Exporting Assistant backup',
+			() =>
+				state.api.recovery({
+					action: 'package',
+					request: {
+						operation: 'export',
+						directory: byId('checkpoint-export-directory').value.trim()
+					}
+				}),
+			'Assistant checkpoint package exported. Keep this backup private.'
+		);
+		if (result) byId('checkpoint-package-result').value = JSON.stringify(result, null, 2);
+		updateCheckpointPackageActions();
+	});
+	byId('preview-checkpoint').addEventListener('click', async () => {
+		if (!instanceCapability('data.recovery.package').supported) return;
+		const input = checkpointRequest(),
+			signature = JSON.stringify(input);
+		state.checkpointPackagePreview = null;
+		const result = await operation(
+			'Validating Assistant backup',
+			() =>
+				state.api.recovery({
+					action: 'package',
+					request: { operation: 'preview', directory: input.directory }
+				}),
+			'Assistant backup validated. Review its identity, private state and coverage before importing.'
+		);
+		if (result) {
+			byId('checkpoint-package-result').value = JSON.stringify(result, null, 2);
+			state.checkpointPackagePreview = { digest: result.previewDigest, signature };
+		}
+		updateCheckpointPackageActions();
+	});
+	byId('checkpoint-import-form').addEventListener('submit', async (event) => {
+		event.preventDefault();
+		const preview = state.checkpointPackagePreview;
+		if (
+			!instanceCapability('data.recovery.package').supported ||
+			!preview ||
+			preview.signature !== JSON.stringify(checkpointRequest())
+		)
+			return;
+		const input = checkpointRequest();
+		setBusy(true);
+		let confirmed;
+		try {
+			confirmed = await state.api.confirmRestart('checkpoint-import');
+		} catch (error) {
+			notice(message(error), 'error', { persist: true });
+		} finally {
+			setBusy(false);
+		}
+		if (!confirmed) return;
+		const result = await operation(
+			'Importing Assistant backup',
+			() =>
+				state.api.recovery({
+					action: 'package',
+					confirmed: true,
+					request: { operation: 'import', ...input, previewDigest: preview.digest }
+				}),
+			'Assistant restored into the new home. Open that folder to review settings and start it; original writers must remain stopped.'
+		);
+		if (result) {
+			byId('checkpoint-package-result').value = JSON.stringify(result, null, 2);
+			state.checkpointPackagePreview = null;
+		}
+		updateCheckpointPackageActions();
+	});
 }

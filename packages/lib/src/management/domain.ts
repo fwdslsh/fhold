@@ -55,6 +55,7 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 			'remote-setup',
 			'recovery-init',
 			'recovery-restore',
+			'checkpoint-import',
 			'instance-export',
 			'instance-import'
 		].includes(action)
@@ -101,6 +102,13 @@ export function interruptionPrompt(action: unknown, effect?: HostingActionEffect
 			detail:
 				'The instance must be stopped. This is a one-time operation for a genuinely unused destination and instance ID. It does not restore data, start containers or overwrite an existing recovery namespace. Keep the destination private.',
 			buttons: ['Cancel', 'Initialize new destination']
+		};
+	if (action === 'checkpoint-import')
+		return {
+			message: 'Restore this same Assistant into a new home?',
+			detail:
+				'The original Assistant and all its writers must remain stopped. This private checkpoint restores sign-ins, approvals, conversations and task intent into an empty home with a new independent backup destination. It does not include host settings, Guardian/Portal state or external drives. No source ownership is copied or cleared. Containers remain stopped; review the restored settings before starting. Never run both copies together.',
+			buttons: ['Cancel', 'Restore Assistant']
 		};
 	if (action === 'recovery-restore')
 		return {

@@ -17,11 +17,10 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 | Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
 | Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history, not an entire runtime. |
 
-These are different restore purposes and coverage promises, not a reason to
-maintain competing Assistant capture engines. The next consolidation is to
-package a validated checkpoint for export/import; see the
-[checkpoint-package implementation brief](technical/checkpoint-packages.md).
-Current manual exports still use their existing input formats and safeguards.
+These are different restore purposes and coverage promises. Assistant backup
+export/import now packages the same validated checkpoint used by automatic
+recovery; see [checkpoint packages](technical/checkpoint-packages.md).
+Whole-home and reviewed-content exports retain their actual scope and safeguards.
 Reviewed-content import does not replay runtime credentials or checkpoint
 authority; same-instance recovery preserves native state. Container exclusions
 are never silently applied to host portable backup. See

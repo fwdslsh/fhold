@@ -410,6 +410,9 @@ export function azureRecovery(
 		restoreData: unsupportedOperation('Cloud portable restore is not implemented.'),
 		restoreInstance: unsupportedOperation('Full cloud import is not implemented.'),
 		recovery: {
+			package: unsupportedOperation(
+				'Checkpoint package transfer to a management-host directory is not available for ACA. Automatic mounted backups and startup restore remain available.'
+			),
 			status: native.recoveryStatus,
 			inspect: supportedOperation((_input, context) => inspect(context)),
 			initialize: supportedOperation(async (_input, context) => {

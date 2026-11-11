@@ -12,6 +12,11 @@ import type {
 import type { RestorePlan } from '../control-plane/restore.js';
 import type { recoveryStatus, runRecoveryOperation } from '../control-plane/recovery.js';
 import type {
+	CheckpointPackageOperation,
+	CheckpointPackagePlan,
+	CheckpointPackageImportResult
+} from '../dto/recovery.js';
+import type {
 	ProviderEndpointInput,
 	ProviderSettings
 } from '../control-plane/provider-settings.js';
@@ -39,6 +44,7 @@ type LegacyRestoreRequest = RestoreRequest & { confirmed?: boolean };
 type LegacyCodexRecallRequest = CodexRecallRequest & { confirmed?: boolean };
 type LegacyRemoteSetupRequest = RemoteSetupRequest & { restartConfirmed?: boolean };
 type LegacyRecoveryRequest =
+	| { action: 'package'; request: CheckpointPackageOperation; confirmed?: boolean }
 	| { action: 'status' }
 	| { action: 'inspect' | 'init' | 'restore'; confirmed?: boolean }
 	| ({ action: 'save' } & RecoverySaveRequest)
@@ -183,7 +189,9 @@ export type ManagementRequestMap = {
 		input: LegacyRecoveryRequest;
 		result:
 			| Awaited<ReturnType<typeof recoveryStatus>>
-			| Awaited<ReturnType<typeof runRecoveryOperation>>;
+			| Awaited<ReturnType<typeof runRecoveryOperation>>
+			| CheckpointPackagePlan
+			| CheckpointPackageImportResult;
 		extra: [];
 	};
 	restoreData: { input: LegacyRestoreRequest; result: RestorePlan; extra: [] };

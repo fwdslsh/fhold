@@ -314,7 +314,16 @@ the same automatic backup settings. The hub contains:
   and allowlisted settings into a fresh agent. Portable sensitive content is
   opt-in and imported tasks stay inactive; full imports retain task intent.
 
-CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
+**Export / import Assistant backup** packages the accepted Assistant checkpoint
+and validates it before import into an empty home and unused independent backup
+destination. If repeating backups are off, export captures once through the same
+engine without changing those settings. Native sign-ins, approvals and task intent
+are retained: stop the original writers and never run both copies together.
+The imported home stays stopped for review. **Other export options** retains
+whole-home preservation and reviewed-content transfer; see
+[checkpoint packages](technical/checkpoint-packages.md) for commands and coverage.
+
+CLI and Admin use the same shared backup operations.
 Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
@@ -626,7 +635,7 @@ portable archive. Independently persistent container mounts are configured only
 in that recovery policy; they do not alter host-side portable backup selection.
 
 ```bash
-fhold backup --to /private/path/backup
+fhold backup --portable --to /private/path/backup
 fhold --name /absolute/path/new-instance install --no-start
 fhold --name /absolute/path/new-instance restore --from /private/path/backup --dry-run
 fhold --name /absolute/path/new-instance restore --from /private/path/backup --apply

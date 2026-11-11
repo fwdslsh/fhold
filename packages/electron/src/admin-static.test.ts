@@ -318,6 +318,7 @@ function normalizedSnapshot({
 			'data.recovery.restore': supported(),
 			'data.recovery.save': supported(),
 			'data.recovery.setCredential': supported(),
+			'data.recovery.package': supported(),
 			...(docker
 				? {
 						'docker.install': supported(),
@@ -938,7 +939,8 @@ describe('Admin static security boundary', () => {
 		expect(control('instance-import-choices').hidden).toBe(false);
 	});
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
-		expect(html).toContain('Import / export');
+		expect(html).toContain('Export / import Assistant backup');
+		expect(html).toContain('Other export options');
 		expect(html).toContain('Backup and recovery');
 		expect(html).toContain('Automatic Assistant backups');
 		expect(html).not.toContain('Ephemeral container support');
@@ -2647,6 +2649,59 @@ describe('Admin runtime recovery controls', () => {
 		renderRecovery(state.currentSnapshot);
 		return state.currentSnapshot;
 	}
+	it('previews checkpoint packages, invalidates edited targets and requires native import confirmation', async () => {
+		fixture(false);
+		const calls: Array<Record<string, unknown>> = [],
+			confirmations: string[] = [];
+		let approved = false;
+		state.api = {
+			recovery: async (input) => {
+				calls.push(input);
+				return {
+					product: 'fhold',
+					scope: 'assistant-checkpoint',
+					previewDigest: 'a'.repeat(64),
+					instanceId: 'my-agent',
+					warnings: ['Private sign-ins and task intent'],
+					...(input.request.operation === 'import'
+						? { restored: true, homeDir: input.request.destinationHome }
+						: {})
+				};
+			},
+			confirmRestart: async (action) => {
+				confirmations.push(action);
+				return approved;
+			}
+		};
+		bindRecoveryEvents();
+		control('checkpoint-source').value = '/private/package';
+		control('checkpoint-home').value = '/private/new-home';
+		control('checkpoint-backups').value = '/private/new-backups';
+		await control('preview-checkpoint').listeners.get('click')?.({});
+		expect(control('import-checkpoint').disabled).toBe(false);
+		await control('checkpoint-import-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls).toHaveLength(1);
+		expect(confirmations).toEqual(['checkpoint-import']);
+		control('checkpoint-home').value = '/private/changed-home';
+		control('checkpoint-home').listeners.get('input')?.({});
+		expect(control('import-checkpoint').disabled).toBe(true);
+		await control('preview-checkpoint').listeners.get('click')?.({});
+		approved = true;
+		await control('checkpoint-import-form').listeners.get('submit')?.({ preventDefault() {} });
+		expect(calls.at(-1)).toEqual({
+			action: 'package',
+			confirmed: true,
+			request: {
+				operation: 'import',
+				directory: '/private/package',
+				destinationHome: '/private/changed-home',
+				backupDirectory: '/private/new-backups',
+				previewDigest: 'a'.repeat(64)
+			}
+		});
+		expect(control('import-checkpoint').disabled).toBe(true);
+		expect(control('checkpoint-package-result').value).toContain('restored');
+	});
 	it('defaults off, hides advanced storage fields and refuses offline operations while writers run', () => {
 		const snapshot = fixture();
 		expect(control('runtime-recovery-akm-capture').checked).toBe(false);

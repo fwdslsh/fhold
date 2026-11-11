@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,7 +19,11 @@ import {
 	validPathCharacters
 } from './catalog.mjs';
 import { inspectMounts, readMountInfo } from './mounts.mjs';
-import { createAkmIndexCache } from './akm-index-cache.mjs';
+import {
+	AKM_INDEX_CACHE_LIMITS,
+	createAkmIndexCache,
+	validAkmIndexCache
+} from './akm-index-cache.mjs';
 
 export const FORMAT_VERSION = 1;
 export { CATALOG_VERSION, DEFAULT_ROOTS };
@@ -33,6 +38,15 @@ export const DEFAULT_LIMITS = Object.freeze({
 });
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const SAFE_FAILURES = new Set([
+	'checkpoint package format rejected',
+	'checkpoint package descriptor rejected',
+	'checkpoint package destination must be empty',
+	'checkpoint has no accepted generation',
+	'checkpoint import requires an idle unowned engine',
+	'checkpoint import requires empty native state',
+	'checkpoint import requires an unused recovery destination',
+	'checkpoint package changed; preview it again',
+	'checkpoint package cache inventory rejected',
 	'recovery Blob transport failed',
 	'recovery Blob authentication failed',
 	'recovery Blob object missing',
@@ -130,6 +144,20 @@ function instance(value) {
 	if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(value))
 		throw new Error('invalid recovery instance identity');
 	return value;
+}
+/** Bounded identity discovery only; preview/import still validate the entire package. */
+export async function checkpointPackageIdentity(directory) {
+	if (!canonicalPath(directory)) throw new Error('checkpoint package path must be absolute');
+	const metadata = JSON.parse(
+		(await readRegular(path.join(directory, 'checkpoint.json'), 64 * 1024)).toString()
+	);
+	if (
+		metadata?.product !== 'fhold' ||
+		metadata.format !== 1 ||
+		metadata.kind !== 'assistant-checkpoint-package'
+	)
+		throw new Error('checkpoint package format rejected');
+	return instance(metadata.descriptor?.instanceId);
 }
 async function exists(target) {
 	try {
@@ -420,7 +448,7 @@ export function createEngine(config, options = {}) {
 		await owned(true);
 		return result;
 	}
-	async function sqlite(operation, source, destination) {
+	async function sqlite(operation, source, destination, workDir = privateDir) {
 		await checkMounts();
 		await checkSQLiteStorage(source);
 		await assertNoLinks(source);
@@ -450,7 +478,7 @@ export function createEngine(config, options = {}) {
 				],
 				{
 					stdio: 'ignore',
-					cwd: privateDir,
+					cwd: workDir,
 					env: { PATH: process.env.PATH, HOME: roots.home },
 					detached: false
 				}
@@ -630,12 +658,136 @@ export function createEngine(config, options = {}) {
 			throw new Error('recovery presence mismatch');
 		return saved;
 	}
-	async function manifestAt(generation, descriptor = head.value) {
-		const bytes = await store.read(`manifests/${generation}`, limits.maxManifestBytes);
+	async function manifestFrom(source, generation, descriptor) {
+		const bytes = await source.read(`manifests/${generation}`, limits.maxManifestBytes);
 		if (digest(bytes) !== generation) throw new Error('recovery manifest checksum mismatch');
 		const manifest = JSON.parse(bytes.toString());
 		validateManifest(manifest, descriptor);
 		return manifest;
+	}
+	const manifestAt = (generation, descriptor = head.value) =>
+		manifestFrom(store, generation, descriptor);
+	function packagePath(directory) {
+		if (
+			!canonicalPath(directory) ||
+			[
+				...Object.values(roots),
+				...catalog.trees.map(([root, name]) => catalog.native(root, name)),
+				privateDir,
+				store.root
+			]
+				.filter(Boolean)
+				.some((root) => containsPath(root, directory) || containsPath(directory, root))
+		)
+			throw new Error('checkpoint package must be separate from native and recovery state');
+		return directory;
+	}
+	function packageDescriptor(value) {
+		validateDescriptor(value);
+		if (!value.generation) throw new Error('checkpoint has no accepted generation');
+		return {
+			format: FORMAT_VERSION,
+			product: 'fhold',
+			kind: 'assistant-instance',
+			catalog: value.catalog,
+			...(value.selectionHash ? { selectionHash: value.selectionHash } : {}),
+			instanceId,
+			versions: value.versions ?? {},
+			owner: null,
+			epoch: 0,
+			generation: value.generation
+		};
+	}
+	function packagePlan(metadata, manifest) {
+		return {
+			product: 'fhold',
+			scope: 'assistant-checkpoint',
+			instanceId,
+			generation: metadata.descriptor.generation,
+			previewDigest: digest(serialize(metadata)),
+			createdAt: manifest.finishedAt,
+			files: manifest.members.length,
+			totalBytes: manifest.members.reduce((total, member) => total + member.bytes, 0),
+			selection: manifest.selection ?? normalizeSelection(),
+			warnings: [
+				'Private Assistant backup: includes native sign-ins, approvals and task intent. Restore only the same Assistant; original writers must remain stopped.',
+				'Host deployment settings, Guardian/Portal state and independently persistent drives are not included.',
+				metadata.optionalCacheIncluded
+					? 'An optional AKM cache object is included; native AKM still decides whether it is eligible to restore.'
+					: 'Optional AKM cache is omitted; native tools rebuild it when needed.'
+			]
+		};
+	}
+	async function packageMembers(source, manifest, consume) {
+		// SQLite verification always runs on a local temporary copy, never on
+		// an SMB destination or a live native database.
+		const stage = await fs.mkdtemp(path.join(tmpdir(), 'fhold-package-'));
+		try {
+			for (const member of manifest.members) {
+				checkDeadline();
+				const key = `objects/${member.hash}`;
+				const bytes = await source.read(key, member.bytes);
+				if (bytes.length !== member.bytes || digest(bytes) !== member.hash)
+					throw new Error('recovery member checksum mismatch');
+				if (member.kind === 'sqlite') {
+					const local = path.join(stage, `${randomUUID()}.sqlite`);
+					await fs.writeFile(local, bytes, { flag: 'wx', mode: 0o600 });
+					await sqlite('verify', local, undefined, stage);
+					await fs.unlink(local);
+				} else if (bytes.subarray(0, 16).toString() === 'SQLite format 3\0')
+					throw new Error('uncataloged SQLite restore rejected');
+				await consume?.(key, bytes);
+			}
+		} finally {
+			await fs.rm(stage, { recursive: true });
+		}
+	}
+	async function optionalPackageCache(source, manifest, consume) {
+		const reference = manifest.akmIndexCache;
+		if (!validAkmIndexCache(reference, instanceId))
+			throw new Error('checkpoint optional cache reference rejected');
+		const key = `objects/${reference.hash}`;
+		const bytes = await source.read(key, AKM_INDEX_CACHE_LIMITS.bytes);
+		if (bytes.length !== reference.bytes || digest(bytes) !== reference.hash)
+			throw new Error('recovery member checksum mismatch');
+		await consume?.(key, bytes);
+	}
+	async function readPackage(directory, consume) {
+		packagePath(directory);
+		const metadata = JSON.parse(
+			(await readRegular(path.join(directory, 'checkpoint.json'), 64 * 1024)).toString()
+		);
+		if (
+			metadata?.product !== 'fhold' ||
+			metadata.format !== 1 ||
+			metadata.kind !== 'assistant-checkpoint-package' ||
+			metadata.descriptor?.owner !== null ||
+			metadata.descriptor?.epoch !== 0
+		)
+			throw new Error('checkpoint package format rejected');
+		const descriptor = packageDescriptor(metadata.descriptor);
+		if (!same(descriptor, metadata.descriptor))
+			throw new Error('checkpoint package descriptor rejected');
+		const source = createDirectoryStore(pathToFileURL(directory).href, {
+			maxReadBytes: Math.max(limits.maxFileBytes, limits.maxDatabaseBytes, limits.maxManifestBytes)
+		});
+		const manifest = await manifestFrom(source, descriptor.generation, descriptor);
+		await packageMembers(source, manifest, consume);
+		if (metadata.optionalCacheIncluded === true)
+			await optionalPackageCache(source, manifest, consume);
+		else if (metadata.optionalCacheIncluded !== false)
+			throw new Error('checkpoint package cache inventory rejected');
+		return { metadata, manifest, plan: packagePlan(metadata, manifest), source };
+	}
+	async function writePackageObject(target, bytes) {
+		await assertNoLinks(target);
+		const file = await fs.open(target, 'wx', 0o600);
+		try {
+			await file.writeFile(bytes);
+			await file.sync();
+		} finally {
+			await file.close();
+		}
 	}
 	async function writeReceipt(generation) {
 		await checkMounts();
@@ -707,6 +859,123 @@ export function createEngine(config, options = {}) {
 		}
 	}
 	return {
+		async exportPackage(directory) {
+			return operation(async () => {
+				packagePath(directory);
+				const current = await store.readDescriptor();
+				if (!current) throw new Error('recovery namespace requires explicit initialization');
+				const descriptor = packageDescriptor(current.value);
+				const manifest = await manifestFrom(store, descriptor.generation, descriptor);
+				const metadata = {
+					product: 'fhold',
+					format: 1,
+					kind: 'assistant-checkpoint-package',
+					descriptor,
+					optionalCacheIncluded: false
+				};
+				if (serialize(metadata).length > 64 * 1024)
+					throw new Error('checkpoint package metadata exceeds budget');
+				await assertNoLinks(directory);
+				await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+				if ((await fs.readdir(directory)).length)
+					throw new Error('checkpoint package destination must be empty');
+				const marker = path.join(directory, '.exporting');
+				await fs.writeFile(marker, '', { flag: 'wx', mode: 0o600 });
+				await fs.mkdir(path.join(directory, 'objects'), { mode: 0o700 });
+				await fs.mkdir(path.join(directory, 'manifests'), { mode: 0o700 });
+				const copied = new Set();
+				await packageMembers(store, manifest, async (key, bytes) => {
+					if (copied.has(key)) return;
+					copied.add(key);
+					await writePackageObject(path.join(directory, key), bytes);
+				});
+				if (manifest.akmIndexCache) {
+					try {
+						await optionalPackageCache(store, manifest, async (key, bytes) => {
+							if (!copied.has(key)) await writePackageObject(path.join(directory, key), bytes);
+						});
+						metadata.optionalCacheIncluded = true;
+					} catch {
+						/* Optional cache omission never invalidates the essential checkpoint. */
+					}
+				}
+				const manifestBytes = await store.read(
+					`manifests/${descriptor.generation}`,
+					limits.maxManifestBytes
+				);
+				if (digest(manifestBytes) !== descriptor.generation)
+					throw new Error('recovery manifest checksum mismatch');
+				await writePackageObject(
+					path.join(directory, 'manifests', descriptor.generation),
+					manifestBytes
+				);
+				for (const name of ['objects', 'manifests']) {
+					const dir = await fs.open(path.join(directory, name), 'r');
+					try {
+						await dir.sync();
+					} finally {
+						await dir.close();
+					}
+				}
+				await fs.unlink(marker);
+				await privateWrite(path.join(directory, 'checkpoint.json'), metadata);
+				return packagePlan(metadata, manifest);
+			});
+		},
+		async previewPackage(directory) {
+			return operation(async () => (await readPackage(directory)).plan);
+		},
+		async importPackage(directory, { confirmedStopped = false, previewDigest } = {}) {
+			if (ownership || ready || busy)
+				throw new Error('checkpoint import requires an idle unowned engine');
+			if (!confirmedStopped)
+				throw new Error('checkpoint import requires confirmed stopped original writers');
+			let plan;
+			try {
+				await operation(async () => {
+					const packaged = await readPackage(directory);
+					plan = packaged.plan;
+					if (!previewDigest || plan.previewDigest !== previewDigest)
+						throw new Error('checkpoint package changed; preview it again');
+					if (
+						(await inventory()).members.length ||
+						(await exists(receiptPath)) ||
+						(await exists(journalPath))
+					)
+						throw new Error('checkpoint import requires empty native state');
+					if (await store.readDescriptor())
+						throw new Error('checkpoint import requires an unused recovery destination');
+					await store.initialize({ ...packaged.metadata.descriptor, generation: null });
+					ownership = await store.acquire();
+					head = await store.claim((await store.readDescriptor()).token, ownership);
+					await packageMembers(packaged.source, packaged.manifest, async (key, bytes) => {
+						await owned(true);
+						await store.createImmutable(key, bytes, ownership);
+					});
+					if (packaged.metadata.optionalCacheIncluded)
+						await optionalPackageCache(packaged.source, packaged.manifest, async (key, bytes) => {
+							await owned(true);
+							await store.createImmutable(key, bytes, ownership);
+						});
+					const key = `manifests/${plan.generation}`;
+					await store.createImmutable(
+						key,
+						await packaged.source.read(key, limits.maxManifestBytes),
+						ownership
+					);
+					head = await store.compareAndSwap(
+						head.token,
+						{ ...head.value, generation: plan.generation },
+						ownership
+					);
+				});
+				await this.release();
+				await this.acquireRestore();
+				return { ...plan, restored: true };
+			} finally {
+				await this.release();
+			}
+		},
 		async inspect() {
 			const reviewed = await checkMounts();
 			return {

@@ -37,6 +37,7 @@ export type InterruptingAction =
 	| 'remote-setup'
 	| 'recovery-init'
 	| 'recovery-restore'
+	| 'checkpoint-import'
 	| 'instance-export'
 	| 'instance-import';
 
@@ -194,6 +195,11 @@ export type AdminApi = {
 	}): Promise<InstanceRestorePlan>;
 	recovery(
 		value:
+			| {
+					action: 'package';
+					request: import('@fhold/lib').CheckpointPackageOperation;
+					confirmed?: boolean;
+			  }
 			| { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string }
 			| { action: 'credential'; connectionString: string }
 			| { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }

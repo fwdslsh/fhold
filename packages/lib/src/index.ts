@@ -1,5 +1,10 @@
 export type { FholdState } from './control-plane/foundation.js';
-export { configureSshHelperResources, configureSshHelperDirectory, resolveSshHelper, sshHelperCommand } from './control-plane/ssh-helper.js';
+export {
+	configureSshHelperResources,
+	configureSshHelperDirectory,
+	resolveSshHelper,
+	sshHelperCommand
+} from './control-plane/ssh-helper.js';
 export * from './hosting/index.js';
 export * from './management/index.js';
 export {
@@ -121,8 +126,31 @@ export {
 } from './control-plane/state.js';
 export { assertInstallInstanceName, installHome } from './control-plane/install.js';
 export { updateHome } from './control-plane/update.js';
-export { defaultRecoverySettings, directoryRecoveryDestination, type RecoverySettings } from './control-plane/recovery-config.js';
-export { recoverySnapshot, recoveryStatus, readRecoverySelection, saveRecoverySettings, saveRecoveryCredential, runRecoveryOperation, type RecoverySelection } from './control-plane/recovery.js';
+export {
+	defaultRecoverySettings,
+	directoryRecoveryDestination,
+	type RecoverySettings
+} from './control-plane/recovery-config.js';
+export {
+	recoverySnapshot,
+	recoveryStatus,
+	readRecoverySelection,
+	saveRecoverySettings,
+	saveRecoveryCredential,
+	runRecoveryOperation,
+	type RecoverySelection
+} from './control-plane/recovery.js';
+export {
+	exportCheckpointPackage,
+	previewCheckpointPackage,
+	importCheckpointPackage
+} from './control-plane/checkpoint-packages.js';
+export type {
+	CheckpointPackageOperation,
+	CheckpointPackagePlan,
+	CheckpointPackageImportResult,
+	CheckpointPackageImportRequest
+} from './dto/recovery.js';
 export {
 	mutateStack,
 	createCredential,
@@ -156,8 +184,13 @@ export {
 	type ConnectionDetails
 } from './control-plane/connection.js';
 export {
-	listProviderSettings, saveProviderEndpoint, useProviderModel, removeProviderSetup, discoverProviderModels,
-	type ProviderSettings, type ProviderEndpointInput
+	listProviderSettings,
+	saveProviderEndpoint,
+	useProviderModel,
+	removeProviderSetup,
+	discoverProviderModels,
+	type ProviderSettings,
+	type ProviderEndpointInput
 } from './control-plane/provider-settings.js';
 export {
 	applyRestore,
@@ -173,10 +206,16 @@ export {
 	type BackupOptions
 } from './control-plane/backup.js';
 export {
-	exportInstance, planInstanceRestore, restoreInstance,
-	INSTANCE_BACKUP_NOTICE, INSTANCE_BACKUP_EXCLUSIONS,
-	type InstanceBackupManifest, type InstanceBackupEntry,
-	type InstanceBackupOptions, type InstanceRestoreOptions, type InstanceRestorePlan
+	exportInstance,
+	planInstanceRestore,
+	restoreInstance,
+	INSTANCE_BACKUP_NOTICE,
+	INSTANCE_BACKUP_EXCLUSIONS,
+	type InstanceBackupManifest,
+	type InstanceBackupEntry,
+	type InstanceBackupOptions,
+	type InstanceRestoreOptions,
+	type InstanceRestorePlan
 } from './control-plane/instance-backup.js';
 export {
 	exportHistory,
@@ -205,7 +244,11 @@ export {
 	runComposeStreaming
 } from './control-plane/docker.js';
 export { auditCompose } from './control-plane/secret-audit.js';
-export { diagnoseNativeRuntime, unavailableNativeDiagnostics, type DiagnosticCheck } from './control-plane/native-diagnostics.js';
+export {
+	diagnoseNativeRuntime,
+	unavailableNativeDiagnostics,
+	type DiagnosticCheck
+} from './control-plane/native-diagnostics.js';
 export {
 	beginRemoteEnable,
 	disableRemote,

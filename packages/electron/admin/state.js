@@ -35,6 +35,8 @@ export function createAdminState() {
 		restorePreviewSignature: null,
 		restorePreviewDigest: null,
 		instanceRestorePreview: null,
+		checkpointPackageTarget: null,
+		checkpointPackagePreview: null,
 		lastReadiness: null,
 		lastReadinessProvider: null,
 		lastReadinessModel: null,

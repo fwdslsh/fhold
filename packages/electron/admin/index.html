@@ -1012,8 +1012,27 @@
                 <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
                 </fieldset>
               </details>
+              <details id="checkpoint-packages" class="disclosure">
+                <summary>Export / import Assistant backup</summary>
+                <p id="checkpoint-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="checkpoint-fields" class="capability-fields" data-instance-feature="data.recovery.package" aria-describedby="checkpoint-fields-unavailable" aria-label="Assistant checkpoint export and import">
+                  <p class="help-text">Export packages the last accepted Assistant backup. If automatic backups are off, the same engine captures a backup once. The package contains private sign-ins, approvals and task intent; keep it private. Host settings, Guardian/Portal state and external drives need separate protection.</p>
+                  <form id="checkpoint-export-form" class="form-stack">
+                    <label class="field" for="checkpoint-export-directory"><span>Export directory on the instance host</span><span class="input-action"><input id="checkpoint-export-directory" autocomplete="off" required /><button id="choose-checkpoint-export" type="button" class="secondary">Choose folder</button></span></label>
+                    <button id="export-checkpoint" class="secondary" type="submit">Export Assistant backup</button>
+                  </form>
+                  <form id="checkpoint-import-form" class="form-stack">
+                    <label class="field" for="checkpoint-source"><span>Backup package directory on the instance host</span><span class="input-action"><input id="checkpoint-source" autocomplete="off" required /><button id="choose-checkpoint-source" type="button" class="secondary">Choose folder</button></span></label>
+                    <label class="field" for="checkpoint-home"><span>New empty instance home</span><span class="input-action"><input id="checkpoint-home" autocomplete="off" required /><button id="choose-checkpoint-home" type="button" class="secondary">Choose folder</button></span></label>
+                    <label class="field" for="checkpoint-backups"><span>New unused backup directory</span><span class="input-action"><input id="checkpoint-backups" autocomplete="off" required /><button id="choose-checkpoint-backups" type="button" class="secondary">Choose folder</button></span></label>
+                    <p class="help-text">Restore the same Assistant into an empty home with an independent backup destination. Stop its original writers first and keep them stopped. Review the preview before importing; containers stay stopped afterward. This does not create a different Assistant or silently copy live backup ownership.</p>
+                    <div class="button-row"><button id="preview-checkpoint" class="secondary" type="button">Preview Assistant backup</button><button id="import-checkpoint" type="submit" class="secondary" disabled>Import reviewed backup</button></div>
+                  </form>
+                  <textarea id="checkpoint-package-result" class="technical-output" readonly spellcheck="false" aria-label="Checkpoint backup preview and result">No checkpoint package operation has run.</textarea>
+                </fieldset>
+              </details>
               <details id="import-export" class="disclosure">
-                <summary id="backup-heading">Import / export</summary>
+                <summary id="backup-heading">Other export options</summary>
                 <p id="transfer-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="transfer-fields" class="capability-fields" data-instance-feature="data.backup" aria-describedby="transfer-fields-unavailable" aria-label="Instance export">
                 <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
