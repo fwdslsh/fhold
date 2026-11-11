@@ -365,8 +365,8 @@ backup settings, inspects them through the real renderer action, saves a mounted
 path with literal percent/Unicode characters, and checks the pending-change
 banner without applying it. It verifies directory-picker capability, truthful
 directory/identity authentication text, stopped versus scaled-to-zero eligibility,
-and the unavailable ACA offline-restore reason. Desktop and 320px light/dark
-screenshots include accessibility checks. IPC responses are synthetic: this
+and the unavailable ACA offline-restore reason. Desktop and 320px screenshots
+use Admin's native dark theme and include accessibility checks. IPC responses are synthetic: this
 proves renderer behavior, not a live ACA deployment or restore.
 
 The full-instance journey creates a native OpenCode session, refuses export

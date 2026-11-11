@@ -1701,10 +1701,6 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
 		).toBe(true);
 		await capture('backup-recovery-cloud-320.png');
-		await command('Emulation.setEmulatedMedia', {
-			features: [{ name: 'prefers-color-scheme', value: 'dark' }]
-		});
-		await capture('backup-recovery-cloud-320-dark.png');
 		await evaluate(
 			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
 		);
