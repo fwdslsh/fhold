@@ -95,7 +95,10 @@ export function parseDeploymentPatch(value: unknown): DeploymentPatch {
 	}
 	return result;
 }
-export function parseProvisioningRequest(value: unknown): ProvisioningRequest {
+export function parseProvisioningRequest(
+	value: unknown,
+	recoveryDefault: 'directory' | 'azblob' = 'directory'
+): ProvisioningRequest {
 	const input = record(value);
 	const name = text(input.name, 'an instance name');
 	if (!isInstanceName(name)) throw new Error('Use a lowercase DNS-safe instance name.');
@@ -142,6 +145,9 @@ export function parseProvisioningRequest(value: unknown): ProvisioningRequest {
 		image: input.image
 	});
 	if (!settings.availability) throw new Error('Choose availability.');
+	const recovery = input.recovery ?? recoveryDefault;
+	if (recovery !== 'directory' && recovery !== 'azblob')
+		throw new Error('Choose local backup with file-share copy or deprecated Blob recovery.');
 	const mounts = input.mounts === undefined ? [] : input.mounts;
 	if (!Array.isArray(mounts)) throw new Error('Provide independent mounts as a list.');
 	return {
@@ -150,6 +156,7 @@ export function parseProvisioningRequest(value: unknown): ProvisioningRequest {
 		location,
 		environment: { name: environmentName, create: environment.create },
 		storage: { name: storageName, create: storage.create },
+		recovery,
 		timezone,
 		availability: settings.availability,
 		cpu: settings.cpu,
@@ -164,6 +171,10 @@ export function parseProvisioningRequest(value: unknown): ProvisioningRequest {
 				!mountPath.startsWith('/') ||
 				mountPath === '/' ||
 				mountPath.endsWith('/') ||
+				(recovery === 'directory' &&
+					(mountPath === '/recovery' ||
+						mountPath.startsWith('/recovery/') ||
+						'/recovery'.startsWith(`${mountPath}/`))) ||
 				mountPath.split('/').some((part) => part === '..' || part === '.')
 			)
 				throw new Error('Use a named environment storage and an absolute container directory.');

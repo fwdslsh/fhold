@@ -41,6 +41,10 @@ export function recoveryConfig(env = process.env) {
 	if (includeFile !== undefined && !canonicalPath(includeFile))
 		throw new Error('recovery include file must be an absolute path');
 	const warnings = [];
+	if (url.protocol === 'azblob:')
+		console.error(
+			'fhold: deprecated: Azure Blob recovery is superseded by local checkpoints copied to a mounted backup directory. Existing Blob recovery remains supported.'
+		);
 	const optionalSwitch = (name) => {
 		if (env[name] === '1') return true;
 		if (env[name] !== undefined && env[name] !== '0') {

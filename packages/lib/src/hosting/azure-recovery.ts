@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import {
 	invokeOperation,
 	supportedOperation,
@@ -17,6 +18,29 @@ import type { AzureManagement } from './azure-client.js';
 import type { InstanceRef } from './types.js';
 import type { DeploymentOperations } from '../management/contracts.js';
 import { HostingPreferencesStore } from './preferences.js';
+
+function hasBackupMount(document: Record<string, unknown>, destination: string): boolean {
+	const container = selectedAzureContainer(document);
+	const template = azureObject(azureObject(document.properties).template);
+	const volumes = (Array.isArray(template.volumes) ? template.volumes : []).map(azureObject);
+	const path = fileURLToPath(destination);
+	const mount = (Array.isArray(container.volumeMounts) ? container.volumeMounts : [])
+		.map(azureObject)
+		.filter(
+			(mount) =>
+				typeof mount.mountPath === 'string' &&
+				(path === mount.mountPath || path.startsWith(`${mount.mountPath}/`))
+		)
+		.sort((a, b) => String(b.mountPath).length - String(a.mountPath).length)[0];
+	return (
+		!!mount &&
+		volumes.some(
+			(volume) =>
+				volume.name === mount.volumeName &&
+				['AzureFile', 'NfsAzureFile'].includes(String(volume.storageType))
+		)
+	);
+}
 
 /** Reuse only identities explicitly required by this job's selected native inputs. */
 async function initializationIdentity(
@@ -160,11 +184,22 @@ export function azureRecovery(
 			reference = `fhold-recovery-${randomBytes(6).toString('hex')}`;
 			const assistant = selectedAzureContainer(document),
 				env = azureEnvironment(assistant);
+			const credentialFile = env.FH_RECOVERY_URL?.startsWith('file:')
+				? undefined
+				: env.FH_RECOVERY_CREDENTIAL_FILE;
+			if (
+				env.FH_RECOVERY_URL?.startsWith('file:') &&
+				!hasBackupMount(document, env.FH_RECOVERY_URL)
+			)
+				throw new Error(
+					'Choose a backup directory on an Azure Files volume mounted in the selected Assistant.'
+				);
 			const identity = document.identity ? azureObject(document.identity) : {},
 				identities = identity.userAssignedIdentities
 					? azureObject(identity.userAssignedIdentities)
 					: {};
 			if (
+				!env.FH_RECOVERY_URL?.startsWith('file:') &&
 				!env.FH_RECOVERY_CREDENTIAL_FILE &&
 				(!env.AZURE_CLIENT_ID || !Object.keys(identities).length)
 			)
@@ -185,7 +220,7 @@ export function azureRecovery(
 								volume.name === mount.volumeName &&
 								(volume.storageType === 'AzureFile' || volume.storageType === 'NfsAzureFile')
 						) ||
-						[env.FH_RECOVERY_CREDENTIAL_FILE, env.FH_RECOVERY_INCLUDE_FILE].some((path) =>
+						[credentialFile, env.FH_RECOVERY_INCLUDE_FILE].some((path) =>
 							path?.startsWith(`${mount.mountPath}/`)
 						)
 				);
@@ -202,7 +237,7 @@ export function azureRecovery(
 										mounts.some(
 											(mount) =>
 												mount.volumeName === volume.name &&
-												[env.FH_RECOVERY_INCLUDE_FILE, env.FH_RECOVERY_CREDENTIAL_FILE].includes(
+												[env.FH_RECOVERY_INCLUDE_FILE, credentialFile].includes(
 													`${mount.mountPath}/${secret.path}`
 												)
 										)
@@ -217,8 +252,15 @@ export function azureRecovery(
 				args: ['init', '--confirm-new-instance'],
 				env: (Array.isArray(assistant.env) ? assistant.env : [])
 					.map(azureObject)
-					.filter((item) =>
-						/^(?:FH_RECOVERY_|FH_INSTANCE_ID$|AZURE_CLIENT_ID$)/.test(String(item.name))
+					.filter(
+						(item) =>
+							/^(?:FH_RECOVERY_|FH_INSTANCE_ID$|AZURE_CLIENT_ID$)/.test(String(item.name)) &&
+							(!env.FH_RECOVERY_URL?.startsWith('file:') ||
+								![
+									'AZURE_CLIENT_ID',
+									'FH_RECOVERY_CREDENTIAL_FILE',
+									'FH_RECOVERY_CLIENT_ID'
+								].includes(String(item.name)))
 					),
 				volumeMounts: mounts
 			};
@@ -247,7 +289,9 @@ export function azureRecovery(
 			const jobIdentity = await initializationIdentity(
 				sdk,
 				identities,
-				env.FH_RECOVERY_CREDENTIAL_FILE ? undefined : env.AZURE_CLIENT_ID,
+				env.FH_RECOVERY_URL?.startsWith('azblob:') && !env.FH_RECOVERY_CREDENTIAL_FILE
+					? env.AZURE_CLIENT_ID
+					: undefined,
 				[
 					...registries
 						.filter((registry) => registry.identity !== undefined)
@@ -381,12 +425,19 @@ export function azureRecovery(
 				if (input.baselineDigest !== snapshot?.digest)
 					throw new Error('Recovery settings changed. Inspect current coverage before saving.');
 				const settings = parseRecoverySettings(input.settings, name);
-				if (settings.destination.startsWith('file:'))
-					throw new Error(
-						'Choose the existing cloud Blob recovery destination; local host directories are not Container App storage.'
-					);
+				if (settings.enabled && settings.destination.startsWith('file:')) {
+					const document = await (await management()).get(ref.resourceId);
+					if (!hasBackupMount(document, settings.destination))
+						throw new Error(
+							'Choose a backup directory on an Azure Files volume mounted in the selected Assistant.'
+						);
+				}
 				const env = await environment();
-				if (settings.authentication === 'connection-string' && !env.FH_RECOVERY_CREDENTIAL_FILE)
+				if (
+					settings.destination.startsWith('azblob:') &&
+					settings.authentication === 'connection-string' &&
+					!env.FH_RECOVERY_CREDENTIAL_FILE
+				)
 					throw new Error(
 						'Configure a native ACA secret file mount for the connection string, or choose managed identity.'
 					);

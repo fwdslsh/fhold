@@ -562,6 +562,99 @@ test('fresh initialization job includes the Files mounts required by its recover
 	).toBeUndefined();
 });
 
+test('new ACA installs default to local snapshots copied to a dedicated SMB backup share', () => {
+	expect(parseProvisioningRequest(input)).toMatchObject({ recovery: 'directory' });
+	const infrastructure = azureInfrastructureTemplate(connection, input);
+	const resources = infrastructure.resources as Record<string, unknown>[];
+	expect(
+		resources.find((r) => r.type === 'Microsoft.Storage/storageAccounts/fileServices/shares')
+	).toMatchObject({
+		name: 'storage123/default/fhold-example',
+		properties: { enabledProtocols: 'SMB' }
+	});
+	expect(
+		resources.find((r) => r.type === 'Microsoft.App/managedEnvironments/storages')
+	).toMatchObject({
+		properties: {
+			azureFile: {
+				accessMode: 'ReadWrite',
+				accountName: 'storage123',
+				shareName: 'fhold-example',
+				accountKey: expect.stringContaining('listKeys(')
+			}
+		}
+	});
+	expect(resources.some((r) => r.type === 'Microsoft.ManagedIdentity/userAssignedIdentities')).toBe(
+		false
+	);
+	const job = resources.find((r) => r.type === 'Microsoft.App/jobs')!;
+	const app = (
+		azureApplicationTemplate(connection, input).resources as Record<string, unknown>[]
+	)[0]!;
+	for (const resource of [job, app]) {
+		const template = azureObject(azureObject(resource.properties).template);
+		const container = azureObject((template.containers as unknown[])[0]);
+		expect(container.env).toContainEqual({
+			name: 'FH_RECOVERY_URL',
+			value: 'file:///recovery/example'
+		});
+		expect(container.volumeMounts).toContainEqual({
+			volumeName: 'recovery-backup',
+			mountPath: '/recovery'
+		});
+		expect(template.volumes).toContainEqual(
+			expect.objectContaining({ name: 'recovery-backup', storageType: 'AzureFile' })
+		);
+		expect(resource.identity).toBeUndefined();
+		expect(JSON.stringify(container.env)).not.toContain('accountKey');
+	}
+	expect(() => parseProvisioningRequest({ ...input, recovery: 'unsupported' })).toThrow();
+	expect(() =>
+		parseProvisioningRequest({
+			...input,
+			mounts: [{ storageName: 'other', mountPath: '/recovery/overlap' }]
+		})
+	).toThrow();
+});
+
+test('explicit deprecated Blob installation retains its native identity and destination', () => {
+	const request = { ...input, recovery: 'azblob' as const };
+	const resources = azureInfrastructureTemplate(connection, request).resources as Record<
+		string,
+		unknown
+	>[];
+	expect(
+		resources.some((r) => r.type === 'Microsoft.Storage/storageAccounts/blobServices/containers')
+	).toBe(true);
+	expect(resources.some((r) => r.type === 'Microsoft.App/managedEnvironments/storages')).toBe(
+		false
+	);
+	const app = (
+		azureApplicationTemplate(connection, request).resources as Record<string, unknown>[]
+	)[0]!;
+	expect(app.identity).toMatchObject({ type: 'UserAssigned' });
+	expect(JSON.stringify(app)).toContain('azblob://storage123/fhold-example');
+});
+
+test('ACA directory settings preserve the exact selected path and unrelated mounts', () => {
+	const current = document();
+	const settings = {
+		...defaultRecoverySettings('example'),
+		enabled: true,
+		destination: 'file:///custom/backups/example'
+	};
+	const patch = azureDeploymentPatch(
+		current,
+		{ recovery: { settings, selection: { paths: [], sqlite: [] } } },
+		[{ name: 'other', value: 'private' }]
+	);
+	const template = azureObject(patch.template);
+	const container = azureObject((template.containers as unknown[])[0]);
+	expect(container.env).toContainEqual({ name: 'FH_RECOVERY_URL', value: settings.destination });
+	expect(template.volumes).toContainEqual(current.properties.template.volumes[0]);
+	expect(container.volumeMounts).toContainEqual({ volumeName: 'work', mountPath: '/custom' });
+});
+
 function provisioningFixture() {
 	const f = fixture(),
 		submissions: string[] = [],
@@ -636,6 +729,31 @@ test('install observes delayed native job completion automatically before app de
 		'deploy',
 		'delete-job'
 	]);
+});
+
+test('resuming an accepted Blob installation does not apply the new-install directory default', async () => {
+	const f = provisioningFixture();
+	const reference = 'fhold-example-abcdef91';
+	f.store.saveInstallation({
+		ref,
+		reference,
+		state: 'in-progress',
+		step: 'initialization',
+		request: input
+	});
+	f.sdk.jobExecutions = async () => [{ name: 'original-attempt', status: 'Succeeded' }];
+	let application = '';
+	f.sdk.deploy = (_name, template) => {
+		application = JSON.stringify(template);
+		return poller('update');
+	};
+	expect((await invokeOperation(f.operations.resume, { reference }, confirm)).state).toBe(
+		'completed'
+	);
+	expect(application).toContain('azblob://storage123/fhold-example');
+	expect(application).not.toContain('file:///recovery');
+	// Fresh submissions still record an explicit directory choice for their continuation.
+	expect(parseProvisioningRequest(input)).toMatchObject({ recovery: 'directory' });
 });
 test('fresh install refuses an existing unselected init job without mutation', async () => {
 	const f = provisioningFixture();
@@ -1119,6 +1237,46 @@ test('recovery job resolves an omitted UAMI client ID through native identity re
 		type: 'UserAssigned',
 		userAssignedIdentities: { [f.ids.recovery]: {} }
 	});
+});
+
+test('mounted-directory initialization needs no Blob identity or credential, and rejects ephemeral destinations', async () => {
+	for (const layout of ['mounted', 'unmounted', 'shadowed']) {
+		const f = identityJobFixture(true);
+		const template = azureObject(f.props.template);
+		const selected = azureObject((template.containers as unknown[])[0]);
+		selected.env = [
+			{ name: 'FH_RECOVERY_URL', value: 'file:///backups/example' },
+			{ name: 'FH_RECOVERY_CREDENTIAL_FILE', value: '/run/recovery/connection' },
+			{ name: 'AZURE_CLIENT_ID', value: 'unused-blob-identity' }
+		];
+		if (layout !== 'unmounted') {
+			(selected.volumeMounts as unknown[]).push({ volumeName: 'backup', mountPath: '/backups' });
+			(template.volumes as unknown[]).push({
+				name: 'backup',
+				storageType: 'AzureFile',
+				storageName: 'backup-share'
+			});
+		}
+		if (layout === 'shadowed') {
+			(selected.volumeMounts as unknown[]).push({
+				volumeName: 'ephemeral',
+				mountPath: '/backups/example'
+			});
+			(template.volumes as unknown[]).push({ name: 'ephemeral', storageType: 'EmptyDir' });
+		}
+		if (layout === 'mounted') {
+			await f.initialize();
+			expect(f.job()?.identity).toBeUndefined();
+			const bytes = JSON.stringify(f.job());
+			expect(bytes).toContain('backup-share');
+			expect(bytes).not.toContain('FH_RECOVERY_CREDENTIAL_FILE');
+			expect(bytes).not.toContain('unused-blob-identity');
+			expect(bytes).not.toContain('/run/recovery');
+		} else {
+			await expect(f.initialize()).rejects.toThrow('Azure Files volume');
+			expect(f.job()).toBeUndefined();
+		}
+	}
 });
 
 test('connection-string recovery gives its job no app identities when no selected dependency requires one', async () => {

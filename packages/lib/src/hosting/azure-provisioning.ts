@@ -33,8 +33,11 @@ export function azureProvisioning(
 		'--resource-group',
 		connection.resourceGroup
 	];
-	function request(value: ProvisioningRequest): AzureInstallRequest {
-		const parsed = parseProvisioningRequest(value);
+	function request(
+		value: ProvisioningRequest,
+		recoveryDefault: 'directory' | 'azblob' = 'directory'
+	): AzureInstallRequest {
+		const parsed = parseProvisioningRequest(value, recoveryDefault);
 		if (parsed.kind !== 'azure-container-apps') throw new Error('Choose Azure placement settings.');
 		return parsed;
 	}
@@ -63,9 +66,16 @@ export function azureProvisioning(
 				'This Container App already exists. Open it to manage or update it; fresh installation does not replace an existing app.'
 			);
 		for (const [id, version] of [
-			[names.identity, '2023-01-31'],
+			...(input.recovery === 'azblob'
+				? [[names.identity, '2023-01-31']]
+				: [[names.backupStorage, '2026-07-01']]),
 			[names.app.replace(/containerApps\/[^/]+$/, `jobs/${names.job}`), '2026-07-01'],
-			[`${names.storage}/blobServices/default/containers/${names.container}`, '2025-06-01']
+			[
+				input.recovery === 'azblob'
+					? `${names.storage}/blobServices/default/containers/${names.container}`
+					: `${names.storage}/fileServices/default/shares/${names.share}`,
+				'2025-06-01'
+			]
 		])
 			if (await exists(id!, version))
 				throw new Error(
@@ -99,12 +109,27 @@ export function azureProvisioning(
 					type: 'Storage account',
 					action: input.storage.create ? 'create' : 'reuse'
 				},
-				{ name: names.container, type: 'Private Blob container', action: 'create' },
-				{
-					name: `${input.name}-identity`,
-					type: 'User-assigned managed identity and container-scoped Blob role',
-					action: 'create'
-				},
+				...(input.recovery === 'azblob'
+					? [
+							{
+								name: names.container,
+								type: 'Deprecated private Blob container',
+								action: 'create' as const
+							},
+							{
+								name: `${input.name}-identity`,
+								type: 'User-assigned managed identity and container-scoped Blob role',
+								action: 'create' as const
+							}
+						]
+					: [
+							{ name: names.share, type: 'Azure Files backup share', action: 'create' as const },
+							{
+								name: `fhold-${input.name}-backup`,
+								type: 'Environment backup storage mount',
+								action: 'create' as const
+							}
+						]),
 				{ name: names.job, type: 'Temporary recovery initialization job', action: 'create' },
 				...(input.mounts ?? []).map((item) => ({
 					name: item.storageName,
@@ -113,6 +138,11 @@ export function azureProvisioning(
 				}))
 			],
 			warnings: [
+				...(input.recovery === 'azblob'
+					? [
+							'Blob recovery is deprecated and superseded by local checkpoints copied to an Azure Files backup share. Existing Blob backups remain supported.'
+						]
+					: []),
 				'Experimental Azure support. Use a test assistant first and keep an independent backup of important work.',
 				'Recovery checkpoints cover selected native state, not the full Azure deployment or independent Files mounts. Forced termination may lose changes since the last accepted checkpoint.',
 				...(input.availability === 'on-demand'
@@ -260,7 +290,8 @@ export function azureProvisioning(
 			});
 		const input = request(
 				saved.request ??
-					(azureObject(azureObject(properties.outputs).request).value as ProvisioningRequest)
+					(azureObject(azureObject(properties.outputs).request).value as ProvisioningRequest),
+				'azblob'
 			),
 			names = azureInstallNames(connection, input);
 		if (

@@ -27,7 +27,10 @@ const configure = defineCommand({
 			type: 'string',
 			description: 'absolute local or mounted backup directory, outside the instance home'
 		},
-		to: { type: 'string', description: 'credential-free file: or azblob: recovery URL' },
+		to: {
+			type: 'string',
+			description: 'credential-free file: recovery URL (azblob: remains supported but deprecated)'
+		},
 		instanceId: { type: 'string', description: 'stable recovery instance ID' },
 		interval: { type: 'string', description: 'checkpoint cadence in seconds' },
 		maxUnsaved: {

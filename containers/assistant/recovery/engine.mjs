@@ -878,6 +878,24 @@ export function createEngine(config, options = {}) {
 				checkpointAttempt.phase = 'staging-create';
 				const stage = await fs.mkdtemp(path.join(privateDir, 'capture-'));
 				stages.add(stage);
+				// Finish the checkpoint on local storage before copying any content to
+				// its destination. In particular, SQLite never writes onto an SMB mount.
+				const pending = new Map();
+				async function stageObject(key, bytes, snapshot) {
+					if (
+						!/^(objects|manifests)\/[a-f0-9]{64}$/.test(key) ||
+						digest(bytes) !== key.split('/')[1]
+					)
+						throw new Error('recovery object key/hash mismatch');
+					if (pending.has(key)) {
+						if (snapshot) await fs.unlink(snapshot);
+						return;
+					}
+					const target = path.join(stage, key.replace('/', '-'));
+					if (snapshot) await fs.rename(snapshot, target);
+					else await fs.writeFile(target, bytes, { flag: 'wx', mode: 0o600 });
+					pending.set(key, target);
+				}
 				const captured = [];
 				let total = 0;
 				for (const member of members) {
@@ -886,7 +904,7 @@ export function createEngine(config, options = {}) {
 					const captureStartedAt = Date.now();
 					const source = native(member.root, member.path);
 					checkpointAttempt.memberPath = source;
-					let bytes;
+					let bytes, snapshot;
 					if (member.kind === 'sqlite') {
 						const target = path.join(
 							stage,
@@ -894,6 +912,7 @@ export function createEngine(config, options = {}) {
 						);
 						await sqlite('capture', source, target);
 						bytes = await readRegular(target, limits.maxDatabaseBytes);
+						snapshot = target;
 					} else {
 						bytes = await readRegular(source, limits.maxFileBytes);
 						if (bytes.subarray(0, 16).toString() === 'SQLite format 3\0')
@@ -903,8 +922,7 @@ export function createEngine(config, options = {}) {
 					if (total > limits.maxTotalBytes) throw new Error('recovery capture budget exceeded');
 					checkDeadline();
 					const hash = digest(bytes);
-					checkpointAttempt.phase = 'object-upload';
-					await store.createImmutable(`objects/${hash}`, bytes, ownership);
+					await stageObject(`objects/${hash}`, bytes, snapshot);
 					captured.push({
 						...member,
 						hash,
@@ -913,6 +931,8 @@ export function createEngine(config, options = {}) {
 						captureFinishedAt: Date.now()
 					});
 				}
+				// Native vector export already stages locally. Keep its existing bounded
+				// optional capture/transfer behavior after essential snapshots complete.
 				if (config.akmIndexCapture)
 					akmIndexReference = await optionalCache(() =>
 						akmIndexCache.capture({
@@ -956,8 +976,21 @@ export function createEngine(config, options = {}) {
 				const generation = digest(bytes);
 				checkpointAttempt.attemptedGeneration = generation;
 				checkDeadline();
-				checkpointAttempt.phase = 'manifest-upload';
-				await store.createImmutable(`manifests/${generation}`, bytes, ownership);
+				await stageObject(`manifests/${generation}`, bytes);
+				for (const [key, source] of pending) {
+					await owned();
+					checkpointAttempt.phase = key.startsWith('objects/')
+						? 'object-upload'
+						: 'manifest-upload';
+					await store.createImmutable(
+						key,
+						await readRegular(
+							source,
+							Math.max(limits.maxDatabaseBytes, limits.maxFileBytes, limits.maxManifestBytes)
+						),
+						ownership
+					);
+				}
 				await owned(true);
 				checkpointAttempt.phase = 'descriptor-publication';
 				// A transport/readback error can follow a successful CAS. Until its

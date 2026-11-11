@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+Stage complete recovery checkpoints on local disk before copying their files to
+the backup destination. Reuse unchanged content and publish the accepted generation
+only after all required copies succeed. Directory publication no longer requires
+hard links, allowing Azure Files SMB backup mounts while live SQLite stays local.
+
+New ACA installs default to a dedicated Azure Files backup share shared by the
+initialization Job and Assistant. Azure Blob recovery remains supported but is
+deprecated and superseded by local checkpoint staging with mounted-directory copy.
+Existing deployments and recovery destinations are not migrated automatically.
+
 ## 0.4.1106-beta — Native AKM recovery, health and embedded Admin UI
 
 Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins

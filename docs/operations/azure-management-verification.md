@@ -1,5 +1,22 @@
 # Azure management qualification
 
+## Mounted backup share follow-up
+
+New installations now default to local checkpoint staging and Azure Files SMB copy.
+Source regressions cover the dedicated share/environment storage ARM resources,
+matching Job/App mounts, mounted-path validation, exact destination preservation,
+and initialization without Blob credentials. Blob opt-in retains its existing flow.
+On November 10, 2026, a new isolated directory on the approved Azure Files test
+share passed real SMB checkpoint/cold restore with a committed WAL row, concurrent
+owner refusal, interrupted-copy preservation of the accepted generation, and a
+post-restore checkpoint/release. The share rejected hard links with errno 95.
+Live databases and staging stayed on local storage throughout.
+This does not extend the historical live Blob qualification below to the new
+provisioning path. Before calling that path live-qualified, exercise a disposable
+ACA install, non-root checkpoint to its share, replica replacement, interrupted
+copy, previous-generation restore, and orderly ownership release. Existing
+assistants must not be repurposed for that test.
+
 ## October 31, 2026 — live experimental qualification
 
 PR #97 was exercised against two disposable, synthetic-data-only assistants in
