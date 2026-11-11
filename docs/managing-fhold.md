@@ -221,8 +221,8 @@ It replaces the removed `akm ui` command. Update older Assistant images before
 using this action; a host-local AKM Desktop manages its own library, not the
 selected container's bundles.
 
-Select an instance, then choose **Knowledge → Open AKM UI**. Admin opens the
-Assistant's native AKM interface in your default browser, using that instance's
+Select an instance, then choose **Knowledge → Open AKM UI** in the page header. Admin opens the
+Assistant's native AKM interface inside Admin, using that instance's
 bundles, configuration and index. Keep Admin open with that instance selected;
 switching instances or closing Admin ends this temporary UI session. Opening it
 does not restart the Assistant, change its configuration or publish another port.
@@ -231,8 +231,9 @@ Local Linux Docker and SSH connections to a Linux Docker host are supported when
 the host can reach its container bridge. SSH uses a private loopback forward and
 requires native OpenSSH multiplexing on the Admin computer (Linux/macOS).
 Docker Desktop, host-network containers, ACA and direct HTTPS agent connections
-do not provide this route. AKM's native session cookie, Host and Origin checks remain enabled;
-keep its launch link private. If the selected SSH port is occupied, Admin reports
+do not provide this route. AKM's native session cookie, Host and Origin checks remain enabled.
+The embedded browser has no Admin preload or Node access; its private bootstrap
+stays outside Admin's renderer. If the selected SSH port is occupied, Admin reports
 a connection failure instead of opening an unrelated service.
 
 ### App permissions
@@ -432,9 +433,14 @@ managed settings are read-only here; no operator policy is silently overwritten.
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
 Plain `fhold doctor` reads OpenCode's native provider state and runs bounded,
-read-only `akm info`, `akm migrate status`, and `akm task doctor` inside the running
-Assistant. It reports optional degradation as warnings, native off choices as
-`OFF`, and unavailable checks as `NOT CHECKED`. It does not start a stopped
+read-only AKM health, `akm migrate status`, and `akm task doctor` inside the running
+Assistant. Health uses the public native `workspace.activity.health({probe:false})`
+operation with the container's existing configuration and working directory.
+It does not write application rows or apply migrations; native SQLite may create
+its ordinary WAL/shared-memory coordination files when reading an existing database.
+It preserves native pass/warn/fail results and reports unknown checks as
+`NOT CHECKED`; these AKM checks are advisory and never restart or block the agent.
+Explicit native off choices remain `OFF`. Doctor does not start a stopped
 Assistant, run an agent/task, apply migrations or write proposals. Legacy
 `knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
 connected endpoints can also work without credentials.
@@ -442,11 +448,18 @@ connected endpoints can also work without credentials.
 AKM configuration and executable availability do not prove successful agent
 execution. Review [native migration and harness selection](managed-harness-configuration.md#existing-beta-installations)
 when a custom executable is no longer available. OpenCode 2.2.6 no longer requires
-the previous argument repair for a preserved native invocation. Proposal write-target
-readiness and aggregate extraction success remain explicitly not checked pending
-[AKM #1289](https://github.com/itlackey/akm/issues/1289) and
-[AKM #1290](https://github.com/itlackey/akm/issues/1290). No successful learning is
-inferred from configuration, file presence or a running process.
+the previous argument repair for a preserved native invocation. Native health owns
+plugin CLI-version, state-database, proposal queue and extraction diagnostics.
+Doctor reports their check names and statuses while keeping private native messages
+and evidence out of its summary. Open **Knowledge → Health** for the full native
+diagnostics. A native unknown result stays not checked; configuration, file
+presence and a running process do not prove successful learning or proposal writes.
+
+`akm health --no-probe` skips network and harness probes, but its current CLI
+still opens/migrates state.db and runs a temporary write/read round-trip. It is
+not a read-only status command. Doctor and the native web health view use AKM's
+read-only API; `fhold doctor` does not invoke the mutating health CLI. A supported CLI
+read-only mode is tracked in [AKM #1607](https://github.com/itlackey/akm/issues/1607).
 
 Native v2 credentials persist in the OpenCode database under
 `data/assistant/.local/share/opencode/`. Advanced native settings

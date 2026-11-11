@@ -79,17 +79,24 @@ manufactures approvals nor approves unrelated hooks. Claude likewise retains
 native plugin/workspace trust and consent.
 
 AKM owns automatic recall, prompt learning and reviewable transcript proposals.
-Native `AKM_AUTO_MEMORY` and `AKM_AUTO_LEARNING` options apply normally.
+Use native `akm setup --learning off` / `--learning on` and `akm info` to
+control and inspect learning. The plugins no longer read `AKM_AUTO_MEMORY`
+or `AKM_AUTO_LEARNING`.
 Fresh instances select the native `opencode` harness (`run --standalone`), which reuses
 OpenCode's provider/model/auth. AKM owns its bounded utility agent and recursion
 prevention; fhold adds no extraction subprocess wrapper or model pipeline.
 The pinned Codex plugin has prompt learning but no SessionEnd extractor;
 fhold does not invent unsupported parity.
 
-The existing instance `assistant.automaticMemory=false` intent maps to both
-native features off in managed Compose. Standalone `FH_AUTOMATIC_MEMORY` intent
-also supplies native defaults; explicitly supplied native AKM options take
-precedence. An operator overlay can set the native features independently.
+The existing instance `assistant.automaticMemory=false` intent (standalone:
+`FH_AUTOMATIC_MEMORY=0`) invokes native `akm setup --learning off` after restore
+and migration, before agents or scheduled writers start. This persists AKM's
+host-wide off choice, including for later `docker exec` commands. Failure to
+save an explicit off choice stops startup with an actionable error.
+Setting fhold's value to `true`/`1` defers to native settings and never enables
+learning itself. To enable it, first remove the fhold off request, then use
+native `akm setup --learning on` or AKM web. No task, cron or model settings
+are rewritten by this mapping.
 
 ## Startup, recovery and verification
 

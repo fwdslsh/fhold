@@ -59,17 +59,22 @@ RUN mkdir -p /fhold-bundle/skills \
     && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
 
 # Both native harnesses install the same immutable upstream marketplace.
-ADD --checksum=sha256:d948f272980fa418bcc0f8b8b40fc7d2a89ee461c32f2f306b49bd05b021f9b1 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/f43a21547b9ad124119979a0a1382092abbde253 /tmp/akm-claude.tar.gz
+# Retain the release's bundled CLI: local marketplaces do not install dependencies.
+ADD --checksum=sha256:d89e1ed35229e38ed414a70cd43ef6742b6b39ab0962aff80d893b1ae68cdf74 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/f1d3b28259f1271b0d274ee4c03c72e9356a67db /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-f43a21547b9ad124119979a0a1382092abbde253/claude \
+    && plugin_root=akm-plugins-f1d3b28259f1271b0d274ee4c03c72e9356a67db/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
+      "$plugin_root/bun.lock" "$plugin_root/node_modules" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-f43a21547b9ad124119979a0a1382092abbde253/.agents/plugins/marketplace.json \
-      akm-plugins-f43a21547b9ad124119979a0a1382092abbde253/.claude-plugin/marketplace.json \
-      akm-plugins-f43a21547b9ad124119979a0a1382092abbde253/LICENSE
+      akm-plugins-f1d3b28259f1271b0d274ee4c03c72e9356a67db/.agents/plugins/marketplace.json \
+      akm-plugins-f1d3b28259f1271b0d274ee4c03c72e9356a67db/.claude-plugin/marketplace.json \
+      akm-plugins-f1d3b28259f1271b0d274ee4c03c72e9356a67db/LICENSE
+# The published Codex catalog selects a Git source. This image distributes the
+# same verified files locally, using Codex's native local marketplace source.
+RUN bun -e 'const file = "/akm-marketplace/.agents/plugins/marketplace.json"; const catalog = await Bun.file(file).json(); const plugin = catalog.plugins.find(p => p.name === "akm"); if (!plugin) throw new Error("AKM marketplace entry missing"); plugin.source = {source: "local", path: "./claude"}; await Bun.write(file, JSON.stringify(catalog, null, 2) + "\n");'
 # Node's official Linux binaries require libatomic on both native architectures.
 RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
     && rm -rf /var/lib/apt/lists/*

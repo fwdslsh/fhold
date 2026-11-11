@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## 0.4.1106-beta — Native AKM recovery, health and embedded Admin UI
+
+Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins
+**0.10.261119**. Retain the published native plugins' bundled CLI for offline
+Claude/Codex hooks. Native verification uses AKM's current configuration settings
+for learning instead of retired plugin environment switches.
+
+Preserve fhold's explicit learning-off setting with native `akm setup --learning
+off` after restore and before agents start. Default/on preserves native choices.
+Update Admin's real Knowledge click-through test to exercise `akm-web` bootstrap
+and HttpOnly cookie authentication, including an authenticated page reload.
+
+Embed native AKM web directly in Admin's Knowledge view. Put Open AKM UI in the
+page header and give AKM the remaining content area. Preserve native cookie
+authentication and SSH forwarding, and close the embedded session when changing
+instances. Prevent status polling from reopening a connection during teardown.
+
+Use AKM's native read-only health API in `fhold doctor`, preserving its statuses
+and keeping optional diagnostics separate from agent readiness. Keep private
+native evidence in AKM's own Health view.
+
+Replace experimental whole-index recovery snapshots with native vector
+export/import. AKM rebuilds from current sources and reuses matching embeddings;
+fhold retains recovery integrity, ownership and optional-work bounds. Lexical-only
+indexes create no cache artifact. Network source scans can exceed the unchanged
+five-second budget and safely fall back to ordinary native indexing.
+Vector recovery remains experimental and opt-in; its switches may change or be
+removed as native AKM recovery evolves.
+
+Update compatible transitive dependencies to **fast-xml-parser 5.12.0** and
+**node-forge 1.4.3**, clearing five newly reported source findings without overrides
+or new exceptions. Keep the page's active layout state separate from navigation
+targets so the Knowledge layout does not interfere with other views.
+
+Publish all three images, Linux CLI/Admin and the Claude Desktop extension,
+including the embedded Knowledge UI and the updated MCPB packer dependency.
+Stable channels and existing instances remain unchanged. The three approved
+source audit exceptions tracked in #63 remain pending compatible upstream fixes.
+
 ## 0.4.1105-beta — Admin app icons
 
 Use the supplied transparent green f/h artwork for Admin's Linux, Windows and

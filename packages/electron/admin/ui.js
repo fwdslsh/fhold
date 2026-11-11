@@ -176,6 +176,8 @@ export function showView(name, options = {}) {
 	if (!ready && name !== 'provider') return;
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;
+	document.body.dataset.activeView = name;
+	byId('knowledge-header-actions').hidden = name !== 'knowledge';
 	for (const panel of all('[data-view-panel]')) panel.hidden = panel.dataset.viewPanel !== name;
 	for (const button of all('[data-view]')) {
 		const active = button.dataset.view === name;

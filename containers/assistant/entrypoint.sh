@@ -21,14 +21,6 @@ SCHEDULER_ENABLED="${FH_SCHEDULER_ENABLED:-1}"
 configuration_degraded=0
 export FH_RUNTIME_DIR="$RUNTIME_DIR"
 
-# Preserve explicit off intent for managed harnesses. On leaves native plugin
-# settings/defaults in charge; exporting "1" would shadow Claude's plugin choices.
-# Explicit native environment options still take precedence.
-if [ "${FH_AUTOMATIC_MEMORY:-1}" = 0 ]; then
-  export AKM_AUTO_MEMORY="${AKM_AUTO_MEMORY-0}"
-  export AKM_AUTO_LEARNING="${AKM_AUTO_LEARNING-0}"
-fi
-
 # Invalid optional settings disable only that feature; never grant extra access.
 case "$SCHEDULER_ENABLED" in
   0|1) ;;
@@ -439,6 +431,15 @@ prepare_opencode_environment
 # degradation, not a reason to restart an otherwise usable Assistant.
 if ! env "${writer_env[@]}" timeout --kill-after=5s 60s akm migrate apply --format json >"$RUNTIME_DIR/akm-migration.json" 2>"$RUNTIME_DIR/akm-migration.log"; then
   mark_degraded akm-migration 'AKM migration needs attention. Run akm migrate status for remaining blockers; native backups and private startup diagnostics are retained.'
+fi
+# Preserve explicit off intent through AKM's own stored switch. Apply it after
+# restore/migration, before any agent or task writer. On defers to native choices;
+# it must never undo an operator's `akm setup --learning off`.
+if [ "${FH_AUTOMATIC_MEMORY:-1}" = 0 ]; then
+  if ! env "${writer_env[@]}" timeout --kill-after=5s 30s akm setup --learning off --format json -q >"$RUNTIME_DIR/akm-learning.json" 2>"$RUNTIME_DIR/akm-learning.log"; then
+    echo 'assistant: Could not preserve the explicit learning-off setting. Check AKM config permissions and private akm-learning.log before restarting.' >&2
+    exit 1
+  fi
 fi
 if ! refresh_native_plugins >"$RUNTIME_DIR/native-plugins.log" 2>&1; then
   mark_degraded native-plugins 'Built-in native plugin refresh needs attention. Inspect native plugin lists and private startup diagnostics; account state and hook consent remain unchanged.'

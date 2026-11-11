@@ -28,6 +28,11 @@ assert.equal(
 	tools['akm-cli'],
 	'OpenCode plugin dependency must match the CLI used by Claude and Codex'
 );
+assert.equal(
+	JSON.parse(readFileSync('/akm-marketplace/claude/node_modules/akm-cli/package.json', 'utf8')).version,
+	tools['akm-cli'],
+	'Native plugins must carry the same published CLI as the image and OpenCode plugin'
+);
 const bunOptions = process.env.BUN_OPTIONS;
 assert.equal(bunOptions, '--no-env-file --config=/dev/null', 'Image Bun startup boundary missing');
 const preloadMarker = join(root, 'untrusted-bun-preload-executed');
@@ -58,9 +63,6 @@ function fixture(harness) {
 		AKM_STATE_DIR: join(dir, 'state/akm'),
 		AKM_DATA_DIR: join(dir, 'data/akm'),
 		AKM_CACHE_DIR: join(dir, 'cache/akm'),
-		AKM_AUTO_MEMORY: '0',
-		AKM_AUTO_LEARNING: '0',
-		AKM_CURATE_MIN_SCORE: '0',
 		// Keep the real image's options rather than weakening or inventing them.
 		BUN_OPTIONS: bunOptions,
 		DISABLE_AUTOUPDATER: '1',
@@ -76,6 +78,13 @@ function fixture(harness) {
 				}
 			: {})
 	};
+	// The CLI and plugins read the same native config; retired plugin env
+	// switches no longer control learning or select the test bundle.
+	mkdirSync(env.AKM_CONFIG_DIR, { recursive: true });
+	const config = JSON.parse(readFileSync('/assistant-defaults/config/akm/config.json', 'utf8'));
+	config.bundles = { stash: { ...config.bundles.stash, path: join(dir, 'bundle') } };
+	config.improve = { enabled: false };
+	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(config));
 	const run = (argv) => {
 		const result = Bun.spawnSync(argv, {
 			cwd: join(dir, 'project'),

@@ -678,12 +678,15 @@ describe('Admin static security boundary', () => {
 		renderInstanceCapabilities(snapshot);
 		showView('knowledge');
 		expect(control('view-knowledge').hidden).toBe(false);
+		expect(control('knowledge-header-actions').hidden).toBe(false);
 		expect(control('knowledge-fields').disabled).toBe(false);
 		await control('open-knowledge').listeners.get('click')?.();
 		expect(opened).toBe(1);
 		renderInstanceCapabilities(normalizedSnapshot());
 		expect(control('knowledge-fields').disabled).toBe(true);
 		expect(control('knowledge-fields-unavailable').hidden).toBe(false);
+		showView('overview');
+		expect(control('knowledge-header-actions').hidden).toBe(true);
 	});
 	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({
@@ -972,7 +975,14 @@ describe('Admin static security boundary', () => {
 			.filter((name) => name.endsWith('.js'))
 			.map((name) => join(admin, name));
 		for (const path of [...productionSources, ...rendererSources]) {
-			expect(readFileSync(path, 'utf8')).not.toMatch(
+			// Native embedded content follows its placeholder; it never resizes
+			// the owning window. Keep every other production resize prohibited.
+			const source = readFileSync(path, 'utf8');
+			expect(
+				path.endsWith('/admin-knowledge.ts')
+					? source.replace('this.view.setBounds(bounds);', '')
+					: source
+			).not.toMatch(
 				/\.\s*(?:setSize|setContentSize|setBounds|resizeTo|resizeBy|maximize|unmaximize|setFullScreen)\s*\(/
 			);
 		}

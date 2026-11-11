@@ -31,4 +31,23 @@ bindRestartEvents();
 bindSnapshotEvents();
 bindHostingEvents();
 bindAdminSettingsEvents();
+// The native browser view sits over this placeholder, outside the Admin DOM.
+// Only request a fresh measurement; its URL, cookie and bounds remain in main.
+let knowledgeLayoutPending = false;
+const syncKnowledge = () => {
+	if (knowledgeLayoutPending) return;
+	knowledgeLayoutPending = true;
+	requestAnimationFrame(() => {
+		knowledgeLayoutPending = false;
+		void state.api.syncKnowledge().catch(() => {});
+	});
+};
+new ResizeObserver(syncKnowledge).observe(document.getElementById('knowledge-viewport'));
+new MutationObserver(syncKnowledge).observe(document.body, {
+	attributes: true,
+	subtree: true,
+	attributeFilter: ['hidden', 'open', 'data-phase', 'data-busy']
+});
+window.addEventListener('resize', syncKnowledge);
+document.addEventListener('scroll', syncKnowledge, true);
 void initializeAdmin();

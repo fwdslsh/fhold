@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,6 +19,23 @@ const cli = path.join(
 	'dist/cli.js'
 );
 const temporary: string[] = [];
+const embeddings = Bun.serve({
+	hostname: '127.0.0.1',
+	port: 0,
+	async fetch(request) {
+		const body = await request.json();
+		const documents = Array.isArray(body.input) ? body.input : [body.input];
+		return Response.json({
+			object: 'list',
+			data: documents.map((_text, index) => ({
+				object: 'embedding',
+				index,
+				embedding: [1, 0.5, 0.25, 0.125, 0.1, 0.05, 0.025, 0.01]
+			}))
+		});
+	}
+});
+afterAll(() => embeddings.stop(true));
 afterEach(async () => {
 	for (const dir of temporary.splice(0)) await fs.rm(dir, { recursive: true, force: true });
 });
@@ -34,11 +51,19 @@ async function fixture() {
 		])
 	);
 	for (const root of Object.values(roots)) await fs.mkdir(root, { recursive: true, mode: 0o700 });
-	const bundle = path.join(dir, 'persistent-bundle');
+	const bundle = process.env.FH_AKM_CACHE_TEST_BUNDLE_ROOT
+		? await fs.mkdtemp(path.join(process.env.FH_AKM_CACHE_TEST_BUNDLE_ROOT, 'fhold-vectors-'))
+		: path.join(dir, 'persistent-bundle');
+	if (process.env.FH_AKM_CACHE_TEST_BUNDLE_ROOT) temporary.push(bundle);
 	await fs.mkdir(path.join(bundle, 'knowledge'), { recursive: true });
 	const config = {
 		configVersion: '0.9.0',
-		semanticSearchMode: 'off',
+		semanticSearchMode: 'auto',
+		embedding: {
+			endpoint: `http://127.0.0.1:${embeddings.port}/v1/embeddings`,
+			model: 'fixture-embedding',
+			dimension: 8
+		},
 		defaultBundle: 'fixture',
 		bundles: { fixture: { path: bundle, components: { main: { adapter: 'akm' } } } }
 	};
@@ -55,8 +80,6 @@ async function fixture() {
 		AKM_DATA_DIR: roots.akmData,
 		AKM_STATE_DIR: path.join(roots.akmData, 'state'),
 		AKM_CACHE_DIR: path.join(dir, 'cache'),
-		AKM_AUTO_MEMORY: '0',
-		AKM_AUTO_LEARNING: '0',
 		BUN_OPTIONS: '--no-env-file --config=/dev/null'
 	};
 	const options = { roots, env, bunPath: process.execPath, akmCommand: [process.execPath, cli] };
@@ -220,7 +243,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 	for (const failure of [
 		'missing',
 		'corrupt',
-		'future-schema',
+		'old-index-format',
 		'oversized',
 		'wrong-instance',
 		'wrong-format'
@@ -237,15 +260,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			const object = path.join(f.dir, 'backup/objects', manifest.akmIndexCache.hash);
 			if (failure === 'missing') await fs.unlink(object);
 			if (failure === 'corrupt') await fs.writeFile(object, 'not sqlite');
-			if (failure === 'future-schema') {
-				const db = new Database(object);
-				db.exec("UPDATE index_meta SET value='99999' WHERE key='version'");
-				db.close();
-				const bytes = await fs.readFile(object);
-				manifest.akmIndexCache.hash = hash(bytes);
-				manifest.akmIndexCache.bytes = bytes.length;
-				await fs.writeFile(path.join(f.dir, 'backup/objects', hash(bytes)), bytes);
-			}
+			if (failure === 'old-index-format') manifest.akmIndexCache.format = 1;
 			if (failure === 'oversized') manifest.akmIndexCache.bytes = 65 * 1024 * 1024;
 			if (failure === 'wrong-instance') manifest.akmIndexCache.instanceId = 'another';
 			if (failure === 'wrong-format') manifest.akmIndexCache.format = 99;
@@ -271,13 +286,14 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			await target.release();
 		});
 
-	test('candidate refresh leaves live index and config unchanged; unchanged snapshots reuse the latest object', async () => {
+	test('native export leaves live index and config unchanged; unchanged vectors reuse the latest object', async () => {
 		const f = await fixture();
 		const engine = f.engine();
 		await engine.initialize();
 		await engine.acquireRestore();
 		const configBefore = await fs.readFile(path.join(f.roots.akmConfig, 'config.json'));
 		const indexBefore = await fs.readFile(path.join(f.roots.akmData, 'index.db'));
+		const stateBefore = await fs.readFile(path.join(f.roots.akmData, 'state.db'));
 		await engine.checkpoint();
 		const first = (await f.saved()).manifest.akmIndexCache;
 		await engine.checkpoint();
@@ -285,12 +301,47 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		expect(first.hash).toBe(second.hash);
 		expect(await fs.readFile(path.join(f.roots.akmConfig, 'config.json'))).toEqual(configBefore);
 		expect(await fs.readFile(path.join(f.roots.akmData, 'index.db'))).toEqual(indexBefore);
+		expect(await fs.readFile(path.join(f.roots.akmData, 'state.db'))).toEqual(stateBefore);
 		await engine.release();
 		const restart = f.engine();
 		await restart.acquireRestore();
 		expect(restart.status().akmIndexCache.state).toBe('preserved-local');
 		expect(await fs.readFile(path.join(f.roots.akmData, 'index.db'))).toEqual(indexBefore);
 		await restart.release();
+	});
+
+	test('lexical-only indexes skip vector capture instead of adding useless startup work', async () => {
+		const f = await fixture();
+		await fs.writeFile(
+			path.join(f.roots.akmConfig, 'config.json'),
+			JSON.stringify({
+				...f.config,
+				semanticSearchMode: 'off',
+				embedding: { ...f.config.embedding, model: 'lexical-only' }
+			})
+		);
+		for (const suffix of ['', '-wal', '-shm'])
+			await fs.rm(path.join(f.roots.akmData, `index.db${suffix}`), { force: true });
+		let began = performance.now();
+		await f.native();
+		const coldMs = performance.now() - began;
+		const source = f.engine();
+		await source.initialize();
+		await source.acquireRestore();
+		began = performance.now();
+		await source.checkpoint();
+		const captureMs = performance.now() - began;
+		expect(source.status().akmIndexCache).toMatchObject({ state: 'skipped', reason: 'no-vectors' });
+		expect((await f.saved()).manifest.akmIndexCache).toBeUndefined();
+		await source.release();
+		await f.replacement();
+		const target = f.engine();
+		await target.acquireRestore();
+		expect(await fs.stat(path.join(f.roots.akmData, 'index.db')).catch(() => null)).toBeNull();
+		await target.release();
+		console.info(
+			`AKM_VECTOR_LEXICAL_MEASUREMENT ${JSON.stringify({ coldMs, captureMs, artifactBytes: 0, restoreBuilds: 0 })}`
+		);
 	});
 
 	test('cache deadline and byte budget leave essential checkpoint successful', async () => {
@@ -307,6 +358,35 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			expect((await f.saved()).manifest.akmIndexCache).toBeUndefined();
 			await engine.release();
 		}
+	});
+
+	test('vector artifact output budget is checked independently of the smaller input index', async () => {
+		const f = await fixture();
+		const inputBytes = (await fs.stat(path.join(f.roots.akmData, 'index.db'))).size;
+		const fake = path.join(f.dir, 'oversized-export.mjs');
+		await fs.writeFile(
+			fake,
+			`
+			import fs from 'node:fs/promises';
+			const file = process.argv[process.argv.indexOf('--export-vectors') + 1];
+			await fs.writeFile(file, Buffer.alloc(${inputBytes * 2}));
+			console.log(JSON.stringify({ ok: true, exported: { vectors: 2 } }));
+		`
+		);
+		const source = f.engine(
+			{},
+			{
+				akmCommand: [process.execPath, fake],
+				akmIndexCacheLimits: { bytes: inputBytes + 1, timeoutMs: 5000 }
+			}
+		);
+		await source.initialize();
+		await source.acquireRestore();
+		await source.checkpoint();
+		expect(source.status().lastCheckpointTick).not.toBeNull();
+		expect((await f.saved()).manifest.akmIndexCache).toBeUndefined();
+		expect(source.status().akmIndexCache.state).toBe('degraded');
+		await source.release();
 	});
 
 	for (const outcome of ['captured', 'optional-failure', 'owner-lost'])
@@ -332,7 +412,8 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 					} catch (error) {
 						renewalError = error;
 					}
-					if (outcome === 'optional-failure') throw new Error('synthetic optional transfer failure');
+					if (outcome === 'optional-failure')
+						throw new Error('synthetic optional transfer failure');
 				}
 				return createImmutable(key, bytes, owner, options);
 			};
@@ -439,7 +520,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			await source.acquireRestore();
 			await source.checkpoint();
 			await source.release();
-			expect((await f.saved()).manifest.akmIndexCache.complete).toBe(true);
+			expect((await f.saved()).manifest.akmIndexCache.format).toBe(2);
 			await f.replacement();
 			const target = f.engine();
 			await target.acquireRestore();
@@ -495,7 +576,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			const retry = f.engine();
 			await retry.acquireRestore();
 			await retry.checkpoint();
-			expect((await f.saved()).manifest.akmIndexCache.complete).toBe(true);
+			expect((await f.saved()).manifest.akmIndexCache.format).toBe(2);
 			await retry.release();
 		});
 
@@ -536,7 +617,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		expect(await fs.stat(path.join(f.roots.akmData, 'index.db')).catch(() => null)).toBeNull();
 	});
 
-	test('an older native SQLite layout migrates without an exact package-version gate', async () => {
+	test('native import handles incompatible artifact contents without a fhold vector schema', async () => {
 		const f = await fixture();
 		const source = f.engine();
 		await source.initialize();
@@ -544,14 +625,9 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		await source.checkpoint();
 		await source.release();
 		const { manifest, head } = await f.saved();
-		const object = path.join(f.dir, 'backup/objects', manifest.akmIndexCache.hash);
-		const db = new Database(object);
-		db.exec("UPDATE index_meta SET value='25' WHERE key='version'");
-		db.close();
-		const bytes = await fs.readFile(object);
+		const bytes = Buffer.from('Not an AKM vector file');
 		manifest.akmIndexCache.hash = hash(bytes);
 		manifest.akmIndexCache.bytes = bytes.length;
-		manifest.akmIndexCache.schema = 25;
 		await fs.writeFile(path.join(f.dir, 'backup/objects', hash(bytes)), bytes);
 		const body = Buffer.from(JSON.stringify(manifest));
 		const generation = hash(body);
@@ -568,85 +644,227 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		await target.release();
 	});
 
-	test('native semantic vectors and environment credential references work in private candidates', async () => {
+	for (const credential of ['environment-reference', 'native-store'])
+		test(`native semantic vectors and ${credential} credentials work without rewriting native config`, async () => {
+			const f = await fixture();
+			let calls = 0;
+			let inputs = 0;
+			let authenticated = true;
+			const server = Bun.serve({
+				hostname: '127.0.0.1',
+				port: 0,
+				async fetch(request) {
+					calls++;
+					authenticated &&= request.headers.get('authorization') === 'Bearer synthetic-test-only';
+					const body = await request.json();
+					const documents = Array.isArray(body.input) ? body.input : [body.input];
+					inputs += documents.length;
+					return Response.json({
+						object: 'list',
+						data: documents.map((_text, index) => ({
+							object: 'embedding',
+							index,
+							embedding: [1, 0.5, 0.25, 0.125, 0.1, 0.05, 0.025, 0.01]
+						}))
+					});
+				}
+			});
+			try {
+				if (credential === 'environment-reference')
+					Object.assign(f.env, { ISSUE48_EMBED_KEY: 'synthetic-test-only' });
+				const endpoint = `http://127.0.0.1:${server.port}/v1/embeddings`;
+				const semantic = {
+					...f.config,
+					semanticSearchMode: 'auto',
+					embedding: {
+						endpoint,
+						model: 'credential-fixture-embedding',
+						dimension: 8,
+						...(credential === 'environment-reference' ? { apiKey: '$ISSUE48_EMBED_KEY' } : {}),
+						timeoutMs: 1000
+					}
+				};
+				const credentialsFile = path.join(f.roots.akmConfig, 'credentials.json');
+				if (credential === 'native-store')
+					await fs.writeFile(
+						credentialsFile,
+						JSON.stringify({ services: { embedding: { key: 'synthetic-test-only', endpoint } } }),
+						{ mode: 0o600 }
+					);
+				await fs.writeFile(path.join(f.roots.akmConfig, 'config.json'), JSON.stringify(semantic));
+				const configBefore = hash(await fs.readFile(path.join(f.roots.akmConfig, 'config.json')));
+				const credentialsBefore = await fs
+					.readFile(credentialsFile)
+					.then(hash)
+					.catch(() => null);
+				expect((await f.native()).verification.ok).toBe(true);
+				expect(inputs).toBe(2);
+				expect(authenticated).toBe(true);
+				const initialCalls = calls;
+				const source = f.engine();
+				await source.initialize();
+				await source.acquireRestore();
+				await source.checkpoint();
+				expect((await f.saved()).manifest.akmIndexCache.vectors).toBe(2);
+				expect(calls).toBe(initialCalls);
+				await f.asset('keep', 'Changed semantic fixture requires one new embedding');
+				await source.checkpoint();
+				// Capture exports existing vectors; freshness belongs to native restore.
+				expect(inputs).toBe(2);
+				expect(authenticated).toBe(true);
+				await source.release();
+				await f.replacement();
+				const target = f.engine();
+				await target.acquireRestore();
+				expect(target.status().akmIndexCache.state).toBe('restored');
+				expect(inputs).toBe(3);
+				expect(JSON.stringify(f.entries())).toContain('Changed semantic');
+				expect(hash(await fs.readFile(path.join(f.roots.akmConfig, 'config.json')))).toBe(
+					configBefore
+				);
+				expect(
+					await fs
+						.readFile(credentialsFile)
+						.then(hash)
+						.catch(() => null)
+				).toBe(credentialsBefore);
+				expect(authenticated).toBe(true);
+				await target.release();
+				// Preserve the essential receipt/config but remove only the disposable
+				// fixture index while every writer is stopped, then change the model.
+				for (const suffix of ['', '-wal', '-shm'])
+					await fs.rm(path.join(f.roots.akmData, `index.db${suffix}`), { force: true });
+				await fs.writeFile(
+					path.join(f.roots.akmConfig, 'config.json'),
+					JSON.stringify({
+						...semantic,
+						embedding: { ...semantic.embedding, model: 'another-model' }
+					})
+				);
+				const changed = f.engine();
+				await changed.acquireRestore();
+				expect(changed.status().akmIndexCache.state).toBe('restored');
+				// Model compatibility is AKM's responsibility: mismatch embeds normally.
+				expect(inputs).toBe(5);
+				expect(changed.status().ready).toBe(true);
+				await changed.release();
+			} finally {
+				await server.stop(true);
+			}
+		});
+
+	test('native vector reuse measurements on a representative semantic bundle', async () => {
 		const f = await fixture();
+		let source: ReturnType<typeof createEngine> | undefined;
+		let target: ReturnType<typeof createEngine> | undefined;
 		let calls = 0;
 		let inputs = 0;
-		let authenticated = true;
 		const server = Bun.serve({
 			hostname: '127.0.0.1',
 			port: 0,
 			async fetch(request) {
 				calls++;
-				authenticated &&= request.headers.get('authorization') === 'Bearer synthetic-test-only';
 				const body = await request.json();
 				const documents = Array.isArray(body.input) ? body.input : [body.input];
 				inputs += documents.length;
+				await Bun.sleep(100);
 				return Response.json({
 					object: 'list',
 					data: documents.map((_text, index) => ({
 						object: 'embedding',
 						index,
-						embedding: [1, 0.5, 0.25, 0.125, 0.1, 0.05, 0.025, 0.01]
+						embedding: Array.from({ length: 384 }, (_, i) => 1 / (i + 1))
 					}))
 				});
 			}
 		});
 		try {
-			Object.assign(f.env, { ISSUE48_EMBED_KEY: 'synthetic-test-only' });
-			const semantic = {
-				...f.config,
-				semanticSearchMode: 'auto',
-				embedding: {
-					endpoint: `http://127.0.0.1:${server.port}/v1/embeddings`,
-					model: 'fixture-embedding',
-					dimension: 8,
-					apiKey: '$ISSUE48_EMBED_KEY',
-					timeoutMs: 1000
-				}
-			};
-			await fs.writeFile(path.join(f.roots.akmConfig, 'config.json'), JSON.stringify(semantic));
-			expect((await f.native()).verification.ok).toBe(true);
-			expect(inputs).toBe(2);
-			expect(authenticated).toBe(true);
-			const initialCalls = calls;
-			const source = f.engine();
-			await source.initialize();
-			await source.acquireRestore();
-			await source.checkpoint();
-			expect((await f.saved()).manifest.akmIndexCache.embeddings).toBe(2);
-			expect(calls).toBe(initialCalls);
-			await f.asset('keep', 'Changed semantic fixture requires one new embedding');
-			await source.checkpoint();
-			expect(inputs).toBe(3);
-			expect(authenticated).toBe(true);
-			await source.release();
-			await f.replacement();
-			const target = f.engine();
-			await target.acquireRestore();
-			expect(target.status().akmIndexCache.state).toBe('restored');
-			expect(inputs).toBe(3);
-			expect(JSON.stringify(f.entries())).toContain('Changed semantic');
-			await target.release();
-			// Preserve the essential receipt/config but remove only the disposable
-			// fixture index while every writer is stopped, then change the model.
-			for (const suffix of ['', '-wal', '-shm'])
-				await fs.rm(path.join(f.roots.akmData, `index.db${suffix}`), { force: true });
+			for (let i = 0; i < 94; i++)
+				await f.asset(`representative-${i}`, `Synthetic reusable document ${i}. `.repeat(30));
 			await fs.writeFile(
 				path.join(f.roots.akmConfig, 'config.json'),
 				JSON.stringify({
-					...semantic,
-					embedding: { ...semantic.embedding, model: 'another-model' }
+					...f.config,
+					semanticSearchMode: 'auto',
+					embedding: {
+						endpoint: `http://127.0.0.1:${server.port}/v1/embeddings`,
+						model: 'measurement-384',
+						dimension: 384,
+						timeoutMs: 2000
+					}
 				})
 			);
-			const changed = f.engine();
-			await changed.acquireRestore();
-			expect(changed.status().akmIndexCache.reason).toBe('source-policy-changed');
-			expect(inputs).toBe(3);
-			expect(changed.status().ready).toBe(true);
-			await changed.release();
+			for (const suffix of ['', '-wal', '-shm'])
+				await fs.rm(path.join(f.roots.akmData, `index.db${suffix}`), { force: true });
+			let began = performance.now();
+			await f.native();
+			const coldMs = performance.now() - began;
+			expect(inputs).toBe(96);
+			const coldCalls = calls;
+			source = f.engine();
+			await source.initialize();
+			await source.acquireRestore();
+			began = performance.now();
+			await source.checkpoint();
+			const captureMs = performance.now() - began;
+			await source.release();
+			source = undefined;
+			const reference = (await f.saved()).manifest.akmIndexCache;
+			expect(reference.vectors).toBe(96);
+			expect(calls).toBe(coldCalls);
+			const artifact = await fs.readFile(path.join(f.dir, 'backup/objects', reference.hash));
+			expect(artifact.includes(Buffer.from(f.bundle))).toBe(false);
+			expect(artifact.includes(Buffer.from('Synthetic reusable document'))).toBe(false);
+			const indexBytes = (await fs.stat(path.join(f.roots.akmData, 'index.db'))).size;
+			await f.replacement();
+			target = f.engine();
+			began = performance.now();
+			await target.acquireRestore();
+			const restoredMs = performance.now() - began;
+			const admission = target.status().akmIndexCache;
+			const restored = admission.state === 'restored';
+			if (restored) expect(f.entries()).toHaveLength(96);
+			else {
+				// Network source scans may exceed the product's unchanged 5s
+				// optional budget. Prove safe fallback rather than widening it.
+				expect(Boolean(process.env.FH_AKM_CACHE_TEST_BUNDLE_ROOT)).toBe(true);
+				expect(admission).toMatchObject({ state: 'degraded', reason: 'deadline' });
+				expect(target.status().ready).toBe(true);
+				expect(await fs.stat(path.join(f.roots.akmData, 'index.db')).catch(() => null)).toBeNull();
+			}
+			expect(calls).toBe(coldCalls);
+			await target.release();
+			target = undefined;
+			let fallbackMs = 0;
+			if (!restored) {
+				began = performance.now();
+				await f.native();
+				fallbackMs = performance.now() - began;
+				expect(f.entries()).toHaveLength(96);
+			}
+			const measurement = {
+				bundle: process.env.FH_AKM_CACHE_TEST_BUNDLE_ROOT ? 'external-filesystem' : 'local',
+				documents: 96,
+				dimensions: 384,
+				fakeRequestLatencyMs: 100,
+				coldMs,
+				captureMs,
+				restoredMs,
+				admission,
+				fallbackMs,
+				fallbackCalls: calls - coldCalls,
+				coldCalls,
+				coldInputs: 96,
+				captureCalls: 0,
+				restoredCalls: 0,
+				artifactBytes: reference.bytes,
+				indexBytes
+			};
+			console.info(`AKM_VECTOR_MEASUREMENT ${JSON.stringify(measurement)}`);
 		} finally {
+			await target?.release();
+			await source?.release();
 			await server.stop(true);
 		}
-	});
+	}, 60_000);
 });

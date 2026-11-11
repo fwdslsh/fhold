@@ -418,6 +418,50 @@ Missing display, Docker, image or provider prerequisites are blocked integration
 gates, not passes. Static DOM/CSP tests and bundle checks remain useful but cannot
 replace rendered verification.
 
+For a focused Knowledge check, build `bun run --cwd packages/electron bundle:e2e`
+and prepare Electron with `node packages/electron/node_modules/electron/install.js`.
+With an already running **disposable** local instance and desktop display, run:
+
+```bash
+FH_HOME=/absolute/disposable-home FH_ADMIN_E2E_OUTPUT=/tmp/knowledge-check \
+  packages/electron/node_modules/electron/dist/electron --disable-gpu \
+  packages/electron/dist/admin-e2e.js --verify-knowledge
+```
+
+Use a fresh output directory for each run. This opens the real Admin renderer,
+selects the test home through the native folder picker and clicks Knowledge.
+AKM renders inside Admin using Electron's native `WebContentsView`, without an
+Admin preload or Node access. AKM's `desktop_session` bootstrap stays in main;
+the native browser retains its HttpOnly/SameSite cookie in a nonpersistent session.
+The test checks anonymous rejection, exact Host/Origin enforcement, authenticated
+reload, Library and Health navigation, clipboard copying where Chromium supports
+it, view reuse, zoom/resize/scroll and modal layout, and browser/server cleanup
+on disconnect. The renderer receives neither a URL nor a token. Only the human
+picker response is replaced; an intercepted OS launcher must remain unused.
+
+For the same check through **real native SSH**, provide a running disposable
+remote home and a configured SSH alias. The test registers the connection only
+in its fresh private profile, selects the remote instance through Admin IPC,
+and uses the distribution's real content-addressed helper and OpenSSH forwarding:
+
+```bash
+FH_HOME=/absolute/disposable-remote-home FH_ADMIN_E2E_SSH_HOST=your-test-alias \
+  FH_ADMIN_E2E_OUTPUT=/tmp/knowledge-ssh-check \
+  packages/electron/node_modules/electron/dist/electron --disable-gpu \
+  packages/electron/dist/admin-e2e.js --verify-knowledge
+```
+
+These modes do not start containers or alter stack settings. An optional
+`FH_ADMIN_E2E_RESTART_WEB_CONTAINER` must be the exact hexadecimal ID of that
+**disposable** Assistant. It terminates only its native `akm-web` process, then
+checks that reopening Knowledge replaces the browser and authenticates again;
+the SSH case retains the same loopback origin. Never point this opt-in at a live
+Assistant. Reports identify actual local or SSH transport. Separate Admin/guest
+screenshots are retained, because capturing only Admin's renderer omits native
+child views. Optional `FH_ADMIN_E2E_CAPTURE_WINDOW=1` also requests an OS window
+capture where supported; Wayland may require a separate desktop sharing grant.
+See [issue #112](https://github.com/fwdslsh/fhold/issues/112).
+
 On a host whose default Docker address pools are exhausted, an operator may first
 check existing Docker IPAM and host routes, then set
 `FH_ADMIN_E2E_INGRESS_SUBNET` to an explicit unused CIDR for this test only. The
