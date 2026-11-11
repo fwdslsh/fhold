@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1106-beta — Native AKM recovery, health and embedded Admin UI
+
 Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins
 **0.10.261119**. Retain the published native plugins' bundled CLI for offline
 Claude/Codex hooks. Native verification uses AKM's current configuration settings
@@ -26,6 +28,11 @@ export/import. AKM rebuilds from current sources and reuses matching embeddings;
 fhold retains recovery integrity, ownership and optional-work bounds. Lexical-only
 indexes create no cache artifact. Network source scans can exceed the unchanged
 five-second budget and safely fall back to ordinary native indexing.
+
+Publish Assistant and Linux CLI/Admin, including the embedded Knowledge UI.
+Guardian, Portal and the Claude Desktop extension retain **0.4.1103-beta**.
+Stable channels and existing instances remain unchanged. The approved source
+audit exceptions tracked in #63 remain pending compatible upstream fixes.
 
 ## 0.4.1105-beta — Admin app icons
 
