@@ -61,7 +61,7 @@ describe('Assistant checkpoint packages', () => {
 			).rejects.toThrow('idle unowned');
 			expect(await source.store.readDescriptor()).toEqual(before);
 			expect(await fs.readFile(path.join(f.dir, 'source/backup/owner/nonce'), 'utf8')).toBe(owner);
-			expect(await fs.readdir(f.packagePath)).toEqual(['checkpoint.json', 'manifests', 'objects']);
+			expect((await fs.readdir(f.packagePath)).sort()).toEqual(['checkpoint.json', 'manifests', 'objects']);
 			const completion = JSON.parse(
 				await fs.readFile(path.join(f.packagePath, 'checkpoint.json'), 'utf8')
 			);
