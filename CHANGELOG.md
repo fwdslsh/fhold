@@ -28,6 +28,8 @@ export/import. AKM rebuilds from current sources and reuses matching embeddings;
 fhold retains recovery integrity, ownership and optional-work bounds. Lexical-only
 indexes create no cache artifact. Network source scans can exceed the unchanged
 five-second budget and safely fall back to ordinary native indexing.
+Vector recovery remains experimental and opt-in; its switches may change or be
+removed as native AKM recovery evolves.
 
 Publish Assistant and Linux CLI/Admin, including the embedded Knowledge UI.
 Guardian, Portal and the Claude Desktop extension retain **0.4.1103-beta**.
