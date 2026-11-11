@@ -31,10 +31,15 @@ five-second budget and safely fall back to ordinary native indexing.
 Vector recovery remains experimental and opt-in; its switches may change or be
 removed as native AKM recovery evolves.
 
-Publish Assistant and Linux CLI/Admin, including the embedded Knowledge UI.
-Guardian, Portal and the Claude Desktop extension retain **0.4.1103-beta**.
-Stable channels and existing instances remain unchanged. The approved source
-audit exceptions tracked in #63 remain pending compatible upstream fixes.
+Update compatible transitive dependencies to **fast-xml-parser 5.12.0** and
+**node-forge 1.4.3**, clearing five newly reported source findings without overrides
+or new exceptions. Keep the page's active layout state separate from navigation
+targets so the Knowledge layout does not interfere with other views.
+
+Publish all three images, Linux CLI/Admin and the Claude Desktop extension,
+including the embedded Knowledge UI and the updated MCPB packer dependency.
+Stable channels and existing instances remain unchanged. The three approved
+source audit exceptions tracked in #63 remain pending compatible upstream fixes.
 
 ## 0.4.1105-beta — Admin app icons
 
