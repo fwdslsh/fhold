@@ -21,6 +21,31 @@ test('operation ingress returns typed recovery documents and separates confirmat
 	expect('confirmed' in input).toBe(false);
 	expect('ignored' in input).toBe(false);
 });
+test('checkpoint package ingress drops unknown fields and requires complete import intent', () => {
+	expect(
+		parseLegacyRecoveryOperation({
+			action: 'package',
+			confirmed: true,
+			request: { operation: 'export', directory: '/private/package', ignored: 'drop' }
+		})
+	).toEqual({
+		name: 'data.recovery.package',
+		context: { confirmed: true },
+		input: { operation: 'export', directory: '/private/package' }
+	});
+	expect(() =>
+		parseOperationInput('data.recovery.package', {
+			operation: 'import',
+			directory: '/private/package'
+		})
+	).toThrow('empty destination');
+	expect(() =>
+		parseOperationInput('data.recovery.package', {
+			operation: 'delete',
+			directory: '/private/package'
+		})
+	).toThrow('export, preview or import');
+});
 
 test('native readiness input drops transport fields and rejects non-boolean confirmation', () => {
 	expect(

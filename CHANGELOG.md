@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Use Assistant checkpoints for manual backup packages as well as automatic
+recovery. Export an accepted generation without claiming source ownership, or
+capture once through the same native pipeline when repeating backups are off.
+CLI/Admin can validate packages and restore the same Assistant into an empty
+home with a new independent backup directory before normal seeding. Imports
+retain private native state and task intent and leave containers stopped.
+Existing whole-home and reviewed-content archives remain supported explicitly;
+ACA host-folder package transfer is not yet implemented.
+
 Stage complete recovery checkpoints on local disk before copying their files to
 the backup destination. Reuse unchanged content and publish the accepted generation
 only after all required copies succeed. Directory publication no longer requires

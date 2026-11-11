@@ -1,14 +1,43 @@
-# Checkpoint packages: implementation brief
+# Assistant checkpoint packages
 
 The desired model is one Assistant backup representation: a validated checkpoint.
 An export packages that checkpoint; an import restores a reviewed package. A
 persistent disk and a replaceable container should not need different backup
 settings or competing Assistant capture implementations.
 
-This is the next backend simplification, not a feature shipped by the Admin
-layout change. The current manual export actions remain accurately scoped and
-working. Nothing automatically converts existing archives, adopts a destination,
-copies recovery authority or changes a running instance.
+Directory packages, bounded preview and same-Assistant empty-home import are
+implemented. Local `fhold backup` defaults to a checkpoint package. With automatic
+backups enabled it exports the last accepted generation; with backups off it
+captures once through the same native engine and a temporary local destination.
+No recurring setting or configured source authority changes.
+
+```sh
+fhold --name original backup --to /private/assistant-backup
+fhold --name /absolute/empty-home restore --from /private/assistant-backup --dry-run
+fhold --name /absolute/empty-home restore --from /private/assistant-backup \
+  --apply --confirm-stopped --backups /private/new-independent-backups
+```
+
+Use the matching release's Assistant image. Preview/import can use the CLI's
+pinned image when the original home is gone; the image must already be available
+locally. An existing selected instance supplies its exact resolved image instead.
+Admin exposes **System → Backup and recovery → Export / import Assistant backup**.
+Package and target paths in this form belong to the selected instance host,
+including SSH. SSH CLI uses the same operations through `recovery export`,
+`recovery preview` and `recovery import`; its paths likewise belong to that host.
+ACA package transfer to a management-host folder is explicitly unavailable;
+automatic mounted backups and startup restoration remain available.
+
+An import requires an empty home and unused independent backup directory. Native
+restore runs before host defaults are seeded, writes its own real receipt, and
+leaves containers stopped. An interrupted import retains the existing startup
+blocker; it is not silently resumed or overwritten. Review the partial target
+and retry with another empty home. Original writers must remain stopped.
+
+Existing archives remain readable. `backup --portable` retains reviewed-content
+export; `backup --full --confirm-stopped` retains whole-home preservation. Admin
+keeps these under **Other export options**. No live migration or archive
+conversion runs automatically.
 
 ## Reuse the existing implementation
 
@@ -28,46 +57,46 @@ optional AKM cache reference. The descriptor selects the accepted generation.
 Temporary uploads, unrelated generations and unreferenced objects are not part
 of the exported checkpoint.
 
-Extract the existing closure-private `manifestAt`, `validateManifest` and
-`savedCatalog` validation into a reusable read-only path. It must retain bounded
+The engine's `manifestFrom`, `validateManifest` and `savedCatalog` validation are
+reused by the package operations. They retain bounded
 reads, catalog/path checks, selection identity, member uniqueness and hashes;
 SQLite validation stays in the image's native SQLite worker. Do not call
 `acquireRestore` merely to preview or export: it claims destination ownership and
 may write a receipt or restore files.
 
-## Smallest migration-free delivery
+## Implementation map
 
-1. Package an existing accepted Assistant checkpoint. Read one descriptor, pin
-   its generation, validate the referenced manifest and copy only its objects
+1. Export reads an existing accepted Assistant checkpoint's descriptor and pins
+   its generation, validates the referenced manifest and copies only its objects
    plus any included optional cache object to a new private destination. Verify
    the copied bytes and publish package completion last. A checkpoint published
    concurrently after that read does not alter this immutable generation. No
    source ownership claim or source rewrite is needed. Retention must not remove
    the pinned objects during export if garbage collection is added later.
-2. Add a shared package preview used by CLI and Admin. Report capture time,
-   Assistant identity, covered paths, omitted/external data, private sign-ins and
-   approvals, active task intent and optional extra sections. Validate every
-   selected member before target writes; keep incomplete imports blocked.
-3. First support **restore the same Assistant** into empty native roots and a
+2. Shared package preview used by CLI and Admin reports capture time,
+   Assistant identity, selected coverage, member/byte counts and warnings about
+   private sign-ins, approvals, active task intent and excluded host data. It
+   validates every selected member before target writes; incomplete imports stay
+   blocked. It does not inspect or disclose native credential values.
+3. **Restore the same Assistant** imports into empty native roots and a
    genuinely unused independent recovery destination. Import the validated
    immutable manifest/objects through the existing storage interface, then
    publish its accepted generation through a deliberate native import operation.
    Do not hand-edit JSON hashes or fabricate a private receipt. The native
    restore path creates the receipt/journal only after normal validation. The
    source identity is retained; no original writer may run concurrently.
-4. Allow a manual Assistant backup to invoke the same engine's local capture
+4. Manual Assistant backup invokes the same engine's local capture
    pipeline even when repeating backups are off. It must not enable recurring
    backups, initialize or claim the configured remote destination merely to make
    an export. Reuse the capture code with a private package target and explicit
    operation lifecycle; do not implement SQLite capture again in host code.
-5. Replace the ordinary Assistant export/import journey with **Export backup**
-   and **Import backup**. Keep existing archive readers as explicit input support
+5. The ordinary Assistant backup journey uses checkpoint export/import. Existing
+   archive readers remain explicit input support
    while users retain those backups. No automatic live-data migration is needed.
 
-A single archive container can hold the existing manifest/object graph and a
-small package inventory. The archive wrapper is transport packaging, not a new
-Assistant snapshot format. A directory package is sufficient for the first
-delivery; adding compression must preserve bounded extraction, link/path
+A directory package holds the existing manifest/object graph and a small
+completion inventory. It is transport packaging, not a new Assistant snapshot
+format. Adding compression must preserve bounded extraction, link/path
 containment, empty-target and verified-manifest protections.
 
 ## Restore purpose and authority
@@ -109,11 +138,13 @@ fallback with its actual guarantees until optional package sections cover those
 needs. Do not silently call an Assistant-only package a full-instance export.
 External mounts need their own explicit coverage and access review.
 
-## Code to retire after equivalent behavior is verified
+## Remaining consolidation
 
-- Replace `createBackup` and its independent file collection/capture in
+- Retire `createBackup` and its independent file collection/capture in
   `packages/lib/src/control-plane/backup.ts` with checkpoint packaging for normal
-  Assistant exports. Retain reviewed-content selection rules as an import-purpose
+  reviewed-content exports once native selective import covers their actual
+  semantics. Normal Assistant exports already use the checkpoint engine.
+  Retain reviewed-content selection rules as an import-purpose
   operation until native selective transfer covers them.
 - Replace duplicate Assistant payload planning/copying in `restore.ts`
   (`planRestore`/`applyRestore`) with the engine's validated staging/restoration.

@@ -11,6 +11,9 @@ import type { CodexRecallReview } from '../control-plane/codex-recall.js';
 import type { RemoteProgress } from '../control-plane/remote.js';
 import type {
 	RecoveryCredentialRequest,
+	CheckpointPackageOperation,
+	CheckpointPackagePlan,
+	CheckpointPackageImportResult,
 	RecoveryOperationResult,
 	RecoverySaveRequest,
 	RecoverySnapshot,
@@ -337,6 +340,10 @@ export type DataOperations = {
 		restore: Operation<void, RecoveryOperationResult>;
 		save: Operation<RecoverySaveRequest, void>;
 		setCredential: Operation<RecoveryCredentialRequest, void>;
+		package: Operation<
+			CheckpointPackageOperation,
+			CheckpointPackagePlan | CheckpointPackageImportResult
+		>;
 	};
 };
 

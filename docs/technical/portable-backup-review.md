@@ -72,7 +72,7 @@ Private `state/restore-receipts/<digest>.json` records phase and completed paths
 Use exact private paths you control. These are templates, not commands executed by this review; select an unused destination/name and locally available trusted images as normal installation requires. Fresh setup chooses available ports unless you explicitly override them.
 
 ```bash
-FH_HOME=/absolute/source-instance fhold backup --to /private/backup-2026-10-01
+FH_HOME=/absolute/source-instance fhold backup --portable --to /private/backup-2026-10-01
 FH_HOME=/absolute/new-instance fhold install --no-start
 FH_HOME=/absolute/new-instance fhold restore --from /private/backup-2026-10-01 --dry-run --json
 ```

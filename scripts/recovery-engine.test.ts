@@ -1130,11 +1130,11 @@ describe('same-instance local recovery engine', () => {
 	test('deadline after successful startup work still revokes readiness and releases owner', async () => {
 		const f = await fixture();
 		const engine = createEngine(f.config, { ...f.options, limits: { operationTimeoutMs: 100 } });
-		await engine.initialize();
 		const monotonic = spyOn(performance, 'now').mockImplementation(() =>
 			engine.status().ready ? 200 : 0
 		);
 		try {
+			await engine.initialize();
 			await expect(engine.acquireRestore()).rejects.toThrow('deadline');
 			expect(engine.status().ready).toBe(false);
 			expect(engine.status().owned).toBe(false);

@@ -512,6 +512,8 @@ export function registerAdminIpc(): void {
 		const active = session();
 		const operation = parseLegacyRecoveryOperation(value);
 		switch (operation.name) {
+			case 'data.recovery.package':
+				return invoke(active.data.recovery.package, operation.input, operation.context);
 			case 'data.recovery.status':
 				return invoke(active.data.recovery.status, operation.input, operation.context);
 			case 'data.recovery.inspect':

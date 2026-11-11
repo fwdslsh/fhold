@@ -17,6 +17,57 @@ export async function runSessionCommand(
 	if (action === 'backup' || action === 'restore')
 		return runSessionDataCommand(session, argv, write);
 	if (action === 'connect') return runSessionConnectCommand(session, argv.slice(1), write);
+	if (action === 'recovery' && ['export', 'preview', 'import'].includes(argv[1])) {
+		const verb = argv[1];
+		const parsed = parseArgs({
+			args: argv.slice(2),
+			strict: true,
+			allowPositionals: false,
+			options: {
+				to: { type: 'string' },
+				from: { type: 'string' },
+				home: { type: 'string' },
+				backups: { type: 'string' },
+				'preview-digest': { type: 'string' },
+				'confirm-stopped': { type: 'boolean' }
+			}
+		});
+		const directory = verb === 'export' ? parsed.values.to : parsed.values.from;
+		if (!directory)
+			throw new Error('Choose the checkpoint package directory on the selected host.');
+		if (verb === 'import') {
+			if (!parsed.values.home || !parsed.values.backups || !parsed.values['preview-digest'])
+				throw new Error('Import needs --home, --backups and --preview-digest.');
+			write(
+				JSON.stringify(
+					await invokeOperation(
+						session.data.recovery.package,
+						{
+							operation: 'import',
+							directory,
+							destinationHome: parsed.values.home,
+							backupDirectory: parsed.values.backups,
+							previewDigest: parsed.values['preview-digest']
+						},
+						{ confirmed: parsed.values['confirm-stopped'] === true }
+					),
+					null,
+					2
+				)
+			);
+		} else
+			write(
+				JSON.stringify(
+					await invokeOperation(session.data.recovery.package, {
+						operation: verb === 'export' ? 'export' : 'preview',
+						directory
+					}),
+					null,
+					2
+				)
+			);
+		return;
+	}
 	const options: ParseArgsOptionsConfig =
 		action === 'update'
 			? {

@@ -4,7 +4,8 @@ import {
 	ensureHomeDirs,
 	managedComposeFile,
 	stackConfigFile,
-	writeFileAtomic
+	writeFileAtomic,
+	type FholdState
 } from './foundation.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,7 +15,8 @@ import {
 	defaultStackConfig,
 	isInstanceName,
 	parseStackConfig,
-	writeStackConfig
+	writeStackConfig,
+	type StackConfig
 } from './stack-config.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { chooseInstallPorts } from './install-ports.js';
@@ -31,14 +33,18 @@ export function assertInstallInstanceName(name: string): void {
 
 /** Shared initialization; frontends own Docker/provider prompts and asset resolution. */
 export async function installHome(
-	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {}
+	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {},
+	/** Internal same-instance checkpoint import: native state must precede default seeding. */
+	restoreNativeState?: (state: FholdState, config: StackConfig) => Promise<void>
 ): Promise<string> {
 	if (options.name !== undefined) assertInstallInstanceName(options.name);
 	const supplied = options.config === undefined ? undefined : parseStackConfig(options.config);
 	if (supplied && !supplied.ok) throw new Error(supplied.error);
 	const name =
 		options.name ??
-		(supplied?.ok ? supplied.config.deployment.projectName : process.env.FH_PROJECT_NAME?.trim() || undefined);
+		(supplied?.ok
+			? supplied.config.deployment.projectName
+			: process.env.FH_PROJECT_NAME?.trim() || undefined);
 	const state = createFholdState(options.homeDir, name);
 	if (classifyInstall(state.homeDir) !== 'not_installed') {
 		throw new Error('fhold is already installed or the selected home is not empty.');
@@ -64,9 +70,10 @@ export async function installHome(
 	if (!check.ok) throw new Error(check.error);
 	// Fresh instance names become hostnames, regardless of the frontend or source of intent.
 	assertInstallInstanceName(check.config.deployment.projectName);
-	const config = (options.automaticPorts ?? options.config === undefined)
-		? await chooseInstallPorts(check.config)
-		: check.config;
+	const config =
+		(options.automaticPorts ?? options.config === undefined)
+			? await chooseInstallPorts(check.config)
+			: check.config;
 	preflightHomeSeed(state.homeDir);
 	ensureHomeDirs(state.homeDir);
 	const lock = acquireStackLock(state.dataDir);
@@ -83,6 +90,7 @@ export async function installHome(
 		}
 		// Identity is persisted before reconciliation, which uses final intent once.
 		writeStackConfig(state.homeDir, config);
+		if (restoreNativeState) await restoreNativeState(state, config);
 		await applyHomeSeed(state.homeDir);
 		ensureRuntime(state);
 		writeFileAtomic(

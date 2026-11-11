@@ -1701,6 +1701,41 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
 		).toBe(true);
 		await capture('backup-recovery-cloud-320.png');
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
+			const qa=window.backupQa;qa.packageCalls=[];qa.approveImport=false;
+			qa.snapshot.operations['data.recovery.package']={support:'supported',availability:{state:'ready'}};
+			state.api.recovery=async input=>{qa.packageCalls.push(input);return {product:'fhold',scope:'assistant-checkpoint',instanceId:'agent',generation:'b'.repeat(64),previewDigest:'a'.repeat(64),files:3,totalBytes:4000,warnings:['Private sign-ins and task intent'],...(input.request.operation==='import'?{restored:true,homeDir:input.request.destinationHome}:{})};};
+			state.api.confirmRestart=async action=>{qa.confirmations.push(action);return qa.approveImport;};
+			render(qa.snapshot,{preserveDirty:false});document.querySelector('#checkpoint-packages').open=true;
+		})()`);
+		await value('#checkpoint-source', '/private/package');
+		await value('#checkpoint-home', '/private/restored');
+		await value('#checkpoint-backups', '/private/new-backups');
+		await click('#preview-checkpoint');
+		expect(await evaluate("document.querySelector('#import-checkpoint').disabled")).toBe(false);
+		await click('#import-checkpoint');
+		expect(await evaluate('window.backupQa.packageCalls.length')).toBe(1);
+		expect(await evaluate('window.backupQa.confirmations.at(-1)')).toBe('checkpoint-import');
+		await value('#checkpoint-home', '/private/reviewed-home');
+		expect(await evaluate("document.querySelector('#import-checkpoint').disabled")).toBe(true);
+		await click('#preview-checkpoint');
+		await evaluate('window.backupQa.approveImport=true');
+		await click('#import-checkpoint');
+		expect(await evaluate('window.backupQa.packageCalls.at(-1).request')).toEqual({
+			operation: 'import',
+			directory: '/private/package',
+			destinationHome: '/private/reviewed-home',
+			backupDirectory: '/private/new-backups',
+			previewDigest: 'a'.repeat(64)
+		});
+		expect(await evaluate("document.querySelector('#checkpoint-package-result').value")).toContain(
+			'restored'
+		);
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
+		await capture('checkpoint-package-import-320.png');
 		await evaluate(
 			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
 		);
