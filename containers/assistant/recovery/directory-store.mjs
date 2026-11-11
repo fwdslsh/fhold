@@ -21,7 +21,10 @@ export async function assertNoLinks(target) {
 export async function readRegular(target, limit, signal) {
 	signal?.throwIfAborted();
 	await assertNoLinks(target);
-	const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+	const handle = await fs.open(
+		target,
+		constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+	);
 	try {
 		const before = await handle.stat();
 		if (!before.isFile() || before.size > limit)
@@ -71,7 +74,7 @@ async function atomic(target, bytes) {
 }
 
 /** Directory destination holds artifacts only. Requires working atomic mkdir,
- * link/create-only, rename and coherent read-after-write from the mounted FS.
+ * exclusive creation, rename and coherent read-after-write from the mounted FS.
  * Ownership never expires: a paused writer is not safe to replace by a clock. */
 export function createDirectoryStore(url, { maxReadBytes = 256 * 1024 * 1024 } = {}) {
 	const parsed = new URL(url);
@@ -238,21 +241,43 @@ export function createDirectoryStore(url, { maxReadBytes = 256 * 1024 * 1024 } =
 			const target = keyPath(key);
 			if (digest(bytes) !== key.split('/')[1]) throw new Error('recovery object key/hash mismatch');
 			await assertNoLinks(target);
+			// Accepted content is reused without copying it again. A conflicting
+			// object is never repaired or overwritten implicitly.
+			try {
+				const stored = await readRegular(target, maxReadBytes, signal);
+				if (!stored.equals(bytes)) throw new Error('immutable object conflict');
+				await renew(owner);
+				return;
+			} catch (error) {
+				if (error.code !== 'ENOENT') throw error;
+			}
 			const temporary = path.join(root, `${randomUUID()}.upload`);
 			const handle = await fs.open(temporary, 'wx', 0o600);
 			try {
-				await handle.writeFile(bytes);
-				await handle.sync();
-			} finally {
-				await handle.close();
-			}
-			try {
+				try {
+					await handle.writeFile(bytes);
+					await handle.sync();
+				} finally {
+					await handle.close();
+				}
 				signal?.throwIfAborted();
-				await fs.link(temporary, target);
-			} catch (error) {
-				if (error.code !== 'EEXIST') throw error;
+				// The copy is complete and flushed before publication. Serialize the
+				// final existence check/rename with the existing destination mutex;
+				// Azure Files SMB needs no hard-link support.
+				await withMutation(async () => {
+					await renew(owner);
+					try {
+						const stored = await readRegular(target, maxReadBytes, signal);
+						if (!stored.equals(bytes)) throw new Error('immutable object conflict');
+					} catch (error) {
+						if (error.code !== 'ENOENT') throw error;
+						await fs.rename(temporary, target);
+					}
+				});
 			} finally {
-				await fs.unlink(temporary);
+				await fs.unlink(temporary).catch((error) => {
+					if (error.code !== 'ENOENT') throw error;
+				});
 			}
 			const directory = await fs.open(path.dirname(target), 'r');
 			try {

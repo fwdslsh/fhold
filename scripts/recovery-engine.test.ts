@@ -1,5 +1,7 @@
 import { describe, expect, test, spyOn } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { constants } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import {
 	mkdtemp,
 	mkdir,
@@ -960,24 +962,20 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 		db.exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES('new-database')");
 		db.close();
 		const store = createDirectoryStore(f.config.url);
-		let changed = false;
-		const engine = createEngine(f.config, {
-			...f.options,
-			store: {
-				...store,
-				async createImmutable(...args) {
-					if (!changed && args[0].startsWith('objects/')) {
-						changed = true;
-						await rename(original, `${original}-retained`);
-						await copyFile(source, original);
-					}
-					return store.createImmutable(...args);
-				}
-			}
-		});
+		const engine = createEngine(f.config, { ...f.options, store });
 		await engine.initialize();
 		await engine.acquireRestore();
-		await expect(engine.checkpoint()).rejects.toThrow('uncataloged SQLite');
+		const open = fsPromises.open;
+		const capture = spyOn(fsPromises, 'open').mockImplementation(async (target, flags, ...rest) => {
+			if (target === path.join(f.roots.work, 'a-note') && typeof flags === 'number' && (flags & constants.O_NONBLOCK)) {
+				await rename(original, `${original}-retained`);
+				await copyFile(source, original);
+			}
+			return open(target, flags, ...rest);
+		});
+		try {
+			await expect(engine.checkpoint()).rejects.toThrow('uncataloged SQLite');
+		} finally { capture.mockRestore(); }
 		expect((await store.readDescriptor())?.value.generation).toBeNull();
 		await engine.release();
 	});
@@ -1020,6 +1018,92 @@ describe('operator-selected recovery paths and SQLite databases', () => {
 });
 
 describe('same-instance local recovery engine', () => {
+	test('failed partial share write cleans its temporary file without advancing the accepted checkpoint', async () => {
+		const f = await fixture();
+		const note = path.join(f.roots.work, 'note');
+		await writeFile(note, 'accepted');
+		const engine = f.engine();
+		await engine.initialize(); await engine.acquireRestore(); await engine.checkpoint();
+		const accepted = (await savedManifest(f)).head.value.generation;
+		await writeFile(note, 'failed-partial-copy');
+		const open = fsPromises.open;
+		const spy = spyOn(fsPromises, 'open').mockImplementation(async (...args) => {
+			const handle = await open(...args);
+			if (String(args[0]).endsWith('.upload')) {
+				const write = handle.writeFile.bind(handle);
+				handle.writeFile = async (bytes) => {
+					await write(Buffer.from(bytes).subarray(0, 4));
+					throw Object.assign(new Error('synthetic partial copy ENOSPC'), { code: 'ENOSPC' });
+				};
+			}
+			return handle;
+		});
+		try { await expect(engine.checkpoint()).rejects.toThrow('synthetic partial copy ENOSPC'); }
+		finally { spy.mockRestore(); }
+		expect((await savedManifest(f)).head.value.generation).toBe(accepted);
+		expect((await readdir(path.join(f.dir, 'backup'))).filter(name => name.endsWith('.upload'))).toEqual([]);
+		await engine.checkpoint(); await engine.release();
+	});
+	test('finishes local capture before copying and restores without hard links', async () => {
+		const f = await fixture();
+		const note = path.join(f.roots.work, 'note');
+		await writeFile(note, 'completed-local-snapshot');
+		const store = createDirectoryStore(f.config.url);
+		let copies = 0;
+		const engine = createEngine(f.config, { ...f.options, store: {
+			...store,
+			async createImmutable(...args) {
+				if (++copies === 1) await writeFile(note, 'changed-during-copy');
+				return store.createImmutable(...args);
+			}
+		} });
+		const link = spyOn(fsPromises, 'link').mockImplementation(async () => {
+			throw Object.assign(new Error('SMB hard links unsupported'), { code: 'EOPNOTSUPP' });
+		});
+		try {
+			await engine.initialize();
+			await engine.acquireRestore();
+			await engine.checkpoint();
+			expect(copies).toBeGreaterThan(0);
+			await engine.release();
+			await rm(note);
+			const replacement = f.engine();
+			await replacement.acquireRestore();
+			expect(await readFile(note, 'utf8')).toBe('completed-local-snapshot');
+			await replacement.release();
+			expect(link).not.toHaveBeenCalled();
+		} finally { link.mockRestore(); }
+	});
+	test('failed local capture copies no objects; failed copy retains the last accepted generation', async () => {
+		const f = await fixture();
+		const note = path.join(f.roots.work, 'note');
+		await writeFile(note, 'accepted');
+		const store = createDirectoryStore(f.config.url);
+		let failCopy = false, copies = 0;
+		const engine = createEngine(f.config, { ...f.options, store: {
+			...store,
+			async createImmutable(...args) {
+				copies++;
+				if (failCopy) throw new Error('interrupted share copy');
+				return store.createImmutable(...args);
+			}
+		} });
+		await engine.initialize(); await engine.acquireRestore(); await engine.checkpoint();
+		const accepted = (await store.readDescriptor()).value.generation;
+		copies = 0;
+		await symlink('/not-a-backup-source', path.join(f.roots.work, 'bad-link'));
+		await expect(engine.checkpoint()).rejects.toThrow('link');
+		expect(copies).toBe(0);
+		await rm(path.join(f.roots.work, 'bad-link'));
+		await writeFile(note, 'new-capture');
+		failCopy = true;
+		await expect(engine.checkpoint()).rejects.toThrow('interrupted share copy');
+		expect((await store.readDescriptor()).value.generation).toBe(accepted);
+		failCopy = false;
+		await engine.checkpoint();
+		expect((await store.readDescriptor()).value.generation).not.toBe(accepted);
+		await engine.release();
+	});
 	test('late startup deadline releases ownership and never reports ready', async () => {
 		const f = await fixture();
 		const store = createDirectoryStore(f.config.url);
@@ -1046,11 +1130,11 @@ describe('same-instance local recovery engine', () => {
 	test('deadline after successful startup work still revokes readiness and releases owner', async () => {
 		const f = await fixture();
 		const engine = createEngine(f.config, { ...f.options, limits: { operationTimeoutMs: 100 } });
-		await engine.initialize();
 		const monotonic = spyOn(performance, 'now').mockImplementation(() =>
 			engine.status().ready ? 200 : 0
 		);
 		try {
+			await engine.initialize();
 			await expect(engine.acquireRestore()).rejects.toThrow('deadline');
 			expect(engine.status().ready).toBe(false);
 			expect(engine.status().owned).toBe(false);
@@ -1415,29 +1499,20 @@ describe('same-instance local recovery engine', () => {
 		await writeFile(first, 'first');
 		await writeFile(missing, 'preserved old note');
 		const store = createDirectoryStore(f.config.url);
-		let disappear = false;
-		const engine = createEngine(f.config, {
-			...f.options,
-			store: {
-				...store,
-				async createImmutable(...args) {
-					const result = await store.createImmutable(...args);
-					if (disappear && args[0].startsWith('objects/')) {
-						disappear = false;
-						await rm(missing);
-					}
-					return result;
-				}
-			}
-		});
+		const engine = createEngine(f.config, { ...f.options, store });
 		await engine.initialize();
 		await engine.acquireRestore();
 		await engine.checkpoint();
 		const accepted = engine.status().generation;
 		const publishedAt = engine.status().lastCheckpointAt;
 		await writeFile(first, 'newer content');
-		disappear = true;
-		await expect(engine.checkpoint()).rejects.toThrow('ENOENT');
+		const open = fsPromises.open;
+		const capture = spyOn(fsPromises, 'open').mockImplementation(async (target, flags, ...rest) => {
+			if (target === first && typeof flags === 'number' && (flags & constants.O_NONBLOCK)) await rm(missing);
+			return open(target, flags, ...rest);
+		});
+		try { await expect(engine.checkpoint()).rejects.toThrow('ENOENT'); }
+		finally { capture.mockRestore(); }
 		expect(engine.status()).toMatchObject({
 			ready: true,
 			owned: true,

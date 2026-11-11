@@ -242,7 +242,8 @@
               <label class="field" for="install-region"><span>Azure region</span><input id="install-region" required disabled autocomplete="off" /></label>
               <label class="field" for="install-storage"><span>Recovery storage account</span><select id="install-storage" disabled></select></label>
               <label class="field" for="install-storage-name"><span>New storage account name</span><input id="install-storage-name" required disabled pattern="[a-z0-9]{3,24}" autocomplete="off" /></label>
-              <p class="help-text">Each assistant uses a private Blob recovery container. Live databases remain on local ephemeral storage; shared project mounts are separate from checkpoint coverage.</p>
+              <label class="field" for="install-recovery"><span>Backup destination</span><select id="install-recovery" disabled><option value="directory">Local backup + Azure Files copy (recommended)</option><option value="azblob">Azure Blob (deprecated)</option></select></label>
+              <p class="help-text">Create checkpoints locally, then copy completed files to a dedicated backup share. Live databases stay on local ephemeral storage. Blob recovery remains available but is deprecated and superseded by local backup with file-share copy.</p>
               <label class="field" for="install-mounts"><span>Optional independent shared folders</span><textarea id="install-mounts" disabled spellcheck="false" placeholder="project-files /work/project"></textarea></label>
               <p class="help-text">Use existing storage configured on the selected Container Apps environment. Enter one storage name and absolute mount path per line. These folders are excluded from checkpoints and must be protected separately. Never mount over live native account state or databases.</p>
               <label class="field" for="install-timezone"><span>Scheduler timezone</span><input id="install-timezone" required disabled autocomplete="off" /></label>
@@ -943,94 +944,120 @@
               </fieldset>
             </details>
 
-            <details id="import-export" class="panel panel-disclosure">
-              <summary id="backup-heading"><span>Import / export <small>Entire instance or reviewed content</small></span></summary>
-              <p id="transfer-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="transfer-fields" class="capability-fields" data-instance-feature="data.backup" aria-describedby="transfer-fields-unavailable" aria-label="Instance export">
-              <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
-              <p class="help-text">To import an entire instance, choose “Open another instance…” → “Import assistant…” and select an empty destination. To import portable content, create a fresh instance and choose “Import from an fhold export” during setup. Imported portable tasks stay inactive until reviewed.</p>
-              <p class="help-text">Automatic checkpoints are configured separately under Ephemeral container support. Their format is not an import/export file.</p>
-              <details class="disclosure"><summary>What is included?</summary><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></details>
-              <form id="backup-form" class="form-stack">
-	                <label class="field" for="backup-scope"><span>Export scope</span><select id="backup-scope"><option value="portable">Portable content</option><option value="instance">Entire instance (must be stopped)</option></select></label>
-	                <p id="backup-full-help" class="help-text" hidden>Stop the instance in Overview first. All containers and other writers must stay stopped until export finishes. The unencrypted export includes private sign-ins and access keys. Import it into an empty folder, and never run both copies together. Export does not automatically stop or restart containers.</p>
-	                <label class="field" for="backup-destination"><span>Export directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
-                <details id="backup-sensitive-options" class="disclosure"><summary>Include sensitive data (optional)</summary>
-                  <fieldset class="option-group">
-                  <legend class="visually-hidden">Include sensitive data</legend>
-                  <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
-                  <label class="check-row"><input id="backup-env" type="checkbox" /> Private user environment</label>
-                  <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
-                </fieldset>
-                  </details>
-                <button id="export-backup" class="primary" type="submit">Export portable content</button>
-              </form>
-              <div id="backup-summary" class="inline-status neutral" hidden></div>
-              <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
-              </fieldset>
-            </details>
-
-            <details id="runtime-recovery" class="panel panel-disclosure">
-              <summary><span>Ephemeral container support <small>Automatic checkpoints · same-instance continuity</small></span></summary>
-              <p id="recovery-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="recovery-fields" class="capability-fields" data-instance-feature="data.recovery.save" aria-describedby="recovery-fields-unavailable" aria-label="Ephemeral container settings">
-              <p class="section-intro">Enable this when the Assistant’s local disk can disappear. Automatic checkpoints restore the same agent’s conversations, sign-ins, approvals and SQLite state before startup, including after ordinary image upgrades. Optional for ordinary local installs.</p>
-              <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
-              <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Ephemeral container support is off.</strong><span>Local data remains in this instance’s home.</span></div>
-              <form id="runtime-recovery-form" class="form-stack" data-managed-form>
-                <label class="check-row"><input id="runtime-recovery-enabled" type="checkbox" /> Enable automatic checkpoints and restore</label>
-                <div id="runtime-recovery-settings" class="form-stack" hidden>
-                  <label class="field" for="runtime-recovery-storage"><span>Backup location</span><select id="runtime-recovery-storage"><option value="directory">Local or mounted directory</option><option value="blob">Azure Blob storage</option></select></label>
-                  <label id="runtime-recovery-directory-field" class="field" for="runtime-recovery-directory"><span>Private backup directory</span><span class="input-action"><input id="runtime-recovery-directory" autocomplete="off" placeholder="/path/to/private-checkpoints" /><button id="choose-recovery-directory" class="secondary" type="button">Choose folder</button></span></label>
-                  <p id="runtime-recovery-directory-help" class="help-text">Choose a location outside the instance home. A network directory must support atomic creation and rename. Live databases always stay on local storage.</p>
-                  <label id="runtime-recovery-blob-field" class="field" for="runtime-recovery-blob" hidden><span>Blob destination</span><input id="runtime-recovery-blob" autocomplete="off" placeholder="azblob://account/container/agent" /><span class="help-text">Use an existing private container. fhold does not create cloud resources.</span></label>
-                  <div id="runtime-recovery-blob-auth" class="form-stack" hidden>
-                    <label class="field" for="runtime-recovery-auth"><span>Storage authentication</span><select id="runtime-recovery-auth"><option value="connection-string">Private connection-string file</option><option value="managed-identity">Deployment managed identity</option></select></label>
-                    <p id="runtime-recovery-credential-status" class="help-text">No connection string saved.</p>
-                    <label id="runtime-recovery-client-id-field" class="field" for="runtime-recovery-client-id" hidden><span>Optional managed identity client ID</span><input id="runtime-recovery-client-id" autocomplete="off" placeholder="Leave empty for the system identity" /><span class="help-text">The deployment must supply an identity with Blob access. Host CLI sign-in is not used.</span></label>
-                  </div>
-                  <details id="runtime-recovery-advanced" class="disclosure"><summary>Advanced checkpoint settings</summary>
-                    <div class="form-stack">
-                      <label class="field" for="runtime-recovery-instance-id"><span>Stable recovery instance ID</span><input id="runtime-recovery-instance-id" autocomplete="off" /><span class="help-text">Keep this ID unchanged when replacing storage. Never share it between running replicas.</span></label>
-                      <div class="field-grid three-column">
-                        <label class="field" for="runtime-recovery-interval"><span>Checkpoint interval (seconds)</span><input id="runtime-recovery-interval" type="number" min="1" max="86400" /></label>
-                        <label class="field" for="runtime-recovery-max-unsaved"><span>Warn when backups are older than (seconds)</span><input id="runtime-recovery-max-unsaved" type="number" min="5" max="604800" /></label>
-                        <label class="field" for="runtime-recovery-timeout"><span>Operation timeout (seconds)</span><input id="runtime-recovery-timeout" type="number" min="1" max="3600" /></label>
-                      </div>
-                      <p class="help-text">These bound recovery work, not a zero-loss guarantee. fhold sets the container’s termination grace to allow writer shutdown and a final checkpoint. Recovery is independent of scheduled tasks.</p>
-                      <label class="check-row"><input id="runtime-recovery-akm-capture" type="checkbox" /> EXPERIMENTAL: capture an optional AKM index cache</label>
-                      <label class="check-row"><input id="runtime-recovery-akm-restore" type="checkbox" /> EXPERIMENTAL: restore an eligible AKM index cache</label>
-                      <p class="help-text">These settings default off and may change or be removed. The cache includes searchable content from configured knowledge bundles, including independently persistent drives. Admission has a five-second processing budget and adds startup latency; rejected caches rebuild on native first use. Switching off keeps local indexes and retained checkpoints.</p>
-                      <label class="field" for="runtime-recovery-paths"><span>Additional files or directories</span><textarea id="runtime-recovery-paths" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client"></textarea></label>
-                      <label class="field" for="runtime-recovery-sqlite"><span>Additional SQLite database files</span><textarea id="runtime-recovery-sqlite" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client/state.sqlite"></textarea></label>
-                      <p class="help-text">One absolute container path per line; no glob or home expansion. Existing native databases are already included. SQLite is snapshotted consistently, including committed WAL changes; it is never a live file copy. Paths must already be accessible in the container—this does not mount drives.</p>
-                      <label class="field" for="runtime-recovery-exclusions"><span>Exclude directory roots</span><textarea id="runtime-recovery-exclusions" rows="2" spellcheck="false" placeholder="/work/scratch"></textarea></label>
-                      <label class="field" for="runtime-recovery-external"><span>Required independently persistent mounts</span><textarea id="runtime-recovery-external" rows="2" spellcheck="false" placeholder="/work/shared-drive"></textarea></label>
-                      <label class="check-row"><input id="runtime-recovery-auto-network" type="checkbox" /> Automatically exclude recognized SMB/NFS mounts</label>
-                      <label class="field" for="runtime-recovery-recover-mounts"><span>Mounts to keep despite automatic exclusion</span><textarea id="runtime-recovery-recover-mounts" rows="2" spellcheck="false"></textarea></label>
-                      <p class="help-text">Ordinary local volumes remain covered. Missing required mounts stop recovery. Native or registered SQLite files and their WAL/SHM cannot be excluded or placed on recognized network filesystems.</p>
-                      <p class="help-text">Coverage changes apply after restart. Recovery restores only currently selected content; excluded drives and removed paths are left untouched. Historical checkpoints remain in the backup destination. Delayed backups show a warning without stopping your agent.</p>
-                      <p class="help-text">Editable policy file: <code id="runtime-recovery-policy-path">config/recovery/include.json</code></p>
+            <details id="backup-recovery" class="panel panel-disclosure">
+              <summary><span>Backup and recovery <small>Automatic backups and manual exports</small></span></summary>
+              <p class="section-intro">Protect the same Assistant with automatic backups, or export an entire stopped instance or reviewed portable content. The same backup settings work with persistent and replaceable containers.</p>
+              <details id="runtime-recovery" class="disclosure" open>
+                <summary>Automatic Assistant backups</summary>
+                <p id="recovery-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="recovery-fields" class="capability-fields" aria-describedby="recovery-fields-unavailable" aria-label="Automatic Assistant backup settings">
+                <p class="section-intro">Use the same automatic backups on local, SSH and cloud hosts. SQLite snapshots and selected files finish on local disk, then copy to the backup destination. Startup restores the same agent’s conversations, sign-ins, approvals and SQLite state before writers run, including after ordinary image upgrades.</p>
+                <p class="help-text">Keep checkpoints private: they can contain account credentials and trust decisions. This is Assistant recovery, not a full-host or full-stack rollback. Guardian/portal state, independently mounted drives and deployment settings need separate protection.</p>
+                <div id="runtime-recovery-status" class="inline-status neutral" role="status" aria-live="polite"><strong>Automatic Assistant backups are off.</strong><span>Existing local data and backups are unchanged.</span></div>
+                <form id="runtime-recovery-form" class="form-stack" data-managed-form>
+                  <fieldset id="runtime-recovery-options" class="capability-fields form-stack" aria-label="Backup location, interval and coverage">
+                  <label class="check-row"><input id="runtime-recovery-enabled" type="checkbox" /> Enable automatic backups and startup recovery</label>
+                  <div id="runtime-recovery-settings" class="form-stack" hidden>
+                    <label class="field" for="runtime-recovery-storage"><span>Backup location</span><select id="runtime-recovery-storage"><option value="directory">Local or mounted directory (recommended)</option><option value="blob">Azure Blob storage (deprecated)</option></select></label>
+                    <label id="runtime-recovery-directory-field" class="field" for="runtime-recovery-directory"><span>Private backup directory</span><span class="input-action"><input id="runtime-recovery-directory" autocomplete="off" placeholder="/path/to/private-checkpoints" /><button id="choose-recovery-directory" class="secondary" type="button">Choose folder</button></span></label>
+                    <p id="runtime-recovery-directory-help" class="help-text">Checkpoints are completed locally, then copied to this backup directory. Use a private directory on the instance host, outside its home, or an already mounted backup path in the container. A network directory must support atomic creation and rename; hard links are not needed. Live databases always stay on local storage.</p>
+                        <div class="field-grid">
+                          <label class="field" for="runtime-recovery-interval"><span>Backup interval (seconds)</span><input id="runtime-recovery-interval" type="number" min="1" max="86400" /></label>
+                          <label class="field" for="runtime-recovery-max-unsaved"><span>Warn when backups are older than (seconds)</span><input id="runtime-recovery-max-unsaved" type="number" min="5" max="604800" /></label>
+                        </div>
+                    <label id="runtime-recovery-blob-field" class="field" for="runtime-recovery-blob" hidden><span>Blob destination (deprecated)</span><input id="runtime-recovery-blob" autocomplete="off" placeholder="azblob://account/container/agent" /><span class="help-text">Existing Blob recovery remains supported, superseded by local checkpoints copied to a mounted backup directory. Use an existing private container; saving these settings does not create cloud resources.</span></label>
+                    <div id="runtime-recovery-blob-auth" class="form-stack" hidden>
+                      <label class="field" for="runtime-recovery-auth"><span>Storage authentication</span><select id="runtime-recovery-auth"><option value="connection-string">Private connection-string file</option><option value="managed-identity">Deployment managed identity</option></select></label>
+                      <p id="runtime-recovery-credential-status" class="help-text">No connection string saved.</p>
+                      <label id="runtime-recovery-client-id-field" class="field" for="runtime-recovery-client-id" hidden><span>Optional managed identity client ID</span><input id="runtime-recovery-client-id" autocomplete="off" placeholder="Leave empty for the system identity" /><span class="help-text">The deployment must supply an identity with Blob access. Host CLI sign-in is not used.</span></label>
                     </div>
-                  </details>
+                    <details id="runtime-recovery-advanced" class="disclosure"><summary>Advanced checkpoint settings</summary>
+                      <div class="form-stack">
+                        <label class="field" for="runtime-recovery-instance-id"><span>Stable recovery instance ID</span><input id="runtime-recovery-instance-id" autocomplete="off" /><span class="help-text">Keep this ID unchanged when replacing storage. Never share it between running replicas.</span></label>
+                          <label class="field" for="runtime-recovery-timeout"><span>Operation timeout (seconds)</span><input id="runtime-recovery-timeout" type="number" min="1" max="3600" /></label>
+                        <p class="help-text">These bound recovery work, not a zero-loss guarantee. fhold sets the container’s termination grace to allow writer shutdown and a final checkpoint. Recovery is independent of scheduled tasks.</p>
+                        <label class="check-row"><input id="runtime-recovery-akm-capture" type="checkbox" /> EXPERIMENTAL: capture an optional AKM index cache</label>
+                        <label class="check-row"><input id="runtime-recovery-akm-restore" type="checkbox" /> EXPERIMENTAL: restore an eligible AKM index cache</label>
+                        <p class="help-text">These settings default off and may change or be removed. The cache includes searchable content from configured knowledge bundles, including independently persistent drives. Admission has a five-second processing budget and adds startup latency; rejected caches rebuild on native first use. Switching off keeps local indexes and retained checkpoints.</p>
+                        <label class="field" for="runtime-recovery-paths"><span>Additional files or directories</span><textarea id="runtime-recovery-paths" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client"></textarea></label>
+                        <label class="field" for="runtime-recovery-sqlite"><span>Additional SQLite database files</span><textarea id="runtime-recovery-sqlite" rows="3" spellcheck="false" placeholder="/home/fhold/.my-client/state.sqlite"></textarea></label>
+                        <p class="help-text">One absolute container path per line; no glob or home expansion. Existing native databases are already included. SQLite is snapshotted consistently, including committed WAL changes; it is never a live file copy. Paths must already be accessible in the container—this does not mount drives.</p>
+                        <label class="field" for="runtime-recovery-exclusions"><span>Exclude directory roots</span><textarea id="runtime-recovery-exclusions" rows="2" spellcheck="false" placeholder="/work/scratch"></textarea></label>
+                        <label class="field" for="runtime-recovery-external"><span>Required independently persistent mounts</span><textarea id="runtime-recovery-external" rows="2" spellcheck="false" placeholder="/work/shared-drive"></textarea></label>
+                        <label class="check-row"><input id="runtime-recovery-auto-network" type="checkbox" /> Automatically exclude recognized SMB/NFS mounts</label>
+                        <label class="field" for="runtime-recovery-recover-mounts"><span>Mounts to keep despite automatic exclusion</span><textarea id="runtime-recovery-recover-mounts" rows="2" spellcheck="false"></textarea></label>
+                        <p class="help-text">Ordinary local volumes remain covered. Missing required mounts stop recovery. Native or registered SQLite files and their WAL/SHM cannot be excluded or placed on recognized network filesystems.</p>
+                        <p class="help-text">Coverage changes apply after restart. Recovery restores only currently selected content; excluded drives and removed paths are left untouched. Historical checkpoints remain in the backup destination. Delayed backups show a warning without stopping your agent.</p>
+                        <p class="help-text">Editable policy file: <code id="runtime-recovery-policy-path">config/recovery/include.json</code></p>
+                      </div>
+                    </details>
+                  </div>
+                  </fieldset>
+                  <button id="save-recovery-settings" class="secondary" type="submit">Save backup settings</button>
+                </form>
+                <form id="runtime-recovery-credential-form" class="form-stack" hidden>
+                  <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. Portable content omits it; an entire-instance export includes it.</span></label>
+                  <button id="save-recovery-credential" class="secondary" type="submit">Save private storage credential</button>
+                </form>
+                <div class="button-row">
+                  <button id="check-recovery-status" class="secondary" type="button">Check checkpoint status</button>
+                  <button id="inspect-recovery" class="secondary" type="button">Inspect saved coverage</button>
                 </div>
-                <button id="save-recovery-settings" class="secondary" type="submit">Save checkpoint settings</button>
-              </form>
-              <form id="runtime-recovery-credential-form" class="form-stack" hidden>
-                <label class="field" for="runtime-recovery-connection-string"><span>Replace Blob connection string</span><input id="runtime-recovery-connection-string" type="password" autocomplete="off" maxlength="16384" /><span class="help-text">Saved as a private file, never in stack settings or environment values. Portable content omits it; an entire-instance export includes it.</span></label>
-                <button id="save-recovery-credential" class="secondary" type="submit">Save private storage credential</button>
-              </form>
-              <div class="button-row">
-                <button id="check-recovery-status" class="secondary" type="button">Check checkpoint status</button>
-                <button id="inspect-recovery" class="secondary" type="button">Inspect saved coverage</button>
-              </div>
-              <details class="disclosure"><summary>Initialize or restore while stopped</summary>
-                <p id="runtime-recovery-offline-help" class="help-text">Save the settings, stop this instance, then initialize a genuinely new destination once. Start it to publish its first checkpoint. For an existing namespace, do not initialize again: startup restores automatically before writers run. Offline validation/restoration leaves containers stopped and never overwrites surviving local data.</p>
-                <div class="button-row"><button id="initialize-recovery" class="secondary" type="button" disabled>Initialize new destination</button><button id="restore-runtime-recovery" class="secondary" type="button" disabled>Validate / restore same instance</button></div>
-                <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
+                <details class="disclosure"><summary>Initialize or restore while stopped</summary>
+                  <p id="runtime-recovery-offline-help" class="help-text">Save the settings, stop this instance, then initialize a genuinely new destination once. Start it to publish its first checkpoint. For an existing namespace, do not initialize again: startup restores automatically before writers run. Offline validation/restoration leaves containers stopped and never overwrites surviving local data.</p>
+                  <p id="runtime-recovery-offline-availability" class="help-text"></p>
+                  <div class="button-row"><button id="initialize-recovery" class="secondary" type="button" disabled>Initialize new destination</button><button id="restore-runtime-recovery" class="secondary" type="button" disabled>Validate / restore same instance</button></div>
+                  <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
+                </details>
+                <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
+                </fieldset>
               </details>
-              <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
-              </fieldset>
+              <details id="checkpoint-packages" class="disclosure">
+                <summary>Export / import Assistant backup</summary>
+                <p id="checkpoint-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="checkpoint-fields" class="capability-fields" data-instance-feature="data.recovery.package" aria-describedby="checkpoint-fields-unavailable" aria-label="Assistant checkpoint export and import">
+                  <p class="help-text">Export packages the last accepted Assistant backup. If automatic backups are off, the same engine captures a backup once. The package contains private sign-ins, approvals and task intent; keep it private. Host settings, Guardian/Portal state and external drives need separate protection.</p>
+                  <form id="checkpoint-export-form" class="form-stack">
+                    <label class="field" for="checkpoint-export-directory"><span>Export directory on the instance host</span><span class="input-action"><input id="checkpoint-export-directory" autocomplete="off" required /><button id="choose-checkpoint-export" type="button" class="secondary">Choose folder</button></span></label>
+                    <button id="export-checkpoint" class="secondary" type="submit">Export Assistant backup</button>
+                  </form>
+                  <form id="checkpoint-import-form" class="form-stack">
+                    <label class="field" for="checkpoint-source"><span>Backup package directory on the instance host</span><span class="input-action"><input id="checkpoint-source" autocomplete="off" required /><button id="choose-checkpoint-source" type="button" class="secondary">Choose folder</button></span></label>
+                    <label class="field" for="checkpoint-home"><span>New empty instance home</span><span class="input-action"><input id="checkpoint-home" autocomplete="off" required /><button id="choose-checkpoint-home" type="button" class="secondary">Choose folder</button></span></label>
+                    <label class="field" for="checkpoint-backups"><span>New unused backup directory</span><span class="input-action"><input id="checkpoint-backups" autocomplete="off" required /><button id="choose-checkpoint-backups" type="button" class="secondary">Choose folder</button></span></label>
+                    <p class="help-text">Restore the same Assistant into an empty home with an independent backup destination. Stop its original writers first and keep them stopped. Review the preview before importing; containers stay stopped afterward. This does not create a different Assistant or silently copy live backup ownership.</p>
+                    <div class="button-row"><button id="preview-checkpoint" class="secondary" type="button">Preview Assistant backup</button><button id="import-checkpoint" type="submit" class="secondary" disabled>Import reviewed backup</button></div>
+                  </form>
+                  <textarea id="checkpoint-package-result" class="technical-output" readonly spellcheck="false" aria-label="Checkpoint backup preview and result">No checkpoint package operation has run.</textarea>
+                </fieldset>
+              </details>
+              <details id="import-export" class="disclosure">
+                <summary id="backup-heading">Other export options</summary>
+                <p id="transfer-fields-unavailable" class="capability-note" hidden></p>
+                <fieldset id="transfer-fields" class="capability-fields" data-instance-feature="data.backup" aria-describedby="transfer-fields-unavailable" aria-label="Instance export">
+                <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
+                <p class="help-text">To import an entire instance, choose “Open another instance…” → “Import assistant…” and select an empty destination. To import portable content, create a fresh instance and choose “Import from an fhold export” during setup. Imported portable tasks stay inactive until reviewed.</p>
+                <p class="help-text">Automatic Assistant backups above preserve same-instance recovery. Their format is not an import/export file.</p>
+                <details class="disclosure"><summary>What is included?</summary><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></details>
+                <form id="backup-form" class="form-stack">
+                  <label class="field" for="backup-scope"><span>Export scope</span><select id="backup-scope"><option value="portable">Portable content</option><option value="instance">Entire instance (must be stopped)</option></select></label>
+                  <p id="backup-full-help" class="help-text" hidden>Stop the instance in Overview first. All containers and other writers must stay stopped until export finishes. The unencrypted export includes private sign-ins and access keys. Import it into an empty folder, and never run both copies together. Export does not automatically stop or restart containers.</p>
+                  <label class="field" for="backup-destination"><span>Export directory</span><span class="input-action"><input id="backup-destination" autocomplete="off" placeholder="/path/to/fhold-export" /><button id="choose-backup-destination" class="secondary" type="button">Choose folder</button></span></label>
+                  <details id="backup-sensitive-options" class="disclosure"><summary>Include sensitive data (optional)</summary>
+                    <fieldset class="option-group">
+                    <legend class="visually-hidden">Include sensitive data</legend>
+                    <label class="check-row"><input id="backup-auth" type="checkbox" /> Provider authentication</label>
+                    <label class="check-row"><input id="backup-env" type="checkbox" /> Private user environment</label>
+                    <label class="check-row"><input id="backup-maps" type="checkbox" /> Portal and OAuth mappings</label>
+                  </fieldset>
+                    </details>
+                  <button id="export-backup" class="primary" type="submit">Export portable content</button>
+                </form>
+                <div id="backup-summary" class="inline-status neutral" hidden></div>
+                <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
+                </fieldset>
+              </details>
+
             </details>
           </section>
         </main>

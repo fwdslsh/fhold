@@ -118,6 +118,8 @@ const parsers: WireParsers = {
 	recovery: (value) => {
 		const parsed = parseLegacyRecoveryOperation(value);
 		switch (parsed.name) {
+			case 'data.recovery.package':
+				return [{ action: 'package', request: parsed.input, ...parsed.context }];
 			case 'data.recovery.status':
 				return [{ action: 'status' }];
 			case 'data.recovery.inspect':

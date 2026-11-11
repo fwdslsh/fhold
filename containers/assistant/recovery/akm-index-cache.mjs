@@ -204,7 +204,7 @@ export function createAkmIndexCache({
 			primary: sources[0],
 			sources: sourceStats,
 			selection: catalog.selection,
-			redaction: pick(env, ['AKM_REDACT_HIGH_ENTROPY', 'AKM_REDACT_PII'])
+			redaction: config.plugins?.redact ?? null
 		};
 		return { hash: hash(JSON.stringify(identity)) };
 	}

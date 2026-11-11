@@ -23,6 +23,15 @@ writable and are not converted or overwritten.
 | `config/akm/config.json` | `/etc/akm/config.json` | Native operator AKM catalog, harnesses and task activation |
 
 Normal user/project settings and hooks need no custom policy mount.
+Plugin redaction is configured in native `config/akm/config.json` under
+`plugins.redact.pii` and `plugins.redact.highEntropy`. Both default to `true` in
+fhold. Startup fills only missing keys through AKM's native config command after
+restore/migration and before writers start; explicit values, including `false`,
+remain unchanged. Image/Compose defaults no longer use the retired
+`AKM_REDACT_*` variables. Do not remove native settings to disable redaction: set
+the desired key to `false` explicitly. Failure to persist a missing default stops
+startup rather than silently starting plugins with redaction disabled.
+
 For an explicit system-level policy, operators can supply native files through
 their existing Compose overlay. That optional policy is their choice and
 maintenance responsibility, not an extra fhold requirement. Keep credentials

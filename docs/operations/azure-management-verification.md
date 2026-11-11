@@ -1,5 +1,62 @@
 # Azure management qualification
 
+## November 11, 2026 — mounted backup share live qualification
+
+PR #117 source `bd275ea9db30cd94172c53b30746a99b7c0487ba` passed a live
+disposable ACA installation and replica-replacement test. The production
+Assistant Dockerfile built the private AMD64 qualification image with manifest
+digest `sha256:904053aec3a43d2062931c0f37f37e74d189729e4723ea4e895ba67410b19848`.
+This is development qualification, not a published release or the complete
+native release matrix.
+
+The test used a new `fh-pr117-261111` app and
+`fhold-fh-pr117-261111` backup share in the existing development resource group,
+environment and storage account. Shared fhold provisioning and deployment
+operations ran against the real Azure SDK. The only fixture addition to generated
+templates was ordinary native registry authentication for the private test image,
+supplied through a secure ARM parameter. Public release images do not require that
+qualification credential. No product source changes or runtime repairs were needed.
+
+| Live scenario | Result |
+| --- | --- |
+| Fresh mounted-directory installation | Created the dedicated SMB share and environment storage registration; the finite same-image initialization Job succeeded and was removed by the provider. The Assistant mounted that share at `/recovery`, without Blob credentials or a Blob identity/role. |
+| Native authentication and local placement | Anonymous native API request returned 401. Authenticated API and shell actions ran as UID 1000. The backup mount reported CIFS/SMB 3.1.1; live SQLite and staging remained on the image-owned local writable layer. |
+| Repeating checkpoint with a live WAL writer | Synthetic workspace/knowledge files and a database with a committed row and a nonempty 20,632-byte WAL reached an accepted scheduled checkpoint. Reading its hash-verified manifest/object and opening a local copy of the snapshot confirmed the row before replacement. |
+| Normal staged deployment replacement | Preparing and applying a timezone change used the actual provider Stop/PATCH/Start sequence. The old owner directory was absent after native Stop completed, before PATCH. Revision changed from `fh-pr117-261111--y5jvbul` to `fh-pr117-261111--0000001`; Azure reported a different replica name. |
+| Cold restoration | The authenticated native API returned the original workspace marker and OpenCode session. A shell on the replacement verified the knowledge marker and SQLite row, UID 1000 and the CIFS backup mount. No seed files, receipts, ownership locks or native databases were repaired by the fixture. |
+| Post-restore checkpoint and clean stop | Normal Stop published a new accepted generation containing the replacement's verification file, advanced ownership epoch to 2 and removed the owner directory. No force-unlock or takeover was used. |
+
+Private local evidence is retained under `audit/aca-pr117/` and
+`audit/aca-pr117-*.log` in the task workspace: placement, provisioning result,
+image build/push, source/replacement replica identities, accepted generation,
+runtime assertions and final checkpoint/release. The test used synthetic content
+only; existing assistants, recovery settings, shares and sign-ins were untouched.
+After clean shutdown, the disposable app, new share, environment storage
+registration, test mount and private qualification image tag were removed.
+The existing environment, storage account and registry were preserved.
+
+This qualifies the exercised single-replica shared-provider installation/update
+path. It does not claim live ACA management-host checkpoint-package transfer,
+new-instance cloning, private-network/registry combinations beyond the test,
+crash/partition takeover or paid-provider sign-in. Prior interrupted-copy and
+ownership rejection evidence below remains applicable; this pass did not inject
+a platform kill during an SMB write. Azure support remains experimental.
+
+### Earlier directory-store evidence
+
+New installations now default to local checkpoint staging and Azure Files SMB copy.
+Source regressions cover the dedicated share/environment storage ARM resources,
+matching Job/App mounts, mounted-path validation, exact destination preservation,
+and initialization without Blob credentials. Blob opt-in retains its existing flow.
+On November 10, 2026, a new isolated directory on the approved Azure Files test
+share passed real SMB checkpoint/cold restore with a committed WAL row, concurrent
+owner refusal, interrupted-copy preservation of the accepted generation, and a
+post-restore checkpoint/release. The share rejected hard links with errno 95.
+Live databases and staging stayed on local storage throughout.
+The live installation/replacement evidence above now covers the new mounted-share
+provisioning path. Historical Blob qualification below remains specific to Blob;
+existing assistants must not be repurposed for qualification.
+
 ## October 31, 2026 — live experimental qualification
 
 PR #97 was exercised against two disposable, synthetic-data-only assistants in

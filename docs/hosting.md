@@ -245,13 +245,26 @@ for the current region, exact bundled image, timezone and existing resource choi
   "location": "centralus",
   "environment": { "name": "personal-agent-env", "create": true },
   "storage": { "name": "youruniquestorageaccount", "create": true },
+  "recovery": "directory",
   "availability": "always",
   "timezone": "America/Chicago"
 }
 ```
 
-Initialization uses a temporary native Container Apps Job, private Blob recovery,
-managed identity and the reviewed runtime image. Failed jobs remain inspectable.
+Initialization uses a temporary native Container Apps Job, a dedicated private
+Azure Files SMB backup share and the reviewed runtime image. The Job and Assistant
+mount the same backup share; live SQLite and checkpoint staging stay on local
+ephemeral disk. Completed checkpoint files are copied to the share before the
+accepted generation advances. Native ACA environment storage authenticates the
+mount, with no storage key in Assistant environment variables. The management
+principal needs permission to create the share/register storage and read the
+account key through ARM. Existing storage accounts must support SMB file shares
+and native account-key mounts. Existing deployments are unchanged.
+
+Azure Blob recovery remains supported but is deprecated and superseded by this
+local-backup-and-copy path. Set `"recovery": "azblob"` explicitly for a new Blob
+deployment; its existing user-assigned identity flow remains available.
+Failed jobs remain inspectable.
 Closing Admin after submission stops observation, not accepted Azure work, and
 does not delete created resources. Saved continuations stay bound to their
 connection and target. Ordinary **Inspect and continue** observes existing work;

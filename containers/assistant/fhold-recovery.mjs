@@ -4,7 +4,12 @@ import * as fs from 'node:fs/promises';
 import { constants, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createEngine, DEFAULT_LIMITS, sanitizeRecoveryError } from './recovery/engine.mjs';
+import {
+	checkpointPackageIdentity,
+	createEngine,
+	DEFAULT_LIMITS,
+	sanitizeRecoveryError
+} from './recovery/engine.mjs';
 import { canonicalPath, readSelection } from './recovery/catalog.mjs';
 import { assertNoLinks, readRegular } from './recovery/directory-store.mjs';
 import { createRecoveryStore } from './recovery/storage.mjs';
@@ -41,6 +46,10 @@ export function recoveryConfig(env = process.env) {
 	if (includeFile !== undefined && !canonicalPath(includeFile))
 		throw new Error('recovery include file must be an absolute path');
 	const warnings = [];
+	if (url.protocol === 'azblob:')
+		console.error(
+			'fhold: deprecated: Azure Blob recovery is superseded by local checkpoints copied to a mounted backup directory. Existing Blob recovery remains supported.'
+		);
 	const optionalSwitch = (name) => {
 		if (env[name] === '1') return true;
 		if (env[name] !== undefined && env[name] !== '0') {
@@ -429,6 +438,64 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 
 async function main() {
 	const command = process.argv[2];
+	if (['export-package', 'preview-package', 'import-package'].includes(command)) {
+		const directory = process.argv[3];
+		if (!canonicalPath(directory)) throw new Error('checkpoint package path must be absolute');
+		const importing = command === 'import-package';
+		if (
+			importing
+				? process.argv.length !== 7 ||
+					process.argv[4] !== '--confirm-stopped' ||
+					process.argv[5] !== '--preview-digest' ||
+					!/^[a-f0-9]{64}$/.test(process.argv[6])
+				: process.argv.length !== 4
+		)
+			throw new Error('Invalid checkpoint package command');
+		let scratch;
+		let engine;
+		try {
+			let env = process.env;
+			if (command === 'preview-package' || (command === 'export-package' && !env.FH_RECOVERY_URL)) {
+				scratch = await fs.mkdtemp('/tmp/fhold-package-operation-');
+				env = {
+					...env,
+					FH_RECOVERY_URL: pathToFileURL(join(scratch, 'backup')).href,
+					FH_RECOVERY_STATE_DIR: join(scratch, 'state'),
+					FH_RECOVERY_CREDENTIAL_FILE: '',
+					AZURE_CLIENT_ID: '',
+					...(command === 'preview-package'
+						? {
+								FH_INSTANCE_ID: await checkpointPackageIdentity(directory),
+								FH_RECOVERY_INCLUDE_FILE: undefined
+							}
+						: {})
+				};
+			}
+			engine = await configuredEngine(recoveryConfig(env), env);
+			let result;
+			if (command === 'preview-package') result = await engine.previewPackage(directory);
+			else if (importing)
+				result = await engine.importPackage(directory, {
+					confirmedStopped: true,
+					previewDigest: process.argv[6]
+				});
+			else {
+				if (scratch) {
+					// A one-off backup reuses the normal native capture pipeline. It
+					// never enables recurring backups or adopts their configured store.
+					await engine.initialize();
+					await engine.acquireRestore();
+					await engine.checkpoint();
+				}
+				result = await engine.exportPackage(directory);
+			}
+			process.stdout.write(`${JSON.stringify(result)}\n`);
+		} finally {
+			await engine?.release();
+			if (scratch) await fs.rm(scratch, { recursive: true });
+		}
+		return;
+	}
 	if (command === 'status') {
 		const status = await readRecoveryStatus(
 			join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'recovery-status.json')

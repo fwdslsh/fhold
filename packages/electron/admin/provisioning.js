@@ -70,6 +70,7 @@ export function renderInstallPlacement() {
 	byId('install-timezone').value = options.timezone;
 	byId('install-image').value = options.image;
 	byId('install-availability').value = 'always';
+	byId('install-recovery').value = 'directory';
 	byId('install-environment-name').value = '';
 	byId('install-environment-name').required = true;
 	byId('install-storage-name').value = '';
@@ -113,6 +114,7 @@ export function cloudInstallRequest() {
 			create: !environment
 		},
 		storage: { name: storage || byId('install-storage-name').value.trim(), create: !storage },
+		recovery: byId('install-recovery').value || 'directory',
 		availability: byId('install-availability').value,
 		timezone: byId('install-timezone').value.trim(),
 		image: byId('install-image').value.trim(),

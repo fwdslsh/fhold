@@ -35,6 +35,8 @@ export function createAdminState() {
 		restorePreviewSignature: null,
 		restorePreviewDigest: null,
 		instanceRestorePreview: null,
+		checkpointPackageTarget: null,
+		checkpointPackagePreview: null,
 		lastReadiness: null,
 		lastReadinessProvider: null,
 		lastReadinessModel: null,
@@ -102,6 +104,6 @@ export const viewMeta = {
 	system: {
 		kicker: 'SYSTEM',
 		title: 'System',
-		description: 'Installation details, logs, import / export, and ephemeral container support.'
+		description: 'Installation details, logs, connection keys, and backup and recovery.'
 	}
 };

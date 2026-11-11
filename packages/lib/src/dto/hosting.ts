@@ -106,6 +106,8 @@ export type ProvisioningRequest =
 			location: string;
 			environment: { name: string; create: boolean };
 			storage: { name: string; create: boolean };
+			/** Local checkpoint + Azure Files copy by default. Blob is deprecated. */
+			recovery?: 'directory' | 'azblob';
 			availability: 'always' | 'on-demand';
 			timezone: string;
 			cpu?: number;

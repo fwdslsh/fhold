@@ -45,6 +45,20 @@ function verifyReadOnlyDiagnostics() {
 	function inspect() {
 		const before = snapshot();
 		const info = JSON.parse(run(['akm', 'info', '--format', 'json', '--quiet']));
+		const inspected = Bun.spawnSync(['akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet'], {
+			stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 30000
+		});
+		if (info.configError) {
+			assert.equal(inspected.exitCode, 78);
+			assert.equal(inspected.stdout.length, 0);
+			assert.equal(JSON.parse(inspected.stderr.toString()).code, 'INVALID_CONFIG_FILE');
+		} else {
+			assert.ok([0, 4, 1].includes(inspected.exitCode));
+			const health = JSON.parse(inspected.stdout.toString());
+			assert.equal(health.schemaVersion, 3);
+			assert.ok(['pass', 'warn', 'fail'].includes(health.status));
+			assert.ok(health.hardChecks.length > 0);
+		}
 		run(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], [0, 1]);
 		run(['akm', 'task', 'doctor', '--format', 'json', '--quiet'], [0, 1, 78]);
 		assert.deepEqual(snapshot(), before, 'Read-only diagnostics changed AKM config, catalog or state');
@@ -71,6 +85,11 @@ function verifyReadOnlyDiagnostics() {
 	} finally { writeFileSync(configPath, original); }
 }
 async function verifyAgentAndProposal() {
+	const originalConfig = readFileSync(configPath, 'utf8');
+	// Keep background learning off while creating this manual-extraction fixture.
+	// Retired env switches do not disable it; otherwise native session-end work
+	// can legitimately hold the same extraction lock on a slower native runner.
+	run(['akm', 'config', 'set', 'improve.enabled', 'false', '--silent']);
 	const requests = [];
 	const marker = 'upgrade-native-proposal';
 	const model = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
@@ -95,7 +114,7 @@ async function verifyAgentAndProposal() {
 		models: { model: { capabilities: { tools: true, input: ['text'], output: ['text'] } } }
 	} } });
 	async function native(args) {
-		const child = Bun.spawn(args, { cwd: '/work', env: { ...process.env, OPENCODE_CONFIG: providerConfig, AKM_AUTO_MEMORY: '0', AKM_AUTO_LEARNING: '0' }, stdout: 'pipe', stderr: 'pipe', timeout: 90_000 });
+		const child = Bun.spawn(args, { cwd: '/work', env: { ...process.env, OPENCODE_CONFIG: providerConfig }, stdout: 'pipe', stderr: 'pipe', timeout: 90_000 });
 		const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
 		assert.equal(code, 0, `${args.slice(0, 3).join(' ')}: ${err}\n${out}`);
 		return out;
@@ -111,14 +130,16 @@ async function verifyAgentAndProposal() {
 		assert.equal(readFileSync(configPath, 'utf8'), preservedConfig, 'Native execution changed operator AKM configuration');
 		// Retain a second turn with the verification evidence in native history.
 		assert.match(await native(['opencode', 'run', '--standalone', '--continue', '--', prompt]), /FH_UPGRADE_AGENT_COMPLETE/);
+		run(['akm', 'config', 'set', 'improve.enabled', 'true', '--silent']);
+		const extractionConfig = readFileSync(configPath, 'utf8');
 		const extracted = await native(['akm', 'proposal', 'extract', '--type', 'opencode', '--force', '--timeout-ms', '30000', '--quiet']);
 		assert.ok(requests.some((request) => JSON.stringify(request.messages).includes('extracting durable engineering insights')), extracted);
 		// Do not trust the extraction aggregate alone: upstream #1290 can report
 		// success when persistence failed. The proposal must actually be present.
 		assert.match(await native(['akm', 'proposal', 'list', '--quiet']), new RegExp(marker));
-		assert.equal(readFileSync(configPath, 'utf8'), preservedConfig, 'Native proposal extraction changed operator AKM configuration');
+		assert.equal(readFileSync(configPath, 'utf8'), extractionConfig, 'Native proposal extraction changed operator AKM configuration');
 		console.log('Upgraded native AKM agent execution and persisted proposal passed using a loopback model.');
-	} finally { model.stop(true); }
+	} finally { model.stop(true); writeFileSync(configPath, originalConfig); }
 }
 const configPath = '/etc/akm/config.json';
 const claudeSettings = `${home}/.claude/settings.json`;
@@ -202,6 +223,7 @@ if (process.argv[2] === 'prepare') {
 	});
 
 	const config = read(configPath);
+	config.plugins = { curateLimit: 9, redact: { pii: false } };
 	delete config.harnesses;
 	config.engines = { opencode: { kind: 'agent', platform: 'opencode-sdk', bin: 'opencode' } };
 	config.bundles.external = {
@@ -260,6 +282,7 @@ if (process.argv[2] === 'prepare') {
 	while (!existsSync(`${fixture}/task-ran`) && Date.now() < deadline) await Bun.sleep(250);
 	assert.equal(readFileSync(`${fixture}/task-ran`, 'utf8'), 'native scheduler');
 	const config = readFileSync(configPath, 'utf8');
+	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false, highEntropy: true } });
 	run(['akm', 'migrate', 'apply', '--format', 'json'], [0, 1]);
 	assert.equal(readFileSync(configPath, 'utf8'), config);
 	// The scheduled command has been verified. Quiesce this synthetic writer

@@ -90,9 +90,11 @@ Logs and installation details remain under System, not on a separate cloud page.
   proves readiness.
 - **Apps:** one inventory ordered OpenCode, Claude, Codex, Discord, Slack, MCP.
   Settings and permissions stay with the app, with advanced actions subordinate.
-- **System:** installation, logs, key maintenance, import/export and ephemeral
-  support use the same disclosure inventory. Keep the two backup formats and
-  stopped-writer/sensitive-data consequences explicit. Instructions must name
+- **System:** installation, logs, key maintenance and one Backup and recovery
+  hub use the same disclosure inventory. Common automatic backup settings do
+  not ask users to classify a container as ephemeral. Manual export actions
+  remain inside the hub with accurate coverage and
+  stopped-writer/sensitive-data consequences. Instructions must name
   actual current controls, not retired Welcome/import toggles.
 - **Admin Settings:** connection rows, bounded editor and update-preference
   rows. Do not visually turn host connections into agent Apps or AI accounts.

@@ -102,7 +102,16 @@ fi
 	};
 	stub(
 		'akm',
-		`if [ "$1" = setup ]; then
+		`if [ "$1 $2" = 'config path' ]; then
+  printf '%s\\n' "$FIXTURE_ROOT/akm.json"
+  exit 0
+fi
+if [ "$1 $2" = 'config set' ]; then
+  test "$4" = true
+  printf 'redaction-%s\\n' "$3" >>"$EVENTS"
+  exit "\${FIXTURE_REDACTION_EXIT:-0}"
+fi
+if [ "$1" = setup ]; then
   test "$*" = 'setup --learning off --format json -q'
   printf 'learning-off\\n' >>"$EVENTS"
   exit "\${FIXTURE_LEARNING_EXIT:-0}"
@@ -114,6 +123,7 @@ printf '{"status":"current"}\\n'
 if [ "\${FIXTURE_MIGRATE_EXIT:-0}" != 0 ]; then printf 'private migration detail\\n' >&2; fi
 exit "\${FIXTURE_MIGRATE_EXIT:-0}"`
 	);
+	writeFileSync(join(root, 'akm.json'), extra.FIXTURE_AKM_CONFIG ?? JSON.stringify({ plugins: { redact: { pii: true, highEntropy: true } } }));
 	stub(
 		'fhold-task',
 		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
@@ -235,6 +245,45 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
+	for (const [config, keys] of [
+		[{}, ['pii', 'highEntropy']],
+		[{ plugins: { redact: { pii: false }, curateLimit: 9 } }, ['highEntropy']],
+		[{ plugins: { redact: { pii: false, highEntropy: false } } }, []],
+		[{ plugins: { redact: { pii: null, highEntropy: 'invalid' } } }, []],
+		[{ plugins: { redact: null } }, []]
+	] as const) {
+		it(`fills only absent native redaction keys before writers: ${JSON.stringify(config)}`, async () => {
+			const run = fixture({ FIXTURE_AKM_CONFIG: JSON.stringify(config), FH_RECOVERY_URL: 'file:///fixture' });
+			try {
+				await until(() => run.events().includes('native'));
+				const events = run.events();
+				expect(events.filter((event) => event.startsWith('redaction-'))).toEqual(keys.map((key) => `redaction-plugins.redact.${key}`));
+				for (const key of keys) {
+					const event = `redaction-plugins.redact.${key}`;
+					expect(events.indexOf('restored')).toBeLessThan(events.indexOf(event));
+					expect(events.indexOf('migrate')).toBeLessThan(events.indexOf(event));
+					expect(events.indexOf(event)).toBeLessThan(events.indexOf('native'));
+				}
+			} finally { run.child.kill('SIGTERM'); await finished(run.child); }
+		});
+	}
+
+	it('does not silently disable redaction if missing native defaults cannot be written', async () => {
+		const run = fixture({ FIXTURE_AKM_CONFIG: '{}', FIXTURE_REDACTION_EXIT: '1' });
+		expect(await finished(run.child)).toBe(1);
+		expect(run.stderr()).toContain('Could not preserve native redaction defaults');
+		expect(run.events()).not.toContain('native');
+	});
+
+	it('leaves malformed config to native fail-closed redaction without gating the core', async () => {
+		const run = fixture({ FIXTURE_AKM_CONFIG: '{invalid', FIXTURE_MIGRATE_EXIT: '1' });
+		try {
+			await until(() => run.events().includes('native'));
+			expect(run.events().some((event) => event.startsWith('redaction-'))).toBe(false);
+			expect(readFileSync(join(run.root, 'akm.json'), 'utf8')).toBe('{invalid');
+		} finally { run.child.kill('SIGTERM'); await finished(run.child); }
+	});
+
 	for (const mode of ['0', '1']) {
 		it(`applies native learning off only for explicit off (${mode}) after restore and before writers`, async () => {
 			const run = fixture({

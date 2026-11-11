@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## 0.4.1107-beta — Local checkpoints, mounted backups and unified Admin recovery
+
+Update Assistant to AKM CLI/web **0.10.261118** and all three native AKM plugins
+**0.10.261120**, including their matching bundled CLI. This includes upstream
+health diagnostics, migration-scope, bundle-update and plugin-settings fixes.
+
+Use native read-only AKM health CLI diagnostics instead of importing its workspace
+API. Preserve warning/failure reports and keep passive inspection free of writes
+and probes. Store plugin redaction defaults in native AKM configuration, retire
+the image/Compose environment switches, preserve explicit operator values and
+include native redaction settings in the optional vector-cache fingerprint.
+
+Use Assistant checkpoints for manual backup packages as well as automatic
+recovery. Export an accepted generation without claiming source ownership, or
+capture once through the same native pipeline when repeating backups are off.
+CLI/Admin can validate packages and restore the same Assistant into an empty
+home with a new independent backup directory before normal seeding. Imports
+retain private native state and task intent and leave containers stopped.
+Existing whole-home and reviewed-content archives remain supported explicitly;
+ACA host-folder package transfer is not yet implemented.
+
+Stage complete recovery checkpoints on local disk before copying their files to
+the backup destination. Reuse unchanged content and publish the accepted generation
+only after all required copies succeed. Directory publication no longer requires
+hard links, allowing Azure Files SMB backup mounts while live SQLite stays local.
+
+New ACA installs default to a dedicated Azure Files backup share shared by the
+initialization Job and Assistant. Azure Blob recovery remains supported but is
+deprecated and superseded by local checkpoint staging with mounted-directory copy.
+Existing deployments and recovery destinations are not migrated automatically.
+
+Admin groups automatic backups and manual import/export under one Backup and
+recovery section. Local, SSH and cloud instances share destination, cadence and
+coverage settings without an ephemeral-container mode. Shared ACA observations
+now enable inspection and saved-setting actions without a Docker configuration;
+mounted paths, storage authentication and unavailable offline actions are shown
+accurately. Saving remains separate from applying deployment changes.
+
 ## 0.4.1106-beta — Native AKM recovery, health and embedded Admin UI
 
 Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins

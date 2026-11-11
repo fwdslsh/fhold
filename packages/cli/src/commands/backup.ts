@@ -1,13 +1,35 @@
 import { defineCommand } from 'citty';
 
-import { createBackup, exportInstance, INSTANCE_BACKUP_NOTICE, requireInstall, resolveFholdHome } from '@fhold/lib';
+import {
+	createBackup,
+	exportCheckpointPackage,
+	exportInstance,
+	INSTANCE_BACKUP_NOTICE,
+	requireInstall,
+	resolveFholdHome
+} from '@fhold/lib';
 
 export default defineCommand({
-	meta: { name: 'backup', description: 'Export portable content or an entire stopped fhold instance' },
+	meta: {
+		name: 'backup',
+		description:
+			'Export an Assistant checkpoint package, reviewed portable content or a stopped whole instance'
+	},
 	args: {
 		to: { type: 'string', required: true, description: 'new or empty destination directory' },
-		full: { type: 'boolean', description: 'export the entire stopped instance, including sessions and credentials' },
-		'confirm-stopped': { type: 'boolean', description: 'confirm downtime and inclusion of private runtime authority; Docker also verifies stopped containers' },
+		portable: {
+			type: 'boolean',
+			description: 'export reviewed transferable files instead of the Assistant checkpoint'
+		},
+		full: {
+			type: 'boolean',
+			description: 'export the entire stopped instance, including sessions and credentials'
+		},
+		'confirm-stopped': {
+			type: 'boolean',
+			description:
+				'confirm downtime and inclusion of private runtime authority; Docker also verifies stopped containers'
+		},
 		includeProviderAuth: { type: 'boolean', description: 'include OpenCode provider credentials' },
 		includeUserEnv: { type: 'boolean', description: 'include knowledge/env/user.env' },
 		includePortalMaps: { type: 'boolean', description: 'include Discord and Slack user mappings' },
@@ -17,20 +39,55 @@ export default defineCommand({
 	async run({ args }) {
 		const homeDir = resolveFholdHome();
 		requireInstall(homeDir);
+		if (args.full && args.portable) throw new Error('Choose --full or --portable.');
 		if (args.full) {
-			if ([args.includeProviderAuth, args.includeUserEnv, args.includePortalMaps, args.includeOAuth].some(Boolean))
-				throw new Error('--full already includes all credentials and settings; do not combine portable include flags.');
+			if (
+				[
+					args.includeProviderAuth,
+					args.includeUserEnv,
+					args.includePortalMaps,
+					args.includeOAuth
+				].some(Boolean)
+			)
+				throw new Error(
+					'--full already includes all credentials and settings; do not combine portable include flags.'
+				);
 			if (!args.json) console.log(INSTANCE_BACKUP_NOTICE);
-			const manifest = await exportInstance({ sourceHome: homeDir, destination: String(args.to), confirmedStopped: args['confirm-stopped'] === true });
+			const manifest = await exportInstance({
+				sourceHome: homeDir,
+				destination: String(args.to),
+				confirmedStopped: args['confirm-stopped'] === true
+			});
 			if (args.json) console.log(JSON.stringify(manifest, null, 2));
 			else {
-				console.log(`Full instance exported to ${args.to}: ${manifest.files.length} entries, ${manifest.totalBytes} bytes.`);
+				console.log(
+					`Full instance exported to ${args.to}: ${manifest.files.length} entries, ${manifest.totalBytes} bytes.`
+				);
 				for (const warning of manifest.warnings) console.warn(`warning: ${warning}`);
-				console.log('Containers remain stopped. Import into an empty folder with `fhold --name <folder> restore --full --from <export> --dry-run`.');
+				console.log(
+					'Containers remain stopped. Import into an empty folder with `fhold --name <folder> restore --full --from <export> --dry-run`.'
+				);
 			}
 			return;
 		}
 		if (args['confirm-stopped']) throw new Error('--confirm-stopped applies only to --full.');
+		if (!args.portable) {
+			if (
+				[
+					args.includeProviderAuth,
+					args.includeUserEnv,
+					args.includePortalMaps,
+					args.includeOAuth
+				].some(Boolean)
+			)
+				throw new Error('Use --portable for reviewed-content include flags.');
+			if (!args.json)
+				console.log(
+					'Private Assistant backup: includes native sign-ins, approvals and task intent. Keep the package private.'
+				);
+			console.log(JSON.stringify(await exportCheckpointPackage(homeDir, String(args.to)), null, 2));
+			return;
+		}
 		const manifest = await createBackup({
 			sourceHome: homeDir,
 			destination: String(args.to),

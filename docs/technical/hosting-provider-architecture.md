@@ -77,8 +77,10 @@ require a Docker operation. Native SDKs track Azure long-running operations.
 Only non-secret patches and resumable operation references are kept locally.
 Known failures, pending operations and ambiguous outcomes remain distinct.
 
-Fresh ACA installation uses packaged ARM templates, private Blob recovery and
-a user-assigned identity shared with a finite same-image initialization Job.
+Fresh ACA installation uses packaged ARM templates and a dedicated Azure Files
+SMB backup share shared with a finite same-image initialization Job. Checkpoints
+are staged locally before completed files are copied to the share. Deprecated
+Blob recovery remains an explicit opt-in with its user-assigned identity flow.
 It uses the image-owned writable layer, not a network-mounted runtime home.
 Existing instances need no adoption, manager tag or takeover confirmation.
 Updates change selected fields and preserve unrelated native configuration.

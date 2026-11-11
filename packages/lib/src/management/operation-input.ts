@@ -55,6 +55,7 @@ export type OperationInputMap = {
 	'data.recovery.restore': undefined;
 	'data.recovery.save': OperationInputOf<DataOperations['recovery']['save']>;
 	'data.recovery.setCredential': OperationInputOf<DataOperations['recovery']['setCredential']>;
+	'data.recovery.package': OperationInputOf<DataOperations['recovery']['package']>;
 	'docker.install': OperationInputOf<DockerOperations['install']>;
 	'docker.saveConfig': OperationInputOf<DockerOperations['saveConfig']>;
 	'docker.update': OperationInputOf<DockerOperations['update']>;
@@ -62,6 +63,11 @@ export type OperationInputMap = {
 };
 export type OperationInputName = keyof OperationInputMap;
 export type LegacyRecoveryOperation =
+	| {
+			name: 'data.recovery.package';
+			input: OperationInputMap['data.recovery.package'];
+			context: RequestContext;
+	  }
 	| { name: 'data.recovery.status'; input: undefined; context: RequestContext }
 	| { name: 'data.recovery.inspect'; input: undefined; context: RequestContext }
 	| { name: 'data.recovery.initialize'; input: undefined; context: RequestContext }
@@ -141,6 +147,12 @@ export function parseLegacyRecoveryOperation(value: unknown): LegacyRecoveryOper
 	const input = record(value, 'Invalid recovery action.');
 	const context = parseRequestContext(input);
 	switch (input.action) {
+		case 'package':
+			return {
+				name: 'data.recovery.package',
+				input: parseOperationInput('data.recovery.package', input.request),
+				context
+			};
 		case 'status':
 			return { name: 'data.recovery.status', input: undefined, context };
 		case 'inspect':
@@ -498,6 +510,25 @@ const parsers: OperationInputParsers = {
 			'Invalid recovery credential.'
 		)
 	}),
+	'data.recovery.package': (value) => {
+		const source = record(value, 'Invalid checkpoint package request.');
+		const directory = text(source.directory, 'Choose a checkpoint package directory.', 4096);
+		if (source.operation === 'export' || source.operation === 'preview')
+			return { operation: source.operation, directory };
+		if (source.operation !== 'import')
+			throw new Error('Choose export, preview or import for the checkpoint package.');
+		return {
+			operation: 'import',
+			directory,
+			destinationHome: text(source.destinationHome, 'Choose an empty destination home.', 4096),
+			backupDirectory: text(source.backupDirectory, 'Choose an unused backup directory.', 4096),
+			previewDigest: text(
+				source.previewDigest,
+				'Preview the checkpoint package before importing.',
+				128
+			)
+		};
+	},
 	'docker.install': (value) => {
 		const source = input(value, 'docker.install');
 		const parsed = parseStackConfig(source?.config);

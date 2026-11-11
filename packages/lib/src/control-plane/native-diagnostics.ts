@@ -27,12 +27,6 @@ export function unavailableNativeDiagnostics(detail: string): DiagnosticCheck[] 
 	return names.map((name) => check(name, 'not-checked', detail));
 }
 
-// The public native workspace operation is read-only. `akm health --no-probe`
-// alone still opens/migrates state.db and performs a write/read round-trip.
-// Resolve the public export from the image-baked package without changing the
-// container's working directory (which can select native project settings).
-const healthCommand = 'import { createRequire } from "node:module"; const { activity } = await import(createRequire("/opt/fhold/tools/package.json").resolve("akm-cli/workspace")); console.log(JSON.stringify(await activity.health({ probe: false })));';
-
 function healthChecks(health: Record<string, unknown>): DiagnosticCheck[] {
 	const statuses = ['pass', 'warn', 'fail', 'unknown'];
 	const native = [...rows(health.hardChecks), ...rows(health.advisories)];
@@ -61,19 +55,20 @@ export async function diagnoseNativeRuntime(
 		if (options.readiness) result.push({ name: 'live provider readiness', ok: false, status: 'not-checked', detail: 'Assistant is stopped or unavailable; no model request was sent.' });
 		return result;
 	}
-	async function nativeReport(command: string[], acceptBlockedMigration = false): Promise<Record<string, unknown>> {
+	async function nativeReport(command: string[], acceptedCodes: readonly number[] = [0]): Promise<Record<string, unknown>> {
 		// The in-container timeout also stops AKM if the Docker client disconnects.
 		const result = await runDocker([...args, 'exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s', ...command], {
 			env, timeoutMs: 15_000, maxOutputBytes: 256 * 1024
 		});
-		// migrate status uses exit 1 for a valid blocked plan; other failures are unknown.
-		if (result.code !== 0 && !(acceptBlockedMigration && result.code === 1)) return {};
+		// Health and migration status use nonzero exits for valid diagnostic reports.
+		// Timeouts, launch failures and unrecognized responses remain unavailable.
+		if (!acceptedCodes.includes(result.code)) return {};
 		try { return record(JSON.parse(result.stdout)); } catch { return {}; }
 	}
 	const [providers, health, migration, tasks] = await Promise.all([
 		listProviders(home, { timeoutMs: 10_000, signal: AbortSignal.timeout(10_000), maxResponseBytes: 256 * 1024 }).catch(() => undefined),
-		nativeReport(['bun', '-e', healthCommand]),
-		nativeReport(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], true),
+		nativeReport(['akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet'], [0, 4, 1]),
+		nativeReport(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], [0, 1]),
 		nativeReport(['akm', 'task', 'doctor', '--format', 'json', '--quiet'])
 	]);
 	const checks: DiagnosticCheck[] = [check('Assistant native API', providers === undefined ? 'not-checked' : 'pass',

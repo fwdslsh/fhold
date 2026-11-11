@@ -1,7 +1,12 @@
 import { defineCommand } from 'citty';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
 
 import {
 	applyRestore,
+	previewCheckpointPackage,
+	importCheckpointPackage,
 	classifyInstall,
 	createFholdState,
 	planRestore,
@@ -119,10 +124,18 @@ export default defineCommand({
 	meta: {
 		name: 'restore',
 		description:
-			'Import portable content into a fresh install, or an entire stopped instance into an empty folder'
+			'Restore an Assistant checkpoint into an empty home, or read an existing portable/full export'
 	},
 	args: {
 		from: { type: 'string', required: true, description: 'fhold export directory (read only)' },
+		backups: {
+			type: 'string',
+			description: 'new unused backup directory for an Assistant checkpoint import'
+		},
+		'preview-digest': {
+			type: 'string',
+			description: 'optional digest from an earlier checkpoint preview'
+		},
 		full: {
 			type: 'boolean',
 			description:
@@ -131,7 +144,7 @@ export default defineCommand({
 		'confirm-stopped': {
 			type: 'boolean',
 			description:
-				'confirm private runtime authority and stopped writers before full import; no containers are started'
+				'confirm private same-Assistant state and stopped writers before checkpoint/full import'
 		},
 		apply: { type: 'boolean', description: 'apply a freshly validated restore plan' },
 		'dry-run': { type: 'boolean', description: 'display the plan without writing (the default)' },
@@ -161,6 +174,51 @@ export default defineCommand({
 	async run({ args }) {
 		const state = createFholdState();
 		if (args.apply && args['dry-run']) throw new Error('Choose either --apply or --dry-run.');
+		if (existsSync(join(String(args.from), 'checkpoint.json'))) {
+			if (
+				args.full ||
+				[
+					'include-provider-auth',
+					'include-user-env',
+					'include-portal-maps',
+					'include-oauth',
+					'acknowledge-unrestored'
+				].some((name) => args[name as keyof typeof args])
+			)
+				throw new Error(
+					'Checkpoint packages restore the same Assistant; do not combine whole-instance or reviewed-content flags.'
+				);
+			const preview = await previewCheckpointPackage(state.homeDir, String(args.from));
+			if (!args.apply) {
+				console.log(JSON.stringify(preview, null, 2));
+				return;
+			}
+			if (!args.backups)
+				throw new Error(
+					'Choose a new unused --backups directory before importing this checkpoint.'
+				);
+			await seedSkeletonFromEmbedded(async () => {
+				console.log(
+					JSON.stringify(
+						await importCheckpointPackage(
+							state.homeDir,
+							{
+								directory: String(args.from),
+								destinationHome: state.homeDir,
+								backupDirectory: String(args.backups),
+								previewDigest: args['preview-digest']
+									? String(args['preview-digest'])
+									: preview.previewDigest
+							},
+							args['confirm-stopped'] === true
+						),
+						null,
+						2
+					)
+				);
+			}, state.homeDir);
+			return;
+		}
 		if (args.full) {
 			if (
 				[

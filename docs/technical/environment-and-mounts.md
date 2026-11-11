@@ -275,13 +275,19 @@ for the schema, private inspection and stopped-writer policy transition.
 Fresh ACA installation keeps `/home/fhold`, `/work`, `/stash`, `/opt/akm/data`
 and `/etc/akm` on the image-owned writable container layer. Any container recreation
 can lose that layer; the existing recovery worker restores its last accepted
-checkpoint before starting writers. Blob storage is the checkpoint destination,
-never a live SQLite mount. Replica-scoped EmptyDir retention is not selected by
+checkpoint before starting writers. New installs stage checkpoints locally and
+copy completed files to a dedicated Azure Files SMB backup share at `/recovery`.
+The share is never a live SQLite mount and does not need hard links.
+Replica-scoped EmptyDir retention is not selected by
 default and was not qualified in ACA; no startup chown/init workaround is added.
 
 The provider creates or reuses an environment/storage account, creates a private
-per-instance Blob container and grants its user-assigned identity Blob access.
-The same identity serves a finite initialization Job and the assistant. The
+per-instance SMB backup share, and registers it with the ACA environment. ARM
+supplies the account key directly to the native environment storage resource;
+it is not placed in Assistant environment variables or local preferences. The
+finite initialization Job and Assistant mount the same share. Explicit
+`recovery: "azblob"` retains the deprecated Blob container/user-assigned identity
+path, which remains supported. Existing deployments are not migrated. The
 password and recovery policy use ordinary ACA secret-file mounts. The generated
 runtime receives `TZ` (not Docker's `FH_TIMEZONE` intent), stable `FH_INSTANCE_ID`
 and the existing recovery variables. Native account files stay native and are
@@ -289,7 +295,8 @@ checkpointed, not copied into Azure environment settings.
 
 Optional existing environment Files storage can mount independent project folders.
 Those paths are required external mounts and excluded from recovery. The provider
-does not create Files shares or move files into them. Live native databases stay
+does not move project files into them. The dedicated backup share is separate
+from these independent project mounts. Live native databases stay
 local. Existing deployment mounts, secrets and identities remain unchanged unless
 the user requests the corresponding supported edit. Cloud full export/import is
 not implemented. See [hosting](../hosting.md) and

@@ -17,13 +17,40 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 | Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
 | Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history, not an entire runtime. |
 
-Keep these contracts/formats separate. Portable imports deliberately do not
-replay runtime credentials or checkpoint authority; recovery must preserve that
-authority and native state. Combining their writers would
-complicate those guarantees. Container exclusions are never silently applied to
-host portable backup. See [managing fhold](managing-fhold.md) for those flows.
+These are different restore purposes and coverage promises. Assistant backup
+export/import now packages the same validated checkpoint used by automatic
+recovery; see [checkpoint packages](technical/checkpoint-packages.md).
+Whole-home and reviewed-content exports retain their actual scope and safeguards.
+Reviewed-content import does not replay runtime credentials or checkpoint
+authority; same-instance recovery preserves native state. Container exclusions
+are never silently applied to host portable backup. See
+[managing fhold](managing-fhold.md) for the currently available flows.
 
 ## Runtime configuration
+
+The recommended destination is a local or mounted backup directory. Each checkpoint
+first snapshots SQLite with its native backup mechanism and captures selected files
+into a temporary directory on local disk. After local capture succeeds, the worker
+copies completed content to the destination, reusing identical objects already
+present. It publishes the accepted generation last. Interrupted capture or copy
+leaves the previous accepted checkpoint usable; unreferenced partial files are not
+restored. This is incremental content reuse, not an atomic snapshot across all live
+applications. Ordinary files must remain stable while they are captured.
+
+For ACA, mount a separate Azure Files SMB share at `/recovery`; keep all live
+databases and temporary snapshots on the container's local ephemeral storage.
+Startup reads and verifies the accepted checkpoint into local storage before
+starting native writers. No hard links or live SQLite operations run on the share.
+Size local ephemeral storage for live data plus the complete staged checkpoint.
+Directory ownership remains persistent: after an unclean stop, confirm all old
+writers have terminated and use the existing exact-owner `unlock --confirm-stopped`
+procedure before a replacement can acquire the destination.
+
+**Azure Blob recovery is deprecated**, superseded by local checkpoint staging
+and copying to a mounted backup directory. Existing Blob destinations, credentials
+and restore behavior remain supported. Deprecation does not migrate or disable
+existing deployments. New ACA installs default to a dedicated backup share; use
+`"recovery": "azblob"` explicitly to retain Blob for a new installation.
 
 Standalone deployments supply the image inputs below. Docker CLI/Admin installs
 store the same non-secret intent in `state/stack.json` under `recovery`, selection
@@ -35,15 +62,29 @@ see [Azure hosting](hosting.md#azure-container-apps-experimental).
 
 ### Configure through Admin or CLI
 
-Open **System → Ephemeral container support**, the last section after installation
-details, recent logs and import/export. This is the Admin name for the same runtime
-recovery feature; environment variables and `fhold recovery` commands are unchanged.
-Enable **automatic checkpoints and restore**, then choose
+Open **System → Backup and recovery → Automatic Assistant backups**. Persistent
+and replaceable containers use this same location, interval and coverage form;
+there is no ephemeral-container mode to choose. Environment variables and
+`fhold recovery` commands are unchanged.
+Enable **automatic backups and startup recovery**, then choose
 a private local/mounted directory outside the instance home or an existing
 `azblob://account/container/prefix`. The stable instance ID defaults from the
 saved instance name. Blob uses a private connection-string file or the deployment's
 explicit managed identity, never a host CLI account. Saving does not initialize
 storage or restart containers; a persistent alert records unapplied settings.
+
+The directory picker selects a path on the instance's Docker host, including
+over SSH. If the connection does not offer host directory browsing, enter the
+already mounted backup path inside the container instead. On ACA this must be
+an Azure Files mount; saving a path does not provision storage. Storage
+authentication controls appear only for the deprecated Blob destination.
+The backup interval and stale-backup warning are common settings; identity,
+operation timeout and custom coverage remain advanced.
+
+If settings have not been inspected, **Inspect saved coverage** loads them
+through the shared connection. It remains available without a local Docker
+configuration. Unsupported actions explain their native limitation beside the
+controls. A scaled-to-zero app is not a confirmed stopped app.
 
 For a **genuinely new** namespace: save, stop the instance through its confirmed
 lifecycle action, and choose **Initialize new destination**. Confirmation is
@@ -54,7 +95,7 @@ validates/restores before writers run. **Validate / restore same instance** does
 that offline while stopped; it does not erase surviving data or select an older
 rollback point. Stale ownership still requires separate external verification.
 
-**Inspect saved coverage** is read-only. **Advanced recovery settings** exposes
+**Inspect saved coverage** is read-only. **Advanced checkpoint settings** exposes
 additional paths/SQLite and exclusions/required mounts/discovery. These are
 literal container paths, not host names; listing them does not mount a drive.
 The native engine checks database integrity, required mounts and accepted
@@ -76,7 +117,7 @@ The CLI uses the same shared operations:
 
 ```sh
 fhold --name my-agent recovery configure --directory /absolute/private-checkpoints
-# Blob alternative; the input file must be mode 600/400:
+# Deprecated Blob alternative; the input file must be mode 600/400:
 fhold --name my-agent recovery credential --from /absolute/private-connection-string
 fhold --name my-agent recovery configure --to azblob://account/container/my-agent
 fhold --name my-agent recovery show
@@ -141,7 +182,7 @@ contract. Codex/Claude workers remain independent and experimental. Both
 supervisors default on, with independent explicit off switches.
 Configuring recovery does not sign them in, accept trust or approve their tools.
 
-## Local or mounted-directory destination first
+## Local or mounted-directory destination (recommended)
 
 Use `FH_RECOVERY_URL=file:///absolute/path/to/private-backups` and a stable
 `FH_INSTANCE_ID`. The directory is a backup destination, not the live Assistant
@@ -149,6 +190,15 @@ home. Keep working SQLite databases on local storage. A network-mounted backup
 directory is eligible only when all owners see the same filesystem and atomic
 directory creation, exclusive file creation and atomic rename behave correctly.
 This does not qualify live SQLite WAL on NFS/SMB or object-storage FUSE.
+Hard-link support is not required. Completed copies use a temporary file and
+same-filesystem rename under the existing ownership/mutation guard. A content
+hash conflict is refused rather than overwritten.
+
+To switch an existing deployment, stop its writers, provision and mount a new
+private backup directory, and explicitly configure/initialize a genuinely unused
+namespace. Preserve the old Blob destination until a new checkpoint and a restore
+drill have been verified. Old accepted Blob checkpoints are not automatically
+transferred or adopted by the new destination.
 
 Initialize a genuinely unused namespace through the explicit recovery
 initialization operation before ordinary startup. Initialization is not an
@@ -234,7 +284,7 @@ An unreleased owner explains blocked restarts, not necessarily the initial crash
 Retain platform system/console logs externally to distinguish an interrupted
 shutdown, lost storage ownership, an unhealthy probe or resource exhaustion.
 
-## Blob destination and authentication
+## Blob destination and authentication (deprecated)
 
 Azure Blob uses the identical storage-neutral core added after directory proof.
 Use `azblob://account/container[/prefix]`, without credentials/query strings.

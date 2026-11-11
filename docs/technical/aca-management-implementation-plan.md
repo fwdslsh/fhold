@@ -204,16 +204,16 @@ Use the existing [recovery contract](../assistant-recovery.md) and
 
 | Content | Location and management |
 | --- | --- |
-| Live SQLite, native account state and recovery receipts | Image-owned writable container directories; restore from Blob before native writers on recreation. No default EmptyDir overlays. |
-| Recovery generations | Private Blob container through existing managed-identity transport. |
+| Live SQLite, native account state and recovery receipts | Image-owned writable container directories; restore from the accepted backup before native writers on recreation. No default EmptyDir overlays. |
+| Recovery generations | Completed local checkpoints copied to a dedicated Azure Files SMB backup mount. Deprecated Blob transport remains supported as an explicit option. |
 | Optional shared project/workspace directories | Azure Files, with explicit read/write intent and recovery mount exclusions. Never put live databases here. |
 | Boot/deployment intent | ACA environment variables, including recovery location/ID, scheduler, timezone and existing worker settings. |
 | Recovery include/exclude/required-mount policy | Existing JSON format, mounted as a small deployment-supplied file; no new policy schema. |
 | Deployment secrets | ACA secret references/file mounts; optional existing Key Vault integration. |
 | AI accounts and harness preferences | Native files/auth APIs, covered by recovery; not duplicated into ACA env on every edit. |
 
-Azure Files is optional, not the assistant's default home. Blob is the checkpoint
-destination, not a mounted live filesystem. Both container recreation and replica
+Azure Files is a backup destination and optional project storage, not the
+assistant's live home. SQLite snapshots and staging remain local. Both container recreation and replica
 replacement may require restoration; durability does not depend on the local
 writable layer surviving. [Azure storage mounts](https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts)
 

@@ -74,6 +74,10 @@ export function azureDeploymentPatch(
 			throw new Error('Resolve current native secrets before changing the recovery policy mount.');
 		const settings = patch.recovery.settings,
 			env = recoveryEnvironment(settings);
+		// ACA uses the selected container's actual volume path, not the Docker
+		// host bind convention that maps every destination to /recovery.
+		if (settings.enabled && settings.destination.startsWith('file:'))
+			env.FH_RECOVERY_URL = settings.destination;
 		delete env.FH_RECOVERY_STATE_DIR; // Preserve the native receipt placement, not a Docker-host path.
 		if (settings.authentication === 'connection-string') delete env.FH_RECOVERY_CREDENTIAL_FILE;
 		const volumes = (Array.isArray(template.volumes) ? template.volumes : []).map(azureObject);

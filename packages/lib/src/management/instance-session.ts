@@ -116,8 +116,7 @@ function hostDeployment(snapshot: HostingSnapshot): DeploymentObservation {
 					: {
 							state: 'unavailable' as const,
 							reason:
-								capability.reason ??
-								'This lifecycle operation is unavailable for this target.'
+								capability.reason ?? 'This lifecycle operation is unavailable for this target.'
 						}
 			];
 		})
@@ -193,6 +192,9 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 		),
 		recovery: {
 			status: unsupportedOperation('Recovery management is not configured for this instance.'),
+			package: unsupportedOperation(
+				'Checkpoint package transfer is not configured for this instance.'
+			),
 			inspect: unsupportedOperation('Recovery management is not configured for this instance.'),
 			initialize: unsupportedOperation('Recovery management is not configured for this instance.'),
 			restore: unsupportedOperation('Recovery management is not configured for this instance.'),
@@ -523,6 +525,23 @@ export function rpcManagementBindings(
 				})
 			),
 			recovery: {
+				package: operation('recovery', async (request, context) => {
+					const result = await manager.call('recovery', {
+						action: 'package',
+						request,
+						...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
+					});
+					if (
+						!result ||
+						typeof result !== 'object' ||
+						!('scope' in result) ||
+						result.scope !== 'assistant-checkpoint'
+					)
+						throw new Error('The checkpoint package operation returned an invalid result.');
+					return result as
+						| import('../dto/recovery.js').CheckpointPackagePlan
+						| import('../dto/recovery.js').CheckpointPackageImportResult;
+				}),
 				status: operation('recovery', async () => {
 					const result = await manager.call('recovery', { action: 'status' });
 					if (!result || typeof result !== 'object' || Array.isArray(result))

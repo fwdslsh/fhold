@@ -5,6 +5,11 @@ import {
 	type RemoteEnableSession
 } from '../control-plane/remote.js';
 import { classifyInstall, requireInstall } from '../control-plane/state.js';
+import {
+	exportCheckpointPackage,
+	previewCheckpointPackage,
+	importCheckpointPackage
+} from '../control-plane/checkpoint-packages.js';
 import { connectionDetails } from '../control-plane/connection.js';
 import { createFholdState, stackConfigFile } from '../control-plane/foundation.js';
 import {
@@ -323,6 +328,13 @@ export function localInstanceManagement(
 		},
 		recovery: async (value) => {
 			const home = state().homeDir;
+			if (value.action === 'package') {
+				const request = value.request;
+				if (request.operation === 'export') return exportCheckpointPackage(home, request.directory);
+				if (request.operation === 'preview')
+					return previewCheckpointPackage(home, request.directory);
+				return importCheckpointPackage(home, request, value.confirmed === true);
+			}
 			if (value.action === 'save') {
 				saveRecoverySettings(home, {
 					baselineDigest: value.baselineDigest,

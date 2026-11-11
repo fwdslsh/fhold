@@ -535,7 +535,7 @@ it.skipIf(process.env.FH_NATIVE_PROVIDER_TESTS !== '1')(
 			const finalAuthIds = await authIds();
 			await run(['stop']);
 			const portable = join(root, 'compiled-portable');
-			await run(['backup', '--to', portable, '--include-provider-auth']);
+			await run(['backup', '--portable', '--to', portable, '--include-provider-auth']);
 			assert(
 				existsSync(join(portable, 'knowledge/secrets/opencode-credentials.json')),
 				'Compiled CLI must execute the native credential worker'

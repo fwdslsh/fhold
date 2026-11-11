@@ -350,14 +350,34 @@ Screenshot checks focus only the owned test window and bound the complete
 render/accessibility/capture wait. A stalled native renderer must fail the test
 instead of hanging indefinitely; test focus and sizing are not production behavior.
 
-System has one view with five collapsed sections, in order: **Installation
-details**, **Recent logs**, **Connection keys**, **Import / export**,
-**Ephemeral container support**.
+System has one view with four collapsed sections, in order: **Installation
+details**, **Recent logs**, **Connection keys**, **Backup and recovery**.
+The backup hub contains **Automatic Assistant backups**, **Export / import
+Assistant backup**, and **Other export options**.
 Static and rendered checks verify this order, the names, matching setup import
 labels, keyboard traversal and navigation without duplicate backup/diagnostic
-view containers. Import/export distinguishes portable content from the explicit
-whole-instance stopped snapshot; ephemeral support uses the separate native
-same-instance recovery engine.
+view containers. The primary export/import action packages a validated Assistant
+checkpoint; other options retain reviewed portable content and the explicit
+whole-instance stopped snapshot. Automatic backups use the same native recovery
+engine and common location/interval/coverage form on persistent and replaceable
+containers. There is no separate ephemeral-container settings mode.
+
+The focused Chromium provider test also loads initially uninspected non-Docker
+backup settings, inspects them through the real renderer action, saves a mounted
+path with literal percent/Unicode characters, and checks the pending-change
+banner without applying it. It verifies directory-picker capability, truthful
+directory/identity authentication text, stopped versus scaled-to-zero eligibility,
+and the unavailable ACA offline-restore reason. Desktop and 320px screenshots
+use Admin's native dark theme and include accessibility checks. IPC responses are synthetic: this
+proves renderer behavior, not a live ACA deployment or restore.
+
+The focused renderer test also previews a checkpoint package, invalidates the
+preview when any target path changes, and verifies default-cancel confirmation
+before submitting the exact reviewed digest and empty-home/backup destinations.
+A separate native-image integration exports with repeating backups disabled,
+preserves committed SQLite WAL content, imports before host defaults are seeded,
+and verifies the real receipt with normal offline recovery. Source settings,
+data and ownership remain unchanged; this is not live SSH/ACA qualification.
 
 The full-instance journey creates a native OpenCode session, refuses export
 while containers are live, verifies default-cancel native dialogs, stops through

@@ -370,6 +370,7 @@ assistant)
 	fi
 	if [ "$phase" = all ] || [ "$phase" = runtime ]; then
 	verify_runtime_versions
+	docker exec "$container" sh -ec 'test -z "${AKM_REDACT_PII+x}${AKM_REDACT_HIGH_ENTROPY+x}"; jq -e ".plugins.redact == {pii: true, highEntropy: true}" /etc/akm/config.json >/dev/null'
 	docker exec -i "$container" node --input-type=module < scripts/smoke-browser.mjs
 	docker exec -i "$container" node --input-type=module < scripts/smoke-model-picker.mjs
 	docker exec --workdir /work "$container" bash --login -c 'test "$(command -v akm-web)" = /usr/local/bin/akm-web'

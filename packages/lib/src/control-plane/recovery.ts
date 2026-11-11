@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { isAbsolute, join, resolve } from 'node:path';
 import { normalizeSelection } from '../../../../containers/assistant/recovery/selection.mjs';
 import type {
 	RecoveryOperationResult,
@@ -16,7 +16,11 @@ import {
 	writeFileAtomic
 } from './foundation.js';
 import { assertSafePortablePath } from './provider-files.js';
-import { parseRecoverySettings, recoveryDirectory } from './recovery-config.js';
+import {
+	directoryRecoveryDestination,
+	parseRecoverySettings,
+	recoveryDirectory
+} from './recovery-config.js';
 import { readStackConfig, writeStackConfig } from './stack-config.js';
 import { mutateStack } from './operations.js';
 import { ensureRuntime, requireInstall } from './state.js';
@@ -166,12 +170,15 @@ export async function recoveryStatus(homeDir: string): Promise<RecoveryStatus> {
 /** All operator runs use the exact audited Compose mounts/user/image, never a custom startup. */
 export async function runRecoveryOperation(
 	homeDir: string,
-	action: 'inspect' | 'init' | 'restore',
-	confirmed = false
+	action: 'inspect' | 'init' | 'restore' | 'export-package' | 'preview-package',
+	confirmed = false,
+	packageDirectory?: string
 ): Promise<RecoveryOperationResult> {
-	if (!['inspect', 'init', 'restore'].includes(action))
+	if (!['inspect', 'init', 'restore', 'export-package', 'preview-package'].includes(action))
 		throw new Error('Invalid recovery operation.');
-	if (action !== 'inspect' && !confirmed) throw new Error('Confirm this recovery operation first.');
+	const packaging = action === 'export-package' || action === 'preview-package';
+	if (!packaging && action !== 'inspect' && !confirmed)
+		throw new Error('Confirm this recovery operation first.');
 	const state = createFholdState(homeDir);
 	requireInstall(homeDir);
 	const lock = acquireStackLock(state.dataDir);
@@ -179,10 +186,11 @@ export async function runRecoveryOperation(
 	try {
 		const read = readStackConfig(homeDir);
 		if (!read.ok) throw new Error(read.error);
-		if (!read.config.recovery.enabled) throw new Error('Enable and save recovery settings first.');
+		if (!packaging && !read.config.recovery.enabled)
+			throw new Error('Enable and save recovery settings first.');
 		await assertProjectOwnership(read.config.deployment.projectName, state.stackDir);
 		const options = buildComposeOptions(state);
-		if (action !== 'inspect') {
+		if (!packaging && action !== 'inspect') {
 			// Include one-off containers and paused/restarting writers, not just services.
 			const writers = await runDocker([
 				'ps',
@@ -208,12 +216,38 @@ export async function runRecoveryOperation(
 		const resolved = await composeConfigJson(options);
 		if (!resolved.ok) throw new Error('Could not validate the recovery Compose configuration.');
 		await assertRecoveryImage(resolved.config);
+		if (packaging) {
+			if (
+				!packageDirectory ||
+				!isAbsolute(packageDirectory) ||
+				resolve(packageDirectory) !== packageDirectory ||
+				packageDirectory.includes(':')
+			)
+				throw new Error(
+					'Choose an absolute package directory supported by Docker Compose bind mounts.'
+				);
+			// Reuse the existing host path/link/containment checks without changing
+			// the saved destination or enabling periodic recovery.
+			recoveryDirectory(homeDir, {
+				...read.config.recovery,
+				enabled: true,
+				destination: directoryRecoveryDestination(packageDirectory)
+			});
+			if (action === 'export-package') {
+				mkdirSync(packageDirectory, { recursive: true, mode: 0o700 });
+				if (readdirSync(packageDirectory).length)
+					throw new Error('Checkpoint package destination must be empty.');
+			} else if (!lstatSync(packageDirectory).isDirectory())
+				throw new Error('Choose a checkpoint package directory.');
+		}
 		const args =
 			action === 'init'
 				? ['init', '--confirm-new-instance']
 				: action === 'restore'
 					? ['restore', '--confirm-stopped']
-					: ['inspect'];
+					: packaging
+						? [action, '/run/fhold-package']
+						: ['inspect'];
 		const operatorName = `${read.config.deployment.projectName}-recovery-${randomUUID()}`;
 		const result = await runDocker(
 			[
@@ -227,6 +261,12 @@ export async function runRecoveryOperation(
 				'-T',
 				'--entrypoint',
 				'fhold-recovery',
+				...(packaging
+					? [
+							'--volume',
+							`${packageDirectory}:/run/fhold-package${action === 'preview-package' ? ':ro' : ''}`
+						]
+					: []),
 				'assistant',
 				...args
 			],

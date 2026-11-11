@@ -210,8 +210,8 @@ An app's Save action changes that app, not other apps' unsaved drafts. Restart
 confirmation and the persistent pending-changes alert still apply. Native
 workers remain experimental; startup enabled is not a verified client connection.
 There is no separate access-manager sidebar destination. System holds
-installation details, recent logs, advanced connection-key rotation, import/export,
-then ephemeral container support. A stale
+installation details, recent logs, advanced connection-key rotation and one
+Backup and recovery hub. A stale
 settings snapshot is rejected so concurrent changes are not silently lost.
 
 ### Knowledge
@@ -298,22 +298,32 @@ Those connections retain native sign-in, consent and approvals. Keep copied keys
 private, like passwords. This Admin redesign is an unverified preview; see the
 [verification runbook](operations/admin-setup-verification.md).
 
-### Import/export and ephemeral container support
+### Backup and recovery
 
-The **System** page starts with **Installation details** and **Recent logs**.
-Below them, two separate sections explain content transfer and runtime continuity:
+The **System** page has one **Backup and recovery** section after installation
+details, logs and connection keys. Persistent and replaceable containers share
+the same automatic backup settings. The hub contains:
 
-- **Import / export** offers an **entire instance**, requiring stopped containers
-  and including native conversations, sign-ins and runtime authority, or
-  **portable content**, transferring reviewed knowledge, workspace and allowlisted
-  settings into a fresh agent. Portable sensitive content is opt-in and imported
-  task definitions remain inactive; full imports retain active scheduling intent.
-- **Ephemeral container support**, the last section, is opt-in automatic checkpointing for replacing
-  the same Assistant after ephemeral storage disappears. It preserves native
+- **Automatic Assistant backups** is opt-in checkpointing for the same Assistant
+  on local Docker, SSH and cloud hosts. It preserves native
   sessions, account files, approvals and consistent SQLite snapshots. It is not
   a host/Guardian/Portal rollback or an archive to import into a different agent.
+- **Import / export** retains the current manual operations: an **entire instance**
+  requires stopped containers and includes native conversations, sign-ins and
+  runtime authority; **portable content** transfers reviewed knowledge, workspace
+  and allowlisted settings into a fresh agent. Portable sensitive content is
+  opt-in and imported tasks stay inactive; full imports retain task intent.
 
-CLI and Admin use the same `fhold backup` / `fhold restore` implementations.
+**Export / import Assistant backup** packages the accepted Assistant checkpoint
+and validates it before import into an empty home and unused independent backup
+destination. If repeating backups are off, export captures once through the same
+engine without changing those settings. Native sign-ins, approvals and task intent
+are retained: stop the original writers and never run both copies together.
+The imported home stays stopped for review. **Other export options** retains
+whole-home preservation and reviewed-content transfer; see
+[checkpoint packages](technical/checkpoint-packages.md) for commands and coverage.
+
+CLI and Admin use the same shared backup operations.
 Portable content can export while running; import it after installing a fresh
 instance, before provider setup completes. For an entire-instance export, stop
 the instance in Overview first and select **Entire instance (must be stopped)**.
@@ -327,8 +337,10 @@ explains downtime, credentials, active tasks and external-storage limitations.
 Both full operations leave containers stopped. These exports are not interchangeable
 with the automatic same-instance checkpoint format.
 
-Choose a private **local/mounted directory** or an existing **Blob destination**.
-Live SQLite remains on local storage. Directory artifacts require exclusive
+Choose a private **local/mounted directory**, the recommended destination.
+Snapshots and selected files finish locally, then copy to the backup directory.
+Existing **Blob destinations** remain supported but are deprecated. Live SQLite
+remains on local storage. Directory artifacts require exclusive
 creation and atomic rename; Blob credentials use a private file or a deployment
 managed identity, never a secret environment value or host CLI login.
 
@@ -341,8 +353,9 @@ namespace, do not initialize again: start restores before writers run.
 requires stopped writers and confirmation, leaves containers stopped, and
 refuses conflicting surviving files. No automatic owner takeover is provided.
 
-Advanced settings expose bounded timing, extra container paths/SQLite files and
-external-mount/exclusion policy through the editable
+Backup interval and stale-backup warning are visible with the destination.
+Advanced settings expose identity, operation timeout, extra container paths/SQLite
+files and external-mount/exclusion policy through the editable
 `config/recovery/include.json`. They do not mount drives. Storage credentials and
 runtime recovery policy are intentionally not ported by a portable archive.
 See [Assistant recovery](assistant-recovery.md#configure-through-admin-or-cli)
@@ -351,6 +364,15 @@ image updates and coverage edits keep the same checkpoint destination. Failed or
 overdue backups show a warning without stopping the agent; loss of ownership still
 stops writers. Managed recovery requires the updated Compose assets; an older instance
 must be explicitly updated before these settings can be saved.
+
+On a host without directory browsing, enter an already mounted backup path
+inside the container; choosing a path does not create a mount. On ACA, use an
+Azure Files volume. **Inspect saved coverage** loads the shared settings after
+an explicit agent connection; a local Docker configuration is not required.
+Unavailable offline actions explain why beside their buttons. Start restores
+ACA's accepted backup before native writers run; an offline Job cannot restore
+another replica's writable layer. Existing locations, credentials, checkpoint
+identity and pending deployment changes remain explicit operator choices.
 
 ### Save changes, restart when ready
 
@@ -613,7 +635,7 @@ portable archive. Independently persistent container mounts are configured only
 in that recovery policy; they do not alter host-side portable backup selection.
 
 ```bash
-fhold backup --to /private/path/backup
+fhold backup --portable --to /private/path/backup
 fhold --name /absolute/path/new-instance install --no-start
 fhold --name /absolute/path/new-instance restore --from /private/path/backup --dry-run
 fhold --name /absolute/path/new-instance restore --from /private/path/backup --apply
