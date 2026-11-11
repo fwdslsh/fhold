@@ -637,7 +637,7 @@ describe('Admin static security boundary', () => {
 		showView('system');
 		expect(control('view-system').hidden).toBe(false);
 		expect(control('transfer-fields').disabled).toBe(false);
-		expect(control('recovery-fields').disabled).toBe(true);
+		expect(control('runtime-recovery-options').disabled).toBe(true);
 		expect(
 			targetKey({
 				kind: 'hosted',
@@ -939,7 +939,9 @@ describe('Admin static security boundary', () => {
 	});
 	it('explains portable content versus same-instance runtime recovery and keeps storage credentials out of saved settings', () => {
 		expect(html).toContain('Import / export');
-		expect(html).toContain('Ephemeral container support');
+		expect(html).toContain('Backup and recovery');
+		expect(html).toContain('Automatic Assistant backups');
+		expect(html).not.toContain('Ephemeral container support');
 		expect(html).toContain('Their format is not an import/export file');
 		expect(html).toContain('No native conversations or remote sign-ins');
 		expect(html).toContain('including after ordinary image upgrades');
@@ -950,13 +952,20 @@ describe('Admin static security boundary', () => {
 		expect(html).toContain('never overwrites surviving local data');
 		expect(html).toContain('id="runtime-recovery-connection-string" type="password"');
 	});
-	it('puts installation and logs before import/export and keeps ephemeral support last in one System view', () => {
+	it('groups automatic backup and manual export in one System hub without a container-lifetime mode', () => {
 		const start = html.indexOf('<section id="view-system"');
 		const system = html.slice(start, html.indexOf('</main>', start));
-		const ids = ['installation-details', 'recent-logs', 'import-export', 'runtime-recovery'];
+		const ids = ['installation-details', 'recent-logs', 'connection-keys', 'backup-recovery'];
 		const positions = ids.map((id) => system.indexOf(`<details id="${id}"`));
 		expect(positions.every((position) => position >= 0)).toBe(true);
 		expect(positions).toEqual([...positions].sort((a, b) => a - b));
+		const backupHub = system.slice(system.indexOf('<details id="backup-recovery"'));
+		expect(backupHub.indexOf('id="runtime-recovery"')).toBeLessThan(
+			backupHub.indexOf('id="import-export"')
+		);
+		expect(backupHub.indexOf('id="runtime-recovery-interval"')).toBeLessThan(
+			backupHub.indexOf('id="runtime-recovery-advanced"')
+		);
 		expect((html.match(/data-view-panel="system"/g) || []).length).toBe(1);
 		expect(html).toContain('data-view="system" aria-controls="view-system"');
 		expect(html).not.toContain('id="view-diagnostics"');
@@ -2670,7 +2679,7 @@ describe('Admin runtime recovery controls', () => {
 		expect(control('initialize-recovery').disabled).toBe(true);
 		expect(control('restore-runtime-recovery').disabled).toBe(false);
 		expect(control('save-recovery-credential').disabled).toBe(true);
-		expect(html).toContain('data-instance-feature="data.recovery.save"');
+		expect(control('runtime-recovery-options').disabled).toBe(false);
 	});
 	it('recomputes offline controls after a completed lifecycle operation rather than restoring stale disabled flags', async () => {
 		const snapshot = fixture();
@@ -2690,6 +2699,89 @@ describe('Admin runtime recovery controls', () => {
 		updateRecoveryFields();
 		expect(control('initialize-recovery').disabled).toBe(true);
 	});
+	it('uses shared settings for a non-Docker backup destination and explains actual provider limitations', () => {
+		const snapshot = fixture(false);
+		delete snapshot.docker;
+		snapshot.identity.ref = {
+			kind: 'azure-container-apps',
+			connectionId: 'cloud',
+			resourceId: '/resource/agent'
+		};
+		snapshot.operations['docker.directory'] = unsupported(
+			'This host exposes mounted container paths, not a directory browser.'
+		);
+		snapshot.data.recovery.value.settings.enabled = true;
+		snapshot.data.recovery.value.settings.destination = 'file:///recovery/my-agent';
+		snapshot.data.recovery.value.settings.authentication = 'managed-identity';
+		snapshot.data.recovery.value.credentialConfigured = true;
+		snapshot.services = known([{ name: 'assistant', state: 'Stopped' }]);
+		snapshot.operations['data.recovery.restore'] = unsupported(
+			'Start restores the app before writers run; an offline Job cannot restore its writable layer.'
+		);
+		render(snapshot);
+		expect(control('runtime-recovery-directory').value).toBe('/recovery/my-agent');
+		expect(control('initialize-recovery').disabled).toBe(false);
+		expect(control('check-recovery-status').disabled).toBe(false);
+		expect(control('inspect-recovery').disabled).toBe(false);
+		expect(control('restore-runtime-recovery').disabled).toBe(true);
+		expect(control('runtime-recovery-offline-availability').textContent).toContain('offline Job');
+		expect(control('choose-recovery-directory').hidden).toBe(true);
+		expect(control('runtime-recovery-directory-help').textContent).toContain('already mounted');
+		expect(control('runtime-recovery-credential-form').hidden).toBe(true);
+		expect(control('runtime-recovery-credential-status').textContent).toContain(
+			'no Blob credential'
+		);
+		for (const services of [
+			known([{ name: 'assistant', state: 'Scaled to zero' }]),
+			{ state: 'unavailable', reason: 'Connection unavailable' }
+		]) {
+			snapshot.services = services;
+			updateRecoveryFields();
+			expect(control('initialize-recovery').disabled).toBe(true);
+		}
+	});
+	it('can inspect initially unknown shared settings and refreshes the form without changing configuration', async () => {
+		const ready = fixture(false);
+		delete ready.docker;
+		ready.data.recovery.value.settings.enabled = true;
+		ready.data.recovery.value.settings.destination = 'file:///recovery/my-agent';
+		const uninspected = {
+			...ready,
+			data: { recovery: { state: 'not-inspected', reason: 'Connect and inspect saved coverage.' } }
+		};
+		render(uninspected);
+		expect(control('inspect-recovery').disabled).toBe(false);
+		expect(control('runtime-recovery-form').hidden).toBe(true);
+		expect(control('save-recovery-settings').disabled).toBe(true);
+		const actions: string[] = [];
+		state.api = {
+			recovery: async (input: { action: string }) => {
+				actions.push(input.action);
+				return '{"selection":{"paths":[]}}';
+			},
+			snapshot: async () => ready
+		};
+		bindRecoveryEvents();
+		await control('inspect-recovery').listeners.get('click')?.({});
+		expect(actions).toEqual(['inspect']);
+		expect(control('runtime-recovery-form').hidden).toBe(false);
+		expect(control('save-recovery-settings').disabled).toBe(false);
+		expect(control('runtime-recovery-details').value).toContain('selection');
+	});
+	it('preserves an edited non-Docker backup form across a full snapshot refresh', () => {
+		const snapshot = fixture(false);
+		delete snapshot.docker;
+		snapshot.data.recovery.value.settings.enabled = true;
+		render(snapshot);
+		const directory = control('runtime-recovery-directory');
+		directory.value = '/recovery/reviewed-change';
+		directory.form = control('runtime-recovery-form');
+		control('runtime-recovery-form').elements = [directory];
+		state.dirtyForms.add('runtime-recovery-form');
+		render(snapshot);
+		expect(directory.value).toBe('/recovery/reviewed-change');
+		expect(control('runtime-recovery-settings').hidden).toBe(false);
+	});
 	it('supports a directory with spaces and arbitrary path/database lists without copying credentials into the payload', () => {
 		fixture();
 		control('runtime-recovery-enabled').checked = true;
@@ -2706,6 +2798,33 @@ describe('Admin runtime recovery controls', () => {
 		expect(value.selection.sqlite).toEqual(['/home/fhold/.my-client/state.sqlite']);
 		expect(value.baselineDigest).toBe('reviewed-digest');
 		expect(JSON.stringify(value)).not.toContain('secret must');
+		control('runtime-recovery-directory').value = '/private/100% complete/日本語';
+		expect(decodeURIComponent(new URL(recoveryInput().settings.destination).pathname)).toBe(
+			'/private/100% complete/日本語'
+		);
+	});
+	it('does not carry a private credential, backup details or form draft into another instance', () => {
+		const original = fixture(false);
+		const directory = control('runtime-recovery-directory');
+		directory.value = '/private/old-instance';
+		directory.form = control('runtime-recovery-form');
+		control('runtime-recovery-form').elements = [directory];
+		state.dirtyForms.add('runtime-recovery-form');
+		control('runtime-recovery-connection-string').value = 'private original credential';
+		control('runtime-recovery-details').value = 'private original coverage';
+		const next = structuredClone(original);
+		delete next.docker;
+		next.identity.ref = {
+			kind: 'azure-container-apps',
+			connectionId: 'cloud',
+			resourceId: '/resource/another'
+		};
+		next.data.recovery.value.settings.destination = 'file:///recovery/another';
+		render(next);
+		expect(directory.value).toBe('/recovery/another');
+		expect(control('runtime-recovery-connection-string').value).toBe('');
+		expect(control('runtime-recovery-details').value).not.toContain('private original');
+		expect(state.dirtyForms.size).toBe(0);
 	});
 	it('shows Blob credential presence without revealing it and guides deployment identity without host auth discovery', () => {
 		const snapshot = fixture();
@@ -2725,6 +2844,10 @@ describe('Admin runtime recovery controls', () => {
 		updateRecoveryFields();
 		expect(control('runtime-recovery-client-id-field').hidden).toBe(false);
 		expect(control('runtime-recovery-credential-form').hidden).toBe(true);
+		expect(control('runtime-recovery-credential-status').textContent).toContain('managed identity');
+		expect(control('runtime-recovery-credential-status').textContent).not.toContain(
+			'connection string is configured'
+		);
 	});
 	it('requires native confirmation for init/restore; cancel performs no recovery operation', async () => {
 		const snapshot = fixture(false);

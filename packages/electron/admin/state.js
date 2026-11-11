@@ -102,6 +102,6 @@ export const viewMeta = {
 	system: {
 		kicker: 'SYSTEM',
 		title: 'System',
-		description: 'Installation details, logs, import / export, and ephemeral container support.'
+		description: 'Installation details, logs, connection keys, and backup and recovery.'
 	}
 };

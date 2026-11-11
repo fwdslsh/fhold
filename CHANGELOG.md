@@ -12,6 +12,13 @@ initialization Job and Assistant. Azure Blob recovery remains supported but is
 deprecated and superseded by local checkpoint staging with mounted-directory copy.
 Existing deployments and recovery destinations are not migrated automatically.
 
+Admin groups automatic backups and manual import/export under one Backup and
+recovery section. Local, SSH and cloud instances share destination, cadence and
+coverage settings without an ephemeral-container mode. Shared ACA observations
+now enable inspection and saved-setting actions without a Docker configuration;
+mounted paths, storage authentication and unavailable offline actions are shown
+accurately. Saving remains separate from applying deployment changes.
+
 ## 0.4.1106-beta — Native AKM recovery, health and embedded Admin UI
 
 Update Assistant to stable **akm-cli/akm-web 0.10.261117** and AKM plugins

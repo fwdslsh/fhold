@@ -17,11 +17,15 @@ hashes detect corruption, not malicious replacement by an authorized writer.
 | Resume the same agent after replacing its disk/container | Assistant runtime recovery | Native databases, sessions, credentials, approvals and selected files, under single-owner checkpoint authority. |
 | Transfer conversations with reviewed workspace mappings | Offline native history export/restore | Conversation history, not an entire runtime. |
 
-Keep these contracts/formats separate. Portable imports deliberately do not
-replay runtime credentials or checkpoint authority; recovery must preserve that
-authority and native state. Combining their writers would
-complicate those guarantees. Container exclusions are never silently applied to
-host portable backup. See [managing fhold](managing-fhold.md) for those flows.
+These are different restore purposes and coverage promises, not a reason to
+maintain competing Assistant capture engines. The next consolidation is to
+package a validated checkpoint for export/import; see the
+[checkpoint-package implementation brief](technical/checkpoint-packages.md).
+Current manual exports still use their existing input formats and safeguards.
+Reviewed-content import does not replay runtime credentials or checkpoint
+authority; same-instance recovery preserves native state. Container exclusions
+are never silently applied to host portable backup. See
+[managing fhold](managing-fhold.md) for the currently available flows.
 
 ## Runtime configuration
 
@@ -59,15 +63,29 @@ see [Azure hosting](hosting.md#azure-container-apps-experimental).
 
 ### Configure through Admin or CLI
 
-Open **System → Ephemeral container support**, the last section after installation
-details, recent logs and import/export. This is the Admin name for the same runtime
-recovery feature; environment variables and `fhold recovery` commands are unchanged.
-Enable **automatic checkpoints and restore**, then choose
+Open **System → Backup and recovery → Automatic Assistant backups**. Persistent
+and replaceable containers use this same location, interval and coverage form;
+there is no ephemeral-container mode to choose. Environment variables and
+`fhold recovery` commands are unchanged.
+Enable **automatic backups and startup recovery**, then choose
 a private local/mounted directory outside the instance home or an existing
 `azblob://account/container/prefix`. The stable instance ID defaults from the
 saved instance name. Blob uses a private connection-string file or the deployment's
 explicit managed identity, never a host CLI account. Saving does not initialize
 storage or restart containers; a persistent alert records unapplied settings.
+
+The directory picker selects a path on the instance's Docker host, including
+over SSH. If the connection does not offer host directory browsing, enter the
+already mounted backup path inside the container instead. On ACA this must be
+an Azure Files mount; saving a path does not provision storage. Storage
+authentication controls appear only for the deprecated Blob destination.
+The backup interval and stale-backup warning are common settings; identity,
+operation timeout and custom coverage remain advanced.
+
+If settings have not been inspected, **Inspect saved coverage** loads them
+through the shared connection. It remains available without a local Docker
+configuration. Unsupported actions explain their native limitation beside the
+controls. A scaled-to-zero app is not a confirmed stopped app.
 
 For a **genuinely new** namespace: save, stop the instance through its confirmed
 lifecycle action, and choose **Initialize new destination**. Confirmation is
@@ -78,7 +96,7 @@ validates/restores before writers run. **Validate / restore same instance** does
 that offline while stopped; it does not erase surviving data or select an older
 rollback point. Stale ownership still requires separate external verification.
 
-**Inspect saved coverage** is read-only. **Advanced recovery settings** exposes
+**Inspect saved coverage** is read-only. **Advanced checkpoint settings** exposes
 additional paths/SQLite and exclusions/required mounts/discovery. These are
 literal container paths, not host names; listing them does not mount a drive.
 The native engine checks database integrity, required mounts and accepted
