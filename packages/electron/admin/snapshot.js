@@ -34,15 +34,19 @@ const lifecycle = (snapshot) => known(snapshot?.lifecycle) || 'deployed';
 const instanceKey = (snapshot) => JSON.stringify(snapshot?.identity?.ref || null);
 
 export function render(snapshot, options = {}) {
-	const drafts = options.preserveDirty === false ? {} : captureDirtyForms();
 	const previous = state.currentSnapshot;
+	const sameInstance = !previous || instanceKey(previous) === instanceKey(snapshot);
+	const drafts = options.preserveDirty === false || !sameInstance ? {} : captureDirtyForms();
 	const phase = lifecycle(snapshot);
 	state.currentSnapshot = snapshot;
 	state.currentConfig = snapshot.docker?.config || null;
-	if (previous && instanceKey(previous) !== instanceKey(snapshot)) {
+	if (!sameInstance) {
+		state.dirtyForms.clear();
 		resetProviderState();
 		state.deploymentSettings = null;
 		byId('deployment-edit-form').hidden = true;
+		byId('runtime-recovery-details').value = 'No checkpoint operation has run for this instance.';
+		byId('runtime-recovery-connection-string').value = '';
 	}
 	state.renderingSnapshot = true;
 	if (
@@ -87,6 +91,8 @@ export function render(snapshot, options = {}) {
 	if (!config) {
 		// Provider-neutral agent/app observations are rendered above.  Docker
 		// configuration is only needed for the local Compose forms below.
+		restoreDirtyForms(drafts);
+		updateRecoveryFields();
 		state.renderingSnapshot = false;
 		return;
 	}

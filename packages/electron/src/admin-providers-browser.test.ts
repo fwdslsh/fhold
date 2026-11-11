@@ -471,7 +471,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await capture('system-desktop.png');
 		for (const section of ['installation-details', 'import-export', 'runtime-recovery']) {
 			await evaluate(
-				`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}`
+				`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}||panel.id==='backup-recovery'; document.querySelector('#${section}').open=true`
 			);
 			await capture(`system-${section}-desktop.png`);
 		}
@@ -1020,7 +1020,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				"document.querySelector('#open-knowledge').matches(':disabled') && !document.querySelector('#knowledge-fields-unavailable').hidden"
 			)
 		).toBe(true);
-		await evaluate("document.querySelector('#import-export').open=true");
+		await evaluate(
+			"document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true"
+		);
 		await value('#log-source', 'console');
 		await click('#load-logs');
 		expect(await evaluate('window.logQa.at(-1)')).toEqual({ type: 'console' });
@@ -1629,6 +1631,80 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			).toBe(true);
 			await capture(`${kind}-deployment-settings-320.png`);
 		}
+		// One backup form and capability-driven actions also work without Docker
+		// settings. These are the real renderer modules with synthetic IPC only.
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 1060,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		await evaluate(`(async()=>{
+			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');const {showView}=await import('./ui.js');const {bindRecoveryEvents}=await import('./recovery.js');
+			const known=value=>({state:'known',value,observedAt:'2026-11-10T00:00:00Z'});
+			const ready={support:'supported',availability:{state:'ready'}};
+			const recovery={settings:{enabled:true,destination:'file:///recovery/agent',instanceId:'agent',intervalSeconds:60,maxUnsavedSeconds:300,operationTimeoutSeconds:120,akmIndexCapture:false,akmIndexRestore:false,authentication:'managed-identity',clientId:''},selection:{version:1,paths:[],sqlite:[]},digest:'reviewed-checkpoint-settings',credentialConfigured:true,policyPath:'/run/fhold-recovery/include.json'};
+			const qa=window.backupQa={calls:[],confirmations:[],recovery};
+			qa.snapshot={...${JSON.stringify(snapshot)},identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource/agent'},name:'Cloud assistant',location:'/resource/agent'},docker:undefined,lifecycle:known('deployed'),services:known([{name:'assistant',state:'Stopped'}]),data:{recovery:{state:'not-inspected',reason:'Inspect saved coverage to read backup settings.'}},operations:{...${JSON.stringify(snapshot.operations)},'data.recovery.save':ready,'data.recovery.inspect':ready,'data.recovery.initialize':ready,'data.recovery.restore':{support:'unsupported',reason:'Start restores the app before writers run. A separate offline Job cannot restore its writable layer.'},'data.recovery.setCredential':{support:'unsupported',reason:'Use a native storage secret or identity.'},'docker.directory':{support:'unsupported',reason:'Use an existing mounted container path.'},'data.backup':{support:'unsupported',reason:'Cloud full-instance export is not implemented.'}}};
+			state.dirtyForms.clear();state.api.snapshot=async()=>qa.snapshot;
+			state.api.confirmRestart=async action=>{qa.confirmations.push(action);return false;};
+			state.api.recovery=async input=>{qa.calls.push(input);if(input.action==='inspect'){qa.snapshot.data.recovery=known(recovery);return JSON.stringify({selection:recovery.selection});}if(input.action==='status')return {state:'ready',lastPublishedAt:Date.now()};if(input.action==='save'){recovery.settings=input.settings;qa.snapshot.pendingChanges=known({pending:true});return qa.snapshot;}throw Error('Unexpected backup operation');};
+			render(qa.snapshot,{preserveDirty:false});showView('system');bindRecoveryEvents();
+			for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id==='backup-recovery';
+			document.querySelector('#runtime-recovery').open=true;document.querySelector('#import-export').open=false;
+		})()`);
+		expect(await evaluate("document.querySelector('#inspect-recovery').disabled")).toBe(false);
+		expect(await evaluate("document.querySelector('#runtime-recovery-form').hidden")).toBe(true);
+		await click('#inspect-recovery');
+		expect(await evaluate("document.querySelector('#runtime-recovery-directory').value")).toBe(
+			'/recovery/agent'
+		);
+		expect(await evaluate("document.querySelector('#initialize-recovery').disabled")).toBe(false);
+		expect(await evaluate("document.querySelector('#restore-runtime-recovery').disabled")).toBe(
+			true
+		);
+		expect(
+			await evaluate("document.querySelector('#runtime-recovery-offline-availability').textContent")
+		).toContain('offline Job');
+		expect(await evaluate("document.querySelector('#choose-recovery-directory').hidden")).toBe(
+			true
+		);
+		expect(
+			await evaluate("document.querySelector('#runtime-recovery-credential-status').textContent")
+		).toContain('no Blob credential');
+		expect(await evaluate("document.querySelector('#transfer-fields').disabled")).toBe(true);
+		await click('#check-recovery-status');
+		expect(
+			await evaluate("document.querySelector('#runtime-recovery-status').textContent")
+		).toContain('Checkpoint accepted.');
+		await evaluate("document.querySelector('#runtime-recovery-advanced').open=true");
+		await value('#runtime-recovery-directory', '/recovery/100% complete/日本語');
+		await value('#runtime-recovery-interval', '90');
+		await click('#save-recovery-settings');
+		expect(await evaluate('window.backupQa.calls.filter(call=>call.action==="save").length')).toBe(
+			1
+		);
+		expect(
+			await evaluate('window.backupQa.calls.find(call=>call.action==="save").settings.destination')
+		).toBe('file:///recovery/100%25%20complete/%E6%97%A5%E6%9C%AC%E8%AA%9E');
+		expect(await evaluate('window.backupQa.confirmations')).toEqual([]);
+		expect(await evaluate("document.querySelector('#pending-restart').hidden")).toBe(false);
+		await evaluate("document.querySelector('#runtime-recovery-advanced').open=false");
+		await capture('backup-recovery-cloud-desktop.png');
+		await command('Emulation.setDeviceMetricsOverride', {
+			width: 320,
+			height: 900,
+			deviceScaleFactor: 1,
+			mobile: false
+		});
+		expect(
+			await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth')
+		).toBe(true);
+		await capture('backup-recovery-cloud-320.png');
+		await command('Emulation.setEmulatedMedia', {
+			features: [{ name: 'prefers-color-scheme', value: 'dark' }]
+		});
+		await capture('backup-recovery-cloud-320-dark.png');
 		await evaluate(
 			`import('./snapshot.js').then(({showFatalError})=>showFatalError(Error('The selected folder is not an fhold instance. Choose another instance, or check the folder and try again.')))`
 		);

@@ -350,14 +350,24 @@ Screenshot checks focus only the owned test window and bound the complete
 render/accessibility/capture wait. A stalled native renderer must fail the test
 instead of hanging indefinitely; test focus and sizing are not production behavior.
 
-System has one view with five collapsed sections, in order: **Installation
-details**, **Recent logs**, **Connection keys**, **Import / export**,
-**Ephemeral container support**.
+System has one view with four collapsed sections, in order: **Installation
+details**, **Recent logs**, **Connection keys**, **Backup and recovery**.
+The backup hub contains **Automatic Assistant backups** and **Import / export**.
 Static and rendered checks verify this order, the names, matching setup import
 labels, keyboard traversal and navigation without duplicate backup/diagnostic
 view containers. Import/export distinguishes portable content from the explicit
-whole-instance stopped snapshot; ephemeral support uses the separate native
-same-instance recovery engine.
+whole-instance stopped snapshot. Automatic backups use the same native recovery
+engine and common location/interval/coverage form on persistent and replaceable
+containers. There is no separate ephemeral-container settings mode.
+
+The focused Chromium provider test also loads initially uninspected non-Docker
+backup settings, inspects them through the real renderer action, saves a mounted
+path with literal percent/Unicode characters, and checks the pending-change
+banner without applying it. It verifies directory-picker capability, truthful
+directory/identity authentication text, stopped versus scaled-to-zero eligibility,
+and the unavailable ACA offline-restore reason. Desktop and 320px light/dark
+screenshots include accessibility checks. IPC responses are synthetic: this
+proves renderer behavior, not a live ACA deployment or restore.
 
 The full-instance journey creates a native OpenCode session, refuses export
 while containers are live, verifies default-cancel native dialogs, stops through

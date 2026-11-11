@@ -1722,17 +1722,18 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
 				const cards = [...document.querySelectorAll('#view-system > details')];
-				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,connection-keys,import-export,runtime-recovery' &&
+				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,connection-keys,backup-recovery' &&
 					cards.every(card => !card.open) &&
-					cards[3].querySelector('summary').textContent.startsWith('Import / export') &&
-					cards[4].querySelector('summary').textContent.startsWith('Ephemeral container support');
+					cards[3].querySelector('summary').textContent.startsWith('Backup and recovery') &&
+					cards[3].contains(document.querySelector('#import-export')) &&
+					cards[3].contains(document.querySelector('#runtime-recovery'));
 			})()`),
 			'System sections are not in the requested order, collapsed by default, or consistently named.'
 		);
 		await assertRenderedFloor(window, 'System section order');
 		const systemScreenshot = await capture(window, outputDir, '04k-system.png');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#import-export').open=true; document.querySelector('#import-export').scrollIntoView({block:'start'})"
+			"document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true; document.querySelector('#import-export').scrollIntoView({block:'start'})"
 		);
 		await assertRenderedFloor(window, 'import and export');
 		const backupScreenshot = await capture(window, outputDir, '04d-backup.png');
@@ -2680,7 +2681,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
-			document.querySelector('#runtime-recovery').open = true;
+			document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true;
 			document.querySelector('#runtime-recovery').scrollIntoView({block:'start'});
 		})()`);
 		await assertRenderedFloor(window, 'portable versus runtime recovery');
@@ -2842,7 +2843,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'Admin did not display actual accepted publication.'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()"
+			"document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()"
 		);
 		await assertRenderedFloor(window, 'running runtime recovery');
 		assert(
@@ -2858,7 +2859,7 @@ async function run(): Promise<Record<string, unknown>> {
 			true
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()"
+			"document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()"
 		);
 		await assertRenderedFloor(window, 'additional runtime paths and SQLite coverage');
 		assert(
@@ -2991,7 +2992,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const fullExport = join(outputDir, 'full-instance-export');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
-			document.querySelector('#import-export').open=true;
+			document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true;
 			document.querySelector('#backup-scope').value='instance';
 			document.querySelector('#backup-scope').dispatchEvent(new Event('change'));
 			document.querySelector('#backup-destination').value=${JSON.stringify(fullExport)};
@@ -3020,7 +3021,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const sourceIntent = readFileSync(join(homeDir, 'state/stack.json'));
 		const sourceKey = readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'));
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=system]').click(); document.querySelector('#import-export').open=true"
+			"document.querySelector('[data-view=system]').click(); document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true"
 		);
 		confirmations.push(0);
 		const cancelledExportPrompt = prompts.length + 1;
