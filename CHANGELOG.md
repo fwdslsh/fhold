@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1107-beta — Local checkpoints, mounted backups and unified Admin recovery
+
 Update Assistant to AKM CLI/web **0.10.261118** and all three native AKM plugins
 **0.10.261120**, including their matching bundled CLI. This includes upstream
 health diagnostics, migration-scope, bundle-update and plugin-settings fixes.
