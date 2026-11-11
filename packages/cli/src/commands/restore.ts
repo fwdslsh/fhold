@@ -1,6 +1,7 @@
 import { defineCommand } from 'citty';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
 
 import {
 	applyRestore,
@@ -196,24 +197,26 @@ export default defineCommand({
 				throw new Error(
 					'Choose a new unused --backups directory before importing this checkpoint.'
 				);
-			console.log(
-				JSON.stringify(
-					await importCheckpointPackage(
-						state.homeDir,
-						{
-							directory: String(args.from),
-							destinationHome: state.homeDir,
-							backupDirectory: String(args.backups),
-							previewDigest: args['preview-digest']
-								? String(args['preview-digest'])
-								: preview.previewDigest
-						},
-						args['confirm-stopped'] === true
-					),
-					null,
-					2
-				)
-			);
+			await seedSkeletonFromEmbedded(async () => {
+				console.log(
+					JSON.stringify(
+						await importCheckpointPackage(
+							state.homeDir,
+							{
+								directory: String(args.from),
+								destinationHome: state.homeDir,
+								backupDirectory: String(args.backups),
+								previewDigest: args['preview-digest']
+									? String(args['preview-digest'])
+									: preview.previewDigest
+							},
+							args['confirm-stopped'] === true
+						),
+						null,
+						2
+					)
+				);
+			}, state.homeDir);
 			return;
 		}
 		if (args.full) {

@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty';
 import { lstatSync, readFileSync } from 'node:fs';
+import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
 import {
 	directoryRecoveryDestination,
 	exportCheckpointPackage,
@@ -253,22 +254,24 @@ const importPackage = defineCommand({
 		}
 	},
 	async run({ args }) {
-		console.log(
-			JSON.stringify(
-				await importCheckpointPackage(
-					resolveFholdHome(),
-					{
-						directory: String(args.from),
-						destinationHome: String(args.home),
-						backupDirectory: String(args.backups),
-						previewDigest: String(args.previewDigest)
-					},
-					args.confirmStopped === true
-				),
-				null,
-				2
-			)
-		);
+		await seedSkeletonFromEmbedded(async () => {
+			console.log(
+				JSON.stringify(
+					await importCheckpointPackage(
+						resolveFholdHome(),
+						{
+							directory: String(args.from),
+							destinationHome: String(args.home),
+							backupDirectory: String(args.backups),
+							previewDigest: String(args.previewDigest)
+						},
+						args.confirmStopped === true
+					),
+					null,
+					2
+				)
+			);
+		}, String(args.home));
 	}
 });
 

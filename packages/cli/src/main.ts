@@ -120,7 +120,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	remote:
 		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
 	restore:
-		'fhold restore --from <export-directory> [--dry-run|--apply] [--full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
+		'fhold restore --from <export-directory> [--dry-run|--apply] [--backups <unused-directory> --confirm-stopped | --full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
 	update:
 		'fhold update [--no-start] [--pull|--no-pull] (hosted: --confirm [--container <name>] [--image <reference>] or --resume --confirm for saved changes)',

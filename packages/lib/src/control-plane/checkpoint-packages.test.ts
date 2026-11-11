@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { spawnSync } from 'node:child_process';
 import {
 	mkdtempSync,
 	mkdirSync,
@@ -61,8 +62,8 @@ test.skipIf(!image)(
 		);
 		const home = join(root, 'source'),
 			target = join(root, 'restored'),
-			directory = join(root, 'package'),
-			backupDirectory = join(root, 'backups');
+			directory = join(root, 'package,100% 空'),
+			backupDirectory = join(root, 'backups,100% 空');
 		const config = defaultStackConfig(home);
 		config.deployment.projectName = `package-${root.slice(-6).toLowerCase()}`;
 		config.deployment.imageNamespace = match[1];
@@ -112,6 +113,43 @@ test.skipIf(!image)(
 			expect(db.query('SELECT value FROM package_wal_fixture').all()).toEqual([
 				{ value: 'committed WAL' }
 			]);
+			const cli = process.env.FH_CHECKPOINT_PACKAGE_CLI;
+			if (cli) {
+				const cliTarget = join(root, 'cli-restored');
+				const env = { ...process.env };
+				delete env.FH_SKELETON_DIR;
+				delete env.FH_REPO_ROOT;
+				const imported = spawnSync(
+					cli,
+					[
+						'--name',
+						home,
+						'recovery',
+						'import',
+						'--from',
+						directory,
+						'--home',
+						cliTarget,
+						'--backups',
+						join(root, 'cli-backups'),
+						'--preview-digest',
+						preview.previewDigest,
+						'--confirm-stopped'
+					],
+					{ env, cwd: root, encoding: 'utf8', timeout: 60_000 }
+				);
+				expect(imported.error).toBeUndefined();
+				expect(imported.status, imported.stderr).toBe(0);
+				expect(JSON.parse(imported.stdout)).toMatchObject({
+					restored: true,
+					homeDir: cliTarget,
+					generation: preview.generation
+				});
+				expect(existsSync(join(cliTarget, 'system/stack/stack.compose.yml'))).toBe(true);
+				expect(await runRecoveryOperation(cliTarget, 'restore', true)).toContain(
+					'restored and validated'
+				);
+			}
 			writeFileSync(
 				join(root, 'qualification.json'),
 				JSON.stringify(
@@ -121,7 +159,8 @@ test.skipIf(!image)(
 						restored: result,
 						sameAssistant: true,
 						sourceUnchanged: true,
-						nativeWAL: true
+						nativeWAL: true,
+						compiledCli: Boolean(cli)
 					},
 					null,
 					2
