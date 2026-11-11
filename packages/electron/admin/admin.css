@@ -2865,20 +2865,20 @@ body[data-admin-settings="true"]
 	max-width: 100%;
 	margin-left: auto;
 }
-body[data-view="knowledge"] .app-shell {
+body[data-active-view="knowledge"] .app-shell {
 	height: 100dvh;
 	min-height: 0;
 }
-body[data-view="knowledge"] .workspace {
+body[data-active-view="knowledge"] .workspace {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	padding-bottom: 0;
 }
-body[data-view="knowledge"] #instance-page-header {
+body[data-active-view="knowledge"] #instance-page-header {
 	flex-shrink: 0;
 }
-body[data-view="knowledge"] #main-content {
+body[data-active-view="knowledge"] #main-content {
 	display: flex;
 	flex: 1;
 	min-height: 0;
@@ -2897,14 +2897,14 @@ body[data-view="knowledge"] #main-content {
 	overflow: hidden;
 }
 @media (max-width: 900px) {
-	body[data-view="knowledge"] .app-shell {
+	body[data-active-view="knowledge"] .app-shell {
 		display: flex;
 		flex-direction: column;
 	}
-	body[data-view="knowledge"] .sidebar {
+	body[data-active-view="knowledge"] .sidebar {
 		flex-shrink: 0;
 	}
-	body[data-view="knowledge"] .workspace {
+	body[data-active-view="knowledge"] .workspace {
 		flex: 1;
 	}
 }
