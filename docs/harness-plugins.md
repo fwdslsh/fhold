@@ -27,9 +27,11 @@ AKM 0.10's OpenCode plugin calls the public CLI instead of importing its interna
 modules. OpenCode 2 uses the separate upstream `akm-opencode-v2` package.
 Updating AKM does not replace the native OpenCode engine.
 The fhold task commands use AKM's current public interfaces: task listing uses
-`search --type task`, and paused task adoption uses read-only `task explain`
-before reconciliation. Native AKM validates task source grammar; fhold retains
-its restricted prompt-only adoption boundary and never activates an import.
+`search --type task`, execution uses `akm run`, and adoption delegates to
+`akm import --type task`. AKM validates the complete task grammar and keeps new
+imports disabled under its scheduler lock. Fhold preserves the staged source
+and never passes `--force` or activates an import. Review the native task ref
+and its side effects before explicitly resuming it.
 
 This beta intentionally includes prerelease AKM packages. Advanced users with
 custom AKM workflows should review [the upstream 0.10 changes](https://github.com/itlackey/akm/releases/tag/v0.10.261004-beta):

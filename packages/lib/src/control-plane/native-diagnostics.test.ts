@@ -24,8 +24,7 @@ function fixture() {
 	const state = {
 		running: true, unreachable: false, credential: true, generate: 'FH_READY',
 		health: healthReport() as unknown, healthExit: 0,
-		migration: { schemaVersion: 1, status: 'current' } as Record<string, unknown>,
-		tasks: { backend: 'cron', bindings: [], warnings: [], improveAutonomy: { enabled: false } } as Record<string, unknown>
+		migration: { schemaVersion: 1, status: 'current' } as Record<string, unknown>
 	};
 	const statePath = join(root, 'fixture.json');
 	const log = join(root, 'calls.jsonl');
@@ -37,9 +36,8 @@ appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 const state = JSON.parse(readFileSync(${JSON.stringify(statePath)}, 'utf8'));
 let value;
 if (args.includes('ps')) value = [{Service:'assistant',State:state.running ? 'running' : 'exited',ID:'fixture'}];
-else if (args.includes('health')) { value = state.health; process.exitCode=state.healthExit; process.stderr.write('synthetic-secret-native-stderr'); }
-else if (args.includes('migrate')) { value = state.migration; if(value.status==='blocked') process.exitCode=1; }
-else if (args.includes('task')) value = state.tasks;
+else if (args.includes('doctor')) { value = state.health; process.exitCode=state.healthExit; process.stderr.write('synthetic-secret-native-stderr'); }
+else if (args.includes('akm-migrate')) { value = state.migration; if(value.status==='blocked') process.exitCode=1; }
 else throw Error('Unexpected Docker command');
 console.log(typeof value === 'string' ? value : JSON.stringify(value));
 `, { mode: 0o700 });
@@ -79,15 +77,15 @@ test.each([undefined, '{}', '{"not-a-provider":"not-a-credential"}', '{broken'])
 	expect(checks.find((check) => check.name === 'OpenCode providers')?.status).toBe('pass');
 	expect(checks.find((check) => check.name === 'AKM proposal-queue')?.status).toBe('not-checked');
 	expect(f.http.every((call) => call.startsWith('GET '))).toBe(true);
-	expect(f.commands().filter((args) => args.includes('akm')).map((args) => args.slice(args.indexOf('akm') + 1))).toEqual(expect.arrayContaining([
-		['migrate', 'status', '--format', 'json', '--quiet'], ['task', 'doctor', '--format', 'json', '--quiet']
-	]));
-	const health = f.commands().find((args) => args.includes('health')) ?? [];
+	expect(f.commands().find((args) => args.includes('akm-migrate'))?.slice(-2)).toEqual(['akm-migrate', 'status']);
+	expect(f.commands().some((args) => args.includes('task'))).toBe(false);
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
+	const health = f.commands().find((args) => args.includes('doctor')) ?? [];
 	expect(health.slice(health.indexOf('--project-directory'), health.indexOf('--project-directory') + 2)).toEqual(['--project-directory', f.root]);
 	expect(health.slice(health.indexOf('exec'))).toEqual(['exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s',
-		'akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet']);
+		'akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet']);
 	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
-	expect(f.commands()).toHaveLength(4);
+	expect(f.commands()).toHaveLength(3);
 });
 
 test('no-key native endpoint is connected without credential requirements', async () => {
@@ -120,7 +118,7 @@ test.each(['FH_READY', 'not ready'])('model requests run only for explicit readi
 	expect(f.http.filter((call) => call.startsWith('POST '))).toEqual(['POST /api/experimental/generate']);
 });
 
-test('unavailable native health and migration/task blockers degrade independently, then recover', async () => {
+test('unavailable native health and migration blockers degrade independently, then recover', async () => {
 	const f = fixture();
 	f.state.healthExit = 78;
 	f.state.migration.status = 'blocked';
@@ -130,16 +128,15 @@ test('unavailable native health and migration/task blockers degrade independentl
 	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
 	f.state.healthExit = 4;
 	f.state.health = healthReport('warn', [{ name: 'connections-and-harnesses', status: 'warn' }]);
-	f.state.tasks.warnings = ['synthetic-secret'];
 	checks = await f.diagnose();
 	expect(checks.find((check) => check.name === 'AKM connections-and-harnesses')?.status).toBe('warn');
-	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('warn');
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
 	f.state.healthExit = 0;
 	f.state.health = healthReport();
-	f.state.migration.status = 'current'; f.state.tasks.warnings = [];
+	f.state.migration.status = 'current';
 	checks = await f.diagnose();
 	expect(checks.filter((check) => check.status === 'warn')).toEqual([]);
-	expect(checks.find((check) => check.name === 'AKM improve autonomy')?.status).toBe('off');
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
 });
 
 test('native plugin mismatch and unknown proposal outcomes retain native statuses without private evidence', async () => {
@@ -175,6 +172,6 @@ test.each([1, 4, 124, 137])('native command errors never become healthy reports:
 });
 
 test.each([{}, '{truncated', healthReport('pass', []), healthReport('pass', [{ name: 'unexpected/private-path', status: 'pass' }]), healthReport('pass', [{ name: 'state-db-integrity', status: 'unrecognized' }])])('unrecognized or truncated native reports never pass: %j', async (report) => {
-	const f = fixture(); f.state.health = report; f.state.tasks = {}; f.state.migration = {};
+	const f = fixture(); f.state.health = report; f.state.migration = {};
 	expect((await f.diagnose()).filter((check) => check.name.startsWith('AKM ')).every((check) => check.status === 'not-checked')).toBe(true);
 });

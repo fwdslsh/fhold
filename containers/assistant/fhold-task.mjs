@@ -7,10 +7,9 @@ import {
 	readFileSync,
 	realpathSync,
 	renameSync,
-	statSync,
-	writeFileSync
+	statSync
 } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 
 const KNOWLEDGE = process.env.FH_KNOWLEDGE_DIR || '/stash';
 const TASKS = join(KNOWLEDGE, 'tasks');
@@ -70,27 +69,6 @@ function option(args, name) {
 	return args[index + 1];
 }
 
-function atomicWrite(path, text) {
-	const temporary = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
-	writeFileSync(temporary, text, { mode: 0o600 });
-	renameSync(temporary, path);
-}
-
-function validateImportedPromptSource(source) {
-	const task = Bun.YAML.parse(source);
-	if (
-		!task ||
-		typeof task !== 'object' ||
-		Array.isArray(task) ||
-		task.uses !== 'akm/command' ||
-		['run', 'shell', 'workflow', 'command'].some((key) => Object.hasOwn(task, key))
-	) {
-		throw new Error(
-			'only AKM prompt tasks can be adopted; command and workflow tasks require manual review'
-		);
-	}
-}
-
 function create(id, args) {
 	const schedule = option(args, '--schedule');
 	const prompt = option(args, '--prompt');
@@ -104,8 +82,8 @@ function create(id, args) {
 		'--prompt',
 		prompt,
 		...(args.includes('--harness') ? ['--harness', option(args, '--harness')] : []),
-		'--timeout-ms',
-		'900000',
+		'--timeout',
+		'15m',
 		'--description',
 		`fhold scheduled request: ${prompt.slice(0, 160)}`,
 		'--tags',
@@ -142,26 +120,10 @@ function adopt(path) {
 	if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.ya?ml$/.test(name))
 		fail('invalid imported task filename');
 	const id = taskId(name.replace(/\.ya?ml$/, ''));
-	const destination = taskFile(id);
-	if (existsSync(destination)) fail(`task already exists: ${id}`);
-	const original = readFileSync(source, 'utf8');
-	validateImportedPromptSource(original);
-	mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
-	try {
-		// Disable any stale host-local assignment BEFORE the source becomes visible
-		// to the periodic reconciler. disable accepts an id whose source is absent.
-		runChecked('akm', ['task', 'disable', id, '--quiet']);
-		atomicWrite(destination, original);
-		// Native explain validates the source without executing or scheduling it.
-		runChecked('akm', ['task', 'explain', `tasks/${id}`, '--quiet']);
-		runChecked('akm', ['task', 'sync', '--rebind', '--quiet']);
-	} catch (error) {
-		try {
-			renameSync(destination, `${destination}.rejected`);
-		} catch {}
-		throw error;
-	}
-	console.log(`Adopted ${id} in paused state. Review it, then run: fhold task resume ${id}`);
+	// AKM validates the complete native grammar, refuses overwrite and publishes
+	// new imports disabled under its scheduler lock. Preserve the staged source.
+	runChecked('akm', ['import', source, '--type', 'task', '--name', id, '--quiet']);
+	console.log(`Adopted ${id} in paused state. Review it, then use fhold task resume with the native task ref shown above.`);
 }
 
 const [command, ...args] = process.argv.slice(2);
@@ -185,7 +147,8 @@ try {
 			run('akm', ['task', 'history', ...args]);
 			break;
 		case 'run':
-			run('akm', ['task', 'run', ...args]);
+			if (!args[0]) fail('run requires a task id or native ref');
+			run('akm', ['run', args[0].includes('/') ? args[0] : `tasks/${args[0]}`, ...args.slice(1)]);
 			break;
 		case 'pause':
 			run('akm', ['task', 'disable', ...args]);

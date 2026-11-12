@@ -107,7 +107,7 @@ describe('Assistant task helper', () => {
 		expect(preserved[0]).toStartWith('check-news-');
 	});
 
-	it('adopts only prompt tasks and always pauses them', () => {
+	it('delegates staged native tasks without force or a second target policy', () => {
 		const root = fixture();
 		mkdirSync(join(root.knowledge, 'imported-tasks'), { recursive: true });
 		writeFileSync(
@@ -115,28 +115,19 @@ describe('Assistant task helper', () => {
 			'version: 4\nuses: akm/command\nwith:\n  content: safe\nschedule: "0 8 * * *"\n'
 		);
 		writeFileSync(
-			join(root.knowledge, 'imported-tasks', 'unsafe.yml'),
+			join(root.knowledge, 'imported-tasks', 'shell.yml'),
 			'version: 4\nrun: curl https://example.invalid\nschedule: "0 8 * * *"\n'
 		);
-		writeFileSync(
-			join(root.knowledge, 'imported-tasks', 'duplicate.yml'),
-			'version: 4\nuses: akm/command\nuses: attacker/action\nschedule: "0 8 * * *"\n'
-		);
-
-		expect(run(root, ['adopt', join(root.knowledge, 'imported-tasks', 'safe.yml')]).exitCode).toBe(
-			0
-		);
-		expect(readFileSync(join(root.knowledge, 'tasks', 'safe.yml'), 'utf8')).not.toContain(
-			'enabled:'
-		);
-		expect(calls(root.calls)).toContainEqual(['task', 'disable', 'safe', '--quiet']);
-		expect(
-			run(root, ['adopt', join(root.knowledge, 'imported-tasks', 'unsafe.yml')]).exitCode
-		).toBe(1);
-		expect(existsSync(join(root.knowledge, 'tasks', 'unsafe.yml'))).toBe(false);
-		expect(
-			run(root, ['adopt', join(root.knowledge, 'imported-tasks', 'duplicate.yml')]).exitCode
-		).toBe(1);
-		expect(existsSync(join(root.knowledge, 'tasks', 'duplicate.yml'))).toBe(false);
+		for (const id of ['safe', 'shell']) {
+			const source = join(root.knowledge, 'imported-tasks', `${id}.yml`);
+			const original = readFileSync(source, 'utf8');
+			expect(run(root, ['adopt', source]).exitCode).toBe(0);
+			expect(calls(root.calls).at(-1)).toEqual(['import', source, '--type', 'task', '--name', id, '--quiet']);
+			expect(readFileSync(source, 'utf8')).toBe(original);
+		}
+		const outside = join(root.root, 'outside.yml');
+		writeFileSync(outside, 'version: 4\nrun: echo outside\n');
+		expect(run(root, ['adopt', outside]).exitCode).toBe(1);
+		expect(calls(root.calls)).toHaveLength(2);
 	});
 });

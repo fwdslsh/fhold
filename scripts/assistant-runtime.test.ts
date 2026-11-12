@@ -5,9 +5,11 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readdirSync,
 	rmSync,
 	writeFileSync
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -253,8 +255,27 @@ describe('published AKM scheduler compatibility', () => {
 				(typeof entry === 'string' ? entry : entry.ref).endsWith('/adopted-check')
 			)
 		).toBe(false);
+		expect(run('adopt', staged).exitCode).not.toBe(0);
+		expect(readFileSync(join(knowledge, 'tasks', 'adopted-check.yml'), 'utf8')).toBe(quotedSource);
+		// Native grammar includes shell/workflow targets. Imports stay paused even
+		// when a stale host-local choice still names the not-yet-present source.
+		const marker = join(root, 'native-import-ran');
+		const shell = join(knowledge, 'imported-tasks', 'native-shell.yml');
+		const shellSource = `version: 4\nrun: ${JSON.stringify(`echo imported > ${marker}`)}\nschedule: "* * * * *"\n`;
+		writeFileSync(shell, shellSource);
+		const stale = JSON.parse(readFileSync(configFile, 'utf8'));
+		stale.scheduler.enabled.push('stash//tasks/native-shell');
+		writeFileSync(configFile, JSON.stringify(stale));
+		expect(run('adopt', shell).exitCode).toBe(0);
+		expect(existsSync(marker)).toBe(false);
+		expect(readFileSync(shell, 'utf8')).toBe(shellSource);
+		expect(readFileSync(join(knowledge, 'tasks', 'native-shell.yml'), 'utf8')).toBe(shellSource);
+		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([ref]);
+		expect(run('run', 'native-shell').exitCode).toBe(0);
+		expect(readFileSync(marker, 'utf8').trim()).toBe('imported');
+		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([ref]);
 		for (const [name, invalid] of [
-			['shell-target', source.replace(/^uses:.*$/m, 'run: "echo must-not-run"')],
+			['invalid-yaml', 'version: 4\nrun: [unterminated'],
 			['invalid-native-source', source.replace(/^version:.*$/m, 'version: 999')]
 		]) {
 			const file = join(knowledge, 'imported-tasks', `${name}.yml`);
@@ -268,5 +289,36 @@ describe('published AKM scheduler compatibility', () => {
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
 		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(keepalive);
+		// Exercise the actual entrypoints used by passive host diagnostics. Usage
+		// capture is left enabled, so suppressing it globally cannot hide writes.
+		const snapshot = () => {
+			const files: Record<string, string> = {};
+			function visit(directory: string) {
+				if (!existsSync(directory)) return;
+				for (const entry of readdirSync(directory, { withFileTypes: true })) {
+					const file = join(directory, entry.name);
+					if (entry.isDirectory()) visit(file);
+					else if (entry.isFile() && !entry.name.endsWith('-shm')) {
+						const bytes = readFileSync(file);
+						// SQLite read-only opens may create an empty WAL coordination
+						// file. Nonempty WAL and every other durable byte must match.
+						if (entry.name.endsWith('-wal') && bytes.length === 0) continue;
+						files[file] = createHash('sha256').update(bytes).digest('hex');
+					}
+				}
+			}
+			for (const directory of [config, knowledge, env.AKM_DATA_DIR, env.AKM_STATE_DIR]) visit(directory);
+			return files;
+		};
+		const before = snapshot();
+		for (const command of [
+			['akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet'],
+			['akm-migrate', 'status']
+		]) {
+			const inspected = Bun.spawnSync(command, { env, cwd: root, stdout: 'pipe', stderr: 'pipe', timeout: 30_000 });
+			expect([0, 1, 4]).toContain(inspected.exitCode);
+			expect(JSON.parse(inspected.stdout.toString()).schemaVersion).toBe(command[0] === 'akm' ? 3 : 1);
+			expect(snapshot()).toEqual(before);
+		}
 	}, 160_000);
 });
