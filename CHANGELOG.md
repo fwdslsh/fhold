@@ -14,6 +14,9 @@ instead of the deprecated `akm task sync`.
 Move off AKM surfaces deprecated for 0.11 where a native replacement exists:
 `fhold task create` imports a native task file and enables it instead of
 calling `akm task add`; `fhold task history <id>` reads `akm doctor log --task`.
+Task creation enables the imported bundle-qualified ref, retains explicit native
+scheduler rebinding, and reports scheduling failures while preserving the source
+for repair.
 The Assistant no longer sets `AKM_BUNDLE_DIR`; the seeded AKM configuration
 already registers `/stash` as the default bundle. Listing every task's history
 and passive migration inspection (`akm-migrate status`) keep their deprecated

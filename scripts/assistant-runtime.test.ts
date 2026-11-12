@@ -225,6 +225,8 @@ describe('published AKM scheduler compatibility', () => {
 		expect(listed.stdout.toString()).toContain('tasks/published-check');
 		const source = readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8');
 		expect(source).not.toContain('enabled:');
+		expect(run('create', 'published-check', '--schedule', '@daily', '--prompt', 'Must not overwrite').exitCode).not.toBe(0);
+		expect(readFileSync(join(knowledge, 'tasks', 'published-check.yml'), 'utf8')).toBe(source);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toHaveLength(1);
 		const ref = 'stash//tasks/published-check';
 		const shown = run('show', ref);
@@ -272,6 +274,10 @@ describe('published AKM scheduler compatibility', () => {
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([ref]);
 		expect(run('run', 'native-shell').exitCode).toBe(0);
 		expect(readFileSync(marker, 'utf8').trim()).toBe('imported');
+		const history = run('history', 'stash//tasks/native-shell', '--format', 'json');
+		expect(history.exitCode).toBe(0);
+		expect(JSON.parse(history.stdout.toString()).rows).toHaveLength(1);
+		expect(history.stderr.toString()).not.toContain('deprecated');
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([ref]);
 		for (const [name, invalid] of [
 			['invalid-yaml', 'version: 4\nrun: [unterminated'],
@@ -288,6 +294,26 @@ describe('published AKM scheduler compatibility', () => {
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
 		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(keepalive);
+		// Native writes may target a different bundle from unqualified reads.
+		// Creation must activate the imported ref, leaving the default untouched.
+		const writeBundle = join(root, 'write-bundle');
+		mkdirSync(writeBundle);
+		const alternate = JSON.parse(readFileSync(configFile, 'utf8'));
+		alternate.bundles.other = { path: writeBundle, writable: true, components: { main: { adapter: 'akm' } } };
+		alternate.defaultWriteTarget = 'other';
+		writeFileSync(configFile, JSON.stringify(alternate));
+		const alternateCreated = run('create', 'alternate', '--schedule', '@daily', '--prompt', 'Use the native write target');
+		expect(alternateCreated.exitCode).toBe(0);
+		expect(existsSync(join(knowledge, 'tasks', 'alternate.yml'))).toBe(false);
+		expect(existsSync(join(writeBundle, 'tasks', 'alternate.yml'))).toBe(true);
+		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual(['other//tasks/alternate']);
+		expect(run('pause', 'other//tasks/alternate').exitCode).toBe(0);
+		// Native enable returns sync failures as data. fhold create must also
+		// check native sync's exit status and preserve the source for repair.
+		const failed = run('create', 'unschedulable', '--schedule', '@daily', '--prompt', 'Needs a missing harness', '--harness', 'missing-fixture');
+		expect(failed.exitCode).not.toBe(0);
+		expect(existsSync(join(writeBundle, 'tasks', 'unschedulable.yml'))).toBe(true);
+		expect(run('pause', 'other//tasks/unschedulable').exitCode).toBe(0);
 		// Exercise the actual entrypoints used by passive host diagnostics. Usage
 		// capture is left enabled, so suppressing it globally cannot hide writes.
 		const snapshot = () => {
@@ -306,7 +332,7 @@ describe('published AKM scheduler compatibility', () => {
 					}
 				}
 			}
-			for (const directory of [config, knowledge, env.AKM_DATA_DIR, env.AKM_STATE_DIR]) visit(directory);
+			for (const directory of [config, knowledge, writeBundle, env.AKM_DATA_DIR, env.AKM_STATE_DIR]) visit(directory);
 			return files;
 		};
 		const before = snapshot();
@@ -316,7 +342,12 @@ describe('published AKM scheduler compatibility', () => {
 		]) {
 			const inspected = Bun.spawnSync(command, { env, cwd: root, stdout: 'pipe', stderr: 'pipe', timeout: 30_000 });
 			expect([0, 1, 4]).toContain(inspected.exitCode);
-			expect(JSON.parse(inspected.stdout.toString()).schemaVersion).toBe(command[0] === 'akm' ? 3 : 1);
+			const report = JSON.parse(inspected.stdout.toString());
+			expect(report.schemaVersion).toBe(command[0] === 'akm' ? 3 : 1);
+			if (command[0] === 'akm') {
+				expect(report.scheduler.bindings).toBeArray();
+				expect(report.scheduler.warnings).toBeArray();
+			}
 			expect(snapshot()).toEqual(before);
 		}
 	}, 160_000);

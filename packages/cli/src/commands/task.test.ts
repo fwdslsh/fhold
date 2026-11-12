@@ -35,6 +35,7 @@ if (args[0] === 'import' && args.includes('--type')) {
   const id = args[args.indexOf('--name') + 1];
   mkdirSync(join(process.env.FH_KNOWLEDGE_DIR, 'tasks'), { recursive: true });
   copyFileSync(args[1], join(process.env.FH_KNOWLEDGE_DIR, 'tasks', id + '.yml'));
+  console.log(JSON.stringify({ ref: 'write-bundle//tasks/' + id }));
 }
 `
 	);
@@ -80,9 +81,10 @@ describe('Assistant task helper', () => {
 			'Summarize local news'
 		]);
 		expect(created.exitCode).toBe(0);
-		const [imported = [], enabled] = calls(root.calls);
-		expect([imported[0], ...imported.slice(2)]).toEqual(['import', '--type', 'task', '--name', 'morning-news']);
-		expect(enabled).toEqual(['task', 'enable', 'morning-news']);
+		const [imported = [], enabled, synced] = calls(root.calls);
+		expect([imported[0], ...imported.slice(2)]).toEqual(['import', '--type', 'task', '--name', 'morning-news', '--format', 'json', '--quiet']);
+		expect(enabled).toEqual(['task', 'enable', 'write-bundle//tasks/morning-news']);
+		expect(synced).toEqual(['doctor', 'scheduler', 'sync', '--bundle', 'write-bundle', '--rebind']);
 		const task = Bun.YAML.parse(readFileSync(join(root.knowledge, 'tasks', 'morning-news.yml'), 'utf8')) as Record<string, unknown>;
 		expect(task).toMatchObject({ version: 4, uses: 'akm/command', with: { content: 'Summarize local news' }, schedule: '0 8 * * *' });
 		expect(task).not.toHaveProperty('harness');

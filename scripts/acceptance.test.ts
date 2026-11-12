@@ -96,6 +96,7 @@ if (args[0] === 'import' && args.includes('--type')) {
   const id = args[args.indexOf('--name') + 1];
   mkdirSync(join(knowledge, 'tasks'), { recursive: true });
   copyFileSync(args[1], join(knowledge, 'tasks', id + '.yml'));
+  console.log(JSON.stringify({ ref: 'stash//tasks/' + id }));
 }
 if (args[0] === 'run') {
   const id = args[1].replace('tasks/', '');

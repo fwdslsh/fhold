@@ -56,15 +56,16 @@ function run(command, args) {
 	if (result.exitCode !== 0) process.exit(result.exitCode || 1);
 }
 
-function runChecked(command, args) {
+function runChecked(command, args, stdout = 'inherit') {
 	const result = Bun.spawnSync({
 		cmd: [command, ...args],
 		env: process.env,
 		stdin: 'ignore',
-		stdout: 'inherit',
+		stdout,
 		stderr: 'inherit'
 	});
 	if (result.exitCode !== 0) throw new Error(`${command} ${args.join(' ')} failed`);
+	return result.stdout?.toString();
 }
 
 function option(args, name) {
@@ -93,8 +94,13 @@ function create(id, args) {
 	try {
 		const source = join(staging, `${id}.yml`);
 		writeFileSync(source, Bun.YAML.stringify(task, null, 2), { mode: 0o600 });
-		runChecked('akm', ['import', source, '--type', 'task', '--name', id]);
-		runChecked('akm', ['task', 'enable', id]);
+		const imported = JSON.parse(runChecked('akm', ['import', source, '--type', 'task', '--name', id, '--format', 'json', '--quiet'], 'pipe'));
+		// Native write and default bundles can differ. Activate the exact ref
+		// returned by import, then preserve create's explicit launcher rebinding.
+		runChecked('akm', ['task', 'enable', imported.ref]);
+		// Enable reports sync failures as data; native sync also fails its exit
+		// status, so an unschedulable task must not be reported as created.
+		runChecked('akm', ['doctor', 'scheduler', 'sync', '--bundle', imported.ref.split('//')[0], '--rebind']);
 	} finally {
 		rmSync(staging, { recursive: true, force: true });
 	}
