@@ -147,14 +147,16 @@ export function createAkmIndexCache({
 		return output;
 	}
 
-	async function profile(catalog, signal, stage) {
+	async function profile(catalog, signal, stage, selectedFile) {
 		signal.throwIfAborted();
-		// Let AKM resolve AKM_CONFIG_FILE, including relative paths and an empty
-		// override. Usage capture, if enabled, stays in private staging. Credentials
-		// remain in native AKM_CONFIG_DIR; never copy or parse them here.
-		const file = (await command(
-			[...akmCommand, 'config', 'path', '--quiet'], candidateEnvironment(stage), signal
-		)).toString().trimEnd();
+		// AKM_CONFIG_DIR is fixed to this native root. Resolve an explicit file
+		// override natively once per attempt; later checks re-read the same file.
+		// Usage capture stays in staging and credentials remain native-owned.
+		const file = selectedFile ?? (nativeEnv.AKM_CONFIG_FILE === undefined
+			? path.join(roots.akmConfig, 'config.json')
+			: (await command(
+				[...akmCommand, 'config', 'path', '--quiet'], candidateEnvironment(stage), signal
+			)).toString().trimEnd());
 		if (!canonicalPath(file)) throw new Error('unsupported-source-policy');
 		const bytes = (await exists(file))
 			? await readRegular(file, 1024 * 1024, signal)
@@ -212,7 +214,7 @@ export function createAkmIndexCache({
 			selection: catalog.selection,
 			redaction: config.plugins?.redact ?? null
 		};
-		return { hash: hash(JSON.stringify(identity)) };
+		return { hash: hash(JSON.stringify(identity)), file };
 	}
 
 	function candidateEnvironment(stage) {
@@ -259,7 +261,7 @@ export function createAkmIndexCache({
 			result.verification?.ok !== true
 		)
 			throw new Error('refresh-incomplete');
-		if ((await profile(catalog, signal, stage)).hash !== before.hash)
+		if ((await profile(catalog, signal, stage, before.file)).hash !== before.hash)
 			throw new Error('source-policy-changed');
 		const snapshot = path.join(stage, 'complete.sqlite');
 		await sqlite('capture', path.join(candidateEnv.AKM_DATA_DIR, 'index.db'), snapshot, signal);
@@ -346,7 +348,7 @@ export function createAkmIndexCache({
 					result.exported.vectors < 0
 				)
 					throw new Error('refresh-incomplete');
-				if ((await profile(catalog, signal, stage)).hash !== before.hash)
+				if ((await profile(catalog, signal, stage, before.file)).hash !== before.hash)
 					throw new Error('source-policy-changed');
 				if (result.exported.vectors === 0) {
 					set('skipped', 'no-vectors');

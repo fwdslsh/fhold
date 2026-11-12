@@ -77,7 +77,7 @@ async function fixture() {
 		XDG_CACHE_HOME: path.join(dir, 'xdg-cache'),
 		AKM_BUNDLE_DIR: bundle,
 		AKM_CONFIG_DIR: roots.akmConfig,
-		AKM_CONFIG_FILE: '',
+		AKM_CONFIG_FILE: undefined as string | undefined,
 		AKM_DATA_DIR: roots.akmData,
 		AKM_STATE_DIR: path.join(roots.akmData, 'state'),
 		AKM_CACHE_DIR: path.join(dir, 'cache'),
@@ -611,7 +611,7 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		test(`native zero-exit ${JSON.stringify(result)} never proves completion and retries later`, async () => {
 			const f = await fixture();
 			const fake = path.join(f.dir, 'incomplete.mjs');
-			await fs.writeFile(fake, `console.log(process.argv[2] === 'config' ? ${JSON.stringify(path.join(f.roots.akmConfig, 'config.json'))} : ${JSON.stringify(JSON.stringify(result))});`);
+			await fs.writeFile(fake, `console.log(${JSON.stringify(JSON.stringify(result))});`);
 			const source = f.engine({}, { akmCommand: [process.execPath, fake] });
 			await source.initialize();
 			await source.acquireRestore();
