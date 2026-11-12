@@ -98,8 +98,8 @@ if (args[0] === 'task' && args[1] === 'add') {
   mkdirSync(join(knowledge, 'tasks'), { recursive: true });
   writeFileSync(join(knowledge, 'tasks', id + '.yml'), 'version: 4\\nname: ' + id + '\\nuses: akm/command\\nwith:\\n  content: scheduled\\nschedule: "' + schedule + '"\\n');
 }
-if (args[0] === 'task' && args[1] === 'run') {
-  const id = args[2];
+if (args[0] === 'run') {
+  const id = args[1].replace('tasks/', '');
   const history = join(knowledge, '.akm', 'task-runs', id, 'run-1');
   mkdirSync(history, { recursive: true });
   writeFileSync(join(history, 'result.md'), 'durable scheduled result');

@@ -455,14 +455,17 @@ managed settings are read-only here; no operator policy is silently overwritten.
 OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
 Plain `fhold doctor` reads OpenCode's native provider state and runs bounded,
-read-only AKM health, `akm migrate status`, and `akm task doctor` inside the running
-Assistant. Health uses the public native `workspace.activity.health({probe:false})`
-operation with the container's existing configuration and working directory.
+read-only AKM health and migration inspection inside the running Assistant.
+Health uses `akm doctor --read-only --no-probe`; migration inspection uses the
+native standalone `akm-migrate status`. Both use the container's existing
+configuration and working directory.
 It does not write application rows or apply migrations; native SQLite may create
 its ordinary WAL/shared-memory coordination files when reading an existing database.
 It preserves native pass/warn/fail results and reports unknown checks as
 `NOT CHECKED`; these AKM checks are advisory and never restart or block the agent.
-Explicit native off choices remain `OFF`. Doctor does not start a stopped
+Task-binding inspection is `NOT CHECKED` until AKM provides a read-only interface:
+`akm task doctor` currently records local CLI usage. Run it explicitly when you
+want binding details. Doctor does not start a stopped
 Assistant, run an agent/task, apply migrations or write proposals. Legacy
 `knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
 connected endpoints can also work without credentials.
@@ -477,11 +480,10 @@ and evidence out of its summary. Open **Knowledge → Health** for the full nati
 diagnostics. A native unknown result stays not checked; configuration, file
 presence and a running process do not prove successful learning or proposal writes.
 
-`akm health --no-probe` skips network and harness probes, but its current CLI
-still opens/migrates state.db and runs a temporary write/read round-trip. It is
-not a read-only status command. Doctor and the native web health view use AKM's
-read-only API; `fhold doctor` does not invoke the mutating health CLI. A supported CLI
-read-only mode is tracked in [AKM #1607](https://github.com/itlackey/akm/issues/1607).
+`--no-probe` alone skips network and harness probes but does not prevent writes.
+Use `akm doctor --read-only --no-probe` for passive health inspection. Ordinary
+CLI commands also record local usage unless native `usage.capture` is disabled;
+fhold preserves that operator setting instead of disabling usage globally.
 
 Native v2 credentials persist in the OpenCode database under
 `data/assistant/.local/share/opencode/`. Advanced native settings
@@ -526,13 +528,16 @@ fhold task remove project-news
 
 Show, run, history, pause and resume also accept native bundle-qualified task refs,
 for example `fhold task pause stash//tasks/project-news`. Copy refs from AKM output;
-AKM resolves and validates them. Create, remove and adopt retain fhold's local
-task-file handling; remove takes a local task name, not a bundle-qualified ref.
+AKM resolves and validates them. Run delegates to native `akm run`; adopt uses
+native `akm import --type task`. Remove takes a local task name, not a
+bundle-qualified ref.
 
 Timezone is explicit Assistant intent; daylight saving follows that IANA zone.
 Downtime does not replay missed slots. Remove preserves the definition in
 `knowledge/disabled-tasks/`. Restore stages tasks outside active scheduling;
-`fhold task adopt <file>` validates prompt-only sources and installs paused.
+`fhold task adopt <file>` delegates native task validation and imports into AKM's
+selected writable bundle without overwriting an existing task. Native prompt,
+shell and workflow definitions remain paused; the staged source is preserved.
 Review the source and manual run's side effects/results before resuming.
 
 ## Access

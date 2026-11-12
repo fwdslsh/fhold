@@ -65,11 +65,11 @@ export async function diagnoseNativeRuntime(
 		if (!acceptedCodes.includes(result.code)) return {};
 		try { return record(JSON.parse(result.stdout)); } catch { return {}; }
 	}
-	const [providers, health, migration, tasks] = await Promise.all([
+	const [providers, health, migration] = await Promise.all([
 		listProviders(home, { timeoutMs: 10_000, signal: AbortSignal.timeout(10_000), maxResponseBytes: 256 * 1024 }).catch(() => undefined),
-		nativeReport(['akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet'], [0, 4, 1]),
-		nativeReport(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], [0, 1]),
-		nativeReport(['akm', 'task', 'doctor', '--format', 'json', '--quiet'])
+		nativeReport(['akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet'], [0, 4, 1]),
+		// The native standalone migrator does not start CLI usage capture.
+		nativeReport(['akm-migrate', 'status'], [0, 1])
 	]);
 	const checks: DiagnosticCheck[] = [check('Assistant native API', providers === undefined ? 'not-checked' : 'pass',
 		providers === undefined ? 'Native API observation failed; core agent availability is unknown.' : 'Native provider API responded; model execution is checked only with --readiness.')];
@@ -89,12 +89,10 @@ export async function diagnoseNativeRuntime(
 		migrationStatus === 'current' ? 'Native migration status is current.'
 			: migrationStatus === 'ready' || migrationStatus === 'blocked' ? `Native migrations are ${migrationStatus}; inspect akm migrate status before explicitly applying repairs.`
 				: 'Native migration status is unavailable or returned an unsupported response.'));
-	const validTasks = typeof tasks.backend === 'string' && Array.isArray(tasks.bindings) && Array.isArray(tasks.warnings);
-	const taskWarnings = validTasks && ((tasks.warnings as unknown[]).length > 0 || tasks.remediation || rows(tasks.bindings).some((binding) => !Array.isArray(binding.status) || !binding.status.includes('ok')));
-	checks.push(check('AKM tasks', !validTasks ? 'not-checked' : taskWarnings ? 'warn' : 'pass',
-		!validTasks ? 'Native task diagnostics are unavailable.' : taskWarnings ? 'Native scheduler diagnostics report warnings. Inspect akm task doctor; no tasks were changed or run.'
-			: 'Native scheduler bindings inspected; task execution and historical outcomes are not checked.'));
-	if (validTasks && record(tasks.improveAutonomy).enabled === false) checks.push(check('AKM improve autonomy', 'off', 'Disabled by native AKM policy; preserved.'));
+	// AKM's task doctor currently records CLI usage and has no read-only mode.
+	// Keep passive inspection read-only until upstream provides that interface;
+	// native health still owns state integrity and task-history advisories.
+	checks.push(check('AKM tasks', 'not-checked', 'Native task-binding inspection has no read-only mode yet. Run akm task doctor explicitly to inspect bindings; it records local CLI usage.'));
 	if (options.readiness) {
 		const readiness = await testAssistantReadiness(home, { timeoutMs: 120_000 });
 		checks.push({ name: 'live provider readiness', ok: readiness.ok, detail: readiness.ok ? 'Native model responded.' : 'Native model request failed. Use fhold provider test for diagnostics.' });

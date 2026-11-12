@@ -133,7 +133,7 @@ try {
 	const enabled = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8'));
 	delete enabled.improve;
 	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(enabled));
-	const extraction = await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout-ms', '30000', '-q']);
+	const extraction = await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout', '30s', '-q']);
 	assert.match(extraction, /opencode/);
 	writeFileSync(join(root, 'extraction.json'), extraction);
 	assert.ok(requests.some((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')), `Native extraction did not reach configured model: ${extraction}`);

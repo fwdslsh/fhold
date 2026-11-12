@@ -43,9 +43,11 @@ function verifyReadOnlyDiagnostics() {
 		return hashes;
 	}
 	function inspect() {
+		// Fixture introspection records ordinary native CLI usage. The product's
+		// passive doctor path below uses only native read-only entrypoints.
+		const info = JSON.parse(run(['akm', 'doctor', 'info', '--format', 'json', '--quiet']));
 		const before = snapshot();
-		const info = JSON.parse(run(['akm', 'info', '--format', 'json', '--quiet']));
-		const inspected = Bun.spawnSync(['akm', 'health', '--read-only', '--no-probe', '--format', 'json', '--quiet'], {
+		const inspected = Bun.spawnSync(['akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet'], {
 			stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 30000
 		});
 		if (info.configError) {
@@ -59,8 +61,7 @@ function verifyReadOnlyDiagnostics() {
 			assert.ok(['pass', 'warn', 'fail'].includes(health.status));
 			assert.ok(health.hardChecks.length > 0);
 		}
-		run(['akm', 'migrate', 'status', '--format', 'json', '--quiet'], [0, 1]);
-		run(['akm', 'task', 'doctor', '--format', 'json', '--quiet'], [0, 1, 78]);
+		run(['akm-migrate', 'status'], [0, 1]);
 		assert.deepEqual(snapshot(), before, 'Read-only diagnostics changed AKM config, catalog or state');
 		return info;
 	}
@@ -132,7 +133,7 @@ async function verifyAgentAndProposal() {
 		assert.match(await native(['opencode', 'run', '--standalone', '--continue', '--', prompt]), /FH_UPGRADE_AGENT_COMPLETE/);
 		run(['akm', 'config', 'set', 'improve.enabled', 'true', '--silent']);
 		const extractionConfig = readFileSync(configPath, 'utf8');
-		const extracted = await native(['akm', 'proposal', 'extract', '--type', 'opencode', '--force', '--timeout-ms', '30000', '--quiet']);
+		const extracted = await native(['akm', 'proposal', 'extract', '--type', 'opencode', '--force', '--timeout', '30s', '--quiet']);
 		assert.ok(requests.some((request) => JSON.stringify(request.messages).includes('extracting durable engineering insights')), extracted);
 		// Do not trust the extraction aggregate alone: upstream #1290 can report
 		// success when persistence failed. The proposal must actually be present.

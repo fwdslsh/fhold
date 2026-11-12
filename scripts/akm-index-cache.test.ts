@@ -77,6 +77,7 @@ async function fixture() {
 		XDG_CACHE_HOME: path.join(dir, 'xdg-cache'),
 		AKM_BUNDLE_DIR: bundle,
 		AKM_CONFIG_DIR: roots.akmConfig,
+		AKM_CONFIG_FILE: undefined as string | undefined,
 		AKM_DATA_DIR: roots.akmData,
 		AKM_STATE_DIR: path.join(roots.akmData, 'state'),
 		AKM_CACHE_DIR: path.join(dir, 'cache'),
@@ -148,6 +149,35 @@ async function fixture() {
 }
 
 describe('experimental AKM cache using the pinned native CLI', () => {
+	for (const selection of ['absolute', 'relative', 'empty'])
+		test(`native ${selection} config selection owns vector capture and restore`, async () => {
+			const f = await fixture();
+			const original = path.join(f.roots.akmConfig, 'config.json');
+			const selected = path.join(f.roots.akmConfig, 'selected.json');
+			if (selection === 'empty') {
+				f.env.AKM_CONFIG_FILE = ' ';
+			} else {
+				await fs.writeFile(selected, JSON.stringify(f.config));
+				// This unselected file must not supply the fingerprint or policy.
+				await fs.writeFile(original, JSON.stringify({ extends: 'unselected-config' }));
+				f.env.AKM_CONFIG_FILE = selection === 'absolute'
+					? selected : path.relative(f.recovery.privateDir, selected);
+			}
+			const source = f.engine();
+			await source.initialize();
+			await source.acquireRestore();
+			await source.checkpoint();
+			expect(source.status().akmIndexCache.state).toBe('captured');
+			expect((await f.saved()).manifest.akmIndexCache).toBeDefined();
+			await source.release();
+			await f.replacement();
+			const target = f.engine();
+			await target.acquireRestore();
+			expect(target.status().akmIndexCache.state).toBe('restored');
+			expect(f.entries()).toHaveLength(2);
+			await target.release();
+		});
+
 	for (const inference of [
 		'missing-components',
 		'missing-adapter',

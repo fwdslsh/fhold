@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.4.1108-beta — Native AKM tasks and updated knowledge UI
+
+Update Assistant to AKM CLI/web **0.10.261119** and all three AKM plugins
+**0.10.261121**, with the exact matching CLI retained in the native marketplace.
+The embedded knowledge UI gains upstream library maps, activity replay and
+workflow traces. Project include selectors and context budgets remain owned
+by AKM and its plugins.
+
+Use native `akm import --type task` for reviewed task adoption and `akm run`
+for execution. Remove fhold's prompt-only YAML policy and custom publication
+sequence. Native imports validate the full task grammar, refuse overwrites and
+keep new tasks disabled; staged sources and explicit review remain intact.
+
+Keep passive diagnostics read-only with native `akm doctor --read-only --no-probe`
+and `akm-migrate status`. Task-binding inspection reports `NOT CHECKED` until
+upstream offers a read-only interface; ordinary native task commands remain
+available and retain the operator's usage-recording preference.
+
+Optional vector recovery honors native alternate config-file selection without
+copying credentials. Resolve explicit overrides once per attempt and re-read
+their policy without repeated CLI launches; keep the five-second budget unchanged.
+
+This release updates Assistant and CLI/Admin. Guardian, Portal and the Claude
+Desktop extension retain their published **0.4.1107-beta** artifacts.
+
 ## 0.4.1107-beta — Local checkpoints, mounted backups and unified Admin recovery
 
 Update Assistant to AKM CLI/web **0.10.261118** and all three native AKM plugins
