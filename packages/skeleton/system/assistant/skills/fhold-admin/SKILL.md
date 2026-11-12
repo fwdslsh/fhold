@@ -64,10 +64,11 @@ it never approves changed hooks or replaces operator-selected marketplaces.
 An explicitly disabled Codex plugin refreshes on a later enabled boot.
 
 For a passive environment audit, use `akm-migrate status` and
-`akm doctor --read-only --no-probe --format json --quiet`. Native task history
-(`akm task history --limit 10 --format json`) and task binding inspection
-(`akm task doctor`) record local CLI usage; run them explicitly when investigating
-tasks, rather than treating them as passive status reads. Inspect a failed task's native
+`akm doctor --read-only --no-probe --format json --quiet`; its `scheduler`
+field reports task bindings. Native task history
+(`akm doctor log --task <id> --limit 10 --format json`) records local CLI usage;
+run it explicitly when investigating a task, rather than treating it as a
+passive status read. Inspect a failed task's native
 history before diagnosing its cause; a historical failure rate does not prove
 that an upgrade broke it or that it has recovered. Keep private paths, task
 output and credentials out of shared reports. Report the affected feature and

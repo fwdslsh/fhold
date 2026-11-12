@@ -100,7 +100,7 @@ function remove(id) {
 	runChecked('akm', ['task', 'disable', id, '--quiet']);
 	renameSync(source, destination);
 	try {
-		runChecked('akm', ['task', 'sync', '--rebind', '--quiet']);
+		runChecked('akm', ['doctor', 'scheduler', 'sync', '--rebind', '--quiet']);
 	} catch (error) {
 		renameSync(destination, source);
 		throw error;
@@ -130,7 +130,7 @@ const [command, ...args] = process.argv.slice(2);
 try {
 	switch (command) {
 		case 'sync':
-			run('akm', ['task', 'sync', '--rebind']);
+			run('akm', ['doctor', 'scheduler', 'sync', '--rebind']);
 			break;
 		case 'create':
 			create(taskId(args[0]), args.slice(1));

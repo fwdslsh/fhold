@@ -129,18 +129,18 @@ try {
 	// The shipped native harness owns bounded model work and reuses native auth.
 	await turn(sessions[0], `Investigation evidence: the independently verified native bundle ownership remained intact after the recovery fix. ${'We inspected native configuration, reproduced the failure, verified ownership and preserved the operator settings. '.repeat(30)}`);
 	assert.doesNotMatch(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/, 'Explicit off must prevent automatic extraction');
-	assert.match(await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '-q']), /extract is disabled/, 'Native host-wide off also blocks explicit extraction');
+	assert.match(await run(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '-q']), /extract is disabled/, 'Native host-wide off also blocks explicit extraction');
 	const enabled = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8'));
 	delete enabled.improve;
 	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(enabled));
-	const extraction = await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout', '30s', '-q']);
+	const extraction = await run(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout', '30s', '-q']);
 	assert.match(extraction, /opencode/);
 	writeFileSync(join(root, 'extraction.json'), extraction);
 	assert.ok(requests.some((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')), `Native extraction did not reach configured model: ${extraction}`);
 	assert.match(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/);
 	assert.ok(requests.filter((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')).length <= 2, 'Native utility inference recursed');
 	const before = readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8');
-	const broken = Bun.spawn(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--harness', 'missing-native-harness', '-q'], { cwd, env, stdout: 'pipe', stderr: 'pipe' });
+	const broken = Bun.spawn(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '--harness', 'missing-native-harness', '-q'], { cwd, env, stdout: 'pipe', stderr: 'pipe' });
 	const [brokenOut, brokenError, brokenCode] = await Promise.all([new Response(broken.stdout).text(), new Response(broken.stderr).text(), broken.exited]);
 	assert.notEqual(brokenCode, 0);
 	assert.match(brokenOut + brokenError, /harness|config/i);

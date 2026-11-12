@@ -83,15 +83,15 @@ verify_explicit_remote_modes() {
 		expected=sign-in-needed
 		if [ "$mode" = 0 ]; then expected=not-started; fi
 		verify_remote_state "$expected"
-		docker exec "$container" sh -ec "akm info --format json -q | jq -e '.learning.on == $([ "$mode" = 1 ] && echo true || echo false)'" >/dev/null
+		docker exec "$container" sh -ec "akm doctor info --format json -q | jq -e '.learning.on == $([ "$mode" = 1 ] && echo true || echo false)'" >/dev/null
 		if [ "$mode" = 1 ]; then
 			# Default/on must preserve a native off choice across normal restart.
 			docker exec "$container" akm setup --learning off --format json -q >/dev/null
 			docker restart "$container" >/dev/null
 			wait_for_health
-			docker exec "$container" sh -ec 'akm info --format json -q | jq -e ".learning.on == false"' >/dev/null
+			docker exec "$container" sh -ec 'akm doctor info --format json -q | jq -e ".learning.on == false"' >/dev/null
 			docker exec "$container" akm setup --learning on --format json -q >/dev/null
-			docker exec "$container" sh -ec 'akm info --format json -q | jq -e ".learning.on == true"' >/dev/null
+			docker exec "$container" sh -ec 'akm doctor info --format json -q | jq -e ".learning.on == true"' >/dev/null
 		fi
 		printf 'Explicit native remote mode %s: %s, healthy Assistant\n' "$mode" "$expected"
 	done

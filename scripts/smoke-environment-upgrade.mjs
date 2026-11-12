@@ -133,7 +133,7 @@ async function verifyAgentAndProposal() {
 		assert.match(await native(['opencode', 'run', '--standalone', '--continue', '--', prompt]), /FH_UPGRADE_AGENT_COMPLETE/);
 		run(['akm', 'config', 'set', 'improve.enabled', 'true', '--silent']);
 		const extractionConfig = readFileSync(configPath, 'utf8');
-		const extracted = await native(['akm', 'proposal', 'extract', '--type', 'opencode', '--force', '--timeout', '30s', '--quiet']);
+		const extracted = await native(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--force', '--timeout', '30s', '--quiet']);
 		assert.ok(requests.some((request) => JSON.stringify(request.messages).includes('extracting durable engineering insights')), extracted);
 		// Do not trust the extraction aggregate alone: upstream #1290 can report
 		// success when persistence failed. The proposal must actually be present.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins
+**0.10.261122**, which require that CLI exactly. AKM's native migrator applies
+its one new state index at startup.
+
+`fhold doctor` now reports task bindings from the `scheduler` field of the same
+read-only `akm doctor --read-only --no-probe` report, replacing the previous
+`NOT CHECKED` hold. Task synchronization uses native `akm doctor scheduler sync`
+instead of the deprecated `akm task sync`.
+
 ## 0.4.1108-beta — Native AKM tasks and updated knowledge UI
 
 Update Assistant to AKM CLI/web **0.10.261119** and all three AKM plugins

@@ -88,7 +88,7 @@ manufactures approvals nor approves unrelated hooks. Claude likewise retains
 native plugin/workspace trust and consent.
 
 AKM owns automatic recall, prompt learning and reviewable transcript proposals.
-Use native `akm setup --learning off` / `--learning on` and `akm info` to
+Use native `akm setup --learning off` / `--learning on` and `akm doctor info` to
 control and inspect learning. The plugins no longer read `AKM_AUTO_MEMORY`
 or `AKM_AUTO_LEARNING`.
 Fresh instances select the native `opencode` harness (`run --standalone`), which reuses

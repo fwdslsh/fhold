@@ -463,9 +463,9 @@ It does not write application rows or apply migrations; native SQLite may create
 its ordinary WAL/shared-memory coordination files when reading an existing database.
 It preserves native pass/warn/fail results and reports unknown checks as
 `NOT CHECKED`; these AKM checks are advisory and never restart or block the agent.
-Task-binding inspection is `NOT CHECKED` until AKM provides a read-only interface:
-`akm task doctor` currently records local CLI usage. Run it explicitly when you
-want binding details. Doctor does not start a stopped
+Task-binding status comes from the same read-only report's native `scheduler`
+field; run `akm doctor` in Assistant when you want binding details, and
+`akm doctor scheduler sync --rebind` to repair them. Doctor does not start a stopped
 Assistant, run an agent/task, apply migrations or write proposals. Legacy
 `knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
 connected endpoints can also work without credentials.
