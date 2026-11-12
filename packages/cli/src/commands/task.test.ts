@@ -27,15 +27,14 @@ function fixture() {
 	writeFileSync(
 		fake,
 		`#!/usr/bin/env bun
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 const args = process.argv.slice(2);
 appendFileSync(process.env.FH_AKM_CALLS, JSON.stringify(args) + '\\n');
-if (args[0] === 'task' && args[1] === 'add') {
-  const id = args[2];
-  const schedule = args[args.indexOf('--schedule') + 1];
+if (args[0] === 'import' && args.includes('--type')) {
+  const id = args[args.indexOf('--name') + 1];
   mkdirSync(join(process.env.FH_KNOWLEDGE_DIR, 'tasks'), { recursive: true });
-  writeFileSync(join(process.env.FH_KNOWLEDGE_DIR, 'tasks', id + '.yml'), 'version: 4\\nname: ' + id + '\\nuses: akm/command\\nwith:\\n  content: task\\nschedule: "' + schedule + '"\\n');
+  copyFileSync(args[1], join(process.env.FH_KNOWLEDGE_DIR, 'tasks', id + '.yml'));
 }
 `
 	);
@@ -81,11 +80,15 @@ describe('Assistant task helper', () => {
 			'Summarize local news'
 		]);
 		expect(created.exitCode).toBe(0);
-		const add = calls(root.calls)[0] ?? [];
-		expect(add.slice(0, 3)).toEqual(['task', 'add', 'morning-news']);
-		expect(add[add.indexOf('--prompt') + 1]).toBe('Summarize local news');
-		expect(add).not.toContain('--harness');
+		const [imported = [], enabled] = calls(root.calls);
+		expect([imported[0], ...imported.slice(2)]).toEqual(['import', '--type', 'task', '--name', 'morning-news']);
+		expect(enabled).toEqual(['task', 'enable', 'morning-news']);
+		const task = Bun.YAML.parse(readFileSync(join(root.knowledge, 'tasks', 'morning-news.yml'), 'utf8')) as Record<string, unknown>;
+		expect(task).toMatchObject({ version: 4, uses: 'akm/command', with: { content: 'Summarize local news' }, schedule: '0 8 * * *' });
+		expect(task).not.toHaveProperty('harness');
 		expect(existsSync(join(root.knowledge, 'inbox', 'morning-news'))).toBe(true);
+		expect(run(root, ['create', 'codex-news', '--schedule', '@daily', '--prompt', 'p', '--harness', 'codex']).exitCode).toBe(0);
+		expect(Bun.YAML.parse(readFileSync(join(root.knowledge, 'tasks', 'codex-news.yml'), 'utf8'))).toHaveProperty('harness', 'codex');
 
 		expect(run(root, ['pause', 'morning-news']).exitCode).toBe(0);
 		const original = readFileSync(join(root.knowledge, 'tasks', 'morning-news.yml'), 'utf8');

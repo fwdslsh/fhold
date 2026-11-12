@@ -4,11 +4,15 @@ import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
+	mkdtempSync,
 	readFileSync,
 	realpathSync,
 	renameSync,
-	statSync
+	rmSync,
+	statSync,
+	writeFileSync
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 
 const KNOWLEDGE = process.env.FH_KNOWLEDGE_DIR || '/stash';
@@ -72,24 +76,28 @@ function option(args, name) {
 function create(id, args) {
 	const schedule = option(args, '--schedule');
 	const prompt = option(args, '--prompt');
+	const task = {
+		version: 4,
+		uses: 'akm/command',
+		with: { content: prompt },
+		description: `fhold scheduled request: ${prompt.slice(0, 160)}`,
+		tags: ['fhold', 'scheduled'],
+		...(args.includes('--harness') ? { harness: option(args, '--harness') } : {}),
+		timeout: 15 * 60 * 1000,
+		schedule
+	};
 	mkdirSync(join(INBOX, id), { recursive: true, mode: 0o700 });
-	run('akm', [
-		'task',
-		'add',
-		id,
-		'--schedule',
-		schedule,
-		'--prompt',
-		prompt,
-		...(args.includes('--harness') ? ['--harness', option(args, '--harness')] : []),
-		'--timeout',
-		'15m',
-		'--description',
-		`fhold scheduled request: ${prompt.slice(0, 160)}`,
-		'--tags',
-		'fhold,scheduled',
-		'--rebind'
-	]);
+	// AKM's native authoring path: import a task file (validated, no overwrite,
+	// published disabled), then enable it. Scheduler sync owns rebinding.
+	const staging = mkdtempSync(join(tmpdir(), 'fhold-task-'));
+	try {
+		const source = join(staging, `${id}.yml`);
+		writeFileSync(source, Bun.YAML.stringify(task, null, 2), { mode: 0o600 });
+		runChecked('akm', ['import', source, '--type', 'task', '--name', id]);
+		runChecked('akm', ['task', 'enable', id]);
+	} finally {
+		rmSync(staging, { recursive: true, force: true });
+	}
 }
 
 function remove(id) {
@@ -144,7 +152,11 @@ try {
 			run('akm', ['show', args[0].includes('/') ? args[0] : `tasks/${args[0]}`, ...args.slice(1)]);
 			break;
 		case 'history':
-			run('akm', ['task', 'history', ...args]);
+			// Native per-task run history. Listing every task's runs has no
+			// replacement for the deprecated command yet.
+			if (args[0] && !args[0].startsWith('-'))
+				run('akm', ['doctor', 'log', '--task', args[0], ...args.slice(1)]);
+			else run('akm', ['task', 'history', ...args]);
 			break;
 		case 'run':
 			if (!args[0]) fail('run requires a task id or native ref');

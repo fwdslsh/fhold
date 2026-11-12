@@ -86,7 +86,6 @@ ENV PATH="/repo/node_modules/.bin:${PATH}"
 # ARM64 uses native keyword search or an operator's remote embedding endpoint.
 RUN export AKM_CACHE_DIR=/akm-cache AKM_CONFIG_DIR=/tmp/akm-build/config \
       AKM_DATA_DIR=/tmp/akm-build/data AKM_STATE_DIR=/tmp/akm-build/state \
-      AKM_BUNDLE_DIR=/tmp/akm-build/bundle \
     && bun -e "import { ensureRuntimeBinary } from 'akm-cli/dist/integrations/harnesses/opencode/runtime/binary.js'; await ensureRuntimeBinary();" \
     && if [ "${TARGETARCH}" = amd64 ]; then \
       akm setup --yes --embedding local --dir /tmp/akm-build/bundle --format json -q > /tmp/akm-setup.json \
@@ -195,7 +194,6 @@ ENV HOME=/home/fhold \
     OPENCODE_CONFIG=/home/fhold/.config/opencode/opencode.json \
     OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \
     OPENCODE_PORT=4096 \
-    AKM_BUNDLE_DIR=/stash \
     AKM_CONFIG_DIR=/etc/akm \
     AKM_CACHE_DIR=/opt/akm/cache \
     AKM_DATA_DIR=/opt/akm/data \

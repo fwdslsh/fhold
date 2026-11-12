@@ -118,7 +118,6 @@ const MANAGED_SECRET_FILES: Readonly<Record<string, string>> = {
 
 const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 	assistant: {
-		AKM_BUNDLE_DIR: '/stash',
 		AKM_CACHE_DIR: '/opt/akm/cache',
 		AKM_CONFIG_DIR: '/etc/akm',
 		AKM_DATA_DIR: '/opt/akm/data',

@@ -29,7 +29,6 @@ services:
       OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true"
       OPENCODE_PORT: "4096"
       OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
-      AKM_BUNDLE_DIR: /stash
       AKM_CONFIG_DIR: /etc/akm
       AKM_CACHE_DIR: /opt/akm/cache
       AKM_DATA_DIR: /opt/akm/data

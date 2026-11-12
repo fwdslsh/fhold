@@ -220,7 +220,6 @@ export function createAkmIndexCache({
 	function candidateEnvironment(stage) {
 		return {
 			...nativeEnv,
-			AKM_BUNDLE_DIR: env.AKM_BUNDLE_DIR || roots.stash,
 			// Native config/credentials remain native-owned and are read in place.
 			// Explicit adapters above avoid native detection writes; only derived
 			// data/state are isolated. No credential copying or parsing is needed.

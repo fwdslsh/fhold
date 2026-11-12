@@ -91,6 +91,9 @@ async function verifyAgentAndProposal() {
 	// Retired env switches do not disable it; otherwise native session-end work
 	// can legitimately hold the same extraction lock on a slower native runner.
 	run(['akm', 'config', 'set', 'improve.enabled', 'false', '--silent']);
+	mkdirSync('/stash/agents', { recursive: true });
+	writeFileSync('/stash/agents/upgrade-dispatch.md', '---\ndescription: Disposable agent for native dispatch checks.\n---\nComplete the request.\n');
+	run(['akm', 'index', '--format', 'json', '-q']);
 	const requests = [];
 	const marker = 'upgrade-native-proposal';
 	const model = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
@@ -127,7 +130,7 @@ async function verifyAgentAndProposal() {
 		// do not retain an expected vendor failure or repair the test environment.
 		const preservedConfig = readFileSync(configPath, 'utf8');
 		assert.equal(read(configPath).harnesses.opencode.args, undefined);
-		assert.match(await native(['akm', 'agent', '--prompt', prompt, '--quiet']), /FH_UPGRADE_AGENT_COMPLETE/);
+		assert.match(await native(['akm', 'run', 'agents/upgrade-dispatch', '--prompt', prompt, '--quiet']), /FH_UPGRADE_AGENT_COMPLETE/);
 		assert.equal(readFileSync(configPath, 'utf8'), preservedConfig, 'Native execution changed operator AKM configuration');
 		// Retain a second turn with the verification evidence in native history.
 		assert.match(await native(['opencode', 'run', '--standalone', '--continue', '--', prompt]), /FH_UPGRADE_AGENT_COMPLETE/);

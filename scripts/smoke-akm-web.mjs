@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { get } from 'node:http';
 import { connect, createServer } from 'node:net';
@@ -23,8 +23,12 @@ try {
 			env[`XDG_${name}_HOME`] = join(root, name.toLowerCase());
 			env[`AKM_${name}_DIR`] = join(root, 'akm', name.toLowerCase());
 		}
-		env.AKM_BUNDLE_DIR = join(root, 'bundle');
-		for (const value of Object.values(env).slice(1)) mkdirSync(value, { recursive: true });
+		const bundle = join(root, 'bundle');
+		for (const value of [...Object.values(env).slice(1), bundle]) mkdirSync(value, { recursive: true });
+		writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify({
+			bundles: { stash: { path: bundle, writable: true, components: { main: { adapter: 'akm' } } } },
+			defaultBundle: 'stash', defaultWriteTarget: 'stash'
+		}));
 		let forward;
 		let port;
 		const sockets = new Set();

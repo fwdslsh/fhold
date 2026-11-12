@@ -191,7 +191,6 @@ describe('published AKM scheduler compatibility', () => {
 		const env = {
 			...process.env,
 			HOME: root,
-			AKM_BUNDLE_DIR: knowledge,
 			AKM_CONFIG_DIR: config,
 			AKM_CACHE_DIR: join(root, 'cache'),
 			AKM_DATA_DIR: join(root, 'data'),
