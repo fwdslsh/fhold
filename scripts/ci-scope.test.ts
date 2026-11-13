@@ -3,9 +3,36 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { changeScope, validationPlan, releaseValidationPlan } from './ci-scope.mjs';
+import { changeScope, validationPlan, releaseValidationPlan, runtimeImpact } from './ci-scope.mjs';
 
 const all = ['assistant', 'guardian', 'portal'];
+test('Compose service changes retain unrelated published components', () => {
+	const file = 'packages/skeleton/system/stack/stack.compose.yml';
+	const source = readFileSync(file, 'utf8');
+	const before = Bun.YAML.parse(source) as { services: Record<string, { environment: Record<string, string> }>; networks: Record<string, unknown> };
+	for (const [service, component] of [['assistant', 'assistant'], ['guardian', 'guardian'], ['discord', 'portal'], ['slack', 'portal']]) {
+		const after = structuredClone(before);
+		const changed = after.services[service];
+		if (!changed) throw new Error('Missing fixture service');
+		changed.environment.SCOPE_FIXTURE = 'changed';
+		expect(runtimeImpact([file], () => source, () => JSON.stringify(after))).toEqual([component]);
+	}
+	const removed = structuredClone(before);
+	delete removed.services.guardian;
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(removed))).toEqual(['guardian']);
+	const shared = structuredClone(before);
+	shared.networks.fixture = {};
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(shared))).toEqual([...all, 'bridge']);
+	const unknown = structuredClone(before);
+	unknown.services.fixture = { environment: {} };
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(unknown))).toEqual([...all, 'bridge']);
+	for (const invalid of ['', 'null', '[]', 'services: broken', 'services: [broken', '{}'])
+		expect(runtimeImpact([file], () => source, () => invalid)).toEqual([...all, 'bridge']);
+	const invalidService = structuredClone(before);
+	(invalidService.services as Record<string, unknown>).assistant = 'broken';
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(invalidService))).toEqual([...all, 'bridge']);
+	expect(runtimeImpact([file], () => source, () => source.replaceAll('0.4.1109-beta', '0.4.1110-beta'))).toEqual([]);
+});
 test('container README changes do not change shipped runtime inputs', () => {
 	expect(validationPlan(['containers/guardian/README.md'], () => '', () => '')).toEqual({ scope: 'none', images: [], admin: false });
 });

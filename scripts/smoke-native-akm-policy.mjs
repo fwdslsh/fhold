@@ -37,21 +37,22 @@ const model = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
 } });
 const env = { ...process.env, HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'config'),
 	XDG_DATA_HOME: join(root, 'home/.local/share'), XDG_STATE_HOME: join(root, 'state'), XDG_CACHE_HOME: join(root, 'cache'),
-	AKM_BUNDLE_DIR: join(root, 'bundle'), AKM_CONFIG_DIR: join(root, 'akm'),
+	AKM_CONFIG_DIR: join(root, 'akm'),
 	AKM_STATE_DIR: join(root, 'akm-state'), AKM_DATA_DIR: join(root, 'akm-data'), AKM_CACHE_DIR: join(root, 'akm-cache'),
 	FH_RUNTIME_DIR: join(root, 'runtime'),
 	OPENCODE_SERVER_PASSWORD: 'synthetic-native-policy', OPENCODE_CONFIG_DIR: join(root, 'system'),
 	OPENCODE_CONFIG: join(root, 'config/opencode/opencode.json') };
-for (const path of ['home', 'config/opencode', 'data', 'state', 'cache', 'bundle/knowledge', 'akm', 'runtime', 'project/.opencode/skills/project-native'])
+for (const path of ['home', 'config/opencode', 'data', 'state', 'cache', 'bundle/knowledge', 'bundle/agents', 'akm', 'runtime', 'project/.opencode/skills/project-native'])
 	mkdirSync(join(root, path), { recursive: true });
 cpSync('/etc/opencode', env.OPENCODE_CONFIG_DIR, { recursive: true });
 writeFileSync(join(root, 'bundle/knowledge/lean-release-verification.md'), `---\ndescription: Lean release verification and token budget design knowledge ${marker}.\n---\n# Lean verification\n${marker}\n`);
+writeFileSync(join(root, 'bundle/agents/native-dispatch.md'), '---\ndescription: Disposable agent for native dispatch checks.\n---\nComplete the request.\n');
 writeFileSync(join(root, 'project/.opencode/skills/project-native/SKILL.md'), '---\nname: project-native\ndescription: Synthetic project skill discovery probe.\n---\nNative project skill.\n');
 writeFileSync(join(root, 'project/opencode.json'), JSON.stringify({ agents: {
 	'project-native': { mode: 'primary', description: 'Native project configuration probe' }
 } }));
 const config = JSON.parse(readFileSync('/assistant-defaults/config/akm/config.json', 'utf8'));
-config.bundles.stash.path = env.AKM_BUNDLE_DIR;
+config.bundles.stash.path = join(root, 'bundle');
 config.improve = { enabled: false };
 writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(config));
 writeFileSync(env.OPENCODE_CONFIG, JSON.stringify({ model: 'fixture/model', default_agent: 'analyst',
@@ -123,24 +124,24 @@ try {
 	}
 	// Ordinary native child dispatch must inherit nonstandard AKM locations,
 	// without a fhold launcher, config alias or environment repair.
-	const dispatched = await run(['akm', 'agent', '--prompt', prompt, '-q']);
+	const dispatched = await run(['akm', 'run', 'agents/native-dispatch', '--prompt', prompt, '-q']);
 	assert.match(dispatched, /FH_NATIVE_COMPLETE/);
 	assert.ok(JSON.stringify(requests.at(-1).messages).includes(marker), 'Native child lost AKM catalog locations');
 	// The shipped native harness owns bounded model work and reuses native auth.
 	await turn(sessions[0], `Investigation evidence: the independently verified native bundle ownership remained intact after the recovery fix. ${'We inspected native configuration, reproduced the failure, verified ownership and preserved the operator settings. '.repeat(30)}`);
 	assert.doesNotMatch(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/, 'Explicit off must prevent automatic extraction');
-	assert.match(await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '-q']), /extract is disabled/, 'Native host-wide off also blocks explicit extraction');
+	assert.match(await run(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '-q']), /extract is disabled/, 'Native host-wide off also blocks explicit extraction');
 	const enabled = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8'));
 	delete enabled.improve;
 	writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify(enabled));
-	const extraction = await run(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout', '30s', '-q']);
+	const extraction = await run(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '--timeout', '30s', '-q']);
 	assert.match(extraction, /opencode/);
 	writeFileSync(join(root, 'extraction.json'), extraction);
 	assert.ok(requests.some((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')), `Native extraction did not reach configured model: ${extraction}`);
 	assert.match(await run(['akm', 'proposal', 'list', '-q']), /native-recovery-observation/);
 	assert.ok(requests.filter((body) => JSON.stringify(body.messages).includes('extracting durable engineering insights')).length <= 2, 'Native utility inference recursed');
 	const before = readFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), 'utf8');
-	const broken = Bun.spawn(['akm', 'proposal', 'extract', '--type', 'opencode', '--session-id', sessions[0].id, '--force', '--harness', 'missing-native-harness', '-q'], { cwd, env, stdout: 'pipe', stderr: 'pipe' });
+	const broken = Bun.spawn(['akm', 'proposal', 'extract', '--sessions', 'opencode', '--session-id', sessions[0].id, '--force', '--harness', 'missing-native-harness', '-q'], { cwd, env, stdout: 'pipe', stderr: 'pipe' });
 	const [brokenOut, brokenError, brokenCode] = await Promise.all([new Response(broken.stdout).text(), new Response(broken.stderr).text(), broken.exited]);
 	assert.notEqual(brokenCode, 0);
 	assert.match(brokenOut + brokenError, /harness|config/i);

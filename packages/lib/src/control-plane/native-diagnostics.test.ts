@@ -67,7 +67,7 @@ console.log(typeof value === 'string' ? value : JSON.stringify(value));
 }
 
 function healthReport(status = 'pass', hardChecks = [{ name: 'state-db-integrity', status: 'pass' }], advisories = [{ name: 'proposal-queue', status: 'unknown' }]): Record<string, unknown> {
-	return { schemaVersion: 3, status, hardChecks, advisories };
+	return { schemaVersion: 3, status, hardChecks, advisories, scheduler: { bindings: [{ argv: ['/private/akm'], taskIds: ['news'], status: ['ok'] }], warnings: [] } };
 }
 
 test.each([undefined, '{}', '{"not-a-provider":"not-a-credential"}', '{broken'])('native providers ignore legacy auth input %s and never generate by default', async (legacy) => {
@@ -79,7 +79,7 @@ test.each([undefined, '{}', '{"not-a-provider":"not-a-credential"}', '{broken'])
 	expect(f.http.every((call) => call.startsWith('GET '))).toBe(true);
 	expect(f.commands().find((args) => args.includes('akm-migrate'))?.slice(-2)).toEqual(['akm-migrate', 'status']);
 	expect(f.commands().some((args) => args.includes('task'))).toBe(false);
-	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('pass');
 	const health = f.commands().find((args) => args.includes('doctor')) ?? [];
 	expect(health.slice(health.indexOf('--project-directory'), health.indexOf('--project-directory') + 2)).toEqual(['--project-directory', f.root]);
 	expect(health.slice(health.indexOf('exec'))).toEqual(['exec', '-T', 'assistant', 'timeout', '--kill-after=2s', '10s',
@@ -130,13 +130,28 @@ test('unavailable native health and migration blockers degrade independently, th
 	f.state.health = healthReport('warn', [{ name: 'connections-and-harnesses', status: 'warn' }]);
 	checks = await f.diagnose();
 	expect(checks.find((check) => check.name === 'AKM connections-and-harnesses')?.status).toBe('warn');
-	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('pass');
 	f.state.healthExit = 0;
 	f.state.health = healthReport();
 	f.state.migration.status = 'current';
 	checks = await f.diagnose();
 	expect(checks.filter((check) => check.status === 'warn')).toEqual([]);
-	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('not-checked');
+	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('pass');
+});
+
+test.each([
+	[{ bindings: [{ argv: ['/private/akm'], taskIds: ['news'], status: ['missing-path'] }], warnings: [] }, 'warn'],
+	[{ bindings: [], warnings: ['synthetic-secret'] }, 'warn'],
+	[{ bindings: [], warnings: [] }, 'pass'],
+	[undefined, 'not-checked'],
+	[{ bindings: 'synthetic-secret' }, 'not-checked']
+])('task bindings come from the same read-only native report without private evidence: %j', async (scheduler, status) => {
+	const f = fixture(); f.state.health = { ...healthReport(), scheduler };
+	const checks = await f.diagnose();
+	expect(checks.find((check) => check.name === 'AKM tasks')).toMatchObject({ status, advisory: true });
+	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
+	expect(JSON.stringify(checks)).not.toContain('/private');
+	expect(f.commands()).toHaveLength(3);
 });
 
 test('native plugin mismatch and unknown proposal outcomes retain native statuses without private evidence', async () => {

@@ -532,7 +532,7 @@ that selection if the intent is best-effort caching.
 The first experimental scope supports plain JSON AKM configuration and materialized filesystem bundles with
 one explicitly configured native `akm` or `agent-skills` component adapter per
 bundle, including a declared component whose effective content root matches the
-primary `AKM_BUNDLE_DIR` path. Inferred adapters and undeclared primary sources skip
+primary bundle path (`/stash`, or an operator-set `AKM_BUNDLE_DIR`). Inferred adapters and undeclared primary sources skip
 caching without changing native detection or indexing behavior. Readable persistent and
 read-only source mounts are supported. Inherited AKM configuration, other source providers or
 adapters, missing/unreadable roots, and source roots overlapping explicit recovery

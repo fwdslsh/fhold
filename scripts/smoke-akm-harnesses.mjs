@@ -60,7 +60,6 @@ function fixture(harness) {
 		XDG_STATE_HOME: join(dir, 'state'),
 		XDG_CACHE_HOME: join(dir, 'cache'),
 		XDG_DATA_HOME: join(dir, 'data'),
-		AKM_BUNDLE_DIR: join(dir, 'bundle'),
 		AKM_CONFIG_DIR: join(dir, 'config/akm'),
 		AKM_STATE_DIR: join(dir, 'state/akm'),
 		AKM_DATA_DIR: join(dir, 'data/akm'),

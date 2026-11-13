@@ -3,7 +3,7 @@
 // restarts, a custom loader, or vendor credentials. Managed Compose can mount
 // the user settings directory writable, with managed/system policy read-only.
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync, statSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const file = process.env.OPENCODE_CONFIG;
@@ -54,13 +54,17 @@ await until(
 	'initial native activation'
 );
 const before = await info();
-const inode = statSync(file).ino;
 const original = readFileSync(file, 'utf8');
 let retainedSession;
 function save(path, text) {
 	const temporary = `${path}.${process.pid}.tmp`;
 	writeFileSync(temporary, text, { mode: 0o600 });
+	// A filesystem can recycle the initial inode after multiple saves. Check
+	// each replacement while the old and staged files still coexist instead.
+	const replacement = statSync(temporary).ino;
+	if (existsSync(path)) assert.notEqual(replacement, statSync(path).ino, 'Atomic saves must stage a separate file');
 	renameSync(temporary, path);
+	assert.equal(statSync(path).ino, replacement, 'Atomic saves must publish the staged file');
 }
 const plugin = '/work/fhold-native-watcher-fixture';
 mkdirSync(plugin, { recursive: true });
@@ -244,7 +248,6 @@ try {
 		'plugin removal and cleanup'
 	);
 	assert.match(readFileSync(join(plugin, 'lifecycle.log'), 'utf8'), /stop:watcher_configured/);
-	assert.notEqual(statSync(file).ino, inode, 'Ordinary atomic editor saves must be supported');
 	assert.equal((await info()).pid, before.pid, 'Native server must not restart');
 	assert(
 		!requests.some((request) => /\/(?:reload|dispose)(?:\/|$)/.test(request.path)),

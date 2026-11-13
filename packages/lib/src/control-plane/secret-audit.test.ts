@@ -19,7 +19,6 @@ afterEach(() => {
 });
 
 const assistantEnvironment = {
-	AKM_BUNDLE_DIR: '/stash',
 	AKM_CACHE_DIR: '/opt/akm/cache',
 	AKM_CONFIG_DIR: '/etc/akm',
 	AKM_DATA_DIR: '/opt/akm/data',

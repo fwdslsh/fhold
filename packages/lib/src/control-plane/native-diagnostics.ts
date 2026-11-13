@@ -33,12 +33,27 @@ function healthChecks(health: Record<string, unknown>): DiagnosticCheck[] {
 	const valid = health.schemaVersion === 3 && ['pass', 'warn', 'fail'].includes(String(health.status))
 		&& Array.isArray(health.hardChecks) && health.hardChecks.length > 0 && Array.isArray(health.advisories)
 		&& native.every((row) => typeof row.name === 'string' && /^[a-z][a-z0-9-]{0,79}$/.test(row.name) && statuses.includes(String(row.status)));
-	if (!valid) return [check('AKM health', 'not-checked', 'Native read-only AKM health is unavailable or returned an unsupported response. Open Knowledge → Health or inspect Assistant diagnostics; no health success is inferred.')];
+	if (!valid) return [check('AKM health', 'not-checked', 'Native read-only AKM health is unavailable or returned an unsupported response. Open Knowledge → Health or inspect Assistant diagnostics; no health success is inferred.'), taskCheck(undefined)];
 	return [
 		check('AKM health', health.status as 'pass' | 'warn' | 'fail', `Native AKM reported ${health.status}. Read-only inspection; network and harness probes disabled. Open Knowledge → Health for full diagnostics.`),
 		...native.map((row) => check(`AKM ${row.name}`, row.status === 'unknown' ? 'not-checked' : row.status as 'pass' | 'warn' | 'fail',
-			`Native AKM reported ${row.status}. Open Knowledge → Health for details; network and harness probes were disabled.`))
+			`Native AKM reported ${row.status}. Open Knowledge → Health for details; network and harness probes were disabled.`)),
+		taskCheck(health.scheduler)
 	];
+}
+
+// The same read-only native report carries scheduler bindings; report only
+// their status, never binding paths or native warning text.
+function taskCheck(value: unknown): DiagnosticCheck {
+	const scheduler = record(value);
+	if (!Array.isArray(scheduler.bindings) || !Array.isArray(scheduler.warnings))
+		return check('AKM tasks', 'not-checked', 'Native read-only scheduler inspection is unavailable or returned an unsupported response.');
+	const bindings = rows(scheduler.bindings);
+	const ok = scheduler.warnings.length === 0
+		&& bindings.every((binding) => Array.isArray(binding.status) && binding.status.length === 1 && binding.status[0] === 'ok');
+	return check('AKM tasks', ok ? 'pass' : 'warn', ok
+		? `Native AKM reported ${bindings.length} current scheduler binding group(s).`
+		: 'Native AKM reported scheduler bindings that need attention. Inspect akm doctor, then run akm doctor scheduler sync --rebind.');
 }
 
 /** Explicit doctor inspection only. Never starts a container, model, task or migration. */
@@ -89,10 +104,6 @@ export async function diagnoseNativeRuntime(
 		migrationStatus === 'current' ? 'Native migration status is current.'
 			: migrationStatus === 'ready' || migrationStatus === 'blocked' ? `Native migrations are ${migrationStatus}; inspect akm migrate status before explicitly applying repairs.`
 				: 'Native migration status is unavailable or returned an unsupported response.'));
-	// AKM's task doctor currently records CLI usage and has no read-only mode.
-	// Keep passive inspection read-only until upstream provides that interface;
-	// native health still owns state integrity and task-history advisories.
-	checks.push(check('AKM tasks', 'not-checked', 'Native task-binding inspection has no read-only mode yet. Run akm task doctor explicitly to inspect bindings; it records local CLI usage.'));
 	if (options.readiness) {
 		const readiness = await testAssistantReadiness(home, { timeoutMs: 120_000 });
 		checks.push({ name: 'live provider readiness', ok: readiness.ok, detail: readiness.ok ? 'Native model responded.' : 'Native model request failed. Use fhold provider test for diagnostics.' });

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { componentVersions, imageComponents, inferReleaseScope, releaseImages } from './release-scope.mjs';
 
 const TOOLING_WORKSPACES = new Set(['packages/lib', 'packages/cli', 'packages/electron']);
@@ -279,7 +280,23 @@ export function runtimeImpact(files, readBefore, readAfter) {
 		}
 		if (path === 'packages/skeleton/system/stack/stack.compose.yml') {
 			const normalized = (text) => text.replace(/\$\{(FH_(?:ASSISTANT|GUARDIAN|PORTAL)_VERSION):-[^}]*\}/g, '${$1:-VERSION}');
-			try { if (normalized(readBefore(path)) === normalized(readAfter(path))) continue; } catch {}
+			try {
+				const before = Bun.YAML.parse(normalized(readBefore(path)));
+				const after = Bun.YAML.parse(normalized(readAfter(path)));
+				const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
+				if (!object(before) || !object(after) || !object(before.services) || !object(after.services)) throw new Error('Unsupported Compose document');
+				const { services: left, ...leftShared } = before;
+				const { services: right, ...rightShared } = after;
+				if (![...Object.values(left), ...Object.values(right)].every(object)) throw new Error('Unsupported Compose service');
+				if (!isDeepStrictEqual(leftShared, rightShared)) { add(all); continue; }
+				// Native YAML resolves shared anchors. A change to one service
+				// does not change unrelated images or the desktop extension.
+				const owners = { assistant: 'assistant', guardian: 'guardian', discord: 'portal', slack: 'portal' };
+				for (const service of new Set([...Object.keys(left), ...Object.keys(right)]))
+					if (!isDeepStrictEqual(left[service], right[service]))
+						add(Object.hasOwn(owners, service) ? [owners[service]] : all);
+				continue;
+			} catch { /* Unknown Compose inputs retain every component. */ }
 			add(all); continue;
 		}
 		if (/^(?:containers\/assistant\/|plugins\/|packages\/skeleton\/)/.test(path) ||

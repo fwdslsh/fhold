@@ -340,7 +340,7 @@ write_cron_environment() {
     echo '# fhold managed environment'
     echo 'SHELL=/bin/bash'
     echo "PATH=$PATH"
-  for name in TZ HOME AKM_BUNDLE_DIR AKM_CONFIG_DIR AKM_CACHE_DIR AKM_DATA_DIR AKM_STATE_DIR OPENCODE_API_URL OPENCODE_CONFIG_DIR; do
+  for name in TZ HOME AKM_CONFIG_DIR AKM_CACHE_DIR AKM_DATA_DIR AKM_STATE_DIR OPENCODE_API_URL OPENCODE_CONFIG_DIR; do
       if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
     done
   } >"$file" || return

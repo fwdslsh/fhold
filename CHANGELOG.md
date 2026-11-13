@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.4.1109-beta — Updated AKM and native scheduler diagnostics
+
+Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins
+**0.10.261122**, which require that CLI exactly. AKM's native migrator applies
+its one new state index at startup.
+
+`fhold doctor` now reports task bindings from the `scheduler` field of the same
+read-only `akm doctor --read-only --no-probe` report, replacing the previous
+`NOT CHECKED` hold. Task synchronization uses native `akm doctor scheduler sync`
+instead of the deprecated `akm task sync`.
+
+Move off AKM surfaces deprecated for 0.11 where a native replacement exists:
+`fhold task create` imports a native task file and enables it instead of
+calling `akm task add`; `fhold task history <id>` reads `akm doctor log --task`.
+Task creation enables the imported bundle-qualified ref, retains explicit native
+scheduler rebinding, and reports scheduling failures while preserving the source
+for repair.
+The Assistant no longer sets `AKM_BUNDLE_DIR`; the seeded AKM configuration
+already registers `/stash` as the default bundle. Listing every task's history
+and passive migration inspection (`akm-migrate status`) keep their deprecated
+forms until AKM offers an all-task run list and a read-only `akm migrate status`.
+
+Release scope now compares individual Compose services, so Assistant-only settings
+changes can retain unchanged Guardian, Portal and extension releases. Shared or
+unknown Compose changes still require all affected components.
+
 ## 0.4.1108-beta — Native AKM tasks and updated knowledge UI
 
 Update Assistant to AKM CLI/web **0.10.261119** and all three AKM plugins

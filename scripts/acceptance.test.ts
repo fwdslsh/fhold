@@ -88,15 +88,15 @@ function installFakeAkm(root: string): string {
 	writeFileSync(
 		executable,
 		`#!/usr/bin/env bun
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 const args = process.argv.slice(2);
 const knowledge = process.env.FH_KNOWLEDGE_DIR;
-if (args[0] === 'task' && args[1] === 'add') {
-  const id = args[2];
-  const schedule = args[args.indexOf('--schedule') + 1];
+if (args[0] === 'import' && args.includes('--type')) {
+  const id = args[args.indexOf('--name') + 1];
   mkdirSync(join(knowledge, 'tasks'), { recursive: true });
-  writeFileSync(join(knowledge, 'tasks', id + '.yml'), 'version: 4\\nname: ' + id + '\\nuses: akm/command\\nwith:\\n  content: scheduled\\nschedule: "' + schedule + '"\\n');
+  copyFileSync(args[1], join(knowledge, 'tasks', id + '.yml'));
+  console.log(JSON.stringify({ ref: 'stash//tasks/' + id }));
 }
 if (args[0] === 'run') {
   const id = args[1].replace('tasks/', '');
