@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1109-beta — Updated AKM and native scheduler diagnostics
+
 Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins
 **0.10.261122**, which require that CLI exactly. AKM's native migrator applies
 its one new state index at startup.
@@ -21,6 +23,10 @@ The Assistant no longer sets `AKM_BUNDLE_DIR`; the seeded AKM configuration
 already registers `/stash` as the default bundle. Listing every task's history
 and passive migration inspection (`akm-migrate status`) keep their deprecated
 forms until AKM offers an all-task run list and a read-only `akm migrate status`.
+
+Release scope now compares individual Compose services, so Assistant-only settings
+changes can retain unchanged Guardian, Portal and extension releases. Shared or
+unknown Compose changes still require all affected components.
 
 ## 0.4.1108-beta — Native AKM tasks and updated knowledge UI
 
