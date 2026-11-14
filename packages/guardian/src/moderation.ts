@@ -104,9 +104,8 @@ export async function moderatorCall(
 			return response.text;
 		});
 	const prompt = moderationPrompt(message, signals);
-	const name = model ? `${model.providerID}/${model.id}` : '';
-	const skipped = unavailable?.model === name && now() < (unavailable?.until ?? 0);
-	if (model && !skipped) {
+	const name = model && `${model.providerID}/${model.id}`;
+	if (name && !(unavailable?.model === name && now() < unavailable.until)) {
 		try {
 			const text = await generate(prompt, model);
 			unavailable = undefined;

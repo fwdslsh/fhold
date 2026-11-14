@@ -80,6 +80,9 @@ describe('fhold own-backup restore', async () => {
 		const { source, destination } = fixture();
 		const options = { sourceHome: source, destinationHome: destination };
 		expect(() => inspectBackup(options)).toThrow('required fhold-backup.json');
+		writeFileSync(join(source, 'checkpoint.json'), '{}');
+		expect(() => inspectBackup(options)).toThrow('Use recovery preview, then recovery import');
+		rmSync(join(source, 'checkpoint.json'));
 		for (const [product, version] of [
 			['foreign', 1],
 			['fhold', 2]

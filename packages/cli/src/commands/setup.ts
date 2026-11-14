@@ -73,21 +73,19 @@ export async function completeSessionSetup(
 	// A chosen provider or model becomes the agent's model, as "Use this model"
 	// does in Admin; selecting the verified model completes installation.
 	if ((values.provider || values.model) && readiness.provider && readiness.model) {
-		const choice = { provider: readiness.provider, model: readiness.model };
-		let selected = await invokeOperation(session.agent.selectModel, choice);
-		// OpenCode applies saved preferences through its file watcher. On a slow
-		// host that can outlast one confirmation window; saving again is cheap and
-		// makes no provider request.
-		if (selected.write?.effective === 'unconfirmed')
-			selected = await invokeOperation(session.agent.selectModel, choice);
-		if (selected.write?.effective !== 'verified' || selected.configurationIssue)
+		const selected = await invokeOperation(session.agent.selectModel, {
+			provider: readiness.provider,
+			model: readiness.model
+		});
+		if (selected.write?.effective !== 'verified' || selected.configurationIssue) {
+			const reason =
+				selected.configurationIssue ??
+				selected.write?.detail ??
+				`The verified model ${readiness.provider}/${readiness.model} could not be selected.`;
 			throw new Error(
-				`${
-					selected.configurationIssue ??
-					selected.write?.detail ??
-					`The verified model ${choice.provider}/${choice.model} could not be selected.`
-				} Setup is not complete; run it again once the agent is responsive.`
+				`${reason} Setup is not complete; run it again once the agent is responsive.`
 			);
+		}
 	}
 	write(JSON.stringify(readiness, null, 2));
 	write(

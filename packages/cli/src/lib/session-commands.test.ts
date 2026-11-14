@@ -1,7 +1,4 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
 	capabilities,
 	composeInstanceSession,
@@ -241,25 +238,9 @@ test('backup requires an explicit export scope before running the data adapter',
 	});
 	for (const [args, message] of [
 		[['backup', '--to', '/local/export'], 'Choose --portable'],
-		[['backup', '--to', '/local/export', '--full', '--include-provider-auth'], 'do not combine'],
 		[['backup', '--to', '/local/export', '--portable', '--confirm-stopped'], 'only to --full']
 	] as const)
 		await expect(runSessionDataCommand(f.session, [...args], () => {})).rejects.toThrow(message);
-	expect(called).toBe(false);
-});
-
-test('restore points a checkpoint package to recovery preview and import', async () => {
-	const f = fixture();
-	const directory = mkdtempSync(join(tmpdir(), 'fhold-checkpoint-package-'));
-	writeFileSync(join(directory, 'checkpoint.json'), '{}');
-	let called = false;
-	f.session.data.restoreData = supportedOperation(async () => {
-		called = true;
-		throw new Error('must not run');
-	});
-	await expect(
-		runSessionDataCommand(f.session, ['restore', '--from', directory], () => {})
-	).rejects.toThrow('recovery preview');
 	expect(called).toBe(false);
 });
 

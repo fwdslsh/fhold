@@ -167,6 +167,13 @@ export function httpsAgentBindings(options: Options): Pick<
 					}
 		);
 	}
+	/** Account and model observations follow every provider settings result. */
+	function observe(settings: ProviderSettings): ProviderSettings {
+		if (settings.inventoryUnavailable) return settings;
+		models = known(settings.currentModel ?? {});
+		account = known({ signedIn: settings.providers.some((item) => item.authenticated) });
+		return settings;
+	}
 	async function providers(context: RequestContext): Promise<ProviderSettings> {
 		const selected = await bound(context, false);
 		const [inventory, config] = await Promise.all([
@@ -190,8 +197,11 @@ export function httpsAgentBindings(options: Options): Pick<
 		} else if (typeof model?.providerID === 'string' && typeof model.model === 'string') {
 			selectedModel = { provider: model.providerID, model: model.model };
 		}
-		models = known(selectedModel ?? {});
-		account = known({ signedIn: inventory.some((item) => item.authenticated) });
+		const fallback = {
+			providers: inventory,
+			...(selectedModel ? { currentModel: selectedModel } : {})
+		};
+		observe(fallback);
 		try {
 			// Reuse this bound connection; a second bind could clear it and the
 			// fallback below would then report a stale inventory as current.
@@ -200,7 +210,7 @@ export function httpsAgentBindings(options: Options): Pick<
 			});
 		} catch {
 			context.signal?.throwIfAborted();
-			return { providers: inventory, ...(selectedModel ? { currentModel: selectedModel } : {}) };
+			return fallback;
 		}
 	}
 	async function management(context: RequestContext, writing = true) {
@@ -301,12 +311,7 @@ export function httpsAgentBindings(options: Options): Pick<
 		modelInventory: connected(async (_input, context) => (await providers(context)).providers),
 		setKey: connected(sameConnection((input, context) => services.setKey(input, context))),
 		removeProvider: connected(
-			sameConnection(async (input, context) => {
-				const result = await services.remove(input, context);
-				// Refresh the account and model observations after a sign-out.
-				await providers(context).catch(() => undefined);
-				return result;
-			})
+			sameConnection(async (input, context) => observe(await services.remove(input, context)))
 		),
 		oauthStart: connected(sameConnection((input, context) => services.oauthStart(input, context))),
 		oauthFinish: connected(
@@ -317,8 +322,12 @@ export function httpsAgentBindings(options: Options): Pick<
 			readiness = known({ ready: result.ok, ...(!result.ok ? { detail: result.error } : {}) });
 			return result;
 		}),
-		selectModel: connected(sameConnection((input, context) => services.use(input, context))),
-		saveEndpoint: connected(sameConnection((input, context) => services.endpoint(input, context))),
+		selectModel: connected(
+			sameConnection(async (input, context) => observe(await services.use(input, context)))
+		),
+		saveEndpoint: connected(
+			sameConnection(async (input, context) => observe(await services.endpoint(input, context)))
+		),
 		discoverModels: connected(sameConnection((input, context) => services.models(input, context))),
 		remote: connected(async (input, context) => {
 			if (!['claude', 'codex'].includes(input.tool)) throw new Error('Choose claude or codex.');

@@ -124,7 +124,12 @@ function verifyBackupManifest(sourceHome: string): {
 	warnings: string[];
 } {
 	const path = join(sourceHome, 'fhold-backup.json');
-	if (!existsSync(path)) throw new Error('A required fhold-backup.json manifest is missing');
+	if (!existsSync(path))
+		throw new Error(
+			existsSync(join(sourceHome, 'checkpoint.json'))
+				? 'This is an Assistant checkpoint package. Use recovery preview, then recovery import.'
+				: 'A required fhold-backup.json manifest is missing'
+		);
 	let value: unknown;
 	try {
 		value = JSON.parse(

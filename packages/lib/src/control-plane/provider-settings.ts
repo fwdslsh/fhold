@@ -295,8 +295,9 @@ async function applyConfigChange(
 ): Promise<NativeSettingsWriteResult> {
 	await home.writePreferences(patch);
 	// Native watchers apply the file asynchronously. Read back normalization;
-	// no reload API or process restart is involved.
-	const deadline = Date.now() + Math.min(5_000, options.timeoutMs ?? 5_000);
+	// no reload API or process restart is involved. Slow hosts can take several
+	// seconds; a confirmed change returns as soon as it is observed.
+	const deadline = Date.now() + Math.min(15_000, options.timeoutMs ?? 15_000);
 	let lastFailure: string | undefined;
 	do {
 		try {

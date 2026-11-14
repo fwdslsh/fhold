@@ -276,6 +276,18 @@ export async function backupFromAdmin(
 ) {
 	if (value.full !== undefined && typeof value.full !== 'boolean')
 		throw new Error('Invalid export scope.');
+	if (
+		value.full &&
+		[
+			value.includeProviderAuth,
+			value.includeUserEnv,
+			value.includePortalMaps,
+			value.includeOAuth
+		].some(Boolean)
+	)
+		throw new Error(
+			'A full export already includes all credentials and settings; do not combine portable include options.'
+		);
 	if (value.full)
 		return exportInstance({
 			sourceHome: homeDir,
