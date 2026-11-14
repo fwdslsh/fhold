@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 /** Launch the freshly packaged native Admin without Docker or provider secrets. */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	writeFileSync
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
@@ -73,6 +81,16 @@ function verifySkeleton(resources) {
 
 async function verifyPackagedStartup(command, args, platform) {
 	phase('launch');
+	if (platform === 'linux') {
+		// The isolated profile turns off the native updater's background check, as
+		// an operator can in Admin; the smoke never contacts the update feed.
+		const settings = join(profile, 'config', 'fhold-admin');
+		mkdirSync(settings, { recursive: true });
+		writeFileSync(
+			join(settings, 'settings.json'),
+			JSON.stringify({ updates: { channel: 'stable', automatic: false } })
+		);
+	}
 	const admin = await electron.launch({
 		executablePath: command,
 		args,
@@ -146,11 +164,12 @@ async function verifyPackagedStartup(command, args, platform) {
 					});
 				phase('app settings');
 				const preferences = await page.evaluate(() => window.fholdAdmin.appSettings());
+				// Linux reads the seeded preference; elsewhere the profile is fresh.
 				if (
 					preferences.settings.updates.channel !== 'stable' ||
-					!preferences.settings.updates.automatic
+					preferences.settings.updates.automatic !== (platform !== 'linux')
 				)
-					throw new Error('Packaged Admin update defaults are incorrect.');
+					throw new Error('Packaged Admin update preferences are incorrect.');
 				if (platform === 'linux') {
 					phase('desktop installation');
 					const before = await page.evaluate(() => window.fholdAdmin.desktopStatus());

@@ -210,8 +210,8 @@ export function registerAdminIpc(): void {
 	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
 		version: app.getVersion(),
 		unavailableReason:
-			!app.isPackaged || process.argv.includes('--fhold-release-smoke')
-				? 'Automatic updates are available in installed releases, not development or smoke tests.'
+			!app.isPackaged
+				? 'Automatic updates are available in installed releases, not development builds.'
 				: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
 						true
 					? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
