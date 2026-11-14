@@ -342,10 +342,11 @@ count as a fresh boot publication.
 
 Core health proves the authenticated agent is usable and, when configured,
 restoration completed with a live recovery owner. Optional boot task sync,
-scheduler and knowledge failures appear as health-log warnings in
+scheduler, knowledge and keep-alive failures appear as health-log warnings in
 CLI status and Admin Overview. They never trigger a whole-container restart.
-A failed boot task sync retries every minute until schedules are installed.
-A stopped optional process requires corrective action and an explicit restart. Readiness is not provider/client readiness.
+A failed boot task sync retries every minute until schedules are installed, and
+heartbeat failures retry. A stopped optional process requires corrective action
+and an explicit restart. Readiness is not provider/client readiness.
 
 The potential loss window includes the timer interval, capture and upload time;
 outages make it longer. SIGTERM should stop writers and descendants before a

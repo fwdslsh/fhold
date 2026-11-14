@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.4.1112-beta — Keep-alive restored
+
+Restore conditional HTTP keep-alive, removed in 0.4.1110-beta. With
+`FH_KEEPALIVE_URL` set, the Assistant again requests that URL every 20 seconds
+while OpenCode, Claude Code or Codex work is active or unknown, so a host that
+scales to zero on idle HTTP traffic, such as Azure Container Apps, keeps
+detached work running. Without it, 0.4.1110-beta and 0.4.1111-beta let Azure
+Container Apps scale an Assistant to zero mid-task, and the interrupted work
+did not resume. The fhold OpenCode plugin and Claude/Codex activity hooks, the
+`fhold-keepalive` command, its health checks and the keep-alive smoke lanes are
+back as they were in 0.4.1109-beta. Settings are unchanged: `FH_KEEPALIVE_URL`,
+`FH_KEEPALIVE_AUTH` and `FH_KEEPALIVE_AUTHORIZATION_FILE`.
+
 ## 0.4.1111-beta — AKM 0.10.261125 and no AKM settings writes at startup
 
 Update Assistant to AKM CLI/web **0.10.261125**, the OpenCode plugin

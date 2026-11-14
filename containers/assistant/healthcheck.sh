@@ -33,6 +33,12 @@ done
 if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ] && [ ! -s "$runtime/degraded-scheduler" ]; then
   alive scheduler || warning 'Scheduled tasks are unavailable. Check scheduler logs and restart to resume them; the agent is still usable.'
 fi
+if [ -n "${FH_KEEPALIVE_URL:-}" ] && [ ! -s "$runtime/degraded-keepalive" ]; then
+  alive scheduler || warning 'Keep-alive is unavailable. Check scheduler logs and restart; the agent is still usable.'
+  if ! fhold-keepalive status >/dev/null; then
+    warning 'Keep-alive needs attention. Review its configuration and recent logs; failed requests retry automatically.'
+  fi
+fi
 for tool in codex claude; do
   variable="FH_${tool^^}_REMOTE"
   if [ "${!variable-1}" = 1 ] && [ ! -s "$runtime/degraded-$tool" ]; then
