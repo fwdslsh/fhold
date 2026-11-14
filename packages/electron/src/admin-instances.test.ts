@@ -15,7 +15,7 @@ import { AdminInstances as Instances, validateInstance } from './admin-instances
 import { HostingPreferencesStore } from '@fhold/lib';
 
 class AdminInstances extends Instances {
-	constructor(profile: string, home: string) { super(profile, home, new HostingPreferencesStore(join(profile, 'hosting.json'))); }
+	constructor(profile: string, home: string) { super(home, new HostingPreferencesStore(join(profile, 'hosting.json'))); }
 }
 
 const roots: string[] = [];

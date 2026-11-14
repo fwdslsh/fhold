@@ -306,11 +306,11 @@ export function localInstanceManagement(
 			savePortalTokens(current.homeDir, { portal: input.portal, botToken, appToken });
 		},
 		'data.knowledgeUi': (input) => knowledgeUi.open(input || undefined),
-		'data.backup': (input, context) => backupFromAdmin(state().homeDir, { ...input, ...context }),
-		'data.restoreData': (input, context) =>
-			restoreFromAdmin(state().homeDir, { ...input, ...context }),
+		'data.backup': (input, context) => backupFromAdmin(state().homeDir, { ...input, confirmed: context.confirmed }),
+		'data.restoreData': (input) =>
+			restoreFromAdmin(state().homeDir, input),
 		'data.restoreInstance': (input, context) =>
-			instanceRestoreFromAdmin(managedState().homeDir, { ...input, ...context }),
+			instanceRestoreFromAdmin(managedState().homeDir, { ...input, confirmed: context.confirmed }),
 		'data.recovery.status': () => recoveryStatus(state().homeDir),
 		'data.recovery.inspect': () => runRecoveryOperation(state().homeDir, 'inspect'),
 		'data.recovery.initialize': (_input, context) =>

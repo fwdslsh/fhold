@@ -96,7 +96,6 @@ export type OperationInputMetadata = {
 
 export type Operation<Input, Output> =
 	| { support: 'unsupported'; reason: string }
-	| { support: 'unknown'; reason: string }
 	| {
 			support: 'supported';
 			input?: OperationInputMetadata;
@@ -106,7 +105,7 @@ export type Operation<Input, Output> =
 	  };
 
 export type OperationDescription =
-	| { support: 'unsupported' | 'unknown'; reason: string }
+	| { support: 'unsupported'; reason: string }
 	| {
 			support: 'supported';
 			availability: Availability;

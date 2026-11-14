@@ -852,7 +852,7 @@ async function saveKey() {
 	const outcome = await providerOperation(
 		'Saving sign-in',
 		() => state.api.operation('agent.setKey', { provider, key }),
-		'Sign-in saved. Choose a model, then test its response.'
+		'Sign-in saved. Choose a model to test or use.'
 	);
 	if (!currentRequest(request, true)) return;
 	byId('provider-key').value = '';
@@ -1211,7 +1211,7 @@ export function bindProvidersEvents() {
 					method: attempt.method,
 					...(code ? { code } : {})
 				}),
-			'Sign-in saved. Choose a model, then test its response.'
+			'Sign-in saved. Choose a model to test or use.'
 		);
 		if (!outcome.ok) return;
 		resetOAuthAttempt();

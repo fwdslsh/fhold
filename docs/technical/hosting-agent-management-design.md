@@ -367,7 +367,7 @@ if release classification confirms no runtime dependency/source changes.
 | 3. Shared consumers | Adapt Electron main/preload and CLI commands to the same named operations and normalized snapshot. Keep fixed page/component layout. Move provider-specific lifecycle effects into adapter descriptions. Keep dedicated native interactive CLI transport where it is actually required. | Remove the `phase: 'remote'` view branch, `managed` feature guesses and broad `settings/transfer` flags. Confirm unchanged local/SSH workflows and clear disabled ACA operations. |
 | 4. Native agent client | Extract injected HTTP access from `control-plane/opencode.ts`; isolate native preference and in-agent model-discovery dependencies from `provider-settings.ts`. Add explicit ACA native API connection/auth/readiness for supported operations. | No-wake passive tests, native auth flow, no redirects leaking auth, same agent-service contract on each reachable transport. Actual ACA qualification before claiming live parity. |
 | 5. Remaining runtime operations | First run the bounded ACA execution feasibility experiment. Then, only if warranted, extract existing worker/recovery commands and add narrow generic preference operations to the image. | Shipped-image verification of I/O, account/consent lifetime, runtime replacement, secrets, effective settings and persistence after replacement. This stage needs a full runtime release. |
-| 6. Retire bridges and document extension | Remove old dispatch/snapshot compatibility code once in-tree callers move; keep only necessary advertised remote protocol compatibility. Update hosting guide/core principles and provider conformance fixtures. | New adapter can satisfy contracts without modifying ordinary Admin screens, agent services or existing provider behavior. |
+| 6. Retire bridges and document extension | Remove old dispatch/snapshot compatibility code once in-tree callers move; the same-build SSH helper needs no remote protocol compatibility. Update hosting guide/core principles and provider conformance fixtures. | New adapter can satisfy contracts without modifying ordinary Admin screens, agent services or existing provider behavior. |
 
 Stage 1 has an explicit dependency direction: adapters contribute bound host and
 application ports, and management services do not import concrete host adapters.
@@ -435,9 +435,10 @@ tests and Admin browser fixtures. Test observable behavior, not class/file names
 - Watched preference change preserves unrelated JSONC and managed precedence;
   effective read-back, persisted save and recovery durability have truthful separate
   outcomes. No unnecessary container restart or stale rollback.
-- Optional metadata failure preserves other operations. Old CLI/image support is
-  reported per operation; old/new client-server combinations preserve the advertised
-  contract. Repairing tools is explicit and never updates workloads. Missing optional
+- Optional metadata failure preserves other operations. The SSH helper is the
+  content-addressed executable of the managing build, so client and server always
+  match; there is no per-operation version negotiation. Repairing tools is explicit
+  and never updates workloads. Missing optional
   observations do not introduce new mandatory preflight requests or restart gates.
 - An accepted lifecycle mutation with dropped response is not replayed. Polling
   stops on timeout/cancel with unknown outcome rather than false success. Deployment

@@ -136,12 +136,20 @@ function handleAdmin(
 }
 
 /** Allowlisted slots that take no input; every other allowlisted name has a parser. */
-const NO_INPUT_OPERATIONS: ReadonlySet<AdminOperation> = new Set([
+const NO_INPUT_OPERATION_NAMES = [
 	'host.deployment.inspect',
 	'host.deployment.discard',
 	'agent.providers',
 	'agent.assistantPassword'
-]);
+] as const satisfies readonly AdminOperation[];
+// Compile-time proof that each allowlisted operation is parsed or takes no input.
+type UnparsedOperation = Exclude<
+	AdminOperation,
+	OperationInputName | (typeof NO_INPUT_OPERATION_NAMES)[number]
+>;
+const everyOperationParsed: [UnparsedOperation] extends [never] ? true : UnparsedOperation = true;
+void everyOperationParsed;
+const NO_INPUT_OPERATIONS: ReadonlySet<string> = new Set(NO_INPUT_OPERATION_NAMES);
 
 /** Invoke one allowlisted named operation on the selected instance session. */
 function invokeAdminOperation(name: unknown, value: unknown, context: unknown): Promise<unknown> {
@@ -150,7 +158,7 @@ function invokeAdminOperation(name: unknown, value: unknown, context: unknown): 
 	let operation: unknown = session();
 	for (const key of name.split('.')) operation = (operation as Record<string, unknown>)[key];
 	let input: unknown;
-	if (NO_INPUT_OPERATIONS.has(name as AdminOperation)) {
+	if (NO_INPUT_OPERATIONS.has(name)) {
 		if (value !== undefined) throw new Error(`Invalid ${name} request.`);
 	} else input = parseInput(name as OperationInputName, value);
 	return invoke(operation as Operation<unknown, unknown>, input, confirmationContext(context));
@@ -194,7 +202,7 @@ export async function runAdminAction(action: StackAction) {
 }
 
 export function registerAdminIpc(): void {
-	instances = new AdminInstances(app.getPath('userData'));
+	instances = new AdminInstances();
 	desktop = new AdminDesktop({
 		platform: process.platform,
 		packaged: app.isPackaged,

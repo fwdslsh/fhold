@@ -102,8 +102,6 @@ export {
 export {
 	assistantEndpoint,
 	configureGuardianModeratorModel,
-	listProviders,
-	removeProviderAuth,
 	setProviderApiKey,
 	testAssistantReadiness,
 	waitForAssistant

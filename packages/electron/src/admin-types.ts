@@ -63,7 +63,6 @@ export const ADMIN_OPERATIONS = [
 	'apps.credentials.create',
 	'apps.credentials.updatePolicy',
 	'apps.credentials.rotate',
-	'apps.credentials.remove',
 	'apps.credentials.revealKey',
 	'apps.portal.mapUser',
 	'apps.portal.saveToken',

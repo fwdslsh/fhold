@@ -2295,22 +2295,6 @@ describe('Admin instance picker and automatic status', () => {
 		expect(imageInRow(0)).toBe('Not reported');
 		renderServices({ ...snapshot, docker: { ...snapshot.docker, updateImageTag: undefined } });
 		expect(control('update-image-tag').textContent).toBe('Not reported');
-		expect(control('runtime-version-settings').hidden).toBe(true);
-		renderServices({
-			...snapshot,
-			docker: { ...snapshot.docker, updateImageTag: undefined },
-			operations: {
-				...snapshot.operations,
-				'host.deployment.update': { support: 'unknown', reason: 'Remote CLI must be updated.' }
-			}
-		});
-		expect(control('runtime-version-help').textContent).toContain('Remote CLI must be updated');
-		expect(control('runtime-version-help').textContent).toContain('Your agent keeps running.');
-		expect(control('runtime-version-settings').hidden).toBe(false);
-		expect(control('update-stack').disabled).toBe(true);
-		renderServices(snapshot);
-		expect(control('runtime-version-settings').hidden).toBe(true);
-		expect(control('runtime-version-help').textContent).not.toContain('older');
 	});
 	it('labels configured deployment image references as non-runtime evidence', () => {
 		const snapshot = withServices(runtimeSnapshot(), [

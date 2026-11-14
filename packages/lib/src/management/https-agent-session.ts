@@ -1,5 +1,5 @@
 import type { HostingSnapshot } from '../hosting/types.js';
-import type { ProviderSettings } from '../control-plane/provider-settings.js';
+import { listProviderSettings, type ProviderSettings } from '../control-plane/provider-settings.js';
 import {
 	createHttpsNativeAgentService,
 	httpsNativeAgentAccess,
@@ -193,7 +193,11 @@ export function httpsAgentBindings(options: Options): Pick<
 		models = known(selectedModel ?? {});
 		account = known({ signedIn: inventory.some((item) => item.authenticated) });
 		try {
-			return await services.providers(context);
+			// Reuse this bound connection; a second bind could clear it and the
+			// fallback below would then report a stale inventory as current.
+			return await listProviderSettings(assertCurrent(context).management.settings, {
+				signal: context.signal
+			});
 		} catch {
 			context.signal?.throwIfAborted();
 			return { providers: inventory, ...(selectedModel ? { currentModel: selectedModel } : {}) };

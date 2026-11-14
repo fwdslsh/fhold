@@ -100,8 +100,6 @@ export class AdminInstances {
 	readonly defaultInstance: AdminInstance;
 
 	constructor(
-		// Unused since recents moved to hosting preferences; kept for the admin-app caller.
-		_userData: string,
 		defaultHome = resolveFholdHome(),
 		readonly hosting = new HostingPreferencesStore()
 	) {

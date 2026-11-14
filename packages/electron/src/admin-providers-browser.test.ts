@@ -415,13 +415,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe(true);
 		await evaluate(
-			`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,docker:{...window.overviewQa.docker,updateImageTag:undefined},operations:{...window.overviewQa.operations,'host.deployment.update':{support:'unknown'}},services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]}});})()`
-		);
-		expect(await evaluate("document.querySelector('#runtime-version-settings').hidden")).toBe(
-			false
+			`(async()=>{const {renderServices}=await import('./runtime.js');renderServices({...window.overviewQa,docker:{...window.overviewQa.docker,updateImageTag:undefined},operations:{...window.overviewQa.operations,'host.deployment.update':{support:'unsupported',reason:'This host does not report image updates.'}},services:{state:'known',observedAt:'2026-10-22T00:00:00.000Z',value:[{name:'assistant',state:'running',health:'healthy'}]}});})()`
 		);
 		expect(await evaluate("document.querySelector('#runtime-version-help').textContent")).toContain(
-			'local tooling distribution'
+			'This host does not report image updates.'
 		);
 		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
 		await capture('overview-missing-host-metadata.png');
