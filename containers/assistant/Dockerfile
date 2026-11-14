@@ -60,7 +60,7 @@ RUN mkdir -p /fhold-bundle/skills \
 
 # Both native harnesses install the same immutable upstream marketplace.
 # Retain the release's bundled CLI: local marketplaces do not install dependencies.
-ADD --checksum=sha256:1e774f887a28c28c813e9e8fa48df9b49738cf7de83c9674360d872fe7318ac9 \
+ADD --checksum=sha256:b4aefb733017fd3b4bd14ae3a289d20afafc02b7f747131b6901b6e96b5b76af \
     https://codeload.github.com/itlackey/akm-plugins/tar.gz/25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
     && plugin_root=akm-plugins-25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e/claude \
