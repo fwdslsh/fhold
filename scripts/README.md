@@ -16,7 +16,7 @@ Only a small script surface remains active.
 | `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |
 | `smoke-recovery.mjs` | Real-image directory checkpoints, required/excluded mounts, cold replacement and offline restore |
 | `smoke-blob-recovery.mjs` | Standard Blob transport conformance and native recovery against Azurite or an explicitly scoped live destination |
-| `smoke-admin-artifact.mjs` | Extract and launch a fresh Linux Admin AppImage on its build runner |
+| `smoke-admin-artifact.mjs` | Extract a freshly packaged Admin on its build runner and drive its startup journey through Playwright's Electron support |
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
 | `validate-admin-update-feeds.mjs` | Verify both generated Electron feeds match their exact AppImage version, architecture, size and SHA-512 |
