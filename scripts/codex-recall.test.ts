@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'bun:test';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
 	changeRecall,
 	recallReview,
-	reviewRecall
+	reviewRecall,
+	withCodexRecall
 } from '../containers/assistant/fhold-codex-recall.mjs';
 
 const hook = (event = 'sessionStart') => ({
@@ -112,5 +116,37 @@ describe('native Codex recall review', () => {
 		await expect(
 			reviewRecall(async () => ({ data: [{ hooks: [hook()], errors: ['bad definition'] }] }))
 		).rejects.toThrow('configuration errors');
+	});
+	it('runs a bounded private stdio app-server session with a normal handshake', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'fhold-codex-recall-'));
+		const methods = join(root, 'methods');
+		writeFileSync(
+			join(root, 'codex'),
+			`#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+for await (const line of console) {
+  const input = JSON.parse(line);
+  appendFileSync(${JSON.stringify(methods)}, input.method + '\\n');
+  if (input.method === 'hold' || !input.id) continue;
+  console.log(JSON.stringify(input.method === 'reject' ? { id: input.id, error: {} } : { id: input.id, result: { method: input.method } }));
+}
+`
+		);
+		chmodSync(join(root, 'codex'), 0o755);
+		const options = { env: { PATH: `${root}:${process.env.PATH}` }, workdir: root };
+		try {
+			expect(await withCodexRecall((rpc) => rpc('hooks/list', {}), options)).toEqual({
+				method: 'hooks/list'
+			});
+			expect(readFileSync(methods, 'utf8')).toBe('initialize\ninitialized\nhooks/list\n');
+			await expect(withCodexRecall((rpc) => rpc('reject', {}), options)).rejects.toThrow(
+				'rejected the hook configuration change'
+			);
+			await expect(
+				withCodexRecall((rpc) => rpc('hold', {}), { ...options, timeoutMs: 200 })
+			).rejects.toThrow('failed or timed out');
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
