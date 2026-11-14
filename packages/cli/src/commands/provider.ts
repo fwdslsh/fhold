@@ -15,7 +15,6 @@ import {
 	waitForAssistant
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
 import { runStartAction } from './lifecycle.js';
 
 function readKey(path: string): string {
@@ -60,7 +59,7 @@ async function verifyAndComplete(homeDir: string, provider?: string): Promise<vo
 const listCommand = defineCommand({
 	meta: { name: 'list', description: 'List providers and authentication methods from OpenCode' },
 	args: { json: { type: 'boolean', default: false, description: 'Print JSON' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
@@ -81,7 +80,7 @@ const listCommand = defineCommand({
 			const methods = provider.authMethods.map((method) => method.label).join(', ') || 'configured';
 			console.log(`${provider.id.padEnd(24)} ${status.padEnd(14)} ${methods}`);
 		}
-	})
+	}
 });
 
 const loginCommand = defineCommand({
@@ -90,7 +89,7 @@ const loginCommand = defineCommand({
 		provider: { type: 'positional', required: false, description: 'Provider id or name' },
 		method: { type: 'string', description: 'Native OpenCode login method ID' }
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		await runNativeProviderLogin({
 			provider: args.provider ? String(args.provider) : undefined,
 			method: args.method ? String(args.method) : undefined
@@ -99,7 +98,7 @@ const loginCommand = defineCommand({
 			createFholdState().homeDir,
 			args.provider ? String(args.provider) : undefined
 		);
-	})
+	}
 });
 
 const keyCommand = defineCommand({
@@ -112,7 +111,7 @@ const keyCommand = defineCommand({
 			description: 'Read the key from this file, or - for stdin'
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
@@ -123,31 +122,31 @@ const keyCommand = defineCommand({
 			readKey(String(args['key-file']))
 		);
 		await verifyAndComplete(state.homeDir, String(args.provider));
-	})
+	}
 });
 
 const logoutCommand = defineCommand({
 	meta: { name: 'logout', description: 'Remove one provider credential through OpenCode' },
 	args: { provider: { type: 'positional', required: true, description: 'Provider id' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
 		await waitForAssistant(state.homeDir, { timeoutMs: 5_000 });
 		await removeProviderAuth(state.homeDir, String(args.provider));
 		console.log(`Removed provider credential: ${String(args.provider)}`);
-	})
+	}
 });
 
 const testCommand = defineCommand({
 	meta: { name: 'test', description: 'Run a real no-tool Assistant readiness request' },
-	run: defineAction(async () => {
+	run: async () => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
 		await waitForAssistant(state.homeDir);
 		await verifyAndComplete(state.homeDir);
-	})
+	}
 });
 
 export default defineCommand({

@@ -13,7 +13,6 @@ import {
 	type ComposedInstanceSession
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
 import { runRestartAction, runStartAction } from './lifecycle.js';
 import { runNativeProviderLogin } from './provider.js';
 import { enableRemote } from './remote.js';
@@ -141,12 +140,12 @@ export default defineCommand({
 			description: 'Guide experimental Codex remote sign-in after provider setup'
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		await completeSetup({
 			provider: args.provider ? String(args.provider) : undefined,
 			method: args.method ? String(args.method) : undefined,
 			claudeRemote: args['claude-remote'] === true,
 			codexRemote: args['codex-remote'] === true
 		});
-	})
+	}
 });

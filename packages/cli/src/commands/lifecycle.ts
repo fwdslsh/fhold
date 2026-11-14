@@ -10,8 +10,6 @@ import {
 	runComposeStreaming
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-
 export async function runStartAction(homeDir?: string): Promise<void> {
 	await operateLocalInstance(resolveFholdHome(homeDir), 'start');
 }
@@ -45,25 +43,25 @@ export async function readStatus(): Promise<Record<string, unknown>> {
 
 export const startCommand = defineCommand({
 	meta: { name: 'start', description: 'Start the configured stack' },
-	run: defineAction(() => runStartAction())
+	run: () => runStartAction()
 });
 
 export const stopCommand = defineCommand({
 	meta: { name: 'stop', description: 'Stop the stack without deleting volumes' },
-	run: defineAction(runStopAction)
+	run: runStopAction
 });
 
 export const restartCommand = defineCommand({
 	meta: { name: 'restart', description: 'Recreate the configured stack' },
-	run: defineAction(() => runRestartAction())
+	run: () => runRestartAction()
 });
 
 export const logsCommand = defineCommand({
 	meta: { name: 'logs', description: 'Print the last 100 service log lines' },
-	run: defineAction(runLogsAction)
+	run: runLogsAction
 });
 
 export const statusCommand = defineCommand({
 	meta: { name: 'status', description: 'Show stack intent and container status' },
-	run: defineAction(async () => console.log(JSON.stringify(await readStatus(), null, 2)))
+	run: async () => console.log(JSON.stringify(await readStatus(), null, 2))
 });
