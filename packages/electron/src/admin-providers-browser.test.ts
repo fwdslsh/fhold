@@ -254,16 +254,18 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const account=(id,extra={})=>({id,name:id,source:'api',authenticated:false,connected:false,configured:false,models:[{id:'first-model',name:'First model'},{id:'team/second-model',name:'Second model'}],authMethods:[{index:0,type:'api',label:'API key'}],...extra});
 			window.providerQa={state,providers,calls:[],confirmations:[],confirmRemoval:false,failCheck:false,settings:{providers:[account('current-service',{authenticated:true,connected:true}),account('alphabetical-first',{authenticated:true,connected:true}),account('openai'),account('opencode',{source:'custom',connected:true}),account('uncommon-provider'),account('orphan',{authenticated:true,models:[]}),account('oauth-provider',{authMethods:[{index:0,type:'oauth',label:'Browser'}]})],currentModel:{provider:'current-service',model:'team/second-model'}}};
 			const qa=window.providerQa;window.confirm=prompt=>{qa.confirmations.push(prompt);return qa.confirmRemoval;};
-			state.api={snapshot:async()=>({...${JSON.stringify(snapshot)},lifecycle:{state:'known',value:qa.setup?'setup-incomplete':'ready',observedAt:'2026-10-22T00:00:00.000Z'}}),providers:async()=>{qa.calls.push({operation:'list'});return structuredClone(qa.settings);},
-				readiness:async value=>{qa.calls.push({operation:'test',...value});if(qa.failCheck)return {ok:false,error:'Check this server address and model access. This model could not respond.'};if(qa.settings.currentModel?.provider===value.provider&&qa.settings.currentModel?.model===value.model)qa.setup=false;return {ok:true,...value,response:'FH_READY'};},
-				providerKey:async value=>{qa.calls.push({operation:'key',provider:value.provider});Object.assign(qa.settings.providers.find(item=>item.id===value.provider),{authenticated:true,connected:true});},
-				providerOAuthStart:async value=>{qa.calls.push({operation:'oauth-start',provider:value.provider});return {method:'code',instructions:'Return with the authorization code from your provider.'};},
-				providerOAuthFinish:async value=>{qa.calls.push({operation:'oauth-save',provider:value.provider});Object.assign(qa.settings.providers.find(item=>item.id===value.provider),{authenticated:true,connected:true});},
-				providerModels:async value=>{qa.calls.push({operation:'discover',url:value.url});return ['team/local-model','team/long-model-name-with-an-exact-native-id'];},
-				providerEndpoint:async value=>{qa.calls.push({operation:'endpoint-save',provider:value.provider,model:value.model,url:value.url});let item=qa.settings.providers.find(item=>item.id===value.provider);if(!item){item=account(value.provider);qa.settings.providers.push(item);}Object.assign(item,{name:value.name,configured:true,disabled:false,connected:true,source:'config',models:[{id:value.model,name:value.model}],endpoint:{name:value.name,url:value.url,models:[value.model],editable:true}});if(value.key)item.authenticated=true;return structuredClone(qa.settings);},
-				providerUse:async value=>{qa.calls.push({operation:'use',...value});if(!qa.rejectUse)qa.settings.currentModel={...value};return structuredClone(qa.settings);},
-				providerRemove:async value=>{qa.calls.push({operation:'remove',...value});const item=qa.settings.providers.find(item=>item.id===value.provider);if(value.endpoint){item.disabled=true;item.connected=false;item.models=[];}else item.authenticated=false;return structuredClone(qa.settings);},
+			state.api={snapshot:async()=>({...${JSON.stringify(snapshot)},lifecycle:{state:'known',value:qa.setup?'setup-incomplete':'ready',observedAt:'2026-10-22T00:00:00.000Z'}}),operation:(name,input,context)=>{const handler=window.qaOps[name];if(!handler)throw Error('Unexpected operation '+name);return handler(input,context);},
 				confirmRestart:async()=>{throw new Error('No automatic provider restart');}};
+			window.qaOps={'agent.providers':async()=>{qa.calls.push({operation:'list'});return structuredClone(qa.settings);},
+				'agent.readiness':async value=>{qa.calls.push({operation:'test',...value});if(qa.failCheck)return {ok:false,error:'Check this server address and model access. This model could not respond.'};if(qa.settings.currentModel?.provider===value.provider&&qa.settings.currentModel?.model===value.model)qa.setup=false;return {ok:true,...value,response:'FH_READY'};},
+				'agent.setKey':async value=>{qa.calls.push({operation:'key',provider:value.provider});Object.assign(qa.settings.providers.find(item=>item.id===value.provider),{authenticated:true,connected:true});},
+				'agent.oauthStart':async value=>{qa.calls.push({operation:'oauth-start',provider:value.provider});return {method:'code',instructions:'Return with the authorization code from your provider.'};},
+				'agent.oauthFinish':async value=>{qa.calls.push({operation:'oauth-save',provider:value.provider});Object.assign(qa.settings.providers.find(item=>item.id===value.provider),{authenticated:true,connected:true});},
+				'agent.discoverModels':async value=>{qa.calls.push({operation:'discover',url:value.url});return ['team/local-model','team/long-model-name-with-an-exact-native-id'];},
+				'agent.saveEndpoint':async value=>{qa.calls.push({operation:'endpoint-save',provider:value.provider,model:value.model,url:value.url});let item=qa.settings.providers.find(item=>item.id===value.provider);if(!item){item=account(value.provider);qa.settings.providers.push(item);}Object.assign(item,{name:value.name,configured:true,disabled:false,connected:true,source:'config',models:[{id:value.model,name:value.model}],endpoint:{name:value.name,url:value.url,models:[value.model],editable:true}});if(value.key)item.authenticated=true;return structuredClone(qa.settings);},
+				'agent.selectModel':async value=>{qa.calls.push({operation:'use',...value});if(!qa.rejectUse)qa.settings.currentModel={...value};return structuredClone(qa.settings);},
+				'agent.removeProvider':async value=>{qa.calls.push({operation:'remove',...value});const item=qa.settings.providers.find(item=>item.id===value.provider);if(value.endpoint){item.disabled=true;item.connected=false;item.models=[];}else item.authenticated=false;return structuredClone(qa.settings);},
+};
 			render(${JSON.stringify(snapshot)});showView('provider');bindUiEvents();providers.bindProvidersEvents();await providers.loadProviders(false,true);
 		})()`);
 		const idle = async () => {
@@ -869,7 +871,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				prepareNewInstance:async value=>{if(qa.readPending)throw Error('Wait for the current operation to finish');qa.name=value.name;qa.names.push(value.name);},
 				snapshot:async()=>{if(++qa.reads===2){qa.readPending=true;return new Promise(resolve=>{qa.release=()=>{qa.readPending=false;resolve(snapshot());};});}return snapshot();},
 			install:async()=>{if(++qa.installs===1)throw Error('Instance name is already in use.');return {...snapshot(),lifecycle:{state:'known',value:'setup-incomplete',observedAt:'2026-10-22T00:00:00.000Z'},services:{state:'known',value:[{name:'assistant',state:'running',health:'healthy',running:true}],observedAt:'2026-10-22T00:00:00.000Z'}};},
-				providers:async()=>({providers:[]})};
+				operation:(name,input,context)=>{const handler=window.qaOps[name];if(!handler)throw Error('Unexpected operation '+name);return handler(input,context);}};
+			window.qaOps['agent.providers']=async()=>({providers:[]});
 			renderWelcome({defaultInstance:{homeDir:'/disposable-installs/default',available:false},instancesDirectory:'/disposable-installs',recentInstances:[]});
 			renderInstallationReadiness({ok:true});bindInstanceEvents();bindRuntimeEvents();
 		})()`);
@@ -934,16 +937,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#provider-fields').disabled")).toBe(false);
 		expect(await evaluate("document.querySelector('#transfer-fields').disabled")).toBe(false);
 		await evaluate(
-			`(async()=>{const {state}=await import('./state.js');window.logQa=[];state.api.logs=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`
+			`(async()=>{const {state}=await import('./state.js');window.logQa=[];window.qaOps['host.logs']=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`
 		);
 		await click('#load-logs');
-		expect(await evaluate('window.logQa.at(-1)')).toBeNull();
+		expect(await evaluate('window.logQa.at(-1)')).toEqual({ tail: 250 });
 		// Every hosting connection uses the same actual screens. This deliberately does
 		// not qualify SSH/Azure connectivity or any native account/deployment.
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
 			const {render}=await import('./snapshot.js');
-			state.api.providers=async()=>{throw Error('Remote view attempted local provider discovery');};
+			window.qaOps['agent.providers']=async()=>{throw Error('Remote view attempted local provider discovery');};
 			state.currentView='overview';
 			render({
 				identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},name:'cloud-agent',location:'/subscriptions/example/resourceGroups/agents/providers/Microsoft.App/containerApps/agent'},
@@ -1025,7 +1028,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		);
 		await value('#log-source', 'console');
 		await click('#load-logs');
-		expect(await evaluate('window.logQa.at(-1)')).toEqual({ type: 'console' });
+		expect(await evaluate('window.logQa.at(-1)')).toEqual({ tail: 250, type: 'console' });
 		expect(
 			await evaluate(
 				"document.querySelector('#transfer-fields').disabled && document.querySelector('#export-backup').matches(':disabled') && !document.querySelector('#transfer-fields-unavailable').hidden"
@@ -1287,7 +1290,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.chooseDirectory=async()=>undefined;
 			state.api.openInstance=async target=>{qa.opens.push(target);throw Error('This instance is not available. Choose another instance or check its host connection.');};
 			state.api.prepareNewInstance=async target=>{qa.prepares.push(target);};
-			state.api.restoreInstance=async input=>{if(input.apply)qa.imports++;return {projectName:'restored-agent',sourceHome:input.sourceHome,destinationHome:'/home/user/fhold/instances/restored-agent',copyCount:142,skipped:[],warnings:['The source export must remain private: it includes sign-ins and access keys.'],digest:'fixture-preview'};};
+			window.qaOps['data.restoreInstance']=async input=>{if(input.apply)qa.imports++;return {projectName:'restored-agent',sourceHome:input.sourceHome,destinationHome:'/home/user/fhold/instances/restored-agent',copyCount:142,skipped:[],warnings:['The source export must remain private: it includes sign-ins and access keys.'],digest:'fixture-preview'};};
 			state.api.confirmRestart=async()=>{qa.confirmations++;return qa.approve;};
 			window.instanceQaWelcome={instancesDirectory:'/home/user/fhold/instances',defaultInstance:{kind:'local',homeDir:'/home/user/fhold/instances/default',available:false},recentInstances:[]};
 			state.recentInstances=[];renderWelcome(window.instanceQaWelcome);bindInstanceRestoreEvents();
@@ -1532,7 +1535,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const {state}=await import('./state.js'); const {render}=await import('./snapshot.js');
 			window.cloudAccessQa={...window.overviewQa,identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource/agent'},name:'Cloud assistant',location:'/resource/agent'},docker:undefined,lifecycle:{state:'known',value:'deployed'},agent:{access:{state:'not-inspected',reason:'Connect explicitly'}},operations:{...window.overviewQa.operations,'agent.connect':{support:'supported',availability:{state:'ready'},input:{acceptsPassword:true,requiresPassword:false}}}};
 			state.api.snapshot=async()=>window.cloudAccessQa;
-			state.api.connectAgent=async input=>{window.cloudInstallQa.connections.push(input);if(!input.password)throw Error('Azure secret access is unavailable. Enter the native OpenCode password.');return {endpoint:'https://private.example.test',username:'custom-user'};};
+			window.qaOps['agent.connect']=async input=>{window.cloudInstallQa.connections.push(input);if(!input.password)throw Error('Azure secret access is unavailable. Enter the native OpenCode password.');return {endpoint:'https://private.example.test',username:'custom-user'};};
 			state.awaitingSetupFinish=true; render(window.cloudAccessQa);
 		})()`);
 		await click('#provider-connect-agent');
@@ -1556,8 +1559,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			window.cloudDraftQa={prepared:[],applied:0,confirmations:[],settings:{containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],availability:'always',environment:{FH_TIMEZONE:'America/Chicago',FH_SCHEDULER_ENABLED:'1',FH_CLAUDE_REMOTE:'0',FH_CODEX_REMOTE:'0'}}};
 			state.awaitingSetupFinish=false; state.currentView='system';
 			window.cloudAccessQa={...window.cloudAccessQa,operations:{...window.cloudAccessQa.operations,...Object.fromEntries(['inspect','prepare','apply','discard'].map(name=>['host.deployment.'+name,{support:'supported',availability:{state:'ready'}}]))}};
-			state.api.deploymentSettings=async()=>window.cloudDraftQa.settings;
-			state.api.prepareDeployment=async patch=>{window.cloudDraftQa.prepared.push(patch);window.cloudDraftQa.settings={...window.cloudDraftQa.settings,pending:patch};window.cloudAccessQa={...window.cloudAccessQa,pendingChanges:{state:'known',value:{pending:true,detail:'Deployment changes are saved locally. Apply them when you are ready to interrupt the current instance.'}}};return window.cloudDraftQa.settings;};
+			window.qaOps['host.deployment.inspect']=async()=>window.cloudDraftQa.settings;
+			window.qaOps['host.deployment.prepare']=async patch=>{window.cloudDraftQa.prepared.push(patch);window.cloudDraftQa.settings={...window.cloudDraftQa.settings,pending:patch};window.cloudAccessQa={...window.cloudAccessQa,pendingChanges:{state:'known',value:{pending:true,detail:'Deployment changes are saved locally. Apply them when you are ready to interrupt the current instance.'}}};return window.cloudDraftQa.settings;};
 			state.api.applyDeployment=async()=>{window.cloudDraftQa.applied++;throw Error('Later must not apply cloud changes');};
 			state.api.confirmRestart=async action=>{window.cloudDraftQa.confirmations.push(action);return false;};
 			bindConfigurationEvents();render(window.cloudAccessQa);
@@ -1648,7 +1651,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			qa.snapshot={...${JSON.stringify(snapshot)},identity:{ref:{kind:'azure-container-apps',connectionId:'cloud',resourceId:'/resource/agent'},name:'Cloud assistant',location:'/resource/agent'},docker:undefined,lifecycle:known('deployed'),services:known([{name:'assistant',state:'Stopped'}]),data:{recovery:{state:'not-inspected',reason:'Inspect saved coverage to read backup settings.'}},operations:{...${JSON.stringify(snapshot.operations)},'data.recovery.save':ready,'data.recovery.inspect':ready,'data.recovery.initialize':ready,'data.recovery.restore':{support:'unsupported',reason:'Start restores the app before writers run. A separate offline Job cannot restore its writable layer.'},'data.recovery.setCredential':{support:'unsupported',reason:'Use a native storage secret or identity.'},'docker.directory':{support:'unsupported',reason:'Use an existing mounted container path.'},'data.backup':{support:'unsupported',reason:'Cloud full-instance export is not implemented.'}}};
 			state.dirtyForms.clear();state.api.snapshot=async()=>qa.snapshot;
 			state.api.confirmRestart=async action=>{qa.confirmations.push(action);return false;};
-			state.api.recovery=async input=>{qa.calls.push(input);if(input.action==='inspect'){qa.snapshot.data.recovery=known(recovery);return JSON.stringify({selection:recovery.selection});}if(input.action==='status')return {state:'ready',lastPublishedAt:Date.now()};if(input.action==='save'){recovery.settings=input.settings;qa.snapshot.pendingChanges=known({pending:true});return qa.snapshot;}throw Error('Unexpected backup operation');};
+			window.qaOps['data.recovery.inspect']=async()=>{qa.calls.push({action:'inspect'});qa.snapshot.data.recovery=known(recovery);return JSON.stringify({selection:recovery.selection});};
+			window.qaOps['data.recovery.status']=async()=>{qa.calls.push({action:'status'});return {state:'ready',lastPublishedAt:Date.now()};};
+			window.qaOps['data.recovery.save']=async input=>{qa.calls.push({action:'save',...input});recovery.settings=input.settings;qa.snapshot.pendingChanges=known({pending:true});};
 			render(qa.snapshot,{preserveDirty:false});showView('system');bindRecoveryEvents();
 			for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id==='backup-recovery';
 			document.querySelector('#runtime-recovery').open=true;document.querySelector('#import-export').open=false;
@@ -1705,7 +1710,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const {state}=await import('./state.js');const {render}=await import('./snapshot.js');
 			const qa=window.backupQa;qa.packageCalls=[];qa.approveImport=false;
 			qa.snapshot.operations['data.recovery.package']={support:'supported',availability:{state:'ready'}};
-			state.api.recovery=async input=>{qa.packageCalls.push(input);return {product:'fhold',scope:'assistant-checkpoint',instanceId:'agent',generation:'b'.repeat(64),previewDigest:'a'.repeat(64),files:3,totalBytes:4000,warnings:['Private sign-ins and task intent'],...(input.request.operation==='import'?{restored:true,homeDir:input.request.destinationHome}:{})};};
+			window.qaOps['data.recovery.package']=async(input,context)=>{qa.packageCalls.push({input,context});return {product:'fhold',scope:'assistant-checkpoint',instanceId:'agent',generation:'b'.repeat(64),previewDigest:'a'.repeat(64),files:3,totalBytes:4000,warnings:['Private sign-ins and task intent'],...(input.operation==='import'?{restored:true,homeDir:input.destinationHome}:{})};};
 			state.api.confirmRestart=async action=>{qa.confirmations.push(action);return qa.approveImport;};
 			render(qa.snapshot,{preserveDirty:false});document.querySelector('#checkpoint-packages').open=true;
 		})()`);
@@ -1722,12 +1727,15 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await click('#preview-checkpoint');
 		await evaluate('window.backupQa.approveImport=true');
 		await click('#import-checkpoint');
-		expect(await evaluate('window.backupQa.packageCalls.at(-1).request')).toEqual({
-			operation: 'import',
-			directory: '/private/package',
-			destinationHome: '/private/reviewed-home',
-			backupDirectory: '/private/new-backups',
-			previewDigest: 'a'.repeat(64)
+		expect(await evaluate('window.backupQa.packageCalls.at(-1)')).toEqual({
+			input: {
+				operation: 'import',
+				directory: '/private/package',
+				destinationHome: '/private/reviewed-home',
+				backupDirectory: '/private/new-backups',
+				previewDigest: 'a'.repeat(64)
+			},
+			context: { confirmed: true }
 		});
 		expect(await evaluate("document.querySelector('#checkpoint-package-result').value")).toContain(
 			'restored'

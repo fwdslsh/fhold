@@ -42,7 +42,10 @@ export function bindKeyEvents() {
 		try {
 			saved = await operation(
 				'Rotating connection key',
-				() => state.api.credential({ action: 'rotate', username }),
+				() =>
+					state.api
+						.operation('apps.credentials.rotate', { username })
+						.then(() => state.api.snapshot()),
 				'Connection key rotated. Update external apps using this connection.'
 			);
 		} finally {

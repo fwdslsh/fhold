@@ -554,7 +554,7 @@ export async function loadProviders(withNotice = true, force = false) {
 	const request = { home: home(), epoch: ++state.providerCatalogEpoch };
 	const ownsCatalog = () => request.home === home() && request.epoch === state.providerCatalogEpoch;
 	const promise = state.api
-		.providers()
+		.operation('agent.providers')
 		.then((settings) => {
 			if (!ownsCatalog()) return;
 			renderProviders(settings);
@@ -859,7 +859,7 @@ async function saveKey() {
 	const request = captureRequest();
 	const outcome = await providerOperation(
 		'Saving sign-in',
-		() => state.api.providerKey({ provider, key }),
+		() => state.api.operation('agent.setKey', { provider, key }),
 		'Sign-in saved. Choose a model, then test its response.'
 	);
 	if (!currentRequest(request, true)) return;
@@ -888,7 +888,7 @@ async function loadModels() {
 	}
 	const outcome = await providerOperation(
 		'Loading server models',
-		() => state.api.providerModels({ url, ...(key ? { key } : {}) }),
+		() => state.api.operation('agent.discoverModels', { url, ...(key ? { key } : {}) }),
 		undefined
 	);
 	if (!outcome.ok) return;
@@ -930,7 +930,7 @@ async function testSelectedModel() {
 		endpoint ? 'Saving setup and testing response' : 'Testing model response',
 		async () => {
 			if (payload) {
-				const settings = await state.api.providerEndpoint(payload);
+				const settings = await state.api.operation('agent.saveEndpoint', payload);
 				if (!currentRequest(request, true))
 					throw new Error('Setup changed before the response test.');
 				byId('provider-endpoint-key').value = '';
@@ -946,7 +946,7 @@ async function testSelectedModel() {
 					'Endpoint setup saved. It stays saved even if this response test fails.'
 				);
 			}
-			return state.api.readiness({ provider, model });
+			return state.api.operation('agent.readiness', { provider, model });
 		},
 		{ provider, model }
 	);
@@ -974,7 +974,11 @@ async function removeProvider(id, endpoint) {
 	clearTest();
 	const outcome = await providerOperation(
 		endpoint ? 'Disabling endpoint' : 'Removing saved sign-in',
-		() => state.api.providerRemove({ provider: id, ...(endpoint ? { endpoint: true } : {}) }),
+		() =>
+			state.api.operation('agent.removeProvider', {
+				provider: id,
+				...(endpoint ? { endpoint: true } : {})
+			}),
 		endpoint
 			? 'Endpoint disabled. Its definition and saved sign-in are kept.'
 			: 'Saved sign-in removed. The vendor account was not revoked.',
@@ -1102,10 +1106,14 @@ export function bindProvidersEvents() {
 	on('test-current-model', 'click', () => {
 		const current = state.providerCurrentModel;
 		if (!current || state.operationInFlight || state.activeOAuth) return;
-		void verifyProvider('Testing current model response', () => state.api.readiness(current), {
-			...current,
-			current: true
-		});
+		void verifyProvider(
+			'Testing current model response',
+			() => state.api.operation('agent.readiness', current),
+			{
+				...current,
+				current: true
+			}
+		);
 	});
 	on('use-provider-model', 'click', async () => {
 		const provider = selectedId();
@@ -1113,7 +1121,7 @@ export function bindProvidersEvents() {
 		if (byId('use-provider-model').disabled || !testedModel(provider, model)) return;
 		const request = captureRequest();
 		const outcome = await providerOperation('Changing your agent’s default model', () =>
-			state.api.providerUse({ provider, model })
+			state.api.operation('agent.selectModel', { provider, model })
 		);
 		if (!outcome.ok) return;
 		renderProviders(outcome.value);
@@ -1171,7 +1179,7 @@ export function bindProvidersEvents() {
 		clearTest();
 		const outcome = await providerOperation(
 			'Opening provider sign-in',
-			() => state.api.providerOAuthStart({ provider, method: method.index, inputs }),
+			() => state.api.operation('agent.oauthStart', { provider, method: method.index, inputs }),
 			'Sign-in opened. Finish it here before choosing a model.'
 		);
 		if (!outcome.ok) return;
@@ -1206,7 +1214,7 @@ export function bindProvidersEvents() {
 		const outcome = await providerOperation(
 			'Saving provider sign-in',
 			() =>
-				state.api.providerOAuthFinish({
+				state.api.operation('agent.oauthFinish', {
 					provider: attempt.provider,
 					method: attempt.method,
 					...(code ? { code } : {})
