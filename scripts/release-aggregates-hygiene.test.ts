@@ -432,9 +432,13 @@ describe('release completeness gate', () => {
 		expect(builder).toContain('artifactName: fhold-admin-${version}-${arch}-${os}.${ext}');
 		// Native preview packaging is allowed; public distribution remains Linux-only.
 		const workflow = Bun.YAML.parse(readFileSync(join(WORKFLOWS, 'gates.yml'), 'utf8'));
-		expect(workflow.jobs.admin.strategy.matrix.include).toEqual([
-			{ os: 'ubuntu-latest', platform: 'linux', script: 'build:linux' }
-		]);
+		expect(workflow.jobs.admin['runs-on']).toBe('ubuntu-latest');
+		expect(workflow.jobs.admin.strategy).toBeUndefined();
+		expect(
+			workflow.jobs.admin.steps.some(
+				(step: { run?: string }) => step.run === 'bun run --cwd packages/electron build:linux'
+			)
+		).toBe(true);
 		expect(readJson('packages/electron/package.json').scripts?.['build:linux']).toContain(
 			'--linux'
 		);
