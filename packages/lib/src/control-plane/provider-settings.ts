@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
 import { composeProcessEnvironment, runDocker } from './docker.js';
-import { createFholdState } from './foundation.js';
+import { asRecord as record, createFholdState } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
 	listProviders as localListProviders,
@@ -74,11 +74,6 @@ type Options = NativeAgentRequestOptions;
 type ConfigFile = { value: Record<string, unknown> };
 const POLICY_FILE = 'system/assistant/opencode.json';
 
-function record(value: unknown): Record<string, unknown> | undefined {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
-}
 function id(value: string): string {
 	if (
 		!/^[A-Za-z0-9._-]{1,128}$/.test(value) ||

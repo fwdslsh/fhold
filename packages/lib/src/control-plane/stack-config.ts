@@ -4,7 +4,9 @@ import { isIP } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 
 import {
+	asRecord,
 	defaultFholdHome,
+	hasOnlyKeys,
 	isInstanceName,
 	mergeEnvContent,
 	resolveFholdHome,
@@ -182,17 +184,6 @@ export function validTimezone(value: unknown): value is string {
 	} catch {
 		return false;
 	}
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
-}
-
-function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-	const allowed = new Set(keys);
-	return Object.keys(value).every((key) => allowed.has(key));
 }
 
 function parsePort(value: unknown): number | null {
