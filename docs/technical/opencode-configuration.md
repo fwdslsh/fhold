@@ -81,7 +81,8 @@ expose a previously private server, start it or download its models.
 
 The authenticated native API uses username `opencode` and the file-backed
 server password. The default bind is `127.0.0.1:3810`; fresh setup chooses a
-free port when occupied. `fhold connect opencode` reports the saved address.
+free port when occupied. `fhold connect opencode` reports the running instance's
+published address.
 Other addresses require explicit operator choice.
 
 The OpenCode client connects using `--server <url>`; use the native

@@ -343,10 +343,17 @@ export async function runHostedCommand(
 	const connection = store().connection(connectionId);
 	const action = argv[0] || 'status';
 	const composedAction =
-		['status', 'logs', 'start', 'stop', 'restart', 'console', 'backup', 'restore'].includes(
-			action
-		) ||
-		(action === 'connect' && argv[1] !== 'remote') ||
+		[
+			'status',
+			'logs',
+			'start',
+			'stop',
+			'restart',
+			'console',
+			'backup',
+			'restore',
+			'connect'
+		].includes(action) ||
 		(action === 'update' && (connection.kind !== 'ssh-docker' || argv.includes('--resume')));
 	if (connection.kind === 'ssh-docker' && !composedAction) {
 		if (!instance) throw Error('Choose a remote instance with --name/-n.');
