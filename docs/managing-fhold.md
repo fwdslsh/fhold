@@ -467,7 +467,7 @@ Task-binding status comes from the same read-only report's native `scheduler`
 field; run `akm doctor` in Assistant when you want binding details, and
 `akm doctor scheduler sync --rebind` to repair them. Doctor does not start a stopped
 Assistant, run an agent/task, apply migrations or write proposals. Legacy
-`knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
+`knowledge/secrets/auth.json` is legacy OpenCode input, not proof of current sign-in;
 connected endpoints can also work without credentials.
 
 AKM configuration and executable availability do not prove successful agent

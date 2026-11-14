@@ -54,8 +54,10 @@ that the account works; only the explicit response test verifies inference.
 
 Sign-in uses native integration/authentication/credential APIs. v2 owns active
 credentials in its SQLite database. The old `knowledge/secrets/auth.json` mount
-is retained solely for upstream's one-time v1 database migration.
-Portable provider exports use native credential APIs and exclude MCP credentials.
+is read only by OpenCode's own one-time import when it migrates a database created
+before that import; fhold does not convert it. Portable provider exports use native
+credential APIs and exclude MCP credentials; a home without a native database
+carries the old file unchanged, so sign in again if the target's OpenCode ignores it.
 
 Changing container environment, mounts, ports, the selected preferences filename,
 read-only operator policy or image-baked tools requires normal managed activation.

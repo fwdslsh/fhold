@@ -149,8 +149,10 @@ in an environment variable.
 OpenCode v2 owns provider credentials in its native SQLite database under
 `data/assistant/.local/share/opencode/`. Guardian uses Assistant's tool-free
 native generation API and receives no provider credentials. The old
-`knowledge/secrets/auth.json` mount remains only as input to upstream's one-time
-v1 database migration; it is not the active v2 credential store.
+`knowledge/secrets/auth.json` is mounted at OpenCode's data-directory `auth.json`.
+OpenCode imports it once, natively, only while migrating a database created before
+its legacy-credential migration; a new database ignores it. fhold never converts
+it, and it is not the active v2 credential store.
 
 ## Assistant
 
@@ -164,7 +166,7 @@ bypasses Guardian.
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
 | `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
-| `knowledge/secrets/auth.json` | Legacy OpenCode auth path | v1 migration input only |
+| `knowledge/secrets/auth.json` | `/home/fhold/.local/share/opencode/auth.json` | Legacy file read only by OpenCode's own one-time migration |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `system/codex/config.toml` | `/etc/codex/config.toml` | read-only individual file |
 | `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only individual file |

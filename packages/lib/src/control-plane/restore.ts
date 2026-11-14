@@ -27,11 +27,7 @@ import {
 import { classifyInstall, ensureRuntime } from './state.js';
 import { createFholdState } from './foundation.js';
 import { readSeedFile } from './seed.js';
-import {
-	importProviderCredentials,
-	legacyProviderCredentials,
-	PROVIDER_CREDENTIAL_EXPORT
-} from './provider-transfer.js';
+import { importProviderCredentials, PROVIDER_CREDENTIAL_EXPORT } from './provider-transfer.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
 	assertSafePortablePath,
@@ -763,14 +759,6 @@ async function applyRestoreLocked(
 				plan.destinationHome,
 				readProviderSecretFile(plan.destinationHome, PROVIDER_CREDENTIAL_EXPORT)
 			);
-		} else if (
-			options.includeProviderAuth &&
-			plan.entries.some((entry) => entry.relativeSource === 'knowledge/secrets/auth.json')
-		) {
-			const credentials = legacyProviderCredentials(
-				readProviderSecretFile(plan.destinationHome, 'knowledge/secrets/auth.json')
-			);
-			if (credentials) await importProviderCredentials(plan.destinationHome, credentials);
 		}
 		save('completed');
 	} catch (error) {
