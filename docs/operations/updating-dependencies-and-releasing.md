@@ -230,20 +230,19 @@ so a new release branch can reuse layers from previous releases. PR and fork bui
 do not write registry caches or stage candidates; their GitHub Actions cache remains
 a fallback. Caches accelerate builds and never replace final checks.
 
-For 0.3, use `X.Y.YYMMNN-beta` (or alpha/rc/stable), retaining its counter 00–99.
-Starting at 0.4, drop the year prefix: use `X.Y.MMNN[-alpha|-beta|-rc]`, for
+Use `X.Y.MMNN[-alpha|-beta|-rc]`, for
 example `0.4.1001-beta`, `0.4.1002`, `0.4.1101`. Counter `NN` starts at 01 each
 UTC month and runs through 99. January's canonical SemVer form is `0.4.101`,
 not `0.4.0101`; at year rollover start a new minor line, e.g. `0.5.101`, to
-avoid a downgrade. See the [0.4 version policy](release.md#month-counter-versions-from-04).
+avoid a downgrade. See the [version policy](release.md#release-version-format).
 Use commit SHAs and image digests while developing and functionally validating
 candidates. Choose and stamp the public version near publication. Start the
-monthly counter at 00 for 0.3 or 01 for 0.4+ and advance it for each public
+monthly counter at 01 and advance it for each public
 release, including channel promotion. No prerelease serial is used. Check public tags, releases and images
 for used counters; local candidate receipts and nonpublishing dry runs do not
 reserve one. See the
-[monthly version policy](release.md#monthly-versions-from-03) for retries,
-overflow and historical 0.1/0.2 compatibility:
+[version policy](release.md#release-version-format) for retries and
+overflow:
 
 ```sh
 git fetch origin --tags

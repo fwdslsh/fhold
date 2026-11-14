@@ -221,9 +221,9 @@ test('root build scripts can change without runtime qualification, but install h
 	).toBe('full');
 });
 test('tooling assets omit the bridge and fresh installs use the published runtime cohort', () => {
-	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'tools')).toHaveLength(7);
+	expect(requiredReleaseAssets('0.4.1002-beta', 'tools')).toHaveLength(7);
 	expect(
-		requiredReleaseAssets('0.2.2610121-beta.9', 'tools').some((name) =>
+		requiredReleaseAssets('0.4.1002-beta', 'tools').some((name) =>
 			name.endsWith('.mcpb')
 		)
 	).toBe(false);
@@ -266,7 +266,7 @@ test('tooling workflow skips image gates and publication without skipping artifa
 test('tooling-only checksums and manifest validate without a new extension', () => {
 	const dir = mkdtempSync(join(tmpdir(), 'fhold-release-preview-'));
 	try {
-		const version = '0.2.2610121-beta.9';
+		const version = '0.4.1002-beta';
 		const names = requiredReleaseAssets(version, 'tools').filter(
 			(name) => name !== 'checksums-sha256.txt'
 		);

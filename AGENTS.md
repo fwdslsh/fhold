@@ -179,11 +179,10 @@ require the affected checks on the final SHA. Follow
 `docs/operations/updating-dependencies-and-releasing.md`. Keep runtime pins exact
 and image-baked rather than floating versions or startup upgrades.
 
-Identify development candidates by commit SHA and image digest. Public version
-formats are `X.Y.YYMMNN` for 0.3 and `X.Y.MMNN` from 0.4 onward, with
-optional `-alpha`, `-beta` or `-rc` and no serial. The 0.4+ counter starts at 01
-each UTC month; January is canonical SemVer `0.4.101`. Drop the year prefix
-only from 0.4 onward. Start a new minor line at year rollover to preserve ordering.
+Identify development candidates by commit SHA and image digest. The public
+version format is `X.Y.MMNN`, with optional `-alpha`, `-beta` or `-rc` and no
+serial. The counter starts at 01 each UTC month; January is canonical SemVer
+`0.4.101`. Start a new minor line at year rollover to preserve ordering.
 Choose and stamp the release version near publication, after functional validation. Unpublished
 local builds, dry runs and candidate receipts do not consume monthly counters;
 they may be rebuilt under the same provisional version with fresh evidence.

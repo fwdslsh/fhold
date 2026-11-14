@@ -86,9 +86,6 @@ SHA to `release/*` **before** updating/readying the PR at that same SHA, so PR c
 can wait for and reuse the canonical candidate. An ordinary PR branch can reuse
 that evidence too; its current base must already be in the candidate's ancestry.
 
-For the historical **0.1 release line**, use `X.Y.yyMMddHHmm` in UTC (20yy), optionally
-`-alpha`, `-beta` or `-rc` and a positive serial. Real dates/hours/minutes,
-canonical integers and numeric precedence are enforced by `scripts/set-version.mjs`.
 Unpublished local builds, nonpublishing dry runs and candidate receipts do not
 consume a version or monthly counter. They can change under the same provisional
 version. Keep evidence by SHA/digest and regenerate local checksums/manifests
@@ -107,13 +104,6 @@ public partial-publication counters as though they were local dry runs.
 Establish final publication intent and carry it across the selected scope's package
 manifests, artifacts, filenames, checksums and receipt. Full releases also advance
 image and MCPB versions; tooling-only releases retain those published versions.
-`releaseIntent` binds version to revision/content hash. Its `existing` input is
-an immutable publication identity, not an unpublished candidate receipt; exact
-publication retries must match it. Regenerate unpublished candidate intent from
-the current revision/hash without treating old local evidence as a reservation.
-For historical 0.1 releases, at the same minute use a higher prerelease serial;
-stable collisions require another minute. Historical 0.2 releases use the daily
-build counter below; current releases use the monthly counter.
 
 `VERSION=<release-version> node scripts/bump-release.mjs` previews stamping;
 `STAMP=true` explicitly writes. It must preflight every listed input first.
@@ -133,64 +123,10 @@ that hostile `/work/bunfig.toml` preloads do not execute through managed helpers
 using the real-image/native-harness smoke. This is an image runtime option,
 not a replacement launcher or configuration service.
 
-### Historical 0.2 date and daily build
+### Release version format
 
-The **0.2 release line** replaced the hour/minute timestamp with
-`X.Y.yyMMdd<build>`: two-digit year, month, day, then an unpadded positive daily
-build number. Keep the date in UTC; start the build counter at `1` each day and
-increment it for each new release build. Existing immutable-version and
-identical-content retry rules still apply.
-
-Examples: `0.2.2610081` is build 1 on October 8, 2026;
-`0.2.2612225-beta.1` is build 5 on December 22, 2026, marked beta 1.
-Alpha, beta and rc suffixes remain supported, including their optional positive
-serials. No existing 0.1 versions, tags or artifacts will be renamed.
-
-The shared release parser, stamping, intent checks and artifact validator support
-this format and retain historical 0.1 timestamps. Release comparisons parse date
-and build separately: with an unpadded counter,
-`26100810` (October 8, build 10) is numerically larger than `2610091`
-(October 9, build 1), so ordinary numeric patch ordering is not chronological.
-Do not use an ordinary SemVer patch comparison to select the newest daily build.
-Changing the minor version from 0.1 to 0.2 on the same UTC date is valid; the
-shorter patch is not a clock regression. Publication does not rewrite existing
-tags, recovery formats or instance identities.
-
-### Monthly versions from 0.3
-
-For the **0.3 release line**, use `X.Y.YYMMNN[-alpha|-beta|-rc]`, with UTC year/month
-and a two-digit monthly counter `NN`. The first October 2026 release is
-`0.3.261000-beta`. There is no additional prerelease serial. The patch is a
-canonical SemVer integer (no leading zero); this calendar format covers 2010–2099.
-Month must be 01–12, and counter must be exactly 00–99.
-
-For each major/minor line, start at `00` each UTC month and increment for every
-public release, sharing the counter across alpha, beta, rc and stable. Promoting
-`0.3.261000-beta` therefore consumes `0.3.261001-rc` or `0.3.261001`;
-do not reuse a public counter for another channel. Abandoned unpublished
-candidates do not consume a counter; an abandoned partial public publication
-does. Check public tags, releases and versioned images before choosing the next
-unused counter. Local candidate receipts do not reserve versions. Gaps are
-allowed; public counter reuse is not.
-After 99, refuse further candidates in that month: wait for the next UTC month
-or explicitly review a new minor line. Never widen/wrap the counter or change
-the date to evade overflow. A new month/year resets the counter to 00.
-
-Comparison uses major/minor, UTC month, counter, then channel
-`alpha < beta < rc < stable`. Channel ordering remains defined even though new
-public release intent requires advancing the counter. Exact publication retries
-retain the public version, revision and content identity; changed public bytes
-require another counter. Unpublished rebuilds use fresh SHA/digest evidence
-without consuming another counter.
-Historical 0.1 timestamps and 0.2 daily builds remain readable and immutable.
-Cross-format clock checks use shared month precision, so moving from an October
-21 daily release to October's monthly line is valid. Moving to a prior month
-is refused, including across minor lines.
-
-### Month-counter versions from 0.4
-
-Starting with **0.4**, drop the `YY` year prefix and use
-`X.Y.MMNN[-alpha|-beta|-rc]`. Month selection remains UTC. `NN` starts at `01`
+Release versions use `X.Y.MMNN[-alpha|-beta|-rc]`, validated by
+`scripts/set-version.mjs`. Month selection is UTC. `NN` starts at `01`
 each month and runs through `99`, shared by all channels. Examples:
 `0.4.1001`, `0.4.1002`, `0.4.1101`, or `0.4.1001-beta`. Promotions consume the
 next counter; `0.4.1001-beta` promotes to `0.4.1002-rc` or `0.4.1002`, never a
@@ -200,7 +136,11 @@ Keep the patch a canonical SemVer integer. For January through September, omit
 the leading zero from the complete patch: January counter 01 is **`0.4.101`**,
 not `0.4.0101`; September counter 99 is `0.4.999`. The two counter digits stay
 present. Counter00, invalid months, `NN=100`, and year-prefixed 0.4 patches are
-rejected. Counter gaps are allowed; published counter reuse is not.
+rejected. Abandoned unpublished candidates do not consume a counter; an
+abandoned partial public publication does. Check public tags, releases and
+versioned images before choosing the next unused counter. Local candidate
+receipts do not reserve versions. Counter gaps are allowed; published counter
+reuse is not.
 
 Comparison uses major/minor, numeric month/counter, then channel. The year is
 not encoded and the parser does not invent one. At December-to-January rollover,
@@ -208,21 +148,18 @@ start a new minor line, for example **`0.4.1299` → `0.5.101`**. January on the
 same minor line would be a SemVer downgrade and is refused. After counter 99,
 wait for the next UTC month or explicitly review a new minor line; never widen
 or wrap the counter. A new minor line takes normal SemVer precedence even when
-its patch is numerically smaller. This also permits `0.3.261013-beta` to advance
-to `0.4.1001-beta` without interpreting the shorter patch as a clock regression.
+its patch is numerically smaller.
 
-The first stable release is **0.4.1001**. The 0.3 format and all published
-historical versions remain unchanged. Existing
-immutable publication identity, unused-counter checks, SHA/digest development
-candidates and rebuild/retry rules apply unchanged to the new format.
+The first stable release is **0.4.1001**. Published pre-0.4 versions remain
+immutable but are not accepted for new stamping.
 
 All stamping, release workflow and artifact validation use the shared parser.
 CLI/Admin derive their own, runtime and MCPB versions from the owning manifests;
 updates advance only previously managed image defaults, preserving explicit pins.
 Download names, native plugin manifests, Compose defaults and release asset
 receipts retain the exact release string. No native database, recovery schema,
-credentials, instance identity or checkpoint authority changes with this naming
-transition.
+credentials, instance identity or checkpoint authority depends on the release
+version format.
 
 ## Linux acceptance
 
