@@ -97,7 +97,7 @@ repair its PATH, settings or permissions inside a test to conceal a product bug.
 Disposable fixtures may isolate accounts/data, not supply missing product behavior.
 Prefer a small, maintainable solution over another helper, service or exception.
 Default to logging, isolating an optional failure and reporting actionable degraded
-state while the agent continues. Scheduling, knowledge hooks, keep-alive and
+state while the agent continues. Scheduling, knowledge hooks and
 diagnostics must not become whole-container restart gates. Stop only when the
 core cannot run or continuing is unsafe, including authentication, incomplete
 restore and actual loss of exclusive recovery ownership.
@@ -233,8 +233,8 @@ Publication scope never narrows shared-pipeline validation: changes to the nativ
 CI pipeline require all six image jobs even for an Assistant-only or tools stamp.
 Keep native architecture, security, browser, scheduler/provider and recovery/upgrade
 checks in the release gates. Release Assistant verification uses three bounded
-lanes with independent cache/runtime/activity/lifecycle fixtures. Extended idle/unload and
-historical import cases run in two endurance lanes weekly/manually against
+lanes with independent cache/runtime/lifecycle fixtures. Historical import cases
+run in an endurance lane weekly/manually against
 published images without rebuilding. Run affected endurance cases during
 development when changing their behavior. They are not automatic blockers for
 unrelated dependency releases. Do not add timing claims without measurements.
