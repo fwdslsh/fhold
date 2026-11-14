@@ -59,6 +59,11 @@ ACA capability can be enabled.
 
 ## Native CLI compatibility checks
 
+> Historical record. The management session now carries named operations as
+> `{operation, input, context}` lines and the content-addressed helper no longer
+> advertises methods or features, so the method-name envelope and capability
+> negotiation described in this section and in the second review pass were removed.
+
 In addition to synthetic wire tests, the retained released Linux x64 CLI
 `0.3.261002-beta` was executed directly (artifact SHA-256
 `129966cfd538a2af593ebf313bc92f1297f92943c78e1b6b7fafdb27d5890358`).

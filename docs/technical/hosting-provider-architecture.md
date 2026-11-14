@@ -143,23 +143,18 @@ invalidates the pending startup change.
 
 ## Transport compatibility and ACA limits
 
-The fixed SSH machine endpoint advertises its wire version and operation names.
-The persistent session preserves OAuth attempts and native prompt processes
-across calls. Request/result types and boundary parsers are shared; unknown IPC
-and SSH JSON is parsed into typed inputs before entering use cases. A mapped
-handler table checks the wire implementations' input/result types. Passive
-snapshot calls do not acquire forwarding resources; explicit connection does.
-Confirmation travels only in the normalized request context and is translated
-to published wire fields inside the adapter. Keep supported old wire shapes explicitly compatible instead of
-requiring identical desktop and image releases. SSH management code and managed
-Skeleton are content-bound to the local distribution; operator-installed remote
-CLIs are not part of this path.
-
-SSH capability discovery is adapter-owned and cached per session. A first operation
-negotiates `hello` itself; callers do not need a throwaway status read. Unknown
-capabilities do not masquerade as an old-CLI refusal. Negotiated method/feature
-checks happen before dispatch, and atomic policy editing uses the additive
-`credentialPolicy` feature advertisement. Older hosts retain their other operations.
+The fixed SSH machine endpoint checks its wire version; `hello` reports only the
+helper release and instances directory. The persistent session preserves OAuth
+attempts and native prompt processes across calls. Local and SSH management run
+one handler table keyed by the named operations (`agent.setKey`,
+`data.recovery.save`, …); SSH carries each call as one `{operation, input,
+context}` JSON line over stdin. Unknown IPC and SSH JSON is parsed into typed
+inputs before entering use cases, and confirmation travels only in the request
+context. Passive snapshot calls do not acquire forwarding resources; explicit
+connection does. SSH management code and managed Skeleton are content-bound to
+the local distribution, so the helper always implements every operation; there
+is no method or feature negotiation and operator-installed remote CLIs are not
+part of this path.
 Connection metadata describes the client routes that explicit acquisition can
 provide. CLI `connect` defaults to MCP consistently; an OpenCode-only route gives
 `connect opencode` guidance before requesting native credentials.
