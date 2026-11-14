@@ -324,8 +324,10 @@ export function localInstanceManagement(
 			saveRecoveryCredential(state().homeDir, input.connectionString);
 		},
 		'data.recovery.package': (input, context) => {
-			const home = state().homeDir;
-			if (input.operation === 'export') return exportCheckpointPackage(home, input.directory);
+			if (input.operation === 'export')
+				return exportCheckpointPackage(state().homeDir, input.directory);
+			// Preview/import fall back to the pinned image when no instance is installed here.
+			const home = managedState().homeDir;
 			if (input.operation === 'preview') return previewCheckpointPackage(home, input.directory);
 			return importCheckpointPackage(home, input, context.confirmed === true);
 		},
