@@ -1,6 +1,70 @@
 import { describe, expect, it } from 'bun:test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { moderateMessage, parseModerationVerdict } from './moderation.js';
+import {
+	moderateMessage,
+	moderatorCall,
+	moderatorModel,
+	parseModerationVerdict
+} from './moderation.js';
+
+describe('Guardian moderator model', () => {
+	const config = (text: string) => {
+		const path = join(mkdtempSync(join(tmpdir(), 'fhold-moderator-')), 'opencode.json');
+		writeFileSync(path, text);
+		return path;
+	};
+
+	it('reads an optional provider/model and treats anything else as not set', () => {
+		expect(moderatorModel(config('{ "model": "example/small/v2" } // operator choice'))).toEqual({
+			providerID: 'example',
+			id: 'small/v2'
+		});
+		for (const text of ['{ "$schema": "x" }', '{ "model": "no-provider" }', '{ invalid'])
+			expect(moderatorModel(config(text))).toBeUndefined();
+		expect(moderatorModel('/nonexistent/opencode.json')).toBeUndefined();
+	});
+
+	it('uses the Guardian model when it works', async () => {
+		const calls: unknown[] = [];
+		const text = await moderatorCall('message', [], {
+			model: { providerID: 'example', id: 'small' },
+			generate: async (_prompt, model) => {
+				calls.push(model);
+				return 'guardian';
+			}
+		});
+		expect(text).toBe('guardian');
+		expect(calls).toEqual([{ providerID: 'example', id: 'small' }]);
+	});
+
+	it('falls back to the Assistant model when the Guardian model is unavailable or not set', async () => {
+		const calls: unknown[] = [];
+		const generate = async (_prompt: string, model?: { providerID: string; id: string }) => {
+			calls.push(model);
+			if (model) throw new Error('model not found');
+			return 'assistant';
+		};
+		expect(
+			await moderatorCall('message', [], { model: { providerID: 'gone', id: 'model' }, generate })
+		).toBe('assistant');
+		expect(await moderatorCall('message', [], { model: undefined, generate })).toBe('assistant');
+		expect(calls).toEqual([{ providerID: 'gone', id: 'model' }, undefined, undefined]);
+	});
+
+	it('fails when the Assistant model is unavailable too', async () => {
+		await expect(
+			moderatorCall('message', [], {
+				model: undefined,
+				generate: async () => {
+					throw new Error('no default model');
+				}
+			})
+		).rejects.toThrow('no default model');
+	});
+});
 
 describe('Guardian moderation', () => {
 	it('lets benign traffic use the cheap local screen', async () => {

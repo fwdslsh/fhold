@@ -44,26 +44,67 @@ function moderationPrompt(message: string, signals: ContentSignal[]): string {
 	].join('\n');
 }
 
-async function moderatorCall(message: string, signals: ContentSignal[]): Promise<string> {
-	const timeout = boundedInt(Bun.env.GUARDIAN_MODERATION_TIMEOUT_MS, 4_000, 30_000);
-	const path = join(Bun.env.HOME ?? '/home/fhold', '.config/opencode/opencode.json');
-	const text = readFileSync(path, 'utf8');
-	if (Buffer.byteLength(text) > 64 * 1024) throw new Error('Moderator configuration is too large');
+type ModelSelection = { providerID: string; id: string };
+type Generate = (prompt: string, model?: ModelSelection) => Promise<string>;
+
+/** The operator's optional moderator model; absent or unusable means not set. */
+export function moderatorModel(
+	path = join(Bun.env.HOME ?? '/home/fhold', '.config/opencode/opencode.json')
+): ModelSelection | undefined {
+	let text: string;
+	try {
+		text = readFileSync(path, 'utf8');
+	} catch {
+		return undefined;
+	}
+	if (Buffer.byteLength(text) > 64 * 1024) {
+		log.warn('moderator_config_ignored', { reason: 'too large' });
+		return undefined;
+	}
 	const errors: ParseError[] = [];
 	const config = asRecord(parse(text, errors, { allowTrailingComma: true }) as unknown);
-	if (errors.length) throw new Error('Moderator configuration is invalid');
+	if (errors.length) {
+		log.warn('moderator_config_ignored', { reason: 'invalid' });
+		return undefined;
+	}
 	const selection = typeof config?.model === 'string' ? config.model : '';
 	const separator = selection.indexOf('/');
-	if (separator < 1 || separator === selection.length - 1)
-		throw new Error('Choose a moderator provider/model');
-	// The native generation API cannot execute tools or create an agent session.
-	// Upstream binds generation to global configuration, not workspace settings.
-	// Credentials and OAuth refresh remain in the one native OpenCode store.
-	const response = await createNativeClient({ timeoutMs: timeout }).generate.text({
-		prompt: moderationPrompt(message, signals),
-		model: { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) }
-	});
-	return response.text;
+	if (separator < 1 || separator === selection.length - 1) return undefined;
+	return { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) };
+}
+
+/** Use the Guardian model when set and available, otherwise the Assistant's model. */
+export async function moderatorCall(
+	message: string,
+	signals: ContentSignal[],
+	options: { model?: ModelSelection; generate?: Generate } = {}
+): Promise<string> {
+	const model = 'model' in options ? options.model : moderatorModel();
+	const generate =
+		options.generate ??
+		(async (prompt, selection) => {
+			const timeout = boundedInt(Bun.env.GUARDIAN_MODERATION_TIMEOUT_MS, 4_000, 30_000);
+			// The native generation API cannot execute tools or create an agent session.
+			// Without a model it uses the Assistant's configured default model.
+			// Credentials and OAuth refresh remain in the one native OpenCode store.
+			const response = await createNativeClient({ timeoutMs: timeout }).generate.text({
+				prompt,
+				...(selection ? { model: selection } : {})
+			});
+			return response.text;
+		});
+	const prompt = moderationPrompt(message, signals);
+	if (model) {
+		try {
+			return await generate(prompt, model);
+		} catch (error) {
+			log.warn('moderator_model_unavailable', {
+				model: `${model.providerID}/${model.id}`,
+				error: error instanceof Error ? error.message : String(error)
+			});
+		}
+	}
+	return generate(prompt);
 }
 
 export async function moderateMessage(

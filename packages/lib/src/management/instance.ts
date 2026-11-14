@@ -96,7 +96,7 @@ export function localInstanceManagement(
 			);
 		},
 		openUrl: options.openUrl,
-		completeSetup: (readiness) => completeInstanceSetup(homeDir, readiness)
+		completeSetup: () => completeInstanceSetup(homeDir)
 	});
 	const transfers = new Set<string>();
 	const knowledgeUi = new KnowledgeUi(homeDir);

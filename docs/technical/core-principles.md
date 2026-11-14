@@ -475,8 +475,10 @@ Guardian's own authentication and request protections remain unchanged.
   native trust/consent and operator/project hooks. There is no managed-only
   exclusion or image task-policy compatibility gate. Actual recovery capability
   and ownership checks remain. See [native configuration](../managed-harness-configuration.md).
-- Provider setup finishes only after a real no-tool request; it replaces only
-  the untouched moderator placeholder with the exact provider/model verified.
+- Provider setup finishes only after a real no-tool request. Guardian moderates
+  with the Assistant's model unless `config/guardian/opencode.json` sets a
+  `model`; an unavailable Guardian model falls back to the Assistant's model.
+  Setup never edits that operator-owned file.
 - Scheduled tasks use native AKM engine/agent selection and the operator's
   unchanged prompt, with no additional fhold tool ceiling. Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.

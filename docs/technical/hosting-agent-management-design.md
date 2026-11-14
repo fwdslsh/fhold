@@ -338,9 +338,8 @@ architectural decision, not a hidden fallback in this refactor.
    updates, then releases the old session's resources.
 2. **Connect an AI account:** acquire native access explicitly, use native auth,
    preserve the live OAuth attempt, discover models, run only a user-requested test
-   and explicitly select a model. The existing first-setup moderator-placeholder
-   update and installation-complete marker are separate application-level steps
-   for deployments that have them; a missing Guardian cannot invalidate agent auth.
+   and explicitly select a model. The installation-complete marker is a separate
+   application-level step for deployments that have it; a missing Guardian cannot invalidate agent auth.
 3. **Save and apply:** save only the owning setting, preserve other drafts, report
    pending deployment changes persistently where supported, and confirm disruptive
    apply. Do not restart the whole container for a watched native preference.

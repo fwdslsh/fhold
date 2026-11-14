@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-	configureGuardianModeratorModel,
 	listProviders,
 	localNativeAgent,
 	removeProviderAuth,
@@ -427,13 +426,5 @@ describe('Native OpenCode v2 setup', () => {
 			ok: false,
 			error: 'The provider responded, but the readiness token was missing'
 		});
-	});
-
-	it('pins only the untouched Guardian placeholder to the verified model', () => {
-		const root = home();
-		const path = join(root, 'config/guardian/opencode.json');
-		expect(configureGuardianModeratorModel(root, 'anthropic', 'team/exact/model')).toBe(true);
-		expect(readFileSync(path, 'utf8')).toContain('"anthropic/team/exact/model"');
-		expect(configureGuardianModeratorModel(root, 'anthropic', 'different')).toBe(false);
 	});
 });

@@ -406,8 +406,10 @@ Live credential keys, policies and portal-user mappings still take effect
 without a restart; deferring settings does not defer credential revocation.
 Provider sign-in and native provider/model API edits do not restart containers.
 In-place native preference changes do not create a pending-restart alert.
-Guardian reads its moderator model on each moderation call, so the first-setup
-moderator update takes effect without a restart.
+Guardian moderates suspicious requests with the Assistant's model. An optional
+`model` in `config/guardian/opencode.json` selects another; Guardian reads it on
+each moderation call, so changes need no restart, and falls back to the
+Assistant's model when that model is unavailable.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider

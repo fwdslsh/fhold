@@ -101,7 +101,6 @@ export {
 } from './control-plane/operations.js';
 export {
 	assistantEndpoint,
-	configureGuardianModeratorModel,
 	setProviderApiKey,
 	testAssistantReadiness,
 	waitForAssistant

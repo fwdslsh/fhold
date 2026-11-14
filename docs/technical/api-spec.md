@@ -229,6 +229,8 @@ older handle cannot cancel a later run in the same session.
   path-bearing origin entries are invalid.
 - Prompts and human-input answers pass the heuristic screen. Suspicious text
   is classified using OpenCode's native tool-free generation API. No agent session or second server is created.
+  The classifier is the optional Guardian `model`; if it is not set or not
+  available, the Assistant's model is used.
 - `flag`, `block`, moderator failure/timeout, or malformed classifier output
   fails closed.
 - Raw shell/file-write endpoints, provider/auth/config management, session

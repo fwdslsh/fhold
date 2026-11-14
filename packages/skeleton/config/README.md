@@ -6,7 +6,7 @@ default but never replace an existing file.
 | Directory | Purpose |
 |---|---|
 | `assistant/` | Trusted local OpenCode preferences |
-| `guardian/` | Guardian moderator model/provider preferences |
+| `guardian/` | Optional Guardian moderator model (defaults to the Assistant's model) |
 | `akm/` | AKM configuration |
 | `portal/discord/` | Discord user-to-credential map |
 | `portal/slack/` | Slack user-to-credential map |

@@ -1,5 +1,4 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import {
 	createNativeAgentService,
 	type AssistantReadiness,
@@ -10,9 +9,7 @@ import {
 	type ProviderSummary
 } from './native-agent.js';
 import { readStackConfig } from './stack-config.js';
-import { stateSecretFile, writeFileAtomic } from './foundation.js';
-
-const FRESH_GUARDIAN_MODEL = '"model": "opencode/big-pickle"';
+import { stateSecretFile } from './foundation.js';
 
 export type {
 	AssistantReadiness,
@@ -88,32 +85,3 @@ export async function testAssistantReadiness(
 	return localNativeAgent(home, options).testReadiness(options);
 }
 
-export function configureGuardianModeratorModel(
-	home: string,
-	provider: string | undefined,
-	model: string | undefined
-): boolean {
-	if (!provider || !model) return false;
-	if (
-		provider.length > 128 ||
-		model.length > 256 ||
-		[provider, model].some((value) => [...value].some((character) => character.charCodeAt(0) < 32))
-	)
-		throw new Error('Provider readiness returned an invalid model identifier.');
-	const path = join(home, 'config/guardian/opencode.json');
-	if (!existsSync(path)) return false;
-	const stat = lstatSync(path);
-	if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024)
-		throw new Error('Guardian configuration must be a regular file smaller than 64 KiB.');
-	const text = readFileSync(path, 'utf8');
-	const occurrences = text.split(FRESH_GUARDIAN_MODEL).length - 1;
-	if (!occurrences) return false;
-	if (occurrences !== 1)
-		throw new Error('Guardian configuration contains duplicate model settings.');
-	writeFileAtomic(
-		path,
-		text.replace(FRESH_GUARDIAN_MODEL, `"model": ${JSON.stringify(`${provider}/${model}`)}`),
-		stat.mode & 0o777
-	);
-	return true;
-}
