@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1110-beta — AKM 0.10.261123, Guardian model fallback and simplification
+
 Update Assistant to AKM CLI/web **0.10.261123**, the OpenCode plugin
 `akm-opencode-v2` **0.10.261124** and the Claude Code/Codex AKM plugins
 **0.10.261124** (marketplace commit `25ccbfc`), which require that CLI exactly.
