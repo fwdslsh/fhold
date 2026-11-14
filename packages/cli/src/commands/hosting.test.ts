@@ -125,13 +125,16 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const command = process.argv.at(-1);
 if (command === 'uname -sm') console.log('Linux x86_64');
 else if (command.startsWith('if test -f ')) process.stdout.write('ready');
-else {
+else if (command.endsWith(' hosting session')) {
+// The application session is unavailable; status must degrade, not fail.
+require('node:readline').createInterface({ input: process.stdin }).on('line', (line) =>
+	console.log(JSON.stringify({ id: JSON.parse(line).id, ok: false, error: 'unavailable' })));
+} else {
 const input = readFileSync(0, 'utf8');
 const request = JSON.parse(input);
 writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args: process.argv.slice(2), request }));
 const item = { ref: { kind:'local-docker',connectionId:'local',homeDir:'/opt/stacks/agent' },name:'agent',location:'/opt/stacks/agent',services:[],warnings:[] };
-const value = request.action==='hello' ? {actions:['list','inspect','logs','start','stop','restart']} : request.action==='list' ? [item] : item;
-if(request.action==='hello') process.exitCode=0;
+const value = request.action==='list' ? [item] : item;
 console.log(JSON.stringify({version:1,ok:true,value}));
 }
 `,
@@ -152,14 +155,18 @@ console.log(JSON.stringify({version:1,ok:true,value}));
 	});
 	expect(snapshot.operations['agent.providers']).toMatchObject({
 		support: 'supported',
-		availability: { state: 'unavailable' }
+		availability: { state: 'ready' }
 	});
 	expect(snapshot.docker).toBeUndefined();
 	const input = JSON.parse(readFileSync(capture, 'utf8'));
 	expect(input.args.at(-1)).toMatch(/^exec "\$\{XDG_CACHE_HOME:-\$HOME\/\.cache\}\/fhold\/management\/[a-f0-9]{64}"\/fhold hosting rpc$/);
 	expect(input.args.at(-1)).not.toContain('.local/bin/fhold');
 	expect(input.args).not.toContain('/opt/stacks/agent');
-	expect(input.request).toMatchObject({ action: 'hello', version: 1 });
+	expect(input.request).toMatchObject({
+		action: 'inspect',
+		version: 1,
+		homeDir: '/opt/stacks/agent'
+	});
 	expect(existsSync(env.FH_HOME)).toBe(false);
 });
 
