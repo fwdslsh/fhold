@@ -213,10 +213,6 @@ prepare_identity() {
   for candidate in /usr/lib/*/libnss_wrapper.so /lib/*/libnss_wrapper.so; do
     if [ -e "$candidate" ]; then wrapper="$candidate"; break; fi
   done
-  if [ -z "$wrapper" ]; then
-    echo "assistant: uid $(id -u) has no passwd entry and libnss-wrapper is unavailable" >&2
-    exit 1
-  fi
   printf 'fhold:x:%s:%s:fhold Assistant:/home/fhold:/bin/bash\n' "$(id -u)" "$(id -g)" >/tmp/fhold-passwd
   printf 'fhold:x:%s:\n' "$(id -g)" >/tmp/fhold-group
   export NSS_WRAPPER_PASSWD=/tmp/fhold-passwd
@@ -380,15 +376,6 @@ start_scheduler() {
   fi
 }
 
-required_binaries=(opencode setsid env)
-if [ -n "${FH_RECOVERY_URL:-}" ]; then required_binaries+=(fhold-recovery); fi
-for binary in "${required_binaries[@]}"; do
-  if ! command -v "$binary" >/dev/null 2>&1; then
-    echo "assistant: required binary not found: $binary" >&2
-    exit 1
-  fi
-done
-
 prepare_identity
 umask 077
 if [ -L "$RUNTIME_DIR" ]; then
@@ -468,10 +455,6 @@ if fhold-keepalive init >/dev/null; then
 else
   mark_degraded keepalive 'Keep-alive could not initialize. Correct its URL or authorization-file settings and restart; the agent remains available.'
 fi
-if [ "$SCHEDULER_ENABLED" = 1 ] && { ! command -v akm >/dev/null || ! command -v fhold-task >/dev/null; }; then
-  SCHEDULER_ENABLED=0
-  mark_degraded scheduler 'Scheduling is unavailable: AKM or the task helper is missing. Use a complete Assistant image and restart.'
-fi
 
 # AKM reads never build the index. Build or refresh it once per boot, after
 # restore and migration, beside the agent; reads serve what is indexed so far.
@@ -499,7 +482,7 @@ essential_pids+=("$assistant_pid")
 printf '%s\n' "$assistant_pid" >"$RUNTIME_DIR/assistant.pid"
 
 if [ "$SCHEDULER_ENABLED" = 1 ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
-  if ! command -v supercronic >/dev/null || ! start_scheduler; then
+  if ! start_scheduler; then
     mark_degraded scheduler 'Scheduling and keep-alive could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
   fi
 fi
