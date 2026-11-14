@@ -8,7 +8,7 @@ export async function startPortal(adapter = process.env.PORTAL_ADAPTER ?? ''): P
 	if (adapter !== 'discord' && adapter !== 'slack') {
 		throw new Error('PORTAL_ADAPTER must be discord or slack');
 	}
-	const health = startHealthServer(`portal:${adapter}`);
+	const health = startHealthServer();
 	if (adapter === 'discord') {
 		const { DiscordPortal } = await import('./discord.js');
 		const portal = new DiscordPortal();

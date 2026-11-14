@@ -57,9 +57,8 @@ privileged policy.
 |---|:---:|:---:|:---:|
 | Guarded agent run and job polling/cancel | yes | yes | yes |
 | Owned session list/get | yes | yes | yes |
-| Session messages/diff resources | yes | yes | yes |
 | Question response and permission rejection | yes | yes | yes |
-| Bounded workspace search/read | no | yes | yes |
+| Bounded workspace search/read and file resource | no | yes | yes |
 | Session fork/delete | no | no | yes |
 | Permission approval (`once`/`always`) | no | no | yes |
 | Managed Assistant profile | `remote` | `remote-read` | `remote-full` |
@@ -150,11 +149,10 @@ does not finish the job while the agent is still working.
 - `fhold.session.list({ limit? })` lists only sessions cryptographically
   owned by the authenticated named credential.
 - `fhold.session.get({ session, include? })` returns status and summary
-  metadata. `include` may contain `messages` and/or `diff`, making
-  those views available to tools-only clients.
+  metadata. `include` may contain `messages` and/or `diff`.
 - `fhold.session.fork({ session, message? })` is `full`-only and creates a
-  newly owned session. The optional value is an opaque message handle from the
-  session-messages resource.
+  newly owned session. The optional value is an opaque message handle from
+  `fhold.session.get` with `include: ["messages"]`.
 - `fhold.session.delete({ session })` is `full`-only and permanently removes
   the session and history.
 
@@ -198,42 +196,14 @@ reach Assistant. Guardian verifies that the interaction is still pending and
 belongs to the same owned session. Non-`full` credentials can never approve a
 permission.
 
-### Catalog
-
-`fhold.catalog.get({})` returns the policy-filtered tool, resource, and
-prompt names. It does not return the Assistant's internal tools, configuration,
-providers, or credentials.
-
 ## Resources
-
-Resources are additive conveniences. Tools-only clients use
-`fhold.session.get` with `include` for the same session views and
-`fhold.job.get` for job state.
 
 OpenCode v2 removed native TODO lists and symbol search. fhold no longer
 advertises those capabilities; file/text search, messages, changes and tool
 progress remain available.
 
-- `fhold://workspace/{path}` (`read`/`full` only)
-- `fhold://sessions/{session}/messages`
-- `fhold://sessions/{session}/diff`
-- `fhold://jobs/{job}`
-
-The URI variables are opaque Guardian handles where applicable. Reads repeat
-policy, ownership, expiry, and path validation; possession of an upstream ID is
-not authorization.
-
-## Prompts
-
-Guardian publishes four static workflow prompts:
-
-- `fhold.implement`
-- `fhold.debug`
-- `fhold.review`
-- `fhold.explain`
-
-They produce client-visible user messages and never bypass `agent.run`, policy,
-moderation, or permission handling.
+`read` and `full` credentials can also read `fhold://workspace/{path}`. The
+read repeats policy and path validation.
 
 ## Handle and ownership model
 
@@ -259,6 +229,8 @@ older handle cannot cancel a later run in the same session.
   path-bearing origin entries are invalid.
 - Prompts and human-input answers pass the heuristic screen. Suspicious text
   is classified using OpenCode's native tool-free generation API. No agent session or second server is created.
+  The classifier is the optional Guardian `model`; if it is not set or not
+  available, the Assistant's model is used.
 - `flag`, `block`, moderator failure/timeout, or malformed classifier output
   fails closed.
 - Raw shell/file-write endpoints, provider/auth/config management, session

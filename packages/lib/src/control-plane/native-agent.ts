@@ -12,6 +12,7 @@ import type {
 	ProviderAuthPrompt,
 	ProviderSummary
 } from '../dto/agent.js';
+import { asRecord as record } from './foundation.js';
 export type {
 	AssistantReadiness,
 	ProviderAuthMethod,
@@ -81,11 +82,6 @@ export class NativeAgentHttpError extends Error {
 	}
 }
 
-function record(value: unknown): Record<string, unknown> | undefined {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
-}
 function dataList(value: unknown): Record<string, unknown>[] {
 	const data = record(value)?.data;
 	return Array.isArray(data)

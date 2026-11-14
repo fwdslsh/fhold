@@ -4,15 +4,5 @@ export {
 	confirmedAdminAction,
 	isAdminPageUrl,
 	externalAdminUrl,
-	adminPortalTokens,
-	installFromAdmin,
-	saveAdminConfig,
-	createAdminCredential,
-	rotateAdminCredential,
-	removeAdminCredential,
-	mapAdminPortalUser,
-	adminPortalMappings,
-	backupFromAdmin,
-	instanceRestoreFromAdmin,
-	restoreFromAdmin
+	installFromAdmin
 } from '@fhold/lib';

@@ -21,7 +21,13 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { assertProjectOwnership, runDocker } from './docker.js';
-import { createFholdState, mergeEnvContent, readEnvFile, writeFileAtomic } from './foundation.js';
+import {
+	contained,
+	createFholdState,
+	mergeEnvContent,
+	readEnvFile,
+	writeFileAtomic
+} from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { assertSafePortablePath } from './provider-files.js';
 import { recordRuntimeActivation, runtimeRevision } from './runtime-revision.js';
@@ -89,11 +95,6 @@ export type InstanceRestoreOptions = {
 	confirmedStopped?: boolean;
 };
 
-function inside(root: string, path: string): boolean {
-	const value = relative(root, path);
-	return value === '' || (!isAbsolute(value) && value !== '..' && !value.startsWith(`..${sep}`));
-}
-
 /** Resolve missing leaves, refusing aliases in the requested path. */
 function directory(path: string, mustExist = false): string {
 	if (!path?.trim() || path.includes('\0'))
@@ -112,7 +113,7 @@ function directory(path: string, mustExist = false): string {
 }
 
 function separate(source: string, destination: string): void {
-	if (inside(source, destination) || inside(destination, source))
+	if (contained(source, destination) || contained(destination, source))
 		throw new Error('Instance and export directories must be separate and non-overlapping.');
 }
 
@@ -322,7 +323,7 @@ function warningsFor(manifest: Pick<InstanceBackupManifest, 'files' | 'sourceHom
 	for (const entry of manifest.files) {
 		if (
 			entry.type === 'symlink' &&
-			!inside(
+			!contained(
 				manifest.sourceHome,
 				resolve(dirname(join(manifest.sourceHome, entry.path)), entry.target)
 			)
@@ -356,7 +357,7 @@ function copyEntries(
 			let link = entry.target;
 			if (readlinkSync(join(source, entry.path)) !== link)
 				throw new Error(`Snapshot link changed: ${entry.path}`);
-			if (rebaseLinks && isAbsolute(link) && inside(manifest.sourceHome, link))
+			if (rebaseLinks && isAbsolute(link) && contained(manifest.sourceHome, link))
 				link =
 					relative(dirname(target), join(destination, relative(manifest.sourceHome, link))) || '.';
 			symlinkSync(link, target);
@@ -605,7 +606,7 @@ export async function restoreInstance(
 		// Only generated host paths/ownership are reconciled; no seeding, upgrades,
 		// schedule pausing, regenerated credentials or native database conversion.
 		const recoveryDirectory = readEnvFile(envPath).FH_RECOVERY_DIRECTORY;
-		if (recoveryDirectory && inside(manifest.sourceHome, recoveryDirectory))
+		if (recoveryDirectory && contained(manifest.sourceHome, recoveryDirectory))
 			updates.FH_RECOVERY_DIRECTORY = join(home, relative(manifest.sourceHome, recoveryDirectory));
 		writeFileAtomic(envPath, mergeEnvContent(oldEnv, updates), 0o600);
 		const receiptPath = join(home, 'state/installation.json');

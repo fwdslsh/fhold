@@ -4,9 +4,10 @@ import { isInstanceName } from '../control-plane/stack-config.js';
 import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { localInstanceManagement } from './instance.js';
 import { localDockerManagementHost } from '../control-plane/local-instance-host.js';
-import { MANAGEMENT_METHODS, type InstanceManagement } from './types.js';
+import type { InstanceManagement } from './types.js';
 import type { ManagementRequest, ManagementResponse } from './ssh.js';
-import { parseManagementArgs } from './wire-input.js';
+import { isManagementOperation, parseManagementInput } from './wire-input.js';
+import { parseRequestContext } from './operation-input.js';
 
 /** Native CLI session scope preserves OAuth, model verification and native prompt processes. */
 export async function serveManagementSession(
@@ -27,13 +28,11 @@ export async function serveManagementSession(
 					id < 1 ||
 					typeof request.homeDir !== 'string' ||
 					!isAbsolute(request.homeDir) ||
-					!MANAGEMENT_METHODS.includes(request.method)
+					!isManagementOperation(request.operation)
 				)
 					throw Error('Invalid instance management request.');
 				if (request.setupName !== undefined && !isInstanceName(request.setupName))
 					throw Error('Choose a lowercase instance name.');
-				if (request.extra !== undefined && !Array.isArray(request.extra))
-					throw Error('Invalid operation options.');
 				let instance = instances.get(request.homeDir);
 				if (!instance) {
 					instance = localInstanceManagement(request.homeDir, {
@@ -43,9 +42,12 @@ export async function serveManagementSession(
 					});
 					instances.set(request.homeDir, instance);
 				}
-				const args = parseManagementArgs(request.method, request.value, request.extra);
+				const input = parseManagementInput(request.operation, request.input);
+				const context = parseRequestContext(request.context);
 				const selected = instance;
-				const value = await withDockerMachineOutput(() => selected.call(request.method, ...args));
+				const value = await withDockerMachineOutput(() =>
+					selected.call(request.operation, input as never, context)
+				);
 				write({ id, ok: true, value });
 			} catch (error) {
 				write({

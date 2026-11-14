@@ -48,7 +48,10 @@ export function mutateStack<T>(homeDir: string, action: (config: StackConfig) =>
 }
 
 function username(value: unknown): string {
-	if (!isCredentialUsername(value)) throw new Error('Invalid credential username.');
+	if (!isCredentialUsername(value))
+		throw new Error(
+			'Credential usernames must start with a lowercase letter and contain only lowercase letters, numbers, dots, underscores, or hyphens (maximum 64 characters).'
+		);
 	return value;
 }
 function policy(value: unknown): GuardianPolicy {
@@ -136,7 +139,12 @@ export function mapPortalUser(
 ): void {
 	if (!isPortalName(value.portal)) throw new Error('Portal must be discord or slack.');
 	const portal = value.portal;
-	if (!isPortalUserId(portal, value.userId)) throw new Error(`Invalid ${portal} user ID.`);
+	if (!isPortalUserId(portal, value.userId))
+		throw new Error(
+			portal === 'discord'
+				? 'Discord user ID must be a numeric snowflake.'
+				: 'Slack user ID must be an uppercase platform ID such as U012ABCDEF.'
+		);
 	const userId = value.userId;
 	mutateStack(homeDir, (config) => {
 		const mapping = readPortalCredentialMap(homeDir, portal);

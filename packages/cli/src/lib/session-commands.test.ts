@@ -210,7 +210,7 @@ test('shared archive operations receive caller paths and confirmation only in co
 	});
 	await runSessionDataCommand(
 		f.session,
-		['backup', '--to=/local/export', '--full', '--confirm-stopped', '--includeProviderAuth'],
+		['backup', '--to=/local/export', '--full', '--confirm-stopped'],
 		() => {}
 	);
 	expect(calls).toEqual([
@@ -218,7 +218,7 @@ test('shared archive operations receive caller paths and confirmation only in co
 			{
 				destination: '/local/export',
 				full: true,
-				includeProviderAuth: true,
+				includeProviderAuth: false,
 				includeUserEnv: false,
 				includePortalMaps: false,
 				includeOAuth: false
@@ -227,6 +227,21 @@ test('shared archive operations receive caller paths and confirmation only in co
 		]
 	]);
 	expect(f.inspections()).toBe(0);
+});
+
+test('backup requires an explicit export scope before running the data adapter', async () => {
+	const f = fixture();
+	let called = false;
+	f.session.data.backup = supportedOperation(async () => {
+		called = true;
+		throw new Error('must not run');
+	});
+	for (const [args, message] of [
+		[['backup', '--to', '/local/export'], 'Choose --portable'],
+		[['backup', '--to', '/local/export', '--portable', '--confirm-stopped'], 'only to --full']
+	] as const)
+		await expect(runSessionDataCommand(f.session, [...args], () => {})).rejects.toThrow(message);
+	expect(called).toBe(false);
 });
 
 test('shared full restore applies exactly its preview digest through the same operation', async () => {
@@ -270,7 +285,7 @@ test('shared full restore applies exactly its preview digest through the same op
 test('unsupported operations and malformed archive arguments never run a data adapter', async () => {
 	const f = fixture();
 	await expect(
-		runSessionDataCommand(f.session, ['backup', '--to', '/unused'], () => {})
+		runSessionDataCommand(f.session, ['backup', '--to', '/unused', '--portable'], () => {})
 	).rejects.toThrow('not configured');
 	for (const args of [
 		['backup', '--to', '/unused', '--typo'],

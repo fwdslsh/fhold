@@ -64,16 +64,6 @@ export const managedFormIds = [
 	'runtime-recovery-form'
 ];
 
-export const commonProviders = new Set([
-	'anthropic',
-	'openai',
-	'google',
-	'github-copilot',
-	'github',
-	'opencode',
-	'openrouter'
-]);
-
 export const policyLabels = {
 	chat: 'Chat only',
 	read: 'Read files',

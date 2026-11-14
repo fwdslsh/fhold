@@ -251,7 +251,7 @@ export function bindUiEvents() {
 	byId('load-logs').addEventListener('click', async () => {
 		const logs = await operation(
 			'Loading recent logs',
-			() => state.api.logs(selectedLogOptions()),
+			() => state.api.operation('host.logs', { tail: 250, ...selectedLogOptions() }),
 			'Recent logs loaded.'
 		);
 		if (typeof logs === 'string') byId('logs').value = logs || 'No recent log entries.';

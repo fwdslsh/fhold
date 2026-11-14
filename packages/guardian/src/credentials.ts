@@ -2,6 +2,7 @@ import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { constantTimeEqual } from './crypto.js';
+import { asRecord, exactKeys } from './http-util.js';
 
 export type GuardianPolicy = 'chat' | 'read' | 'full';
 export type CredentialClass = string;
@@ -32,17 +33,6 @@ export function isCredentialUsername(value: unknown): value is string {
 
 export function isCredentialId(value: unknown): value is string {
 	return typeof value === 'string' && CREDENTIAL_ID_RE.test(value);
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-	const keys = Object.keys(value);
-	return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
 
 function readToken(path: string | undefined): string {

@@ -49,13 +49,6 @@ export function sshDockerProvider(
 			);
 		return response.value;
 	}
-	async function hello(action: string) {
-		const result = (await request({ action: 'hello' })) as { actions?: string[] };
-		if (!result || !Array.isArray(result.actions) || !result.actions.includes(action))
-			throw new Error(
-				`The management helper does not support hosting ${action}. Rebuild or reinstall local tooling.`
-			);
-	}
 	function summary(value: unknown): InstanceSummary {
 		if (
 			!value ||
@@ -78,14 +71,8 @@ export function sshDockerProvider(
 		check: () => checkSshConnection(connection, run, () => provider.listInstances(), helper),
 		installation: {
 			async info() {
-				const value = (await request({ action: 'hello' })) as {
-					instancesDirectory?: unknown;
-					management?: string[];
-				};
-				if (
-					typeof value?.instancesDirectory !== 'string' ||
-					!value.management?.includes('snapshot')
-				)
+				const value = (await request({ action: 'hello' })) as { instancesDirectory?: unknown };
+				if (typeof value?.instancesDirectory !== 'string')
 					throw new Error(
 						'Check the host connection and local tooling distribution before managing this computer.'
 					);
@@ -98,14 +85,13 @@ export function sshDockerProvider(
 				const info = await provider.installation!.info();
 				const manager = new SshInstanceManagement(connection, info.defaultHome, { helper });
 				try {
-					return await manager.call('directory', path ?? info.instancesDirectory);
+					return await manager.call('docker.directory', { path: path ?? info.instancesDirectory });
 				} finally {
 					await manager.close();
 				}
 			}
 		},
 		async listInstances() {
-			await hello('list');
 			const values = await request({
 				action: 'list',
 				roots: connection.roots.length ? connection.roots : undefined
@@ -127,43 +113,6 @@ export function sshDockerProvider(
 			if (ref.kind !== 'ssh-docker' || ref.connectionId !== connection.id)
 				throw new Error('Choose an instance on this SSH connection.');
 			let manager: SshInstanceManagement | undefined;
-			let managementMethods: ReadonlySet<string> | undefined;
-			let managementFeatures: ReadonlySet<string> | undefined;
-			let capabilityRequest: Promise<void> | undefined;
-			async function discoverManagement(): Promise<void> {
-				if (!capabilityRequest)
-					capabilityRequest = (async () => {
-						const hello = (await request({ action: 'hello' })) as
-							| { management?: unknown; features?: unknown }
-							| undefined;
-						managementMethods = new Set(
-							Array.isArray(hello?.management)
-								? hello.management.filter((method): method is string => typeof method === 'string')
-								: []
-						);
-						managementFeatures = new Set(
-							Array.isArray(hello?.features)
-								? hello.features.filter((feature): feature is string => typeof feature === 'string')
-								: []
-						);
-					})();
-				try {
-					await capabilityRequest;
-				} catch (error) {
-					// Allow a later explicit operation to retry discovery after a transient
-					// transport failure. Unknown remains usable until then.
-					capabilityRequest = undefined;
-					throw error;
-				}
-			}
-			async function initializeManagement(): Promise<void> {
-				try {
-					await discoverManagement();
-				} catch {
-					// Feature discovery is optional. Keep the wire method usable and let
-					// its real RPC report an error rather than making hello a preflight.
-				}
-			}
 			async function inspect(): Promise<HostingSnapshot> {
 				const value = await request({
 					action: 'inspect',
@@ -173,34 +122,18 @@ export function sshDockerProvider(
 				const snapshot = value as HostingSnapshot;
 				if (!Array.isArray(snapshot.services) || !Array.isArray(snapshot.warnings))
 					throw new Error('The management helper returned an invalid status snapshot.');
-				let managed = false;
-				const warnings = [...snapshot.warnings];
-				try {
-					await discoverManagement();
-					managed =
-						managementMethods?.has('saveConfig') === true && managementMethods.has('backup');
-				} catch {
-					warnings.push(
-						'Status was read, but advanced management support could not be checked. Check this host connection before changing settings.'
-					);
-				}
 				// Return only the public hosting contract, not unknown future fields or
 				// an unusable remote loopback URL. Native credentials never cross here.
 				return {
 					...identity,
 					ref,
 					services: snapshot.services,
-					warnings,
+					warnings: snapshot.warnings,
 					...(typeof snapshot.serviceError === 'string'
 						? { serviceError: snapshot.serviceError }
 						: {}),
 					pendingRestart: snapshot.pendingRestart,
-					capabilities: capabilities(
-						managed
-							? ['start', 'stop', 'restart', 'settings', 'transfer']
-							: ['start', 'stop', 'restart'],
-						'Check the local tooling distribution to enable instance settings and file transfer.'
-					)
+					capabilities: capabilities(['start', 'stop', 'restart', 'settings', 'transfer'])
 				};
 			}
 			return {
@@ -223,15 +156,8 @@ export function sshDockerProvider(
 				applicationBindings(options) {
 					manager ??= new SshInstanceManagement(connection, ref.remoteHome, { ...options, helper });
 					return rpcManagementBindings(manager, {
-						initialize: initializeManagement,
-						supports: (method) =>
-							managementMethods === undefined ? undefined : managementMethods.has(method),
 						passiveSnapshot: () => manager!.inspectPassive(),
-						acquireSnapshot: () => manager!.acquireForward(),
-						credentialPolicy: () =>
-							managementFeatures === undefined
-								? undefined
-								: managementFeatures.has('credentialPolicy')
+						acquireSnapshot: () => manager!.acquireForward()
 					});
 				},
 				async operate(action, confirmed, options) {
@@ -239,7 +165,6 @@ export function sshDockerProvider(
 						throw new Error('This instance has no deployment revision selector.');
 					if (!confirmed)
 						throw new Error('Confirm this lifecycle operation before changing containers.');
-					await hello(action);
 					await request({ action, homeDir: ref.remoteHome, confirmed });
 					try {
 						return { snapshot: await inspect() };

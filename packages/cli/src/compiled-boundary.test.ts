@@ -35,6 +35,9 @@ function run(binary: string, cwd: string, args: string[], overrides: NodeJS.Proc
 	expect(result.status, result.stderr || result.stdout).toBe(0);
 	return JSON.parse(result.stdout) as Record<string, unknown>;
 }
+function assistantPort(status: Record<string, unknown>): unknown {
+	return (status.docker as { config?: { assistant?: { port?: number } } } | undefined)?.config?.assistant?.port;
+}
 function dockerFixture(path: string, marker: string): void {
 	writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' fixture > ${JSON.stringify(marker)}\nprintf '%s\\n' '{"Service":"assistant","State":"running"}'\n`);
 	chmodSync(path, 0o700);
@@ -98,16 +101,16 @@ test('compiled named installs use sibling default homes and override ambient FH_
 test('compiled CLI selects named, absolute and cwd instances from one shell, ahead of FH_HOME', () => {
 	const april = join(operatorDirectory, 'fhold', 'instances', 'april');
 	const may = join(operatorDirectory, 'fhold', 'instances', 'may');
-	expect(run(secureBinary, root, ['--name', 'april', 'status'], { FH_HOME: explicitHome }).homeDir).toBe(april);
-	expect(run(secureBinary, root, ['status', '-n', 'may']).homeDir).toBe(may);
+	expect(run(secureBinary, root, ['--name', 'april', 'status'], { FH_HOME: explicitHome }).identity).toMatchObject({ location: april });
+	expect(run(secureBinary, root, ['status', '-n', 'may']).identity).toMatchObject({ location: may });
 	expect(run(secureBinary, root, ['config', '--name=april', 'show']).deployment).toMatchObject({ projectName: 'april' });
 	const before = readFileSync(join(explicitHome, 'state/stack.json'), 'utf8');
-	expect(run(secureBinary, root, ['--name', explicitHome, 'status']).homeDir).toBe(explicitHome);
+	expect(run(secureBinary, root, ['--name', explicitHome, 'status']).identity).toMatchObject({ location: explicitHome });
 	expect(run(secureBinary, root, ['config', 'show', '-n', explicitHome]).deployment).toEqual(JSON.parse(before).deployment);
 	expect(readFileSync(join(explicitHome, 'state/stack.json'), 'utf8')).toBe(before);
-	expect(run(secureBinary, april, ['status']).homeDir).toBe(april);
-	expect(run(secureBinary, may, ['status']).homeDir).toBe(may);
-	expect(run(secureBinary, root, ['status'], { FH_HOME: explicitHome }).homeDir).toBe(explicitHome);
+	expect(run(secureBinary, april, ['status']).identity).toMatchObject({ location: april });
+	expect(run(secureBinary, may, ['status']).identity).toMatchObject({ location: may });
+	expect(run(secureBinary, root, ['status'], { FH_HOME: explicitHome }).identity).toMatchObject({ location: explicitHome });
 });
 
 test('compiled install uses cwd or FH_HOME when no selector is provided and preserves an absolute custom path', () => {
@@ -142,19 +145,17 @@ test('compiled selectors reject ambiguous targets before installation without mo
 test('compiled CLI ignores hostile cwd dotenv while honoring explicit inherited home and Docker intent', () => {
 	const cwd = dotenvHome;
 	writeFileSync(join(cwd, '.env'), `FH_HOME=${poisonedHome}\nFH_DOCKER_BIN=${poisonedDocker}\nFH_REPO_ROOT=${join(root, 'unrelated-repo')}\nFH_SKELETON_DIR=${join(root, 'unrelated-assets')}\n`);
-	const connection = run(secureBinary, cwd, ['connect', 'opencode', '--json']);
-	expect(connection.url).toBe('http://127.0.0.1:5411');
-	expect(String(connection.passwordFile)).toStartWith(cwd);
-	expect(run(secureBinary, cwd, ['status']).homeDir).toBe(cwd);
+	expect(assistantPort(run(secureBinary, cwd, ['status']))).toBe(5411);
+	expect(run(secureBinary, cwd, ['status']).identity).toMatchObject({ location: cwd });
 	expect(existsSync(approvedDockerMarker)).toBe(true);
 	expect(existsSync(poisonedDockerMarker)).toBe(false);
-	expect(run(secureBinary, cwd, ['connect', 'opencode', '--json'], { FH_HOME: explicitHome }).url).toBe('http://127.0.0.1:5412');
-	expect(run(secureBinary, cwd, ['status'], { FH_HOME: explicitHome, FH_DOCKER_BIN: explicitDocker }).homeDir).toBe(explicitHome);
+	expect(assistantPort(run(secureBinary, cwd, ['status'], { FH_HOME: explicitHome }))).toBe(5412);
+	expect(run(secureBinary, cwd, ['status'], { FH_HOME: explicitHome, FH_DOCKER_BIN: explicitDocker }).identity).toMatchObject({ location: explicitHome });
 	expect(existsSync(explicitDockerMarker)).toBe(true);
 	// Negative control proves the fixture exploits Bun's actual compiled
 	// autoload behavior, not just an inert .env file or an in-process mock.
-	expect(run(unsafeControl, cwd, ['connect', 'opencode', '--json']).url).toBe('http://127.0.0.1:5499');
-	expect(run(unsafeControl, cwd, ['status']).homeDir).toBe(poisonedHome);
+	expect(assistantPort(run(unsafeControl, cwd, ['status']))).toBe(5499);
+	expect(run(unsafeControl, cwd, ['status']).identity).toMatchObject({ location: poisonedHome });
 	expect(existsSync(poisonedDockerMarker)).toBe(true);
 });
 
@@ -166,13 +167,13 @@ test('compiled CLI ignores hostile cwd bunfig preload execution and environment 
 	dockerFixture(preloadDocker, dockerMarker);
 	writeFileSync(join(cwd, 'bunfig.toml'), 'preload = ["./hostile-preload.ts"]\n');
 	writeFileSync(join(cwd, 'hostile-preload.ts'), `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'fixture preload executed');\nprocess.env.FH_HOME=${JSON.stringify(poisonedHome)};\nprocess.env.FH_DOCKER_BIN=${JSON.stringify(preloadDocker)};\n`);
-	expect(run(secureBinary, cwd, ['connect', 'opencode', '--json']).url).toBe('http://127.0.0.1:5411');
-	expect(run(secureBinary, cwd, ['status']).homeDir).toBe(cwd);
+	expect(assistantPort(run(secureBinary, cwd, ['status']))).toBe(5411);
+	expect(run(secureBinary, cwd, ['status']).identity).toMatchObject({ location: cwd });
 	expect(existsSync(marker)).toBe(false);
 	expect(existsSync(dockerMarker)).toBe(false);
-	expect(run(secureBinary, cwd, ['connect', 'opencode', '--json'], { FH_HOME: explicitHome }).url).toBe('http://127.0.0.1:5412');
-	expect(run(unsafeControl, cwd, ['connect', 'opencode', '--json']).url).toBe('http://127.0.0.1:5499');
+	expect(assistantPort(run(secureBinary, cwd, ['status'], { FH_HOME: explicitHome }))).toBe(5412);
+	expect(assistantPort(run(unsafeControl, cwd, ['status']))).toBe(5499);
 	expect(readFileSync(marker, 'utf8')).toBe('fixture preload executed');
-	expect(run(unsafeControl, cwd, ['status']).homeDir).toBe(poisonedHome);
+	expect(run(unsafeControl, cwd, ['status']).identity).toMatchObject({ location: poisonedHome });
 	expect(existsSync(dockerMarker)).toBe(true);
 });

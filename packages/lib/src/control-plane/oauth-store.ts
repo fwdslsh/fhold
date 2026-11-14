@@ -1,10 +1,9 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { writeFileAtomic } from './foundation.js';
+import { asRecord, ensurePrivateDirectory, writeFileAtomic } from './foundation.js';
 import { isCredentialUsername } from './stack-config.js';
 
-const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const MAX_FILE_BYTES = 1_048_576;
 const MAX_IDENTITIES = 10_000;
@@ -32,12 +31,6 @@ export type OAuthIdentityMap = {
 	version: typeof OAUTH_IDENTITY_MAP_VERSION;
 	identities: OAuthIdentity[];
 };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
-}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
 	const keys = Object.keys(value);
@@ -187,12 +180,6 @@ export function parseOAuthIdentityMap(value: unknown): OAuthIdentityMap {
 	return { version: OAUTH_IDENTITY_MAP_VERSION, identities };
 }
 
-function ensurePrivateDirectory(path: string): void {
-	if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: PRIVATE_DIR_MODE });
-	if (!lstatSync(path).isDirectory()) throw new Error(`Refusing non-directory OAuth path: ${path}`);
-	chmodSync(path, PRIVATE_DIR_MODE);
-}
-
 function readJson(path: string): unknown {
 	if (!existsSync(path) || !lstatSync(path).isFile())
 		throw new Error(`OAuth file is missing: ${path}`);
@@ -202,7 +189,7 @@ function readJson(path: string): unknown {
 }
 
 function writeJson(path: string, value: unknown): void {
-	ensurePrivateDirectory(dirname(path));
+	ensurePrivateDirectory(dirname(path), 'OAuth');
 	if (existsSync(path) && !lstatSync(path).isFile()) {
 		throw new Error(`Refusing non-file OAuth path: ${path}`);
 	}

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { asRecord, json, readJsonBounded, readTextBounded } from './http-util.ts';
+import { asRecord, json, readTextBounded } from './http-util.ts';
 
 describe('json', () => {
 	it('sets the given status code', () => {
@@ -45,8 +45,8 @@ describe('asRecord', () => {
 });
 
 describe('bounded response readers', () => {
-	it('parses JSON below the byte limit', async () => {
-		expect(await readJsonBounded(Response.json({ ok: true }), 64)).toEqual({ ok: true });
+	it('reads bodies below the byte limit', async () => {
+		expect(await readTextBounded(new Response('{"ok":true}'), 64)).toBe('{"ok":true}');
 	});
 
 	it('rejects declared and streamed bodies above the byte limit', async () => {

@@ -154,8 +154,7 @@ a mandatory second check of its format, ownership or readiness in host tooling.
 
 Always running uses minimum/maximum one replica and preserves the ordinary
 scheduler default. On demand uses minimum zero/maximum one, disables user scheduling
-for a fresh instance, and can use existing conditional keep-alive during work.
-It does not disable recovery or native workers. Explain that outbound Discord,
+for a fresh instance. It does not disable recovery or native workers. Explain that outbound Discord,
 Claude and Codex connections cannot themselves wake a zero-replica app. Preserve
 explicit choices on existing instances; changing availability is a reviewed
 deployment edit, not an implicit scheduler rewrite. Persist an explicit timezone
@@ -429,7 +428,7 @@ tests, CLI hosting tests and Admin workflow tests.
   degraded/repair guidance and last-accepted-checkpoint behavior, not automatic
   ownership takeover or a claim that forced kill is lossless.
 - Verify a new Claude and Codex tool request after restart with explicitly provided
-  test accounts. Observe real natural-idle behavior with the chosen keep-alive policy.
+  test accounts. Observe real natural-idle behavior.
 - Visually review the same Admin pages for each provider, keyboard navigation,
   disabled states, progress, retry, Cancel/Finish later and one-click authenticated
   OpenCode access. Do not resize user windows or use live lab instances as fixtures.

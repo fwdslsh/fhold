@@ -258,7 +258,7 @@ export async function runRecovery(config, { env = process.env, engine } = {}) {
 		const cache = checkpoint.akmIndexCache;
 		const cacheDiagnostic =
 			cache?.state === 'degraded'
-				? `Experimental AKM index cache unavailable (${cache.reason}); native first use can rebuild. Settings may change or be removed.`
+				? `Experimental AKM index cache unavailable (${cache.reason}); the boot index build rebuilds it. Settings may change or be removed.`
 				: null;
 		if (cacheDiagnostic && cacheDiagnostic !== lastCacheDiagnostic)
 			console.error(`fhold: degraded: ${cacheDiagnostic}`);

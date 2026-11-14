@@ -8,11 +8,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
-import {
-	isCredentialUsername,
-	type AuthenticatedCredential,
-	type CredentialClass
-} from './credentials.js';
+import type { AuthenticatedCredential, CredentialClass } from './credentials.js';
 import {
 	GatewayError,
 	GatewayService,
@@ -23,7 +19,6 @@ import { createLogger } from './logger.js';
 
 const logger = createLogger('guardian:mcp');
 const HANDLE = z.string().min(1).max(4_096);
-const EMPTY = z.object({}).strict();
 const PUBLIC_SESSION = z
 	.object({
 		handle: z.string(),
@@ -196,18 +191,6 @@ function progress(context: ServerContext): AgentProgress {
 function variable(value: string | string[] | undefined): string {
 	if (Array.isArray(value)) return value.join('/');
 	return value ?? '';
-}
-
-function jsonResource(uri: URL, value: unknown) {
-	return {
-		contents: [
-			{
-				uri: uri.href,
-				mimeType: 'application/json',
-				text: JSON.stringify(value, null, 2)
-			}
-		]
-	};
 }
 
 async function resourceValue<T>(callback: () => Promise<T>): Promise<T> {
@@ -498,85 +481,9 @@ function registerTools(server: McpServer, service: GatewayService): void {
 			)
 		)
 	);
-
-	server.registerTool(
-		'fhold.catalog.get',
-		{
-			title: 'Get fhold capability catalog',
-			description: 'Describe the capabilities exposed to this authenticated policy.',
-			inputSchema: EMPTY,
-			outputSchema: z
-				.object({
-					service: z.string(),
-					policy: z.enum(['chat', 'read', 'full']),
-					principal: z.string().refine(isCredentialUsername, 'invalid credential username'),
-					tools: z.array(z.string()),
-					resources: z.array(z.string()),
-					prompts: z.array(z.string()),
-					nativeAssistantAccess: z.string()
-				})
-				.strict(),
-			annotations: {
-				readOnlyHint: true,
-				destructiveHint: false,
-				idempotentHint: true,
-				openWorldHint: false
-			}
-		},
-		guarded(async () => result(service.catalog()))
-	);
 }
 
 function registerResources(server: McpServer, service: GatewayService): void {
-	server.registerResource(
-		'fhold-session-messages',
-		new ResourceTemplate('fhold://sessions/{session}/messages', { list: undefined }),
-		{
-			title: 'fhold session messages',
-			description: 'Text messages and public execution metadata for an owned session.',
-			mimeType: 'application/json'
-		},
-		async (uri, variables, context) =>
-			jsonResource(
-				uri,
-				await resourceValue(() =>
-					service.sessionMessages(variable(variables.session), context.mcpReq.signal)
-				)
-			)
-	);
-
-	server.registerResource(
-		'fhold-session-diff',
-		new ResourceTemplate('fhold://sessions/{session}/diff', { list: undefined }),
-		{
-			title: 'fhold session changes',
-			description: 'Changed-file summaries for an owned session.',
-			mimeType: 'application/json'
-		},
-		async (uri, variables, context) =>
-			jsonResource(
-				uri,
-				await resourceValue(() =>
-					service.sessionDiff(variable(variables.session), context.mcpReq.signal)
-				)
-			)
-	);
-
-	server.registerResource(
-		'fhold-job',
-		new ResourceTemplate('fhold://jobs/{job}', { list: undefined }),
-		{
-			title: 'fhold agent job',
-			description: 'Current state and output of a guarded agent job.',
-			mimeType: 'application/json'
-		},
-		async (uri, variables, context) =>
-			jsonResource(
-				uri,
-				await resourceValue(() => service.getJob(variable(variables.job), 0, context.mcpReq.signal))
-			)
-	);
-
 	if (service.policy === 'read' || service.policy === 'full') {
 		server.registerResource(
 			'fhold-workspace-file',
@@ -604,81 +511,18 @@ function registerResources(server: McpServer, service: GatewayService): void {
 	}
 }
 
-function registerPrompts(server: McpServer, service: GatewayService): void {
-	const prompt = (
-		name: string,
-		title: string,
-		description: string,
-		instruction: (task: string, path?: string) => string
-	) => {
-		server.registerPrompt(
-			name,
-			{
-				title,
-				description,
-				argsSchema: z
-					.object({
-						task: z.string().min(1).max(8_000),
-						path: z.string().min(1).max(1_024).optional()
-					})
-					.strict()
-			},
-			({ task, path }) => ({
-				description: `${title} using the fhold ${service.policy} policy`,
-				messages: [
-					{
-						role: 'user',
-						content: { type: 'text', text: instruction(task, path) }
-					}
-				]
-			})
-		);
-	};
-
-	prompt(
-		'fhold.implement',
-		'Implement with fhold',
-		'Ask the hosted agent to implement and verify a focused change.',
-		(task, path) =>
-			`Implement this task${path ? ` in or near ${path}` : ''}:\n\n${task}\n\nInspect the relevant code, make the smallest coherent change allowed by your policy, run focused verification, and report changed files and remaining risks.`
-	);
-	prompt(
-		'fhold.debug',
-		'Debug with fhold',
-		'Ask the hosted agent to reproduce and diagnose a problem.',
-		(task, path) =>
-			`Debug this problem${path ? ` around ${path}` : ''}:\n\n${task}\n\nReproduce it when possible, identify the root cause with evidence, apply a fix only when permitted, and report verification.`
-	);
-	prompt(
-		'fhold.review',
-		'Review with fhold',
-		'Ask the hosted agent for a risk-focused code review.',
-		(task, path) =>
-			`Review ${path ? path : 'the relevant implementation'} for this concern:\n\n${task}\n\nPrioritize concrete correctness, security, and regression findings. Cite files and explain impact; avoid speculative style feedback.`
-	);
-	prompt(
-		'fhold.explain',
-		'Explain with fhold',
-		'Ask the hosted agent to explain code or architecture from evidence.',
-		(task, path) =>
-			`Explain ${path ? path : 'the relevant system'} in relation to this request:\n\n${task}\n\nBase the explanation on inspected evidence, identify important boundaries and tradeoffs, and call out uncertainty.`
-	);
-}
-
 function createServer(service: GatewayService): McpServer {
 	const server = new McpServer(
 		{ name: 'fhold-guardian', version: Bun.env.GUARDIAN_VERSION ?? 'dev' },
 		{
 			capabilities: {
 				tools: { listChanged: false },
-				resources: { subscribe: false, listChanged: false },
-				prompts: { listChanged: false }
+				resources: { subscribe: false, listChanged: false }
 			}
 		}
 	);
 	registerTools(server, service);
 	registerResources(server, service);
-	registerPrompts(server, service);
 	return server;
 }
 

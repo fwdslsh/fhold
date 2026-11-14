@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import {
 	_rateLimiterSizesForTest,
 	_resetRateLimitersForTest,
-	activeRateLimiters,
 	allow,
 	allowPreAuth,
 	PREAUTH_RATE_LIMIT,
@@ -36,16 +35,6 @@ describe('guardian fixed-window rate limiting', () => {
 		expect(_rateLimiterSizesForTest()).toEqual({
 			authenticated: RATE_LIMIT_MAX_BUCKETS,
 			preAuth: RATE_LIMIT_MAX_BUCKETS
-		});
-	});
-
-	it('reports active user and portal buckets separately', () => {
-		allow('user:a', 2, 60_000);
-		allow('user:b', 2, 60_000);
-		allow('portal:a', 2, 60_000);
-		expect(activeRateLimiters()).toEqual({
-			activeUserLimiters: 2,
-			activePortalLimiters: 1
 		});
 	});
 });

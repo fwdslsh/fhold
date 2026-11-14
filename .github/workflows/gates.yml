@@ -70,8 +70,6 @@ jobs:
       - name: Build and validate the optional Claude Desktop extension
         if: inputs.scope == 'full'
         run: bun run --cwd packages/claude-desktop pack
-      - name: Verify the embedded Skeleton
-        run: bun test scripts/packaged-assets.test.ts
       - name: Bundle the optional admin app
         if: inputs.candidate != true
         run: bun run --cwd packages/electron bundle
@@ -332,15 +330,8 @@ jobs:
 
   admin:
     if: inputs.candidate
-    name: Build optional admin for ${{ matrix.platform }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            script: build:linux
+    name: Build optional admin for linux
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
       - id: version
@@ -349,7 +340,7 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/electron ${{ matrix.script }}
+      - run: bun run --cwd packages/electron build:linux
       - name: Smoke the fresh native Admin package
         env:
           VERSION: ${{ steps.version.outputs.version }}

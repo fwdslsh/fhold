@@ -120,7 +120,7 @@ export async function copyAccessKey(username) {
 	return operation(
 		'Copying connection key',
 		async () => {
-			const value = await state.api.credentialKey(username);
+			const value = await state.api.operation('apps.credentials.revealKey', { username });
 			await state.api.copyText(value.key);
 			return true;
 		},
@@ -326,16 +326,17 @@ async function saveEditor() {
 			async () => {
 				let saved;
 				if (draft.username) {
-					saved = await state.api.credential({
-						action: 'policy',
+					await state.api.operation('apps.credentials.updatePolicy', {
 						username,
 						policy,
 						previousPolicy: draft.baseline.credentials[username].policy
 					});
+					saved = await state.api.snapshot();
 					draft.baseline = structuredClone(appConfig(saved));
 					render(saved);
 				} else {
-					saved = await state.api.credential({ action: 'create', username, policy });
+					await state.api.operation('apps.credentials.create', { username, policy });
+					saved = await state.api.snapshot();
 					draft.username = username;
 					draft.baseline = structuredClone(appConfig(saved));
 					if (draft.portal) {
@@ -346,7 +347,12 @@ async function saveEditor() {
 				}
 				if (draft.portal && !draft.userId) {
 					try {
-						saved = await state.api.mapPortalUser({ portal: draft.portal, userId, username });
+						await state.api.operation('apps.portal.mapUser', {
+							portal: draft.portal,
+							userId,
+							username
+						});
+						saved = await state.api.snapshot();
 					} catch (error) {
 						throw new Error(
 							`Permissions are saved, but were not assigned to user ${userId}. Retry to assign the saved permissions. ${error instanceof Error ? error.message : String(error)}`
@@ -396,16 +402,16 @@ async function saveClient(app) {
 			async () => {
 				let saved;
 				if (username) {
-					saved = await state.api.credential({
-						action: 'policy',
+					await state.api.operation('apps.credentials.updatePolicy', {
 						username,
 						policy,
 						previousPolicy: baseline.credentials[username].policy
 					});
 				} else {
 					username = uniqueName(app === 'claude' ? 'claude-desktop' : 'mcp-app');
-					saved = await state.api.credential({ action: 'create', username, policy });
+					await state.api.operation('apps.credentials.create', { username, policy });
 				}
+				saved = await state.api.snapshot();
 				setFormClean(`${app}-permissions-form`);
 				render(saved);
 				byId(`${app}-credential`).value = username;
@@ -459,7 +465,10 @@ export function bindAccessEvents() {
 				return;
 			const saved = await operation(
 				'Saving bot default for person',
-				() => state.api.mapPortalUser({ portal, userId }),
+				() =>
+					state.api
+						.operation('apps.portal.mapUser', { portal, userId })
+						.then(() => state.api.snapshot()),
 				'Person now uses the bot’s permissions.'
 			);
 			if (saved) await offerRestart(saved);

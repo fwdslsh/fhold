@@ -80,6 +80,9 @@ describe('fhold own-backup restore', async () => {
 		const { source, destination } = fixture();
 		const options = { sourceHome: source, destinationHome: destination };
 		expect(() => inspectBackup(options)).toThrow('required fhold-backup.json');
+		writeFileSync(join(source, 'checkpoint.json'), '{}');
+		expect(() => inspectBackup(options)).toThrow('Use recovery preview, then recovery import');
+		rmSync(join(source, 'checkpoint.json'));
 		for (const [product, version] of [
 			['foreign', 1],
 			['fhold', 2]
@@ -182,7 +185,8 @@ describe('fhold own-backup restore', async () => {
 			'private-provider-key'
 		);
 		chmodSync(join(source, 'knowledge', 'secrets', 'providers', 'personal.key'), 0o755);
-		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), '{}');
+		const legacy = '{"personal":{"type":"api","key":"auth-key"}}';
+		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), legacy);
 		writeFileSync(join(source, 'knowledge', 'secrets', 'unrelated.key'), 'not-approved');
 		const excluded = planRestore({ sourceHome: source, destinationHome: destination });
 		expect(excluded.entries.some((entry) => entry.category === 'secret')).toBe(false);
@@ -198,6 +202,10 @@ describe('fhold own-backup restore', async () => {
 		const key = join(destination, 'knowledge', 'secrets', 'providers', 'personal.key');
 		expect(readFileSync(key, 'utf8')).toBe('private-provider-key');
 		if (process.platform !== 'win32') expect(lstatSync(key).mode & 0o777).toBe(0o600);
+		// Restored verbatim to the path the stack mounts as OpenCode's auth.json.
+		expect(readFileSync(join(destination, 'knowledge', 'secrets', 'auth.json'), 'utf8')).toBe(
+			legacy
+		);
 		expect(existsSync(join(destination, 'knowledge', 'secrets', 'unrelated.key'))).toBe(false);
 	});
 

@@ -83,8 +83,8 @@ export async function diagnoseNativeRuntime(
 	const [providers, health, migration] = await Promise.all([
 		listProviders(home, { timeoutMs: 10_000, signal: AbortSignal.timeout(10_000), maxResponseBytes: 256 * 1024 }).catch(() => undefined),
 		nativeReport(['akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet'], [0, 4, 1]),
-		// The native standalone migrator does not start CLI usage capture.
-		nativeReport(['akm-migrate', 'status'], [0, 1])
+		// --read-only records no CLI usage and writes nothing.
+		nativeReport(['akm', 'migrate', 'status', '--read-only', '--format', 'json', '--quiet'], [0, 1])
 	]);
 	const checks: DiagnosticCheck[] = [check('Assistant native API', providers === undefined ? 'not-checked' : 'pass',
 		providers === undefined ? 'Native API observation failed; core agent availability is unknown.' : 'Native provider API responded; model execution is checked only with --readiness.')];

@@ -1,75 +1,14 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
 import { buildComposeOptions } from './compose.js';
 import { composeConfigJson, composePs, parseComposePsRows } from './docker.js';
 import { createFholdState } from './foundation.js';
-import { assertSafePortablePath, readProviderSecretFile } from './provider-files.js';
+import { assertSafePortablePath } from './provider-files.js';
 import { runNativeWorker, type NativeWorkerContext } from './native-worker.js';
 
 export const PROVIDER_CREDENTIAL_EXPORT = 'knowledge/secrets/opencode-credentials.json';
 const runtimePath = 'data/assistant/.local/share/opencode';
-
-/** Portable v1 auth-only exports have no database for upstream migration.
- * Adapt that old file format once, then use the ordinary native import API.
- * Runtime upgrades with a database use OpenCode's own migration instead.
- */
-export function legacyProviderCredentials(contents: Buffer): Buffer | undefined {
-	const input: unknown = JSON.parse(contents.toString('utf8'));
-	if (!input || typeof input !== 'object' || Array.isArray(input))
-		throw new Error('Legacy provider credentials must contain an object.');
-	const entries = Object.entries(input).map(([id, raw]) => {
-		if (!raw || typeof raw !== 'object' || Array.isArray(raw))
-			throw new Error('Unsupported legacy provider credential; original retained.');
-		const old = raw as Record<string, unknown>;
-		const integrationID = id.replace(/\/+$/, '');
-		let value: Record<string, unknown>;
-		if (old.type === 'api' && typeof old.key === 'string')
-			value = { type: 'key', key: old.key, ...(old.metadata ? { metadata: old.metadata } : {}) };
-		else if (
-			old.type === 'oauth' &&
-			typeof old.access === 'string' &&
-			typeof old.refresh === 'string' &&
-			typeof old.expires === 'number'
-		)
-			value = {
-				type: 'oauth',
-				methodID:
-					integrationID === 'openai'
-						? 'chatgpt-browser'
-						: ['github-copilot', 'opencode', 'xai'].includes(integrationID)
-							? 'device'
-							: 'oauth',
-				access: old.access,
-				refresh: old.refresh,
-				expires: old.expires,
-				...(old.accountId || old.enterpriseUrl
-					? {
-							metadata: {
-								...(old.accountId ? { accountID: old.accountId } : {}),
-								...(old.enterpriseUrl ? { enterpriseUrl: old.enterpriseUrl } : {})
-							}
-						}
-					: {})
-			};
-		else
-			throw new Error(
-				'Unsupported legacy provider credential; preserve the original and sign in through OpenCode.'
-			);
-		return {
-			id: `cred_${createHash('sha256')
-				.update(JSON.stringify([integrationID, value]))
-				.digest('hex')
-				.slice(0, 32)}`,
-			integrationID,
-			label: value.type === 'oauth' ? 'OAuth' : 'API key',
-			active: true,
-			value
-		};
-	});
-	return entries.length ? Buffer.from(`${JSON.stringify(entries)}\n`) : undefined;
-}
 
 /** Native credential APIs are the same ones used by `opencode auth export/import`. */
 async function credentialsJob({ snapshot, open, api }: NativeWorkerContext): Promise<void> {
@@ -85,7 +24,8 @@ async function credentialsJob({ snapshot, open, api }: NativeWorkerContext): Pro
 	if (!importing) {
 		fs.mkdirSync('/tmp/data/opencode', { recursive: true, mode: 0o700 });
 		snapshot('/source/opencode.db', '/tmp/data/opencode/opencode.db');
-		// Existing v1 databases perform upstream's one-time credential migration.
+		// OpenCode imports a legacy auth.json beside a database that predates its
+		// one-time credential migration; current databases ignore it.
 		if (fs.existsSync('/legacy/auth.json'))
 			fs.copyFileSync('/legacy/auth.json', '/tmp/data/opencode/auth.json');
 	}
@@ -182,11 +122,7 @@ async function transfer(home: string, contents?: Buffer): Promise<Buffer> {
 
 export async function exportProviderCredentials(home: string): Promise<Buffer | undefined> {
 	assertSafePortablePath(home, `${runtimePath}/opencode.db`, true);
-	if (existsSync(join(home, runtimePath, 'opencode.db'))) return transfer(home);
-	const legacy = 'knowledge/secrets/auth.json';
-	return existsSync(join(home, legacy))
-		? legacyProviderCredentials(readProviderSecretFile(home, legacy))
-		: undefined;
+	return existsSync(join(home, runtimePath, 'opencode.db')) ? transfer(home) : undefined;
 }
 export async function importProviderCredentials(home: string, contents: Buffer): Promise<void> {
 	await transfer(home, contents);

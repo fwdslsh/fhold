@@ -150,9 +150,9 @@ client.
 
 For Claude Pro/Max, open **Customize → Connectors → Add custom connector** and
 enter `https://agent.example.com/mcp`. Team/Enterprise owners add it under
-organization connector settings. Claude supports tools, prompts, and resources
-on remote MCP connectors, so this uses the complete Guardian MCP catalog rather
-than a chat-only subset.
+organization connector settings. Claude supports tools and resources on remote
+MCP connectors, so this uses the complete Guardian MCP catalog rather than a
+chat-only subset.
 
 ## Operational guidance
 

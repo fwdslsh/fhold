@@ -77,14 +77,10 @@ export function renderServices(snapshot) {
 	const updateReference =
 		view.docker?.updateImageTag ||
 		[...new Set(candidates.map((candidate) => candidate.reference))].join(', ');
-	const missingHostVersion =
-		!updateReference && snapshot.operations?.['host.deployment.update']?.support === 'unknown';
 	setText('update-image-tag', updateReference || 'Not reported');
 	setText(
 		'runtime-version-help',
-		missingHostVersion
-			? `${snapshot.operations?.['host.deployment.update']?.reason ? `${snapshot.operations['host.deployment.update'].reason} ` : ''}Image metadata is unavailable. Check this host connection and local tooling distribution. Your agent keeps running.`
-			: !instanceCapability('host.deployment.update', snapshot).supported
+		!instanceCapability('host.deployment.update', snapshot).supported
 				? `${instanceCapability('host.deployment.update', snapshot).reason} Images above are deployment references; platform status is not agent readiness.`
 				: view.docker?.updateImageTag
 					? 'Included with the fhold CLI managing this instance. Custom image settings are kept.'
@@ -92,7 +88,6 @@ export function renderServices(snapshot) {
 						? `Update candidate from ${[...new Set(candidates.map((candidate) => candidate.source))].join(', ')}. Configured images above remain distinct from running image observations.`
 						: 'No update candidate was reported. Custom images require an explicit image reference in System → Deployment settings. Your agent keeps running.'
 	);
-	byId('runtime-version-settings').hidden = !missingHostVersion;
 	renderConnectionStatus(snapshot);
 	updateGuardianGuide();
 	setText('instance-client-guidance', view.deployment.guidance?.client || '');
@@ -143,9 +138,7 @@ export function renderServices(snapshot) {
 				(references.length
 					? `${configured ? 'Configured deployment image, not a running-replica observation: ' : ''}${references.join(', ')}`
 					: '') ||
-				(missingHostVersion
-					? 'Check this host connection to report this container’s image reference.'
-					: 'This connection did not report an image reference.');
+				'This connection did not report an image reference.';
 			const details = serviceImageDetails(references[0]);
 			const label = document.createElement('span');
 			label.className = configured && references.length ? 'image-origin' : 'visually-hidden';

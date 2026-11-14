@@ -33,11 +33,8 @@ export function azureProvisioning(
 		'--resource-group',
 		connection.resourceGroup
 	];
-	function request(
-		value: ProvisioningRequest,
-		recoveryDefault: 'directory' | 'azblob' = 'directory'
-	): AzureInstallRequest {
-		const parsed = parseProvisioningRequest(value, recoveryDefault);
+	function request(value: ProvisioningRequest): AzureInstallRequest {
+		const parsed = parseProvisioningRequest(value);
 		if (parsed.kind !== 'azure-container-apps') throw new Error('Choose Azure placement settings.');
 		return parsed;
 	}
@@ -290,8 +287,7 @@ export function azureProvisioning(
 			});
 		const input = request(
 				saved.request ??
-					(azureObject(azureObject(properties.outputs).request).value as ProvisioningRequest),
-				'azblob'
+					(azureObject(azureObject(properties.outputs).request).value as ProvisioningRequest)
 			),
 			names = azureInstallNames(connection, input);
 		if (

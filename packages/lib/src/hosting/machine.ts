@@ -9,7 +9,6 @@ import {
 import { withDockerMachineOutput } from '../control-plane/docker.js';
 import { ensureDockerReady } from '../control-plane/docker.js';
 import { FH_RELEASE_VERSION } from '../control-plane/release.js';
-import { MANAGEMENT_METHODS } from '../management/types.js';
 import {
 	HOSTING_WIRE_VERSION,
 	type MachineRequest,
@@ -43,11 +42,6 @@ export async function hostingMachineRequest(value: unknown): Promise<MachineResp
 				version: 1,
 				ok: true,
 				value: {
-					actions,
-					management: MANAGEMENT_METHODS,
-					// Features are intentionally separate from legacy method names so an
-					// older client can still use the retained RPC surface unchanged.
-					features: ['credentialPolicy'],
 					instancesDirectory: dirname(defaultFholdHome()),
 					release: FH_RELEASE_VERSION
 				}

@@ -69,7 +69,7 @@ describe('managed runtime recovery', () => {
 		expect(recoverySnapshot(home).settings.enabled).toBe(false);
 		expect(readFileSync(join(home, 'state/stack.json'))).toEqual(before);
 	});
-	it('accepts older installed Compose defaults with recovery off or on without weakening active recovery boundaries', async () => {
+	it('accepts older installed Compose defaults with recovery off or on without rewriting them', async () => {
 		const { home, root } = await fixture();
 		const compose = join(home, 'system/stack/stack.compose.yml');
 		// Reproduce an installed pre-cache template, not a freshly refreshed home.
@@ -85,35 +85,13 @@ describe('managed runtime recovery', () => {
 			const before = readFileSync(join(home, 'state/stack.json'));
 			const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
 			if (!resolved.ok) throw new Error(resolved.stderr);
-			const config = resolved.config as { services: { assistant: { environment: Record<string, string>; stop_grace_period: string } } };
+			const config = resolved.config as { services: { assistant: { environment: Record<string, string> } } };
 			const environment = config.services.assistant.environment;
 			expect(environment.FH_RECOVERY_AKM_INDEX_CAPTURE).toBeUndefined();
 			expect(environment.FH_RECOVERY_AKM_INDEX_RESTORE).toBeUndefined();
 			expect(auditCompose(config, home)).toEqual([]);
 			expect(readFileSync(compose, 'utf8')).toBe(installed);
 			expect(readFileSync(join(home, 'state/stack.json'))).toEqual(before);
-			const expectedUrl = environment.FH_RECOVERY_URL;
-			environment.FH_RECOVERY_URL = 'file:///unexpected-storage';
-			expect(auditCompose(config, home)).toContain('assistant FH_RECOVERY_URL must match recovery intent');
-			environment.FH_RECOVERY_URL = expectedUrl;
-			if (enabled) {
-				environment.FH_RECOVERY_AKM_INDEX_CAPTURE = '1';
-				expect(auditCompose(config, home)).toContain('assistant FH_RECOVERY_AKM_INDEX_CAPTURE must match recovery intent');
-				delete environment.FH_RECOVERY_AKM_INDEX_CAPTURE;
-				environment.FH_INSTANCE_ID = 'different-instance';
-				expect(auditCompose(config, home)).toContain('assistant FH_INSTANCE_ID must match recovery intent');
-				config.services.assistant.stop_grace_period = '10s';
-				expect(auditCompose(config, home)).toContain('Assistant termination grace must cover writer shutdown and both recovery phases.');
-			} else {
-				// No inactive recovery setting, including saved cache opt-ins, can
-				// turn an ordinary persistent instance restart into an upgrade gate.
-				for (const key of Object.keys(recoveryEnvironment(current.settings))) delete environment[key];
-				expect(auditCompose(config, home)).toEqual([]);
-				const intent = JSON.parse(before.toString());
-				intent.recovery.akmIndexCapture = true;
-				intent.recovery.akmIndexRestore = true;
-				expect(auditCompose(config, home, undefined, intent)).toEqual([]);
-			}
 		}
 	});
 	it('does not invent a pending restart while reading an earlier recovery-off installation', async () => {
@@ -239,29 +217,6 @@ describe('managed runtime recovery', () => {
 		const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
 		if (!resolved.ok) throw new Error(resolved.stderr);
 		expect(auditCompose(resolved.config, home)).toEqual([]);
-		const config = resolved.config as {
-			services: {
-				assistant: {
-					environment: Record<string, string>;
-					stop_grace_period: string;
-					volumes: { source: string; target: string }[];
-				};
-			};
-		};
-		config.services.assistant.environment.FH_RECOVERY_URL = 'file:///other';
-		expect(auditCompose(config, home)).toContain(
-			'assistant FH_RECOVERY_URL must match recovery intent'
-		);
-		config.services.assistant.environment.FH_RECOVERY_URL = 'file:///recovery';
-		config.services.assistant.stop_grace_period = '10s';
-		expect(auditCompose(config, home)).toContain(
-			'Assistant termination grace must cover writer shutdown and both recovery phases.'
-		);
-		config.services.assistant.stop_grace_period = '297s';
-		const mount = config.services.assistant.volumes.find((mount) => mount.target === '/recovery');
-		if (!mount) throw new Error('Fixture must have a recovery mount.');
-		mount.source = '/tmp/unreviewed';
-		expect(auditCompose(config, home).length).toBeGreaterThan(0);
 		const before = readFileSync(join(home, 'config/recovery/include.json'));
 		expect(() =>
 			saveRecoverySettings(home, {

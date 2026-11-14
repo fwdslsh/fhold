@@ -95,10 +95,7 @@ export function parseDeploymentPatch(value: unknown): DeploymentPatch {
 	}
 	return result;
 }
-export function parseProvisioningRequest(
-	value: unknown,
-	recoveryDefault: 'directory' | 'azblob' = 'directory'
-): ProvisioningRequest {
+export function parseProvisioningRequest(value: unknown): ProvisioningRequest {
 	const input = record(value);
 	const name = text(input.name, 'an instance name');
 	if (!isInstanceName(name)) throw new Error('Use a lowercase DNS-safe instance name.');
@@ -145,7 +142,7 @@ export function parseProvisioningRequest(
 		image: input.image
 	});
 	if (!settings.availability) throw new Error('Choose availability.');
-	const recovery = input.recovery ?? recoveryDefault;
+	const recovery = input.recovery ?? 'directory';
 	if (recovery !== 'directory' && recovery !== 'azblob')
 		throw new Error('Choose local backup with file-share copy or deprecated Blob recovery.');
 	const mounts = input.mounts === undefined ? [] : input.mounts;

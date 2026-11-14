@@ -1,8 +1,6 @@
 import { applyRestore, planRestore } from '../control-plane/restore.js';
 import { classifyInstall, markInstalled } from '../control-plane/state.js';
-import { configureGuardianModeratorModel } from '../control-plane/opencode.js';
 import { mutateStack } from '../control-plane/operations.js';
-import type { AssistantReadiness } from '../control-plane/native-agent.js';
 import { createBackup } from '../control-plane/backup.js';
 import { installHome } from '../control-plane/install.js';
 import {
@@ -33,14 +31,8 @@ import type { HostingActionEffect } from '../hosting/types.js';
 import type { StackAction } from './types.js';
 
 /** Host application completion is separate from the native agent verification. */
-export async function completeInstanceSetup(
-	homeDir: string,
-	readiness: Extract<AssistantReadiness, { ok: true }>
-): Promise<void> {
-	mutateStack(homeDir, () => {
-		configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
-		markInstalled(homeDir);
-	});
+export async function completeInstanceSetup(homeDir: string): Promise<void> {
+	mutateStack(homeDir, () => markInstalled(homeDir));
 }
 
 export function interruptionPrompt(action: unknown, effect?: HostingActionEffect) {
@@ -284,6 +276,18 @@ export async function backupFromAdmin(
 ) {
 	if (value.full !== undefined && typeof value.full !== 'boolean')
 		throw new Error('Invalid export scope.');
+	if (
+		value.full &&
+		[
+			value.includeProviderAuth,
+			value.includeUserEnv,
+			value.includePortalMaps,
+			value.includeOAuth
+		].some(Boolean)
+	)
+		throw new Error(
+			'A full export already includes all credentials and settings; do not combine portable include options.'
+		);
 	if (value.full)
 		return exportInstance({
 			sourceHome: homeDir,

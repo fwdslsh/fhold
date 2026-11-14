@@ -12,6 +12,18 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 	return value as Record<string, unknown>;
 }
 
+/** True when a record has exactly the expected keys, in any order. */
+export function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+	const keys = Object.keys(value);
+	return keys.length === expected.length && keys.every((key) => expected.includes(key));
+}
+
+/** Parse a positive integer setting, capped at maximum, or use the fallback. */
+export function boundedInt(value: string | undefined, fallback: number, maximum: number): number {
+	const parsed = Number.parseInt(value ?? '', 10);
+	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
+}
+
 /** Read a response without allowing an upstream to exhaust Guardian memory. */
 export async function readTextBounded(response: Response, maxBytes: number): Promise<string> {
 	const declared = Number.parseInt(response.headers.get('content-length') ?? '', 10);
@@ -42,8 +54,4 @@ export async function readTextBounded(response: Response, maxBytes: number): Pro
 		offset += chunk.byteLength;
 	}
 	return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-}
-
-export async function readJsonBounded(response: Response, maxBytes: number): Promise<unknown> {
-	return JSON.parse(await readTextBounded(response, maxBytes)) as unknown;
 }

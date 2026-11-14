@@ -18,7 +18,8 @@ import {
 
 import { runRestartAction } from './lifecycle.js';
 
-function current() {
+/** Read the selected installed instance's stack intent and its save baseline. */
+export function current() {
 	const homeDir = resolveFholdHome();
 	requireInstall(homeDir);
 	const result = readStackConfig(homeDir);

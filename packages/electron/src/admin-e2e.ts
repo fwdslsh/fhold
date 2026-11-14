@@ -1644,9 +1644,9 @@ async function run(): Promise<Record<string, unknown>> {
 			!provider
 		);
 		await window.webContents.executeJavaScript(`(async () => {
-			const review = await window.fholdAdmin.codexRecall({action:'review'});
+			const review = await window.fholdAdmin.operation('agent.codexRecall',{action:'review'});
 			if (!['approval-needed','ready'].includes(review.status)) throw new Error('Native recall review failed.');
-			if (review.status !== 'ready') await window.fholdAdmin.codexRecall({action:'approve',digest:review.digest,confirmed:true});
+			if (review.status !== 'ready') await window.fholdAdmin.operation('agent.codexRecall',{action:'approve',digest:review.digest},{confirmed:true});
 		})()`);
 		const recallScreenshot = await capture(window, outputDir, '04a-codex-knowledge-recall.png');
 		await window.webContents.executeJavaScript("document.querySelector('#remote-cancel').click()");
@@ -2608,7 +2608,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'two named agents are healthy simultaneously with distinct ports and matching OS hostnames'
 		);
 		await window.webContents.executeJavaScript(
-			"window.fholdAdmin.credential({ action: 'create', username: 'other-instance-only', policy: 'read' })"
+			"window.fholdAdmin.operation('apps.credentials.create', { username: 'other-instance-only', policy: 'read' })"
 		);
 		assert(
 			readFileSync(join(homeDir, 'state', 'stack.json'), 'utf8') === originalConfig,
@@ -2620,7 +2620,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		assert(
 			await window.webContents.executeJavaScript(
-				"window.fholdAdmin.providerOAuthFinish({provider:'openai',method:0}).then(() => false, () => true)"
+				"window.fholdAdmin.operation('agent.oauthFinish',{provider:'openai',method:0}).then(() => false, () => true)"
 			),
 			'A stale sign-in step was accepted after switching.'
 		);
@@ -2725,7 +2725,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		assert(
 			await window.webContents.executeJavaScript(
-				"window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"
+				"window.fholdAdmin.operation('data.recovery.initialize',undefined,{confirmed:true}).then(() => false, error => error.message.includes('Stop this instance'))"
 			),
 			'Backend initialized with live writers.'
 		);
@@ -2774,7 +2774,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const initializedDescriptor = readFileSync(join(checkpointDirectory, 'descriptor.json'));
 		assert(
 			await window.webContents.executeJavaScript(
-				"window.fholdAdmin.recovery({action:'init',confirmed:true}).then(() => false, () => true)"
+				"window.fholdAdmin.operation('data.recovery.initialize',undefined,{confirmed:true}).then(() => false, () => true)"
 			),
 			'Native initialization accepted an existing namespace.'
 		);

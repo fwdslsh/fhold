@@ -55,8 +55,6 @@ export async function runSessionProviderCommand(
 	if (command === 'key' && !keyFile) throw new Error('Read the key with --key-file <path|->.');
 	if (passwordFile === '-' && keyFile === '-')
 		throw new Error('Password and API key cannot both consume stdin. Use a private file for one.');
-	if (method !== undefined && !/^\d+$/.test(method))
-		throw new Error('Choose the numeric sign-in method index from provider list.');
 	const connect = session.agent.connect;
 	if (connect?.support === 'supported' && connect.input?.requiresPassword && !passwordFile)
 		throw new Error(
@@ -92,10 +90,10 @@ export async function runSessionProviderCommand(
 		const selected =
 			method === undefined && methods.length === 1
 				? methods[0]
-				: methods.find((item) => item.index === Number(method));
+				: methods.find((item) => String(item.index) === method || item.label === method);
 		if (!selected)
 			throw new Error(
-				'Choose an OAuth method with --method <index> from provider list. API keys use provider key.'
+				'Choose an OAuth method with --method <index|label> from provider list. API keys use provider key.'
 			);
 		if (selected.prompts?.length)
 			throw new Error(

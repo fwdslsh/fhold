@@ -75,7 +75,7 @@ async function loadRecall() {
 	byId('remote-recall-definitions').value = '';
 	byId('remote-recall-disable').hidden = true;
 	try {
-		const review = await state.api.codexRecall({ action: 'review' });
+		const review = await state.api.operation('agent.codexRecall', { action: 'review' });
 		if (request !== reviewRequest || !byId('remote-dialog').open) return;
 		recallReview = review;
 		renderRecallStatus(review);
@@ -167,7 +167,7 @@ function showProgress(progress) {
 	} else {
 		timer = setTimeout(async () => {
 			try {
-				showProgress(await state.api.remote({ action: 'progress', tool }));
+				showProgress(await state.api.operation('agent.remote', { action: 'progress', tool }));
 			} catch (error) {
 				byId('remote-stage').textContent =
 					message(error); /* Keep Cancel available; never report success. */
@@ -268,11 +268,11 @@ export function bindRemoteEvents() {
 			if (!connectionOnly && tool === 'codex' && recallRequested) {
 				if (!recallReview) throw new Error('Review current AKM hooks first.');
 				{
-					const review = await state.api.codexRecall({
-						action: 'approve',
-						digest: recallReview.digest,
-						confirmed: true
-					});
+					const review = await state.api.operation(
+						'agent.codexRecall',
+						{ action: 'approve', digest: recallReview.digest },
+						{ confirmed: true }
+					);
 					if (review.status !== 'ready')
 						throw new Error('Native hook approval did not become ready.');
 					recallReview = review;
@@ -286,11 +286,11 @@ export function bindRemoteEvents() {
 				!recallRequested &&
 				recallReview?.status === 'ready'
 			) {
-				await state.api.codexRecall({
-					action: 'disable',
-					digest: recallReview.digest,
-					confirmed: true
-				});
+				await state.api.operation(
+					'agent.codexRecall',
+					{ action: 'disable', digest: recallReview.digest },
+					{ confirmed: true }
+				);
 			}
 			if (recallOnly) {
 				byId('remote-stage').textContent =
@@ -307,16 +307,17 @@ export function bindRemoteEvents() {
 				byId('remote-cancel').disabled = false;
 				byId('remote-cancel').textContent = 'Cancel setup';
 			}
-			const progress = await state.api.remote(
+			const progress = await state.api.operation(
+				'agent.remote',
 				connectionOnly
 					? { action: 'connection', tool }
 					: {
 							action: 'enable',
 							tool,
 							trusted: true,
-							confirmed: true,
 							...(tool === 'codex' ? { sandbox: byId('remote-sandbox').value } : {})
-						}
+						},
+				{ confirmed: !connectionOnly }
 			);
 			byId('remote-trust').disabled = true;
 			byId('remote-sandbox').disabled = true;
@@ -341,7 +342,7 @@ export function bindRemoteEvents() {
 		const answer = byId('remote-answer').value;
 		byId('remote-answer').value = '';
 		try {
-			await state.api.remote({ action: 'input', tool, input: answer });
+			await state.api.operation('agent.remote', { action: 'input', tool, input: answer });
 		} catch (error) {
 			byId('remote-stage').textContent = message(error);
 		}
@@ -353,7 +354,7 @@ export function bindRemoteEvents() {
 			byId('remote-stage').textContent =
 				'Cancelling setup; the existing startup setting will be preserved…';
 			try {
-				await state.api.remote({ action: 'cancel', tool });
+				await state.api.operation('agent.remote', { action: 'cancel', tool });
 			} catch (error) {
 				notice(message(error), 'error', { persist: true });
 			} finally {
@@ -367,7 +368,7 @@ export function bindRemoteEvents() {
 			byId('remote-stage').textContent =
 				'Cancelling setup; the existing startup setting will be preserved…';
 			try {
-				showProgress(await state.api.remote({ action: 'cancel', tool }));
+				showProgress(await state.api.operation('agent.remote', { action: 'cancel', tool }));
 			} catch (error) {
 				notice(message(error), 'error', { persist: true });
 			} finally {
@@ -391,11 +392,11 @@ export function bindRemoteEvents() {
 		starting = true;
 		setBusy(true);
 		try {
-			await state.api.codexRecall({
-				action: 'disable',
-				digest: recallReview.digest,
-				confirmed: true
-			});
+			await state.api.operation(
+				'agent.codexRecall',
+				{ action: 'disable', digest: recallReview.digest },
+				{ confirmed: true }
+			);
 			byId('remote-stage').textContent =
 				'Automatic knowledge recall is off. Native approval is retained; remote startup is unchanged.';
 			byId('remote-begin').hidden = false;
@@ -414,7 +415,7 @@ export function bindRemoteEvents() {
 			const name = button.dataset.remoteDisable;
 			const result = await operation(
 				'Disabling remote startup',
-				() => state.api.remote({ action: 'disable', tool: name }),
+				() => state.api.operation('agent.remote', { action: 'disable', tool: name }),
 				'Remote startup setting saved. Apply it with a restart; account sign-in is retained.'
 			);
 			if (result) {

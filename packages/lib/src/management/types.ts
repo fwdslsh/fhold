@@ -4,51 +4,13 @@ import { type StackConfig } from '../control-plane/stack-config.js';
 import type { InstanceRef } from '../hosting/types.js';
 import { type recoverySnapshot } from '../control-plane/recovery.js';
 import { type CodexRecallReview } from '../control-plane/codex-recall.js';
-import type { BackupManifest } from '../control-plane/backup.js';
 import type {
-	InstanceBackupManifest,
-	InstanceRestorePlan
-} from '../control-plane/instance-backup.js';
-import type { RestorePlan } from '../control-plane/restore.js';
-import type { recoveryStatus, runRecoveryOperation } from '../control-plane/recovery.js';
-import type {
-	CheckpointPackageOperation,
-	CheckpointPackagePlan,
-	CheckpointPackageImportResult
-} from '../dto/recovery.js';
-import type {
-	ProviderEndpointInput,
-	ProviderSettings
-} from '../control-plane/provider-settings.js';
-import type {
-	AssistantReadiness,
-	ProviderOAuthAuthorization
-} from '../control-plane/native-agent.js';
-import type {
-	BackupRequest,
-	CodexRecallRequest,
-	CredentialCreateRequest,
-	CredentialMutationRequest,
-	CredentialPolicyRequest,
-	DirectoryListing,
-	PortalTokenRequest,
-	PortalUserMappingRequest,
-	RecoveryCredentialRequest,
-	RecoverySaveRequest,
-	RemoteSetupResult,
-	RemoteSetupRequest,
-	RestoreRequest
+	AgentOperations,
+	AppOperations,
+	DataOperations,
+	DockerOperations,
+	RequestContext
 } from './contracts.js';
-type LegacyBackupRequest = BackupRequest & { confirmed?: boolean };
-type LegacyRestoreRequest = RestoreRequest & { confirmed?: boolean };
-type LegacyCodexRecallRequest = CodexRecallRequest & { confirmed?: boolean };
-type LegacyRemoteSetupRequest = RemoteSetupRequest & { restartConfirmed?: boolean };
-type LegacyRecoveryRequest =
-	| { action: 'package'; request: CheckpointPackageOperation; confirmed?: boolean }
-	| { action: 'status' }
-	| { action: 'inspect' | 'init' | 'restore'; confirmed?: boolean }
-	| ({ action: 'save' } & RecoverySaveRequest)
-	| ({ action: 'credential' } & RecoveryCredentialRequest);
 export type { DirectoryListing } from './contracts.js';
 export type ManagedSnapshot = {
 	target?: Extract<InstanceRef, { kind: 'ssh-docker' }>;
@@ -84,133 +46,69 @@ export type ManagedSnapshot = {
 };
 
 export type StackAction = 'start' | 'restart' | 'stop';
-export const MANAGEMENT_METHODS = [
-	'directory',
-	'codexRecall',
-	'remote',
-	'snapshot',
-	'install',
-	'saveConfig',
-	'action',
-	'logs',
-	'providers',
-	'providerKey',
-	'providerEndpoint',
-	'providerModels',
-	'providerUse',
-	'providerRemove',
-	'providerOAuthStart',
-	'providerOAuthFinish',
-	'readiness',
-	'assistantPassword',
-	'knowledgeUi',
-	'credential',
-	'credentialKey',
-	'mapPortalUser',
-	'portalToken',
-	'backup',
-	'recovery',
-	'restoreData',
-	'restoreInstance',
-	'update',
-	'transferCreate',
-	'transferRelease',
-	'transferPack',
-	'transferUnpack'
-] as const;
-export type ManagementMethod = (typeof MANAGEMENT_METHODS)[number];
+
+/** Input and result of a callable named operation slot. */
+type Io<T> = T extends {
+	support: 'supported';
+	invoke(input: infer Input, context: RequestContext): Promise<infer Output>;
+}
+	? { input: Input; result: Output }
+	: never;
 
 /**
- * The fixed SSH/stdin envelope's compatibility map. Values still arrive as
- * untrusted JSON and are validated by the named domain operation before use.
- * Keep these method names and request shapes while peers advertise them.
+ * Named operations carried by the bounded SSH/stdin JSON-line envelope. Values
+ * still arrive as untrusted JSON and are parsed per operation before use.
  */
-export type ManagementRequestMap = {
-	directory: { input: string | undefined; result: DirectoryListing; extra: [] };
-	codexRecall: { input: LegacyCodexRecallRequest; result: CodexRecallReview; extra: [] };
-	remote: { input: LegacyRemoteSetupRequest; result: RemoteSetupResult; extra: [] };
-	snapshot: { input: undefined; result: ManagedSnapshot; extra: [] };
-	install: { input: StackConfig; result: ManagedSnapshot; extra: [automaticPorts?: boolean] };
-	saveConfig: {
-		input: { config: StackConfig; baseConfig: StackConfig };
-		result: ManagedSnapshot;
-		extra: [];
-	};
-	action: {
-		input: { action: StackAction; confirmed: boolean };
-		result: ManagedSnapshot;
-		extra: [];
-	};
-	logs: { input: undefined; result: string; extra: [] };
-	providers: { input: undefined; result: ProviderSettings; extra: [] };
-	providerKey: { input: { provider: string; key: string }; result: void; extra: [] };
-	providerEndpoint: { input: ProviderEndpointInput; result: ProviderSettings; extra: [] };
-	providerModels: { input: { url: string; key?: string }; result: string[]; extra: [] };
-	providerUse: { input: { provider: string; model: string }; result: ProviderSettings; extra: [] };
-	providerRemove: {
-		input: { provider: string; endpoint?: boolean };
-		result: ProviderSettings;
-		extra: [];
-	};
-	providerOAuthStart: {
-		input: { provider: string; method: number; inputs?: Record<string, string> };
-		result: ProviderOAuthAuthorization;
-		extra: [];
-	};
-	providerOAuthFinish: {
-		input: { provider: string; method: number; inputs?: Record<string, string>; code?: string };
-		result: void;
-		extra: [];
-	};
-	readiness: {
-		input: { provider?: string; model?: string } | undefined;
-		result: AssistantReadiness;
-		extra: [];
-	};
-	assistantPassword: { input: undefined; result: { password: string }; extra: [] };
-	knowledgeUi: { input: { loopbackPort: number } | undefined; result: { url: string }; extra: [] };
-	credential: {
-		input:
-			| ({ action: 'create' } & CredentialCreateRequest)
-			| ({ action: 'policy' } & CredentialPolicyRequest)
-			| ({ action: 'rotate' | 'remove' } & CredentialMutationRequest);
-		result: ManagedSnapshot;
-		extra: [];
-	};
-	credentialKey: { input: string; result: { username: string; key: string }; extra: [] };
-	mapPortalUser: { input: PortalUserMappingRequest; result: ManagedSnapshot; extra: [] };
-	portalToken: { input: PortalTokenRequest; result: ManagedSnapshot; extra: [] };
-	backup: {
-		input: LegacyBackupRequest;
-		result: BackupManifest | InstanceBackupManifest;
-		extra: [];
-	};
-	recovery: {
-		input: LegacyRecoveryRequest;
-		result:
-			| Awaited<ReturnType<typeof recoveryStatus>>
-			| Awaited<ReturnType<typeof runRecoveryOperation>>
-			| CheckpointPackagePlan
-			| CheckpointPackageImportResult;
-		extra: [];
-	};
-	restoreData: { input: LegacyRestoreRequest; result: RestorePlan; extra: [] };
-	restoreInstance: { input: LegacyRestoreRequest; result: InstanceRestorePlan; extra: [] };
-	update: { input: { confirmed: boolean; pull?: boolean }; result: ManagedSnapshot; extra: [] };
-	transferCreate: { input: undefined; result: string; extra: [] };
-	transferRelease: { input: string; result: void; extra: [] };
-	transferPack: { input: string; result: string; extra: [] };
-	transferUnpack: { input: string; result: string; extra: [] };
+export type ManagementOperationMap = {
+	snapshot: { input: void; result: ManagedSnapshot };
+	'agent.providers': Io<AgentOperations['providers']>;
+	'agent.setKey': Io<AgentOperations['setKey']>;
+	'agent.saveEndpoint': Io<AgentOperations['saveEndpoint']>;
+	'agent.discoverModels': Io<AgentOperations['discoverModels']>;
+	'agent.selectModel': Io<AgentOperations['selectModel']>;
+	'agent.removeProvider': Io<AgentOperations['removeProvider']>;
+	'agent.oauthStart': Io<AgentOperations['oauthStart']>;
+	'agent.oauthFinish': Io<AgentOperations['oauthFinish']>;
+	'agent.readiness': Io<AgentOperations['readiness']>;
+	'agent.assistantPassword': Io<AgentOperations['assistantPassword']>;
+	'agent.remote': Io<AgentOperations['remote']>;
+	'agent.codexRecall': Io<AgentOperations['codexRecall']>;
+	'apps.credentials.create': Io<AppOperations['credentials']['create']>;
+	'apps.credentials.updatePolicy': Io<AppOperations['credentials']['updatePolicy']>;
+	'apps.credentials.rotate': Io<AppOperations['credentials']['rotate']>;
+	'apps.credentials.remove': Io<AppOperations['credentials']['remove']>;
+	'apps.credentials.revealKey': Io<AppOperations['credentials']['revealKey']>;
+	'apps.portal.mapUser': Io<AppOperations['portal']['mapUser']>;
+	'apps.portal.saveToken': Io<AppOperations['portal']['saveToken']>;
+	/** SSH supplies the loopback port its private forward will use. */
+	'data.knowledgeUi': { input: { loopbackPort: number } | void; result: { url: string } };
+	'data.backup': Io<DataOperations['backup']>;
+	'data.restoreData': Io<DataOperations['restoreData']>;
+	'data.restoreInstance': Io<DataOperations['restoreInstance']>;
+	'data.recovery.status': Io<DataOperations['recovery']['status']>;
+	'data.recovery.inspect': Io<DataOperations['recovery']['inspect']>;
+	'data.recovery.initialize': Io<DataOperations['recovery']['initialize']>;
+	'data.recovery.restore': Io<DataOperations['recovery']['restore']>;
+	'data.recovery.save': Io<DataOperations['recovery']['save']>;
+	'data.recovery.setCredential': Io<DataOperations['recovery']['setCredential']>;
+	'data.recovery.package': Io<DataOperations['recovery']['package']>;
+	'docker.install': Io<DockerOperations['install']>;
+	'docker.saveConfig': Io<DockerOperations['saveConfig']>;
+	'docker.update': Io<DockerOperations['update']>;
+	'docker.directory': Io<DockerOperations['directory']>;
+	/** Private staging workspaces for SSH file transfer. */
+	'transfer.create': { input: void; result: string };
+	'transfer.release': { input: string; result: void };
+	'transfer.pack': { input: string; result: string };
+	'transfer.unpack': { input: string; result: string };
 };
-export type ManagementRequestArgs<M extends ManagementMethod> =
-	ManagementRequestMap[M]['input'] extends undefined
-		? [value?: ManagementRequestMap[M]['input'], ...extra: ManagementRequestMap[M]['extra']]
-		: [value: ManagementRequestMap[M]['input'], ...extra: ManagementRequestMap[M]['extra']];
+export type ManagementOperation = keyof ManagementOperationMap;
 export interface InstanceManagement {
-	call<M extends ManagementMethod>(
-		method: M,
-		...args: ManagementRequestArgs<M>
-	): Promise<ManagementRequestMap[M]['result']>;
+	call<N extends ManagementOperation>(
+		operation: N,
+		input?: ManagementOperationMap[N]['input'],
+		context?: RequestContext
+	): Promise<ManagementOperationMap[N]['result']>;
 	busy(): boolean;
 	close(): Promise<void>;
 }

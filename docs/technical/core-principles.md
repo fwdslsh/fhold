@@ -147,7 +147,7 @@ settings to hide a product defect. Fix the owning layer and keep the normal path
 small and maintainable.
 
 Optional failures are logged, isolated and reported as degraded state while the
-agent continues. Scheduling, knowledge hooks, keep-alive, native remote workers
+agent continues. Scheduling, knowledge hooks, native remote workers
 and diagnostics do not become whole-container restart gates. Core readiness is
 the authenticated native API with its required recovery restoration and owner.
 Only an unusable core or unsafe continuation stops startup/writers, including
@@ -254,14 +254,6 @@ existing start/recreate path, while ACA preserves final stopped intent. Failed
 application retains pending state; discarding a draft never reverses already
 saved instance settings. All deployment timezone input uses FH_TIMEZONE; only
 the native ACA template adapter translates it to the image's TZ variable.
-Standalone deployers may opt into exact-name workload environment aliases using
-`FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
-logged or passed as command arguments. Original configured names are stripped
-from writer environments; scheduler and native remote-worker launches get no
-aliases. Invalid optional mappings warn without stopping the agent. This is
-process launch scoping, not plugin/tool isolation: OpenCode subprocesses inherit
-aliases and its plugins may use them during scheduled requests. No cloud-specific
-authority, token broker, wrapper or new managed settings layer is introduced.
 
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned
@@ -398,7 +390,7 @@ Agent settings starts with the resolved native default model, not a directory of
 apparently connected accounts. Saved sign-ins and endpoint definitions are a
 secondary, reviewable inventory; they never prove a working connection. Add AI
 service guides native sign-in or an OpenAI-compatible endpoint, model selection,
-an explicit short response test and an explicit Use this model action. Listing,
+an optional explicit short response test and an explicit Use this model action. Listing,
 saving credentials and discovering model IDs make no inference request. Model
 discovery runs from the Assistant's network, not the Admin host. Keys remain in
 native auth, never inline in generated provider configuration. Native OAuth
@@ -433,7 +425,10 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 The following container configuration rules describe shipped defaults and
 release-test expectations. A user controlling the Docker host owns their Compose
 customizations; host tooling is not a security boundary against that user.
-`fhold doctor` may report differences as advisory warnings, but the policy audit
+`fhold doctor` may report weakened security defaults (root product services,
+privileged or added capabilities, host namespaces or devices, container-runtime
+mounts, services other than Assistant and Guardian on agent_net, secrets outside
+FH_HOME) as advisory warnings, but this audit
 does not authorize or veto start, restart, update or offline recovery. Native
 Compose parsing, instance targeting, lifecycle locks, image compatibility and
 the recovery engine's identity/integrity/ownership checks remain operational
@@ -480,25 +475,22 @@ Guardian's own authentication and request protections remain unchanged.
   native trust/consent and operator/project hooks. There is no managed-only
   exclusion or image task-policy compatibility gate. Actual recovery capability
   and ownership checks remain. See [native configuration](../managed-harness-configuration.md).
-- Provider setup finishes only after a real no-tool request; it replaces only
-  the untouched moderator placeholder with the exact provider/model verified.
+- Provider setup finishes only after a real no-tool request. Guardian moderates
+  with the Assistant's model unless `config/guardian/opencode.json` sets a
+  `model`; an unavailable Guardian model falls back to the Assistant's model.
+  Setup never edits that operator-owned file.
 - Scheduled tasks use native AKM engine/agent selection and the operator's
   unchanged prompt, with no additional fhold tool ceiling. Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
-  `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
+  `FH_SCHEDULER_ENABLED=0` disables user task sync and cron.
   Knowledge, native workers and the independent recovery timer remain available.
-  Missing scheduler processes or overdue reconciliation produce actionable
-  health-log warnings shown by CLI/Admin; they do not fail core readiness.
-  Reconciliation runs in the background and retries without blocking startup.
-- Optional conditional HTTP keep-alive uses native fhold activity hooks and
-  the existing Supercronic process, independently of user task enablement. It
-  has no cloud API authority or work-age expiry. Unknown activity keeps the
-  instance awake; managed hooks must remain enabled. Native supervisors use the
-  installed CLI's account status to wait in `sign-in-needed` before launching an
-  unsigned-in worker. This inactive state permits idle without fabricating native
-  hook observations. Failed status checks and missing signed-in worker coverage
-  remain unknown, not proof of idle. This is best-effort signaling,
-  not a scale-in veto. See [the runtime contract](../harness-plugins.md).
+  Tasks sync once at boot in the background without blocking startup; task
+  create/remove sync their own changes. A missing scheduler process or failed
+  boot sync produces actionable health-log warnings shown by CLI/Admin; they do
+  not fail core readiness.
+- Native supervisors use the installed CLI's account status to wait in
+  `sign-in-needed` before launching an unsigned-in worker. See
+  [the runtime contract](../harness-plugins.md).
 - Native AKM plugins own automatic context, learning and reviewable memory
   proposals for native/custom agents. fhold does not filter prompts or implement
   its own extractor. Explicit off choices remain off. Guardian's current
@@ -645,26 +637,19 @@ GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribut
 host. GitHub builds Linux standalone CLI and Admin AppImage downloads and
 publishes Assistant/Guardian/Portal images to public Docker Hub. Every candidate
 needs its own artifact and runtime gates; earlier artifacts do not qualify changed source.
-The 0.1 release line uses real UTC `X.Y.yyMMddHHmm` timestamps and explicit
-alpha/beta/rc channels. The historical 0.2 patch format is `yyMMdd<build>`:
-UTC year/month/day plus an unpadded daily build number starting at 1, with the
-same prerelease suffixes. The 0.3 line uses `X.Y.YYMMNN[-alpha|-beta|-rc]`:
-UTC year/month and exactly two counter digits starting at 00. Each public release,
-including channel promotion, consumes a counter; there is no additional serial.
-Starting with 0.4, use `X.Y.MMNN[-alpha|-beta|-rc]` without the year prefix,
-with counter 01–99 each UTC month: `0.4.1001`, `0.4.1002`, `0.4.1101`.
+Release versions use `X.Y.MMNN[-alpha|-beta|-rc]`, with counter 01–99 each
+UTC month: `0.4.1001`, `0.4.1002`, `0.4.1101`. Each public release, including
+channel promotion, consumes a counter; there is no additional serial.
 Canonical SemVer removes the leading patch zero for January–September
 (`0.4.101`, not `0.4.0101`). Start a new minor line at year rollover to preserve
 ordering, e.g. `0.4.1299` → `0.5.101`. The shared parser never fabricates a year.
 Development candidates use source SHA/image digest; reserve a version near
 publication. Unpublished candidates and local dry-run receipts do not reserve a
 counter and may change. Published tags, images and downloads remain immutable.
-See the [release runbook](../operations/release.md#monthly-versions-from-03)
+See the [release runbook](../operations/release.md#release-version-format)
 for ordering, UTC reset, immutable retries and refusal after counter 99.
-The [0.4 policy](../operations/release.md#month-counter-versions-from-04)
-defines the yearless form; the 0.3 format and all published versions stay unchanged.
-Historical 0.1/0.2 versions remain valid and immutable. This changes release
-naming, not recovery or runtime schemas.
+Published pre-0.4 versions stay immutable. Release naming does not affect
+recovery or runtime schemas.
 The CLI remains a standalone executable,
 not an npm bootstrap package.
 Fresh installs use pinned `fwdslsh/fhold-{assistant,guardian,portal}` images.

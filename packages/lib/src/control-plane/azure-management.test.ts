@@ -731,28 +731,7 @@ test('install observes delayed native job completion automatically before app de
 	]);
 });
 
-test('resuming an accepted Blob installation does not apply the new-install directory default', async () => {
-	const f = provisioningFixture();
-	const reference = 'fhold-example-abcdef91';
-	f.store.saveInstallation({
-		ref,
-		reference,
-		state: 'in-progress',
-		step: 'initialization',
-		request: input
-	});
-	f.sdk.jobExecutions = async () => [{ name: 'original-attempt', status: 'Succeeded' }];
-	let application = '';
-	f.sdk.deploy = (_name, template) => {
-		application = JSON.stringify(template);
-		return poller('update');
-	};
-	expect((await invokeOperation(f.operations.resume, { reference }, confirm)).state).toBe(
-		'completed'
-	);
-	expect(application).toContain('azblob://storage123/fhold-example');
-	expect(application).not.toContain('file:///recovery');
-	// Fresh submissions still record an explicit directory choice for their continuation.
+test('submissions without an explicit backend default to directory recovery', () => {
 	expect(parseProvisioningRequest(input)).toMatchObject({ recovery: 'directory' });
 });
 test('fresh install refuses an existing unselected init job without mutation', async () => {

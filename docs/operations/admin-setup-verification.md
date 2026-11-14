@@ -502,9 +502,13 @@ bun run --cwd packages/electron build:linux
 VERSION="$(node -p 'require("./package.json").version')" node scripts/smoke-admin-artifact.mjs
 ```
 
-The packaged smoke uses the real preload/CSP, separate temporary profile and
-empty home, verifies the complete public version and welcome-to-fresh-instance
-journey without Docker/provider secrets. `dist/skeleton` is staged exclusively
+The packaged smoke drives the unmodified package from outside through
+Playwright's Electron support; the shipped Admin has no smoke-test entry point.
+It uses the real preload/CSP, temporary host configuration, menu data and empty
+home, verifies the complete public version, packaged skeleton and
+welcome-to-fresh-instance journey without Docker/provider secrets. On Windows and
+macOS, Electron keeps Admin's own profile under the platform application-data
+folder, so run it only on disposable CI accounts there. `dist/skeleton` is staged exclusively
 from the shared library allowlist; `scripts/packaged-assets.test.ts` compares it
 against the CLI archive, including exact bytes and unexpected/missing files.
 

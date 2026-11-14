@@ -4,32 +4,21 @@ import { readFileSync } from 'node:fs';
 import {
 	isPortalName,
 	portalSecretConfigured,
-	readStackConfig,
-	requireInstall,
 	resolveFholdHome,
 	savePortalTokens,
 	saveStackIntent,
 	writeStackConfig,
 	mutateStack,
-	type PortalName,
-	type StackConfig
+	type PortalName
 } from '@fhold/lib';
 
-import { portalCredential } from './config.js';
+import { current, portalCredential } from './config.js';
 import { runRestartAction } from './lifecycle.js';
 
 function positional(args: { _?: unknown[] }): PortalName {
 	const portal = String(args._?.[0] ?? '');
 	if (!isPortalName(portal)) throw new Error('Portal must be discord or slack.');
 	return portal;
-}
-
-function current(): { homeDir: string; config: StackConfig; baseline: StackConfig } {
-	const homeDir = resolveFholdHome();
-	requireInstall(homeDir);
-	const result = readStackConfig(homeDir);
-	if (!result.ok) throw new Error(result.error);
-	return { homeDir, config: result.config, baseline: structuredClone(result.config) };
 }
 
 function ids(value: unknown): string[] {

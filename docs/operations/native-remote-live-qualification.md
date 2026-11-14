@@ -1,18 +1,14 @@
-# Native remote recovery and activity qualification
+# Native remote recovery qualification
 
-The startup activity correction for [#38](https://github.com/fwdslsh/fhold/issues/38)
-shipped in [beta.12](https://github.com/fwdslsh/fhold/releases/tag/0.2.2610154-beta.12),
-from commit `12ad7fde5c2eec5d72f2dc1107eee7dc6f8e3267`.
-The signed-in native-client checks below remain unqualified as of October 21,
-2026. Keep the issue open until the applicable cases pass with retained evidence.
+The signed-in native-client checks below for [#38](https://github.com/fwdslsh/fhold/issues/38)
+remain unqualified as of October 21, 2026. Keep the issue open until the
+applicable cases pass with retained evidence. Conditional keep-alive and its
+activity cases were removed from the product; they are no longer part of this gate.
 An unsupported client/account combination is a blocker, not a successful test.
 
 The automated harness smoke runs the actual image-baked CLIs with disposable
-profiles and no vendor credentials. It verifies fresh/replacement empty Codex
-inventory, a real loaded native thread refusing initial coverage, a missing
-server refusing coverage, and real native hooks. Unit tests additionally reject
-partial/malformed inventories and a worker replaced during inspection. These
-checks do not prove vendor connectivity, a long model turn or cloud scale-to-zero.
+profiles and no vendor credentials and verifies real native hooks. These checks
+do not prove vendor connectivity or a long model turn.
 
 ## Prepare an isolated target
 
@@ -22,13 +18,10 @@ complete native pairing/consent. Do not borrow a management host's credentials o
 use an existing personal instance. Obtain account access through normal guided
 setup described in [native remote access](../native-remote-access.md).
 
-Use the selected release's normal install and deployment path. Enable keepalive
-to an operator-controlled HTTP(S) receiver before qualification, using the normal
-configuration and a dedicated secret if required. Keep user schedules disabled
-to make activity attribution clear. The receiver must record request timestamps,
-not Authorization headers. Preserve the selected native sandbox and approval
-policy; do not weaken them to make a test work. Unrelated workers may be explicitly
-disabled before the test, but the worker under test must remain enabled.
+Use the selected release's normal install and deployment path. Preserve the
+selected native sandbox and approval policy; do not weaken them to make a test
+work. Unrelated workers may be explicitly disabled before the test, but the
+worker under test must remain enabled.
 
 Use the normal recovery lifecycle and a private, unique recovery destination
 already initialized for this disposable target. Read [the recovery contract](../assistant-recovery.md).
@@ -42,169 +35,44 @@ hosting type, intended hostname, approval/sandbox policy and test start time.
 Keep account identity privately; public evidence should say whether the intended
 same account was verified, not identify the account or include token bytes.
 
-## Capture activity without exposing native logs
-
-Set `QUAL_CONTAINER` to the exact disposable Assistant container, never a wildcard
-or a production container selected by guesswork. The following commands only
-read container metadata and selected runtime fields. Run the snapshot repeatedly
-while the operator performs the cases below. Capture externally so evidence
-survives replacement; select the replacement's exact container after each boot.
-
-```sh
-QUAL_CONTAINER=the-disposable-assistant-container
-docker inspect --format '{{.Id}} {{.Config.Image}} {{.Config.Hostname}}' "$QUAL_CONTAINER"
-docker exec "$QUAL_CONTAINER" codex --version
-docker exec "$QUAL_CONTAINER" claude --version
-docker exec -i "$QUAL_CONTAINER" node --input-type=module <<'JS'
-import { readFileSync, readdirSync } from 'node:fs';
-const root = '/tmp/fhold-runtime';
-const read = (file) => {
-  try { return JSON.parse(readFileSync(`${root}/${file}`, 'utf8')); }
-  catch { return null; }
-};
-let files = [];
-let readable = true;
-try { files = readdirSync(`${root}/activity`); } catch { readable = false; }
-const workers = Object.fromEntries(['codex', 'claude'].map((tool) => {
-  const status = read(`remote/${tool}.json`);
-  return [tool, { state: status?.state ?? 'unreadable', pid: status?.pid ?? null,
-    ready: files.includes(`${tool}.ready`),
-    busyMarkers: files.filter((name) => new RegExp(`^${tool}-[a-f0-9]{64}-[a-f0-9]{64}$`).test(name)).length }];
-}));
-const tick = read('keepalive-status.json');
-console.log(JSON.stringify({ observedAt: new Date().toISOString(), readable,
-  unknown: files.includes('unknown'), opencodeReady: files.includes('opencode.ready'), workers,
-  keepalive: tick && { activity: tick.activity, enabled: tick.enabled,
-    sent: tick.sent, checkedAt: tick.checkedAt } }));
-JS
-```
-
-An unreadable snapshot or missing tick is a failed observation, never proof of
-idle. Require a fresh `checkedAt` after the phase change and compare it with
-receiver timestamps. A stale `sent: false` from before a turn proves nothing.
-Do not publish raw native logs, pairing links, prompts, session IDs or credentials.
-The selected snapshot is supporting evidence: it cannot replace the real client
-transcript or prove that a client reached the intended instance.
-
 ## Execute the acceptance cases
 
-1. **Unused enabled worker.** After normal boot with native account and required
-   consent already enrolled, send no user turn. Verify the selected worker is
-   enabled and `process-running`, its ready observation appears, and the whole
-   otherwise-unused instance reaches fresh `activity: idle`, `sent: false`.
-   Observe at least three keepalive intervals with no receiver requests. Empty
-   busy-marker counts alone do not prove coverage. For Claude, document any
-   native activation step that is required; do not call an activation turn
-   "unused idle before any turn."
-   Do not initialize OpenCode's workspace from the test before checking this
-   case. With keepalive enabled, Assistant performs its one ordinary default-
-   workspace initialization at startup; a global health check alone does not
-   load the native activity plugin. Retain cold-boot evidence before any client
-   or location-scoped API request. Failure remains conservative and visible.
-2. **Real client identity and history.** Pair through the actual supported clients.
+1. **Real client identity and history.** Pair through the actual supported clients.
    Have each client run `hostname` and `pwd` in a harmless request. Compare with
    the intended target; a reply from another running instance is a failure.
    Record a harmless unique conversation canary and finish the turn. Check native
    account/provider and configured permissions. OAuth refresh may change token
    bytes; verify identity and behavior rather than byte equality.
-3. **Cold recovery and reconnect.** Stop through the supported lifecycle, wait for
+2. **Cold recovery and reconnect.** Stop through the supported lifecycle, wait for
    a successful final checkpoint, zero writers/replicas and released ownership,
    then restore into the same-instance replacement with an empty runtime home.
-   Repeat case 1 before sending a turn, then reconnect both real clients. Resume
-   the saved native conversation, recall the canary and repeat the identity/tool
-   check. A warm restart with a surviving data directory is a separate test.
+   Reconnect both real clients. Resume the saved native conversation, recall the
+   canary and repeat the identity/tool check. A warm restart with a surviving data directory is a separate test.
    Repeat cold recovery at least twice. Record checkpoint/replacement identities
    privately and do not claim success if the latest completed turn is missing.
-4. **Quiet long work.** Through the real Codex client, explicitly request a harmless
-   two-hour foreground shell wait followed by a fixed completion message, such
-   as `sleep 7200; printf 'fhold quiet-work complete\n'`. Confirm actual execution
-   has begun using the native client, not just that the model promised to do it.
-   Keep the normal approval policy, and have the operator approve only the
-   intended request. Sample activity at least every keepalive interval throughout
-   the silent period; receiver requests must continue without a gap beyond the
-   configured cadence plus request timeout. Record maximum gap and any hosting
-   deactivation. After completion, require established idle and three quiet
-   intervals. Repeat the applicable work/activity test for Claude and record its
-   actual duration. A tool forced into background, interrupted or timed out early
-   does not satisfy the foreground quiet-work case.
-5. **Question, permission and reconnect.** In actual native clients, leave a
+3. **Question, permission and reconnect.** In actual native clients, leave a
    question pending, then a harmless policy-controlled permission request pending.
-   Verify work remains protected from idle shutdown while input is outstanding.
    Disconnect/reconnect the client while keeping Assistant running. Only the
    operator answers; exercise approve and deny, then verify work completes or
-   cancels and returns to idle. For Codex, also interrupt a pending native
-   `request_user_input` question without answering and cancel a pending command
-   approval: confirm native idle and the interrupted turn, then require three
-   quiet intervals. Also run a harmless failing command and let its turn finish.
-   Codex emits `PostToolUse` only for successful calls; these outcomes must not
-   leave an unbalanced tool observation. Foreground calls remain protected by
-   their turn, and independent native subagents retain their own observations.
-   Never replay an approval automatically.
-6. **Replacement boundary.** Stop/restore is not a promise to resume in-flight
+   cancels. For Codex, also interrupt a pending native `request_user_input`
+   question without answering and cancel a pending command approval: confirm
+   the interrupted turn. Never replay an approval automatically.
+4. **Replacement boundary.** Stop/restore is not a promise to resume in-flight
    vendor execution or pending approvals. Document the native outcome for a
    pending question/permission only in the disposable fixture. Confirm no command
    or approval is silently replayed, then require the normal explicit client flow
    to continue. Separate supported completed-conversation recovery from unsupported
    active-turn continuation; failure to resume an active turn must not be hidden
    by resubmission or a fabricated history entry.
-7. **Observation failure.** On a separate disposable Codex fixture, use native
-   `/hooks` or the existing hook review helper to review and explicitly disable
-   only `fhold@fhold-plugins` activity hooks. Current images use ordinary native
-   plugin hooks, not the historical managed-only hook policy. Preserve the
-   selected sandbox, account, other plugins and user/project hooks.
-   Confirm native hook review reports disabled hooks and the enabled running
-   worker remains `unknown` with fresh successful keepalive requests. Record the
-   native choice privately. If native policy validation prevents the worker from
-   launching, this case is blocked; an inactive worker is not a failed observation
-   of a running worker. Do not manually delete ready/busy markers, expire a
-   busy marker, force idle or run a second server. Restore the ordinary fixture
-   hooks through a fresh native review and explicit operator approval after
-   collecting the failure evidence. This deliberate fault is not evidence for
-   the healthy case. With a completed conversation still loaded, re-enable the
-   reviewed hooks without sending another turn or restarting the worker. Require
-   fresh known idle and three quiet intervals. A temporary inspection failure
-   must not leave an otherwise-idle, loaded conversation keeping Assistant awake
-   forever. Native active status, including waiting for approval or user input,
-   must never establish idle coverage.
-8. **Failed turn returns to idle.** In a disposable native conversation, cause a
-   controlled provider failure and require the native client to report a terminal
-   failed turn. The supervisor must retire that exact turn within its next
-   successful observation, then keepalive must stop for three intervals once
-   all other work is idle. Start another quiet turn before an observation and
-   verify that the older failure never clears the newer work. Repeat the failure.
-   Do not treat a pending retry as a terminal failure. The image regression uses
-   a loopback provider with actual Codex binaries and hooks; it does not qualify
-   signed-in vendor connectivity or replace the two-hour foreground case.
-9. **OpenCode native idle unload.** During the two-hour case, leave the otherwise
-   unused OpenCode workspace untouched. Its native idle eviction must not turn
-   healthy observation into permanent unknown. Retain the native eviction log
-   and compare whole-instance activity after Codex finishes. Require three quiet
-   intervals, then start ordinary OpenCode work and verify activity is observed
-   again. Do not poll location-scoped OpenCode endpoints to keep the workspace
-   loaded. The image regression shortens only the documented native idle TTL to
-   exercise the actual unload/reload lifecycle quickly; the live two-hour case
-   retains the native default TTL.
-10. **OpenCode observer removal.** In a disposable instance, disable
-    `fhold.activity` through native plugin configuration while its location is
-    loaded. Run a native user shell command across two heartbeat intervals and
-    require unknown observation with continuing heartbeats. Re-enable the plugin
-    and require quiet idle. Repeat removal after actual native idle eviction,
-    before starting the next shell command. This second case must also remain
-    unknown during work: an old valid idle observation cannot certify a newly
-    loaded location with its observer disabled. Do not edit activity markers.
 
 ## Report and close the gate
 
 For every case, record pass, fail, blocked or unsupported; exact versions and
-revision; UTC start/end; fresh before/during/after activity; receiver request count
-and maximum gap; correct-instance native tool result; retained conversation; and
-any operator consent. Retain redacted client evidence separately from the runtime
-snapshot. Never infer a pass from process state, saved sign-in files, mocked
-transport, a synthetic thread or unrelated OpenCode work.
+revision; UTC start/end; correct-instance native tool result; retained
+conversation; and any operator consent. Retain redacted client evidence. Never
+infer a pass from process state, saved sign-in files, mocked transport, a
+synthetic thread or unrelated OpenCode work.
 
-Post the redacted matrix to #38. Any false idle during genuine work or a failure
-to establish healthy unused idle needs a reproducible defect report. Missing
-disposable account access, unsupported native pairing, or unavailable two-hour
-execution remains an explicit acceptance blocker. Close the issue only when the
-healthy and conservative-failure cases are demonstrated with real native clients;
-otherwise retain its open qualification status and list the remaining cases.
+Post the redacted matrix to #38. Missing disposable account access or unsupported
+native pairing remains an explicit acceptance blocker. Close the issue only when
+the cases are demonstrated with real native clients; otherwise retain its open qualification status and list the remaining cases.

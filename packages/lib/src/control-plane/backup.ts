@@ -12,7 +12,7 @@ import {
 	readFileSync,
 	realpathSync
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { readStackConfig } from './stack-config.js';
 import { exportProviderCredentials, PROVIDER_CREDENTIAL_EXPORT } from './provider-transfer.js';
@@ -21,7 +21,7 @@ import {
 	PORTABLE_BACKUP_EXCLUSIONS,
 	type PreservationItem
 } from './preservation.js';
-import { writeFileAtomic } from './foundation.js';
+import { contained, writeFileAtomic } from './foundation.js';
 import {
 	assertSafePortablePath,
 	hasInlineProviderCredentials,
@@ -63,11 +63,6 @@ export type BackupManifest = {
 	warnings: string[];
 	totalBytes: number;
 };
-
-function contained(root: string, path: string): boolean {
-	const value = relative(root, path);
-	return value === '' || (!value.startsWith(`..${sep}`) && value !== '..' && !isAbsolute(value));
-}
 
 function sourceRoot(path: string): string {
 	const resolved = resolve(path);

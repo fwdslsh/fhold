@@ -26,7 +26,7 @@ What actually happened.
 
 - **OS:** (e.g., Ubuntu 24.04, macOS 15)
 - **Docker version:** (output of `docker --version`)
-- **fhold version:** (e.g., 0.1.2610020008-alpha.1)
+- **fhold version:** (e.g., 0.4.1001-beta)
 - **Install method:** (standalone binary, local Admin, or source)
 
 ## Logs (optional)

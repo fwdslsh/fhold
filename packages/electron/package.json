@@ -1,6 +1,6 @@
 {
   "name": "@fhold/electron",
-  "version": "0.4.1109-beta",
+  "version": "0.4.1110-beta",
   "private": true,
   "type": "module",
   "description": "Optional static desktop administration tool for fhold stacks",
@@ -29,6 +29,7 @@
     "axe-core": "4.14.0",
     "electron": "45.2.3",
     "electron-builder": "^26.18.1",
+    "playwright-core": "1.65.0",
     "typescript": "^7.0.2",
     "@types/node": "^26.6.6"
   }

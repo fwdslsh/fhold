@@ -3,7 +3,7 @@ import { invokeOperation, type ComposedInstanceSession, type HostingLogOptions }
 import { runSessionProviderCommand } from './session-provider-command.js';
 import { runSessionDataCommand } from './session-data-command.js';
 import { runSessionConnectCommand } from './session-connect-command.js';
-import { completeHostedSetup } from '../commands/setup.js';
+import { completeSessionSetup } from '../commands/setup.js';
 
 /** Shared remote verbs. The adapter, not the CLI, supplies their implementation. */
 export async function runSessionCommand(
@@ -12,7 +12,7 @@ export async function runSessionCommand(
 	write: (text: string) => void = console.log
 ): Promise<void> {
 	const action = argv[0] || 'status';
-	if (action === 'setup') return completeHostedSetup(session, argv.slice(1), write);
+	if (action === 'setup') return completeSessionSetup(session, argv.slice(1), write);
 	if (action === 'provider') return runSessionProviderCommand(session, argv.slice(1), write);
 	if (action === 'backup' || action === 'restore')
 		return runSessionDataCommand(session, argv, write);

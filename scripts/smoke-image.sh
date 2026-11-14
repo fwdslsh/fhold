@@ -5,7 +5,7 @@ image=${1:?usage: smoke-image.sh IMAGE assistant|guardian|portal}
 kind=${2:?usage: smoke-image.sh IMAGE assistant|guardian|portal}
 phase=${3:-all}
 case "$kind:$phase" in
-assistant:all|assistant:cache|assistant:runtime|assistant:activity|assistant:lifecycle|guardian:all|portal:all) ;;
+assistant:all|assistant:cache|assistant:runtime|assistant:lifecycle|guardian:all|portal:all) ;;
 *) echo 'Unsupported image smoke phase' >&2; exit 1 ;;
 esac
 remote=${FH_SMOKE_REMOTE:-default}
@@ -152,7 +152,7 @@ verify_runtime_versions() {
 
 verify_workspace_runtime_boundary() {
 	# Exercise installed helper entrypoints and AKM, not only a Bun eval. The
-	# hostile files are present before startup, reconciliation and native hooks.
+	# hostile files are present before startup, task sync and native hooks.
 	docker exec --workdir /work "$container" bun -e \
 		'if (process.env.FH_PLUGIN_ENV_SENTINEL) throw Error("Workspace .env loaded"); if (await Bun.file("/tmp/fhold-bun-preload-executed").exists()) throw Error("Workspace bunfig preload executed");'
 	docker exec --workdir /work "$container" akm --version
@@ -214,12 +214,11 @@ verify_optional_failure_isolation() {
 		import { readFileSync } from "node:fs";
 		import { spawnSync } from "node:child_process";
 		const runtime = "/tmp/fhold-runtime";
-		for (const feature of ["scheduler", "reconciliation"]) process.kill(Number(readFileSync(`${runtime}/${feature}.pid`, "utf8")), "SIGTERM");
+		process.kill(Number(readFileSync(`${runtime}/scheduler.pid`, "utf8")), "SIGTERM");
 		await new Promise(resolve => setTimeout(resolve, 1000));
 		const health = spawnSync("fhold-healthcheck", [], {encoding:"utf8", timeout:10000});
 		assert.equal(health.status, 0, "Optional process failure must not make the agent unhealthy");
 		assert.match(health.stdout, /fhold: degraded: Scheduled tasks are unavailable/);
-		assert.match(health.stdout, /Task reconciliation is unavailable/);
 		const status = spawnSync("bun", ["/etc/opencode/skills/fhold-admin/scripts/status.mjs"], {encoding:"utf8", timeout:15000});
 		assert.equal(status.status, 0);
 		const diagnostics = JSON.parse(status.stdout);
@@ -238,7 +237,7 @@ verify_optional_failure_isolation() {
 		await api(`/session/${session.id}/shell`, {command:"printf fhold-core-remains-usable"});
 		const messages = await api(`/session/${session.id}/message`);
 		assert.ok(messages.some(message => message.type === "shell" && JSON.stringify(message.output).includes("fhold-core-remains-usable")), "Native tool must remain usable");
-		console.log("Optional scheduler/reconciliation failures: native sessions/tools stay usable and report warnings");'
+		console.log("Optional scheduler failure: native sessions/tools stay usable and report warnings");'
 
 	# Ordinary standalone configuration errors degrade only the affected features.
 	# This fresh fixture uses the image defaults; no helper/CLI is substituted.
@@ -246,14 +245,13 @@ verify_optional_failure_isolation() {
 	docker run -d --name "$container" --init --network none \
 		--cap-drop=ALL --security-opt no-new-privileges:true \
 		-e OPENCODE_SERVER_PASSWORD=assistant-smoke-password-0000000000000000 \
-		-e FH_SCHEDULER_ENABLED=invalid -e FH_KEEPALIVE_URL=invalid \
+		-e FH_SCHEDULER_ENABLED=invalid \
 		-e FH_CODEX_REMOTE=invalid -e FH_CLAUDE_REMOTE=0 \
 		-e FH_SHUTDOWN_SECONDS=invalid "$image" >/dev/null
 	wait_for_health
 	docker exec "$container" bun /etc/opencode/skills/fhold-admin/scripts/status.mjs | docker exec -i "$container" bun -e '
 		const result = await Bun.stdin.json();
 		if (!result.agentReady || result.schedulerEnabled || !result.warnings.some(warning => warning.includes("runtime settings")) ||
-			!result.warnings.some(warning => warning.includes("Keep-alive")) ||
 			!result.warnings.some(warning => warning.includes("FH_CODEX_REMOTE")))
 			throw Error("Malformed optional settings blocked startup or hid degradation");'
 	printf '%s\n' 'Malformed optional settings: authenticated agent is healthy with actionable warnings'
@@ -363,11 +361,6 @@ assistant)
 		-v "$root/password:/run/fhold/password:ro" \
 		"$image" >/dev/null
 	wait_for_health
-	if [ "$phase" = activity ]; then
-		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
-		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
-		exit 0
-	fi
 	if [ "$phase" = all ] || [ "$phase" = runtime ]; then
 	verify_runtime_versions
 	docker exec "$container" sh -ec 'test -z "${AKM_REDACT_PII+x}${AKM_REDACT_HIGH_ENTROPY+x}"; jq -e ".plugins.redact == {pii: true, highEntropy: true}" /etc/akm/config.json >/dev/null'
@@ -393,17 +386,13 @@ assistant)
 		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
-	if [ "$phase" = all ]; then
-		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
-		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
-	fi
 	docker cp scripts/smoke-native-akm-policy.mjs "$container:/tmp/smoke-native-akm-policy.mjs"
 	docker exec "$container" bun /tmp/smoke-native-akm-policy.mjs
 	verify_workspace_runtime_boundary
 	verify_builtin_skills
 	if [ "$remote" != 0 ]; then
 		# Default-on supervisors wait for the native account, without launching
-		# unsigned-in workers or pretending their activity hooks have run.
+		# unsigned-in workers.
 		docker exec "$container" test ! -e /home/fhold/.codex/app-server-control/app-server-control.sock
 		docker exec "$container" test ! -e /home/fhold/.codex/packages/app-server-daemon
 		verify_remote_state sign-in-needed

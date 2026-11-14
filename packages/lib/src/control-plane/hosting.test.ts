@@ -164,7 +164,7 @@ test('discovery prepares the bundled helper automatically without replacing an i
 		return JSON.stringify({
 			version: 1,
 			ok: true,
-			value: input.action === 'hello' ? { actions: ['list'] } : []
+			value: []
 		});
 	};
 	const provider = createSshDockerProvider(ssh, run);
@@ -284,15 +284,12 @@ test('local Docker accepts native local sockets, not a remote daemon with local 
 		expect(() => localDockerEndpoint(endpoint)).toThrow('SSH hosting connection');
 });
 
-test('machine interface negotiates actions, refuses arbitrary execution and preserves confirmation', async () => {
+test('machine interface reports its release, refuses arbitrary execution and preserves confirmation', async () => {
 	const hello = await hostingMachineRequest({ version: 1, action: 'hello' });
 	expect(hello).toMatchObject({
 		version: 1,
 		ok: true,
-		value: {
-			actions: expect.arrayContaining(['list', 'inspect', 'logs', 'stop']),
-			features: expect.arrayContaining(['credentialPolicy'])
-		}
+		value: { instancesDirectory: expect.any(String), release: expect.any(String) }
 	});
 	for (const input of [
 		null,
@@ -305,70 +302,6 @@ test('machine interface negotiates actions, refuses arbitrary execution and pres
 });
 
 describe('native SSH transport', () => {
-	test('feeds the server credential-policy feature into SSH operation availability without status warm-up', async () => {
-		const response = await hostingMachineRequest({ version: 1, action: 'hello' });
-		if (!response.ok) throw new Error(response.error);
-		const run: HostingProcess = async (_binary, _args, options) => {
-			const request = JSON.parse(options?.input || '{}') as { action?: string };
-			if (request.action === 'hello')
-				return JSON.stringify({ version: 1, ok: true, value: response.value });
-			return JSON.stringify({
-				version: 1,
-				ok: true,
-				value: {
-					ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
-					name: 'agent',
-					location: '/agent',
-					services: [],
-					warnings: []
-				}
-			});
-		};
-		const bindings = sshDockerProvider(ssh, run).open({
-			kind: 'ssh-docker',
-			connectionId: 'lab',
-			remoteHome: '/agent'
-		}).applicationBindings!();
-		const policy = bindings.apps!.credentials.updatePolicy;
-		if (policy.support !== 'supported') throw new Error('fixture');
-		// Before discovery, an old/unknown host is not falsely disabled.
-		expect(policy.availability()).toEqual({ state: 'ready' });
-		await bindings.initialize!();
-		expect(policy.availability()).toEqual({ state: 'ready' });
-	});
-
-	test('an older SSH hello disables only its unadvertised credential-policy feature', async () => {
-		const run: HostingProcess = async (_binary, _args, options) => {
-			const request = JSON.parse(options?.input || '{}') as { action?: string };
-			return JSON.stringify({
-				version: 1,
-				ok: true,
-				value:
-					request.action === 'hello'
-						? { actions: ['inspect'], management: ['snapshot', 'providers', 'credential'] }
-						: {
-								ref: { kind: 'local-docker', connectionId: 'local', homeDir: '/agent' },
-								name: 'agent',
-								location: '/agent',
-								services: [],
-								warnings: []
-							}
-			});
-		};
-		const bindings = sshDockerProvider(ssh, run).open({
-			kind: 'ssh-docker',
-			connectionId: 'lab',
-			remoteHome: '/agent'
-		}).applicationBindings!();
-		await bindings.initialize!();
-		const policy = bindings.apps!.credentials.updatePolicy;
-		const providers = bindings.agent!.providers!;
-		if (policy.support !== 'supported' || providers.support !== 'supported')
-			throw new Error('fixture');
-		expect(policy.availability()).toMatchObject({ state: 'unavailable' });
-		expect(providers.availability()).toEqual({ state: 'ready' });
-	});
-
 	test('fixed remote command and JSON stdin preserve paths with shell metacharacters', async () => {
 		const remoteHome = "/opt/stacks/owner's agent; echo bad";
 		const requests: Array<{ args: string[]; input: unknown }> = [];
@@ -406,7 +339,7 @@ describe('native SSH transport', () => {
 		});
 		expect(requests[0]?.args).toContain('BatchMode=yes');
 		await expect(session.operate('stop', false)).rejects.toThrow('Confirm');
-		expect(requests).toHaveLength(2);
+		expect(requests).toHaveLength(1);
 	});
 	test('missing protocol support and native connection failures never retry work', async () => {
 		let calls = 0;
@@ -421,22 +354,6 @@ describe('native SSH transport', () => {
 		});
 		await expect(failed.listInstances()).rejects.toThrow('SSH unavailable');
 	});
-	test('a missing mutation capability does not disable supported discovery', async () => {
-		const provider = sshDockerProvider(ssh, async (_binary, _args, options) => {
-			const request = JSON.parse(options?.input || '{}');
-			return JSON.stringify({
-				version: 1,
-				ok: true,
-				value: request.action === 'hello' ? { actions: ['list'] } : []
-			});
-		});
-		expect(await provider.listInstances()).toEqual([]);
-		await expect(
-			provider
-				.open({ kind: 'ssh-docker', connectionId: 'lab', remoteHome: '/agent' })
-				.operate('restart', true)
-		).rejects.toThrow('does not support hosting restart');
-	});
 	test('a completed lifecycle action is not reported as failed when its status read fails', async () => {
 		const actions: string[] = [];
 		const session = sshDockerProvider(ssh, async (_binary, _args, options) => {
@@ -446,11 +363,11 @@ describe('native SSH transport', () => {
 			return JSON.stringify({
 				version: 1,
 				ok: true,
-				value: request.action === 'hello' ? { actions: ['stop'] } : null
+				value: null
 			});
 		}).open({ kind: 'ssh-docker', connectionId: 'lab', remoteHome: '/agent' });
 		await expect(session.operate('stop', true)).rejects.toThrow('Remote stop completed');
-		expect(actions).toEqual(['hello', 'stop', 'inspect']);
+		expect(actions).toEqual(['stop', 'inspect']);
 	});
 });
 

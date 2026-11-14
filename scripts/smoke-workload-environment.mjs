@@ -39,25 +39,15 @@ function environment(tool) {
       const offset = pair.indexOf('='); return [pair.slice(0, offset), pair.slice(offset + 1)];
     }));
 }
-const native = environment('assistant');
-assert.equal(native.PLUGIN_ENDPOINT, 'https://synthetic.invalid/workload');
-assert.equal(native.PLUGIN_HEADER, 'synthetic header with spaces');
-for (const tool of ['assistant', 'scheduler', 'claude', 'codex']) {
-  const env = environment(tool);
-  for (const source of ['WORKLOAD_ENDPOINT', 'IDENTITY_HEADER', 'FH_OPENCODE_ENV_MAP'])
-    assert.equal(env[source], undefined, tool + ': source/map must be omitted');
-  if (tool !== 'assistant') {
-    assert.equal(env.PLUGIN_ENDPOINT, undefined, tool + ': no endpoint alias');
-    assert.equal(env.PLUGIN_HEADER, undefined, tool + ': no header alias');
-  }
-}
+for (const tool of ['assistant', 'scheduler', 'claude', 'codex'])
+  assert.equal(environment(tool).IDENTITY_HEADER, undefined, tool + ': identity selector must be omitted');
 const session = await api('/session', { title: 'Disposable workload environment test', location: { directory: '/work' } });
 await api('/session/' + session.id + '/shell', {
-  command: 'test "$PLUGIN_ENDPOINT" = "https://synthetic.invalid/workload" && test "$PLUGIN_HEADER" = "synthetic header with spaces" && test -z "\${IDENTITY_HEADER+x}" && test -z "\${WORKLOAD_ENDPOINT+x}" && printf workload-aliases-consumed'
+  command: 'test -z "\${IDENTITY_HEADER+x}" && printf workload-identity-omitted'
 });
 const messages = await api('/session/' + session.id + '/message');
-assert.ok(messages.some(message => message.type === 'shell' && JSON.stringify(message.output).includes('workload-aliases-consumed')), 'Native tool output must prove it inherited and consumed aliases');
-console.log('Shipped image: OpenCode/tool aliases ready; scheduler/remotes clean; no source forwarding.');
+assert.ok(messages.some(message => message.type === 'shell' && JSON.stringify(message.output).includes('workload-identity-omitted')), 'Native tool output must prove the identity selector was omitted');
+console.log('Shipped image: OpenCode, tools, scheduler and remotes receive no workload identity selectors.');
 `;
 try {
 	docker([
@@ -72,10 +62,6 @@ try {
 		'no-new-privileges:true',
 		'-e',
 		'OPENCODE_SERVER_PASSWORD=synthetic-workload-test-only',
-		'-e',
-		'FH_OPENCODE_ENV_MAP=WORKLOAD_ENDPOINT=PLUGIN_ENDPOINT,IDENTITY_HEADER=PLUGIN_HEADER',
-		'-e',
-		'WORKLOAD_ENDPOINT=https://synthetic.invalid/workload',
 		'-e',
 		'IDENTITY_HEADER=synthetic header with spaces',
 		image

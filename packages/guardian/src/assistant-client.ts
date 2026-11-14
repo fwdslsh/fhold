@@ -12,7 +12,7 @@ import {
 	type PermissionRuleset
 } from '@opencode/client';
 
-import { readTextBounded } from './http-util.js';
+import { boundedInt, readTextBounded } from './http-util.js';
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,256}$/;
 const MAX_UPSTREAM_RESPONSE_BYTES = 16 * 1_024 * 1_024;
@@ -136,11 +136,6 @@ export type AssistantClientOptions = {
 	timeoutMs?: number;
 	fetch?: typeof fetch;
 };
-
-function boundedInt(value: string | undefined, fallback: number, maximum: number): number {
-	const parsed = Number.parseInt(value ?? '', 10);
-	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
-}
 
 function requireSessionId(sessionId: string): void {
 	if (!SESSION_ID_RE.test(sessionId)) throw new Error('invalid assistant session id');

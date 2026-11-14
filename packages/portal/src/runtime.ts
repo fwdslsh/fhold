@@ -66,7 +66,7 @@ export function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export function startHealthServer(_service: string): { ready: (check: () => boolean) => void } {
+export function startHealthServer(): { ready: (check: () => boolean) => void } {
 	let isReady = () => false;
 	const port = Number.parseInt(process.env.PORT ?? '8080', 10);
 	if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('PORT must be valid');

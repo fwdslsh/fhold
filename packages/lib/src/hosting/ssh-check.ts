@@ -24,9 +24,7 @@ export async function checkSshConnection(
 				version?: number;
 				ok?: boolean;
 				value?: {
-					actions?: string[];
 					release?: string;
-					management?: string[];
 					docker?: { ok: boolean; message?: string };
 				};
 			};
@@ -44,36 +42,22 @@ export async function checkSshConnection(
 			detail: `Connected to ${connection.host} (${platform}).`
 		});
 		const hello = await request('hello');
-		if (
-			hello.version !== HOSTING_WIRE_VERSION ||
-			hello.ok !== true ||
-			!hello.value?.actions?.includes('list')
-		)
+		if (hello.version !== HOSTING_WIRE_VERSION || hello.ok !== true)
 			throw new Error(
 				'This distribution’s management helper lacks compatible hosting support. Rebuild or reinstall local tooling.'
 			);
 		result.checks.push({
 			name: 'Management helper',
 			ok: true,
-			detail: hello.value.release || 'Compatible hosting protocol.'
+			detail: hello.value?.release || 'Compatible hosting protocol.'
 		});
-		const management = hello.value.management?.includes('snapshot') === true;
-		result.checks.push({
-			name: 'Instance management',
-			ok: management,
-			detail: management
-				? 'Settings, apps, updates and import/export are available.'
-				: 'This management helper lacks full management support. Rebuild or reinstall local tooling.'
-		});
-		if (hello.value.actions.includes('diagnose')) {
-			const response = await request('diagnose');
-			if (response.ok && response.value?.docker)
-				result.checks.push({
-					name: 'Docker',
-					ok: response.value.docker.ok,
-					detail: response.value.docker.message || 'Docker and Compose are ready.'
-				});
-		}
+		const response = await request('diagnose');
+		if (response.ok && response.value?.docker)
+			result.checks.push({
+				name: 'Docker',
+				ok: response.value.docker.ok,
+				detail: response.value.docker.message || 'Docker and Compose are ready.'
+			});
 		result.instances = await list();
 		result.checks.push({
 			name: 'Discovery',

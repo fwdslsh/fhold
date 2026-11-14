@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { createAssistantClient, createNativeClient } from './assistant-client.js';
-import { createMcpAgentServer } from './mcp-agent.js';
-import { moderateMessage } from './moderation.js';
+import { createAssistantClient, createNativeClient } from '../src/assistant-client.js';
+import { createMcpAgentServer } from '../src/mcp-agent.js';
+import { moderateMessage } from '../src/moderation.js';
 
 // Called only by the opt-in, disposable native-provider fixture. The real
 // Guardian adapter and MCP server talk to the shipped native engine; only the

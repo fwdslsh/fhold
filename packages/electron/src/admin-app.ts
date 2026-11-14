@@ -8,12 +8,12 @@ import {
 	connectionEndpoint,
 	checkHostingConnection,
 	invokeOperation as invoke,
-	parseLegacyCredentialOperation,
-	parseLegacyRecoveryOperation,
 	parseOperationInput as parseInput,
 	parseRequestContext as confirmationContext,
 	parseProvisioningRequest,
-	type ComposedInstanceSession
+	type ComposedInstanceSession,
+	type Operation,
+	type OperationInputName
 } from '@fhold/lib';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
@@ -28,7 +28,13 @@ import { AdminUpdates } from './admin-updates.js';
 import { AdminDesktop } from './admin-desktop.js';
 import { AdminKnowledge } from './admin-knowledge.js';
 
-import { ADMIN_CHANNELS, type AdminSnapshot, type StackAction } from './admin-types.js';
+import {
+	ADMIN_CHANNELS,
+	ADMIN_OPERATIONS,
+	type AdminOperation,
+	type AdminSnapshot,
+	type StackAction
+} from './admin-types.js';
 import {
 	confirmedAdminAction,
 	interruptionPrompt,
@@ -119,14 +125,43 @@ async function hostingInfo(id: string) {
 
 function handleAdmin(
 	channel: string,
-	handler: (event: IpcMainInvokeEvent, value?: unknown) => unknown
+	handler: (event: IpcMainInvokeEvent, ...values: unknown[]) => unknown
 ): void {
-	ipcMain.handle(channel, (event, value: unknown) => {
+	ipcMain.handle(channel, (event, ...values: unknown[]) => {
 		requireAdminSender(event);
 		if (closingSession)
 			throw new Error('The instance connection is changing. Try again when it finishes.');
-		return instances.run(() => handler(event, value));
+		return instances.run(() => handler(event, ...values));
 	});
+}
+
+/** Allowlisted slots that take no input; every other allowlisted name has a parser. */
+const NO_INPUT_OPERATION_NAMES = [
+	'host.deployment.inspect',
+	'host.deployment.discard',
+	'agent.providers',
+	'agent.assistantPassword'
+] as const satisfies readonly AdminOperation[];
+// Compile-time proof that each allowlisted operation is parsed or takes no input.
+type UnparsedOperation = Exclude<
+	AdminOperation,
+	OperationInputName | (typeof NO_INPUT_OPERATION_NAMES)[number]
+>;
+const everyOperationParsed: [UnparsedOperation] extends [never] ? true : UnparsedOperation = true;
+void everyOperationParsed;
+const NO_INPUT_OPERATIONS: ReadonlySet<string> = new Set(NO_INPUT_OPERATION_NAMES);
+
+/** Invoke one allowlisted named operation on the selected instance session. */
+function invokeAdminOperation(name: unknown, value: unknown, context: unknown): Promise<unknown> {
+	if (typeof name !== 'string' || !(ADMIN_OPERATIONS as readonly string[]).includes(name))
+		throw new Error('Unknown instance operation.');
+	let operation: unknown = session();
+	for (const key of name.split('.')) operation = (operation as Record<string, unknown>)[key];
+	let input: unknown;
+	if (NO_INPUT_OPERATIONS.has(name)) {
+		if (value !== undefined) throw new Error(`Invalid ${name} request.`);
+	} else input = parseInput(name as OperationInputName, value);
+	return invoke(operation as Operation<unknown, unknown>, input, confirmationContext(context));
 }
 
 function requireSwitchable(): void {
@@ -167,7 +202,7 @@ export async function runAdminAction(action: StackAction) {
 }
 
 export function registerAdminIpc(): void {
-	instances = new AdminInstances(app.getPath('userData'));
+	instances = new AdminInstances();
 	desktop = new AdminDesktop({
 		platform: process.platform,
 		packaged: app.isPackaged,
@@ -183,8 +218,8 @@ export function registerAdminIpc(): void {
 	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
 		version: app.getVersion(),
 		unavailableReason:
-			!app.isPackaged || process.argv.includes('--fhold-release-smoke')
-				? 'Automatic updates are available in installed releases, not development or smoke tests.'
+			!app.isPackaged
+				? 'Automatic updates are available in installed releases, not development builds.'
 				: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
 						true
 					? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
@@ -369,41 +404,8 @@ export function registerAdminIpc(): void {
 	handleAdmin(ADMIN_CHANNELS.action, (_event, value) =>
 		runAdminAction(confirmedAdminAction(value))
 	);
-	handleAdmin(ADMIN_CHANNELS.logs, (_event, value) =>
-		invoke(session().host.logs, { tail: 250, ...parseInput('host.logs', value ?? {}) })
-	);
-	handleAdmin(ADMIN_CHANNELS.directory, (_event, value) => {
-		const operation = session().docker?.directory;
-		if (!operation) throw new Error('This instance does not expose an instance directory.');
-		return invoke(operation, parseInput('docker.directory', value ?? {}));
-	});
-	handleAdmin(ADMIN_CHANNELS.providers, () => invoke(session().agent.providers, undefined));
-	handleAdmin(ADMIN_CHANNELS.providerKey, (_event, value) =>
-		invoke(session().agent.setKey, parseInput('agent.setKey', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerEndpoint, (_event, value) =>
-		invoke(session().agent.saveEndpoint, parseInput('agent.saveEndpoint', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerModels, (_event, value) =>
-		invoke(session().agent.discoverModels, parseInput('agent.discoverModels', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerUse, (_event, value) =>
-		invoke(session().agent.selectModel, parseInput('agent.selectModel', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerRemove, (_event, value) =>
-		invoke(session().agent.removeProvider, parseInput('agent.removeProvider', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerOAuthStart, (_event, value) =>
-		invoke(session().agent.oauthStart, parseInput('agent.oauthStart', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.providerOAuthFinish, (_event, value) =>
-		invoke(session().agent.oauthFinish, parseInput('agent.oauthFinish', value))
-	);
-	handleAdmin(ADMIN_CHANNELS.readiness, (_event, value) =>
-		invoke(session().agent.readiness, parseInput('agent.readiness', value ?? {}))
-	);
-	handleAdmin(ADMIN_CHANNELS.connectAgent, (_event, value) =>
-		invoke(session().agent.connect, parseInput('agent.connect', value ?? {}))
+	handleAdmin(ADMIN_CHANNELS.operation, (_event, name, value, context) =>
+		invokeAdminOperation(name, value, context)
 	);
 	handleAdmin(ADMIN_CHANNELS.openKnowledge, async (event) => {
 		const selected = session();
@@ -443,93 +445,6 @@ export function registerAdminIpc(): void {
 			throw new Error('Could not open your browser. Check your default browser and try again.');
 		}
 	});
-	handleAdmin(ADMIN_CHANNELS.assistantPassword, () =>
-		invoke(session().agent.assistantPassword, undefined)
-	);
-	handleAdmin(ADMIN_CHANNELS.remote, (_event, value) =>
-		invoke(session().agent.remote, parseInput('agent.remote', value), confirmationContext(value))
-	);
-	handleAdmin(ADMIN_CHANNELS.codexRecall, (_event, value) =>
-		invoke(
-			session().agent.codexRecall,
-			parseInput('agent.codexRecall', value),
-			confirmationContext(value)
-		)
-	);
-	handleAdmin(ADMIN_CHANNELS.credential, async (_event, value) => {
-		const active = session();
-		const operation = parseLegacyCredentialOperation(value);
-		switch (operation.name) {
-			case 'apps.credentials.create':
-				await invoke(active.apps.credentials.create, operation.input);
-				break;
-			case 'apps.credentials.updatePolicy':
-				await invoke(active.apps.credentials.updatePolicy, operation.input);
-				break;
-			case 'apps.credentials.rotate':
-				await invoke(active.apps.credentials.rotate, operation.input);
-				break;
-			case 'apps.credentials.remove':
-				await invoke(active.apps.credentials.remove, operation.input);
-				break;
-		}
-		return active.inspect();
-	});
-	handleAdmin(ADMIN_CHANNELS.credentialKey, (_event, value) =>
-		invoke(
-			session().apps.credentials.revealKey,
-			parseInput('apps.credentials.revealKey', { username: value })
-		)
-	);
-	handleAdmin(ADMIN_CHANNELS.mapPortalUser, async (_event, value) => {
-		const active = session();
-		await invoke(active.apps.portal.mapUser, parseInput('apps.portal.mapUser', value));
-		return active.inspect();
-	});
-	handleAdmin(ADMIN_CHANNELS.portalToken, async (_event, value) => {
-		const active = session();
-		await invoke(active.apps.portal.saveToken, parseInput('apps.portal.saveToken', value));
-		return active.inspect();
-	});
-	handleAdmin(ADMIN_CHANNELS.backup, (_event, value) =>
-		invoke(session().data.backup, parseInput('data.backup', value), confirmationContext(value))
-	);
-	handleAdmin(ADMIN_CHANNELS.restoreData, (_event, value) =>
-		invoke(
-			session().data.restoreData,
-			parseInput('data.restoreData', value),
-			confirmationContext(value)
-		)
-	);
-	handleAdmin(ADMIN_CHANNELS.restoreInstance, (_event, value) =>
-		invoke(
-			session().data.restoreInstance,
-			parseInput('data.restoreInstance', value),
-			confirmationContext(value)
-		)
-	);
-	handleAdmin(ADMIN_CHANNELS.recovery, async (_event, value) => {
-		const active = session();
-		const operation = parseLegacyRecoveryOperation(value);
-		switch (operation.name) {
-			case 'data.recovery.package':
-				return invoke(active.data.recovery.package, operation.input, operation.context);
-			case 'data.recovery.status':
-				return invoke(active.data.recovery.status, operation.input, operation.context);
-			case 'data.recovery.inspect':
-				return invoke(active.data.recovery.inspect, operation.input, operation.context);
-			case 'data.recovery.initialize':
-				return invoke(active.data.recovery.initialize, operation.input, operation.context);
-			case 'data.recovery.restore':
-				return invoke(active.data.recovery.restore, operation.input, operation.context);
-			case 'data.recovery.save':
-				await invoke(active.data.recovery.save, operation.input, operation.context);
-				return active.inspect();
-			case 'data.recovery.setCredential':
-				await invoke(active.data.recovery.setCredential, operation.input, operation.context);
-				return active.inspect();
-		}
-	});
 	handleAdmin(ADMIN_CHANNELS.update, async (_event, value) => {
 		const outcome = await invoke(
 			session().host.deployment.update,
@@ -538,12 +453,6 @@ export function registerAdminIpc(): void {
 		);
 		return { snapshot: await adminSnapshot(), outcome };
 	});
-	handleAdmin(ADMIN_CHANNELS.deploymentSettings, () =>
-		invoke(session().host.deployment.inspect, undefined)
-	);
-	handleAdmin(ADMIN_CHANNELS.prepareDeployment, (_event, value) =>
-		invoke(session().host.deployment.prepare, parseInput('host.deployment.prepare', value))
-	);
 	handleAdmin(ADMIN_CHANNELS.applyDeployment, async (_event, value) => {
 		const outcome = await invoke(
 			session().host.deployment.apply,
@@ -552,9 +461,6 @@ export function registerAdminIpc(): void {
 		);
 		return { snapshot: await adminSnapshot(), outcome };
 	});
-	handleAdmin(ADMIN_CHANNELS.discardDeployment, () =>
-		invoke(session().host.deployment.discard, undefined)
-	);
 	ipcMain.handle(ADMIN_CHANNELS.install, (event, config: unknown, automaticPorts: unknown) => {
 		requireAdminSender(event);
 		return instances.run(async () => {

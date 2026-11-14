@@ -204,7 +204,7 @@ test('restart accepts older Compose and operator customizations without a policy
 	writeFileSync(join(home, 'workspace/note.txt'), 'preserve user work');
 	const resolved = await composeConfigJson(buildComposeOptions(state));
 	if (!resolved.ok) throw new Error(resolved.stderr);
-	expect(auditCompose(resolved.config, home)).toContain('service assistant has unsupported environment key OPERATOR_SETTING');
+	expect(auditCompose(resolved.config, home)).toEqual([]);
 	const binary = join(root, 'docker');
 	const calls = join(root, 'activation-args');
 	writeFileAtomic(binary, `#!${process.execPath}

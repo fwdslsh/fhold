@@ -9,7 +9,7 @@ import { stateSecretFile } from './foundation.js';
 import { FH_BRIDGE_VERSION } from './release.js';
 
 export type ConnectionDetails = {
-	type: 'opencode' | 'mcp' | 'claude' | 'remote';
+	type: 'opencode' | 'mcp' | 'claude';
 	url: string;
 	username?: string;
 	passwordFile?: string;
@@ -25,7 +25,6 @@ export type ConnectionDetailOptions = {
 	credential?: string;
 	showCredentialKey?: boolean;
 	showAssistantPassword?: boolean;
-	claudeExtension?: string;
 };
 
 function guardianEndpoint(bindAddress: string, port: number): string {
@@ -61,13 +60,6 @@ export function connectionDetails(
 			note: 'Trusted native access bypasses Guardian and should remain on loopback or a trusted private network.'
 		};
 	}
-	if (type === 'remote') {
-		return {
-			type,
-			url: 'https://your-public-host.example/mcp',
-			note: 'Publish Guardian through trusted TLS termination and configure Guardian OAuth before adding this URL as a remote connector.'
-		};
-	}
 	const username = options.credential ?? 'owner';
 	if (!isCredentialUsername(username) || !Object.hasOwn(result.config.credentials, username)) {
 		throw new Error(`Unknown credential: ${username}`);
@@ -82,12 +74,8 @@ export function connectionDetails(
 		return {
 			type,
 			...common,
-			extension:
-				options.claudeExtension ??
-				`https://github.com/fwdslsh/fhold/releases/download/${FH_BRIDGE_VERSION}/fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb`,
-			note: options.claudeExtension
-				? 'Enable Guardian, install the explicitly supplied MCPB, then enter this loopback URL and credential key.'
-				: `Download fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb from the matching GitHub release and install it in Claude Desktop. Enable Guardian, then enter this loopback URL and credential key.`
+			extension: `https://github.com/fwdslsh/fhold/releases/download/${FH_BRIDGE_VERSION}/fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb`,
+			note: `Download fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb from the matching GitHub release and install it in Claude Desktop. Enable Guardian, then enter this loopback URL and credential key.`
 		};
 	}
 	return {

@@ -23,7 +23,7 @@ import {
 import { main } from '../main.js';
 import { sshHelperCommand, sshArgs } from '@fhold/lib';
 import { runHostingProcess } from '@fhold/lib';
-import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
+import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
 import { runSessionCommand } from '../lib/hosting-command.js';
 
 const store = () => new HostingPreferencesStore();
@@ -123,7 +123,10 @@ export const hostingCommand = defineCommand({
 				name: 'session',
 				description: 'Target-bound management over native SSH stdin/stdout'
 			},
-			run: () => seedSkeletonFromEmbedded(() => serveManagementSession(), process.cwd())
+			run: async () => {
+				await useEmbeddedSkeleton();
+				await serveManagementSession();
+			}
 		}),
 		edit: defineCommand({
 			meta: {
@@ -340,10 +343,17 @@ export async function runHostedCommand(
 	const connection = store().connection(connectionId);
 	const action = argv[0] || 'status';
 	const composedAction =
-		['status', 'logs', 'start', 'stop', 'restart', 'console', 'backup', 'restore'].includes(
-			action
-		) ||
-		(action === 'connect' && argv[1] !== 'remote') ||
+		[
+			'status',
+			'logs',
+			'start',
+			'stop',
+			'restart',
+			'console',
+			'backup',
+			'restore',
+			'connect'
+		].includes(action) ||
 		(action === 'update' && (connection.kind !== 'ssh-docker' || argv.includes('--resume')));
 	if (connection.kind === 'ssh-docker' && !composedAction) {
 		if (!instance) throw Error('Choose a remote instance with --name/-n.');

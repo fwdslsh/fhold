@@ -230,13 +230,6 @@ export function composeProjectName(
 	return env.FH_PROJECT_NAME || parent.FH_PROJECT_NAME || 'fhold';
 }
 
-export async function composePreflight(options: ComposeOptions): Promise<DockerResult> {
-	return runDocker(['compose', ...buildComposeArgs(options), 'config', '--quiet'], {
-		timeoutMs: 30_000,
-		env: composeProcessEnvironment(options.envFiles)
-	});
-}
-
 export async function composeConfigJson(
 	options: ComposeOptions
 ): Promise<

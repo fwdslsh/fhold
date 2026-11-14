@@ -30,7 +30,7 @@ import {
 	restartStatus
 } from '../packages/lib/src/index.js';
 import { readAssistantConfig } from '../packages/lib/src/control-plane/opencode.js';
-import { verifyNativeGuardian } from '../packages/guardian/src/native-test-helper.js';
+import { verifyNativeGuardian } from '../packages/guardian/scripts/native-test-helper.js';
 
 const MODEL_SERVER = String.raw`
 const http = require('node:http');

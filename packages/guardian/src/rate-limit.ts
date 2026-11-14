@@ -6,8 +6,6 @@ type Bucket = {
 
 export const USER_RATE_LIMIT = 120;
 export const USER_RATE_WINDOW_MS = 60_000;
-export const PORTAL_RATE_LIMIT = 200;
-export const PORTAL_RATE_WINDOW_MS = 60_000;
 export const PREAUTH_RATE_LIMIT = 600;
 export const PREAUTH_RATE_WINDOW_MS = 60_000;
 export const RATE_LIMIT_MAX_BUCKETS = 10_000;
@@ -56,21 +54,6 @@ export function allowPreAuth(clientIp: string): boolean {
 		PREAUTH_RATE_LIMIT,
 		PREAUTH_RATE_WINDOW_MS
 	);
-}
-
-export function activeRateLimiters(): {
-	activeUserLimiters: number;
-	activePortalLimiters: number;
-} {
-	const now = Date.now();
-	pruneExpired(authenticatedBuckets, now);
-	let activeUserLimiters = 0;
-	let activePortalLimiters = 0;
-	for (const key of authenticatedBuckets.keys()) {
-		if (key.startsWith('user:')) activeUserLimiters += 1;
-		else if (key.startsWith('portal:')) activePortalLimiters += 1;
-	}
-	return { activeUserLimiters, activePortalLimiters };
 }
 
 export function _resetRateLimitersForTest(): void {

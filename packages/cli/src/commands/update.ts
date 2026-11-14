@@ -1,11 +1,11 @@
 import { defineCommand } from 'citty';
 import { updateHome, createFholdState } from '@fhold/lib';
 
-import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
+import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
 export async function updateStack(options: { start: boolean; pull?: boolean }): Promise<void> {
 	const state = createFholdState();
-	const result = await seedSkeletonFromEmbedded(async (homeDir) => updateHome({ homeDir, ...options }), state.homeDir);
-	void result;
+	await useEmbeddedSkeleton();
+	await updateHome({ homeDir: state.homeDir, ...options });
 	console.log(
 		options.start
 			? 'fhold managed assets refreshed and containers recreated successfully.'

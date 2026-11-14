@@ -2,7 +2,7 @@
 // Read-only, redacted container diagnostics. No host/cloud authority.
 import { hostname } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
-import { remoteEnvironment } from '/usr/local/bin/fhold-remote.mjs';
+import { remoteAccount, remoteEnvironment } from '/usr/local/bin/fhold-remote.mjs';
 
 function run(args, env = remoteEnvironment(process.env)) {
 	const result = Bun.spawnSync(args, {
@@ -90,7 +90,6 @@ function recovery() {
 // Only the local health probe needs the native API credential. Vendor account
 // checks continue to use the stripped environment, never that credential.
 const health = run(['fhold-healthcheck'], process.env);
-const codexAccount = run(['codex', 'login', 'status']);
 console.log(
 	JSON.stringify(
 		{
@@ -115,7 +114,7 @@ console.log(
 				...worker('codex'),
 				plugins: plugins('codex'),
 				sandbox: process.env.FH_CODEX_SANDBOX || 'workspace-write',
-				signedIn: codexAccount.ok && /Logged in using ChatGPT/i.test(codexAccount.output)
+				signedIn: remoteAccount('codex') === 'signed-in'
 			},
 			claude: { ...worker('claude'), ...claudeAccount(), plugins: plugins('claude') },
 			note: 'Account, local worker and pairing are prerequisites; verify a real native-client tool request separately.'

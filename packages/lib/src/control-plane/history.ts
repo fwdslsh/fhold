@@ -10,11 +10,11 @@ import {
 	readFileSync,
 	realpathSync
 } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import { buildComposeOptions } from './compose.js';
 import { composeConfigJson, composePs, parseComposePsRows, runDocker } from './docker.js';
-import { createFholdState, writeFileAtomic } from './foundation.js';
+import { contained, createFholdState, writeFileAtomic } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import { assertSafePortablePath } from './provider-files.js';
 import { nativeHistoryJob } from './history-native.js';
@@ -44,11 +44,6 @@ export type HistoryReceipt = {
 	receipt: string;
 };
 
-function inside(root: string, path: string): boolean {
-	const rel = relative(root, path);
-	return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
-}
-
 function directory(path: string): string {
 	const resolved = resolve(path);
 	if (!lstatSync(resolved).isDirectory() || lstatSync(resolved).isSymbolicLink())
@@ -63,7 +58,7 @@ function privateFolder(path: string, forbidden: string[]): string {
 	let parent = target;
 	while (!existsSync(parent)) parent = resolve(parent, '..');
 	const prospective = resolve(realpathSync(parent), relative(parent, target));
-	if (forbidden.some((root) => inside(root, prospective) || inside(prospective, root)))
+	if (forbidden.some((root) => contained(root, prospective) || contained(prospective, root)))
 		throw new Error(
 			'History recovery must use a private directory outside both instance homes and runtime sources.'
 		);
@@ -368,7 +363,7 @@ export async function exportHistory(
 export async function restoreHistory(options: HistoryRestoreOptions): Promise<HistoryReceipt> {
 	const home = directory(options.homeDir);
 	const archive = directory(options.archive);
-	if (inside(home, archive) || inside(archive, home))
+	if (contained(home, archive) || contained(archive, home))
 		throw new Error('History archive must remain outside the destination home.');
 	assertSafePortablePath(archive, 'history.json');
 	const manifestFd = openSync(

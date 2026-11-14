@@ -209,7 +209,7 @@ export function bindInstanceRestoreEvents() {
 							}
 						: { kind: 'local', homeDir: targetHome }
 				);
-				return state.api.restoreInstance({ sourceHome });
+				return state.api.operation('data.restoreInstance', { sourceHome });
 			},
 			'Full-instance preview is ready. Review before importing.'
 		);
@@ -262,12 +262,11 @@ export function bindInstanceRestoreEvents() {
 		const result = await operation(
 			'Importing entire instance',
 			() =>
-				state.api.restoreInstance({
-					sourceHome,
-					apply: true,
-					previewDigest: preview.digest,
-					confirmed: true
-				}),
+				state.api.operation(
+					'data.restoreInstance',
+					{ sourceHome, apply: true, previewDigest: preview.digest },
+					{ confirmed: true }
+				),
 			'Entire instance imported. Containers remain stopped; review settings before starting.'
 		);
 		if (!result) return;
@@ -300,17 +299,21 @@ export function bindBackupEvents() {
 		const result = await operation(
 			full ? 'Exporting entire instance' : 'Exporting portable content',
 			() =>
-				state.api.backup({
-					destination,
-					...(full
-						? { full: true, confirmed: true }
-						: {
-								includeProviderAuth: byId('backup-auth').checked,
-								includeUserEnv: byId('backup-env').checked,
-								includePortalMaps: byId('backup-maps').checked,
-								includeOAuth: byId('backup-maps').checked
-							})
-				}),
+				state.api.operation(
+					'data.backup',
+					{
+						destination,
+						...(full
+							? { full: true }
+							: {
+									includeProviderAuth: byId('backup-auth').checked,
+									includeUserEnv: byId('backup-env').checked,
+									includePortalMaps: byId('backup-maps').checked,
+									includeOAuth: byId('backup-maps').checked
+								})
+					},
+					{ confirmed: full }
+				),
 			full
 				? 'Entire instance exported, including conversations. Containers remain stopped.'
 				: 'Export created. Native conversation history is not included.'
@@ -346,7 +349,7 @@ export function bindBackupEvents() {
 		const signature = restoreSignature();
 		const result = await operation(
 			'Previewing import',
-			() => state.api.restoreData(restoreInput(false)),
+			() => state.api.operation('data.restoreData', restoreInput(false)),
 			'Import preview is ready for review.'
 		);
 		if (!result) return;
@@ -373,7 +376,7 @@ export function bindBackupEvents() {
 			return;
 		const result = await operation(
 			'Applying import',
-			() => state.api.restoreData(restoreInput(true)),
+			() => state.api.operation('data.restoreData', restoreInput(true)),
 			'Import applied. Your imported data is ready for review.'
 		);
 		if (result) {

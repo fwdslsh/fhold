@@ -2,12 +2,11 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readStackConfig } from '@fhold/lib';
+import { connectionDetails, readStackConfig } from '@fhold/lib';
 
 import bridgePackage from '../../../claude-desktop/package.json' with { type: 'json' };
 
 import { bootstrapInstall } from './install.js';
-import { connectionDetails } from './connect.js';
 
 const roots: string[] = [];
 const originalHome = process.env.FH_HOME;
@@ -51,7 +50,7 @@ describe('connection guidance', () => {
 		expect(mcp.credentialKey).toBeUndefined();
 		const revealed = connectionDetails(home, 'claude', {
 			credential: 'owner',
-			showKey: true
+			showCredentialKey: true
 		});
 		expect(revealed.credentialKey?.length).toBeGreaterThanOrEqual(32);
 		expect(revealed.extension).toBe(

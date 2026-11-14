@@ -2,8 +2,7 @@ import { beforeEach, expect, it, mock } from 'bun:test';
 
 const loaded: string[] = [];
 const started: string[] = [];
-const ready: string[] = [];
-const checks = new Map<string, () => boolean>();
+const ready: Array<() => boolean> = [];
 let connected = false;
 
 mock.module('./discord.js', () => {
@@ -36,10 +35,9 @@ mock.module('./slack.js', () => {
 
 mock.module('./runtime.js', () => ({
 	errorMessage: (error: unknown) => String(error),
-	startHealthServer: (service: string) => ({
+	startHealthServer: () => ({
 		ready: (check: () => boolean) => {
-			ready.push(service);
-			checks.set(service, check);
+			ready.push(check);
 		}
 	})
 }));
@@ -50,7 +48,6 @@ beforeEach(() => {
 	loaded.length = 0;
 	started.length = 0;
 	ready.length = 0;
-	checks.clear();
 	connected = false;
 });
 
@@ -58,7 +55,7 @@ it('loads and starts only the selected adapter', async () => {
 	await startPortal('discord');
 	expect(loaded).toEqual(['discord']);
 	expect(started).toEqual(['discord']);
-	expect(ready).toEqual(['portal:discord']);
+	expect(ready).toHaveLength(1);
 
 	loaded.length = 0;
 	started.length = 0;
@@ -67,7 +64,7 @@ it('loads and starts only the selected adapter', async () => {
 	await startPortal('slack');
 	expect(loaded).toEqual(['slack']);
 	expect(started).toEqual(['slack']);
-	expect(ready).toEqual(['portal:slack']);
+	expect(ready).toHaveLength(1);
 });
 
 it('rejects an unknown adapter before loading modules or opening health', async () => {
@@ -79,8 +76,9 @@ it('rejects an unknown adapter before loading modules or opening health', async 
 
 it('checks the current adapter connection instead of latching startup as healthy', async () => {
 	for (const adapter of ['discord', 'slack']) {
+		ready.length = 0;
 		await startPortal(adapter);
-		const check = checks.get(`portal:${adapter}`);
+		const check = ready[0];
 		expect(check?.()).toBe(false);
 		connected = true;
 		expect(check?.()).toBe(true);

@@ -23,7 +23,7 @@ export async function loadDeploymentSettings() {
 	if (!instanceCapability('host.deployment.inspect').supported) return;
 	const settings = await operation(
 		'Reading deployment settings',
-		() => state.api.deploymentSettings(),
+		() => state.api.operation('host.deployment.inspect'),
 		'Current deployment settings loaded.'
 	);
 	if (!settings) return;
@@ -116,7 +116,7 @@ export function bindConfigurationEvents() {
 		if (!Object.keys(patch).length) return notice('Choose at least one change.');
 		const saved = await operation(
 			'Saving pending deployment changes',
-			() => state.api.prepareDeployment(patch),
+			() => state.api.operation('host.deployment.prepare', patch),
 			'Changes saved locally for this target. The running deployment has not changed.'
 		);
 		if (!saved) return;
@@ -138,7 +138,7 @@ export function bindConfigurationEvents() {
 		await operation(
 			'Discarding pending changes',
 			async () => {
-				await state.api.discardDeployment();
+				await state.api.operation('host.deployment.discard');
 				state.deploymentSettings = null;
 				byId('deployment-edit-form').hidden = true;
 				await refresh();

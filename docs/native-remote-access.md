@@ -19,12 +19,11 @@ or Guardian MCP if you want the fhold personal agent and its existing sessions.
 Both supervisors default on and wait for native sign-in/consent.
 The existing supervisor checks `claude auth status` or `codex login status`
 before launching a worker. Confirmed missing subscription sign-in reports
-`sign-in-needed` and retries without keeping an otherwise idle instance awake.
+`sign-in-needed` and retries.
 Completing the built-in setup flow restarts the worker immediately; ordinary
 native sign-in is picked up on the next retry. Status failures do not prevent
-native startup or affect OpenCode. Signed-in worker activity remains unknown
-until native hooks establish coverage; account presence is not proof of idle,
-valid tokens, consent or a working client connection.
+native startup or affect OpenCode. Account presence is not proof of valid
+tokens, consent or a working client connection.
 Explicit off choices are preserved. No public URL, extra container, SSH daemon, published
 port, host-home mount, or runtime package installation is added. The release image
 bakes exact CLI versions. Native account state stays in `FH_HOME/data/assistant`
@@ -121,7 +120,7 @@ do not exchange a real user's device code or qualify vendor-client availability.
 ```sh
 fhold remote enable claude
 fhold remote status claude
-fhold remote pair claude
+fhold remote logs claude
 ```
 
 Guided enable pauses the selected worker and opens native subscription sign-in
@@ -138,7 +137,7 @@ Remote Control needs subscription sign-in, not
 an Anthropic API key or an OpenCode provider login.
 
 Startup runs native `claude remote-control` in server mode, with one concurrent
-session, default interactive permissions, and Chrome access off. The pair command
+session, default interactive permissions, and Chrome access off. The logs command
 shows the private native output containing the connection link, or the sign-in /
 consent error if startup failed. Open the link in claude.ai/code or use Claude's
 mobile app. Claude Code uses outbound HTTPS and does not need an inbound listener.
@@ -365,14 +364,13 @@ public issues without removing pairing links and account details.
 
 ## Acceptance checklist
 
-For cold recovery, signed-in reconnect and quiet-work acceptance, use the
+For cold recovery and signed-in reconnect acceptance, use the
 [live native-client qualification protocol](operations/native-remote-live-qualification.md).
 It separates real account/client evidence from the credential-free image smokes;
 the latter do not close issue #38's live acceptance gate.
 
 1. Fresh install: both supervisors default on. Without subscription sign-in,
-   both report `sign-in-needed` and neither remote worker starts. Once OpenCode
-   activity is idle, enabled keep-alive sends no requests.
+   both report `sign-in-needed` and neither remote worker starts.
 2. Use guided enable in CLI and Admin. Verify startup intent is unchanged during sign-in,
    a native sign-in link opens in the host browser (with a printed fallback),
    and trust/consent are explicit human answers. Do not copy host authentication.
@@ -389,10 +387,10 @@ the latter do not close issue #38's live acceptance gate.
    again. Confirm session continuation using the vendor's own supported flow;
    no OpenCode session or Guardian policy should appear in the vendor history.
 6. Test missing sign-in/consent in an isolated fresh home. Missing sign-in waits
-   without a worker; native consent waits keep activity unknown. Both leave
+   without a worker; native consent waits for the operator. Both leave
    OpenCode and scheduler healthy, with no pairing link in Docker logs. A failed
-   account-status check must not silently classify an enabled worker as idle or
-   prevent native startup. Fix through the ordinary interactive setup flow.
+   account-status check must not prevent native startup. Fix through the ordinary
+   interactive setup flow.
 7. Disable both switches. Verify all remote child processes stop and no additional
    port, privileged mount, or Guardian/portal credential reaches Assistant.
 
