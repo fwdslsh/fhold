@@ -20,7 +20,6 @@ Only a small script surface remains active.
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
 | `validate-admin-update-feeds.mjs` | Verify both generated Electron feeds match their exact AppImage version, architecture, size and SHA-512 |
-| `live-acceptance.ts` | Opt-in real-provider runtime acceptance after a retained Admin E2E run |
 | `provider-settings-native.test.ts` | Opt-in shipped-image native provider settings, live file watching and controlled compatible-transport regression |
 | `smoke-opencode-v2-live.mjs` | Image-internal native settings and plugin hot-update checks, including atomic saves and existing-session permission changes |
 
@@ -105,11 +104,10 @@ Build runtime images with the version from the root `package.json`, then run
 ```bash
 FH_LIVE_TEST_HOME=/absolute/path/to/disposable-e2e/home \
 FH_LIVE_TEST_REPORT=/absolute/path/to/private/live-report.json \
-  bun run scripts/live-acceptance.ts
+  bun run packages/guardian/scripts/live-acceptance.ts
 ```
 
-The thin entrypoint imports the runner beside Guardian's private MCP client
-dependency. It verifies native Guardian interactions and natural-language task
+The runner lives beside Guardian's private MCP client dependency. It verifies native Guardian interactions and natural-language task
 creation and real timer history/output, recall after update/restart, MCP policy
 boundaries, resumable job and identity isolation, explicit permission approval
 with cross-identity rejection, and credential rotation.
