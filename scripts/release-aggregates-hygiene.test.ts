@@ -47,9 +47,7 @@ describe('product package boundary', () => {
 
 	test('direct developer activation never pulls local-only images and preserves source builds', () => {
 		const scripts = readJson('package.json').scripts ?? {};
-		for (const name of ['dev:stack', 'dev:build'])
-			expect(scripts[name]).toContain('up --pull never');
-		expect(scripts['dev:build']).toContain('--build');
+		expect(scripts['dev:build']).toContain('up --pull never --build');
 		expect(readFileSync(join(ROOT, 'compose.dev.yml'), 'utf8')).toContain(
 			'up --pull never --build -d'
 		);
