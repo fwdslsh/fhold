@@ -66,8 +66,24 @@ export async function completeSessionSetup(
 	}
 	if (!readiness.ok)
 		throw new Error(
-			`Provider readiness failed: ${readiness.error}. Use provider login or provider key, then repeat setup.`
+			values.provider
+				? `Provider readiness failed: ${readiness.error}. Use provider login or provider key, then repeat setup.`
+				: `No provider is ready (${readiness.error}). Run provider list, then setup --provider <id>.`
 		);
+	// A chosen provider or model becomes the agent's model, as "Use this model"
+	// does in Admin; selecting the verified model completes installation.
+	if ((values.provider || values.model) && readiness.provider && readiness.model) {
+		const selected = await invokeOperation(session.agent.selectModel, {
+			provider: readiness.provider,
+			model: readiness.model
+		});
+		if (selected.write?.effective !== 'verified' || selected.configurationIssue)
+			throw new Error(
+				selected.configurationIssue ??
+					selected.write?.detail ??
+					`The verified model ${readiness.provider}/${readiness.model} could not be selected.`
+			);
+	}
 	write(JSON.stringify(readiness, null, 2));
 	write(
 		'Verified a real native Assistant response. Native worker sign-in and client consent remain separate.'
@@ -109,7 +125,7 @@ export default defineCommand({
 	},
 	args: {
 		provider: { type: 'string', description: 'Provider id' },
-		method: { type: 'string', description: 'Numeric OAuth method index from provider list' },
+		method: { type: 'string', description: 'OAuth method index or label from provider list' },
 		'claude-remote': {
 			type: 'boolean',
 			description: 'Guide experimental Claude Remote Control sign-in after provider setup'

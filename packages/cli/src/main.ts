@@ -8,8 +8,10 @@ import {
 	LOCAL_CONNECTION,
 	openInstanceSession,
 	readStackConfig,
+	requireInstall,
 	resolveFholdHome,
-	stateSecretFile
+	stateSecretFile,
+	waitForAssistant
 } from '@fhold/lib';
 
 import cliPackage from '../package.json' with { type: 'json' };
@@ -106,11 +108,11 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 		'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup:
-		'fhold setup [--provider <id>] [--method <index>] [--claude-remote] [--codex-remote] (hosted native setup: [--model <id>] [--password-file <private-file|->])',
+		'fhold setup [--provider <id>] [--method <index|label>] [--claude-remote] [--codex-remote] (hosted native setup: [--model <id>] [--password-file <private-file|->])',
 	provider:
-		'fhold provider list | login <provider> [--method <index>] | key <provider> --key-file <path|-> | logout <provider> | test [provider] [--model <id>] (hosted: [--password-file <private-file|->])',
+		'fhold provider list | login <provider> [--method <index|label>] | key <provider> --key-file <path|-> | logout <provider> | test [provider] [--model <id>] (hosted: [--password-file <private-file|->])',
 	backup:
-		'fhold backup --to <empty-directory> [--full --confirm-stopped | [--portable] --include-provider-auth --include-user-env --include-portal-maps --include-oauth] (Assistant checkpoints: recovery export)',
+		'fhold backup --to <empty-directory> (--full --confirm-stopped | --portable [--include-provider-auth] [--include-user-env] [--include-portal-maps] [--include-oauth]) (Assistant checkpoints: recovery export)',
 	recovery:
 		'fhold recovery export --to <empty-directory> | preview --from <package> | import --from <package> --home <empty-home> --backups <unused-directory> --preview-digest <digest> --confirm-stopped | configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
 	history:
@@ -228,6 +230,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		) {
 			// The same session handlers as Admin and hosted targets; never another host.
 			if (argv[0] === 'recovery') await useEmbeddedSkeleton();
+			if (argv[0] === 'provider') {
+				// Provider commands talk to the running Assistant; start it as before.
+				const { runStartAction } = await import('./commands/lifecycle.js');
+				requireInstall(homeDir);
+				await runStartAction(homeDir);
+				await waitForAssistant(homeDir);
+			}
 			const { runSessionCommand } = await import('./lib/hosting-command.js');
 			const session = openInstanceSession(LOCAL_CONNECTION, {
 				kind: 'local-docker',

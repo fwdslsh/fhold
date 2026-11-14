@@ -330,7 +330,7 @@ engine without changing those settings. Native sign-ins, approvals and task inte
 are retained: stop the original writers and never run both copies together.
 The imported home stays stopped for review. The CLI uses `fhold recovery export`,
 `recovery preview` and `recovery import`; `backup` and `restore` handle only the
-**Other export options**, which retain whole-home preservation and reviewed-content
+**Other export options** (`backup` requires `--portable` or `--full`), which retain whole-home preservation and reviewed-content
 transfer. See [checkpoint packages](technical/checkpoint-packages.md) for commands
 and coverage.
 
@@ -406,9 +406,8 @@ Live credential keys, policies and portal-user mappings still take effect
 without a restart; deferring settings does not defer credential revocation.
 Provider sign-in and native provider/model API edits do not restart containers.
 In-place native preference changes do not create a pending-restart alert.
-If provider readiness also
-changes Guardian's moderator configuration, the pending-restart alert lets you
-choose when to apply it; verification does not open a restart prompt.
+Guardian reads its moderator model on each moderation call, so the first-setup
+moderator update takes effect without a restart.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider

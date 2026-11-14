@@ -229,6 +229,19 @@ test('shared archive operations receive caller paths and confirmation only in co
 	expect(f.inspections()).toBe(0);
 });
 
+test('backup requires an explicit export scope before running the data adapter', async () => {
+	const f = fixture();
+	let called = false;
+	f.session.data.backup = supportedOperation(async () => {
+		called = true;
+		throw new Error('must not run');
+	});
+	await expect(
+		runSessionDataCommand(f.session, ['backup', '--to', '/local/export'], () => {})
+	).rejects.toThrow('Choose --portable');
+	expect(called).toBe(false);
+});
+
 test('shared full restore applies exactly its preview digest through the same operation', async () => {
 	const f = fixture();
 	const calls: unknown[] = [];
@@ -270,7 +283,7 @@ test('shared full restore applies exactly its preview digest through the same op
 test('unsupported operations and malformed archive arguments never run a data adapter', async () => {
 	const f = fixture();
 	await expect(
-		runSessionDataCommand(f.session, ['backup', '--to', '/unused'], () => {})
+		runSessionDataCommand(f.session, ['backup', '--to', '/unused', '--portable'], () => {})
 	).rejects.toThrow('not configured');
 	for (const args of [
 		['backup', '--to', '/unused', '--typo'],

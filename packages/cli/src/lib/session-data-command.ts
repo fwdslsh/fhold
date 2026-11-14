@@ -60,6 +60,10 @@ export async function runSessionDataCommand(
 	if (action === 'backup') {
 		if (typeof values.to !== 'string' || !values.to)
 			throw new Error('Choose a local export directory with --to.');
+		if (!values.full && !values.portable)
+			throw new Error(
+				'Choose --portable (reviewed transferable content) or --full (stopped whole instance). Assistant checkpoints use recovery export.'
+			);
 		write(
 			JSON.stringify(
 				await invokeOperation(

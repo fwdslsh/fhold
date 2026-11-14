@@ -72,7 +72,7 @@ test('hosting metadata commands are independent of FH_HOME, Docker, sign-in and 
 	]);
 	expect(existsSync(env.FH_HOME)).toBe(false);
 	const rejected = await run(
-		['--connection', 'lab', '-n', '/opt/stacks/agent', 'backup', '--to', '/bad'],
+		['--connection', 'lab', '-n', '/opt/stacks/agent', 'backup', '--to', '/bad', '--portable'],
 		env,
 		root
 	);

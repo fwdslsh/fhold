@@ -35,7 +35,7 @@ leaves containers stopped. An interrupted import retains the existing startup
 blocker; it is not silently resumed or overwritten. Review the partial target
 and retry with another empty home. Original writers must remain stopped.
 
-Existing archives remain readable. `backup` (optionally `--portable`) retains
+Existing archives remain readable. `backup --portable` retains
 reviewed-content export; `backup --full --confirm-stopped` retains whole-home
 preservation. Admin keeps these under **Other export options**. No live migration or archive
 conversion runs automatically.

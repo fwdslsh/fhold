@@ -6,6 +6,17 @@ import { createFholdState, requireInstall } from '@fhold/lib';
 
 import { execAssistant, runStartAction } from './lifecycle.js';
 
+const TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** Reject an invalid id before starting the stack for it. */
+function id(value: unknown): string {
+	const parsed = String(value ?? '');
+	if (!TASK_ID_RE.test(parsed)) {
+		throw new Error('Task id must contain only letters, digits, dot, underscore, or dash.');
+	}
+	return parsed;
+}
+
 async function runTask(args: string[]): Promise<void> {
 	const state = createFholdState();
 	requireInstall(state.homeDir);
@@ -37,7 +48,7 @@ const create = defineCommand({
 	run: async ({ args }) =>
 		runTask([
 			'create',
-			String(positional(args)),
+			id(positional(args)),
 			'--schedule',
 			String(args.schedule),
 			'--prompt',
@@ -63,7 +74,7 @@ function oneIdCommand(name: string, description: string, localFile = false) {
 			}
 		},
 		run: async ({ args }) =>
-			runTask([name, String(positional(args))])
+			runTask([name, localFile ? id(positional(args)) : String(positional(args))])
 	});
 }
 
