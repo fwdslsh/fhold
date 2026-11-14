@@ -824,7 +824,7 @@ async function qualifyRuntimeRecovery() {
 	}
 	await execBun(
 		second.id,
-		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/fhold/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/fhold/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid','reconciliation.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`
+		`import assert from'node:assert/strict';import{readFile,access}from'node:fs/promises';assert.equal(await readFile('/stash/knowledge/recovery-fixture.md','utf8'),'Synthetic durable knowledge marker.');assert.equal(await readFile('/work/recovery-fixture.txt','utf8'),'Synthetic workspace marker.');assert.equal(JSON.parse(await readFile('/home/fhold/.codex/auth.json','utf8')).fixtureOnly,'synthetic-account-marker');assert.equal(JSON.parse(await readFile('/home/fhold/.claude.json','utf8')).fixtureTrustMarker,'synthetic-trust-marker');for(const name of ['scheduler.pid']){let found=false;try{await access('/tmp/fhold-runtime/'+name);found=true;}catch{}assert.equal(found,false);}console.log('synthetic state and scheduler-off assertions passed');`
 	);
 	report.checks.emptyLayerReplacement = !survivingHome;
 	await execBun(

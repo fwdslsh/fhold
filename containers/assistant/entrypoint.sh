@@ -287,33 +287,22 @@ write_cron_environment() {
   } >"$file"
 }
 
-sync_tasks() {
-  if fhold-task sync "$@" >&2; then
-    date +%s >"$RUNTIME_DIR/tasks-synced"
-  else
-    rm -f "$RUNTIME_DIR/tasks-synced"
-    echo 'assistant: task sync failed; scheduling is degraded and will retry; OpenCode remains available' >&2
-    return 1
-  fi
-}
-
 start_scheduler() {
   mkdir -p "$TASK_SPOOL_DIR" || return
   write_cron_environment || return
-  export -f sync_tasks
-  export RUNTIME_DIR
   setsid env "${writer_env[@]}" supercronic -inotify "$TASK_CRONTAB" &
   scheduler_pid=$!
   writer_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
-  if [ "$SCHEDULER_ENABLED" = 1 ]; then
-    # Capture the image's AKM runtime once per boot; periodic reconciliation
-    # preserves that binding, as AKM documents for ordinary sync.
-    setsid env "${writer_env[@]}" bash -c 'sync_tasks --rebind || true; while sleep 60; do sync_tasks || true; done' &
-    reconciliation_pid=$!
-    writer_pids+=("$reconciliation_pid")
-    printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
-  fi
+  # Sync once per boot, capturing the image's AKM runtime. fhold task create
+  # and remove, and native enable/disable, sync their own changes.
+  setsid env "${writer_env[@]}" bash -c '
+    if ! fhold-task sync --rebind >&2; then
+      echo "assistant: task sync failed; scheduling is degraded; OpenCode remains available" >&2
+      printf "%s\n" "Task sync failed at startup; schedules may be stale. Review task definitions, AKM settings and recent logs, then restart." >"$1/degraded-task-sync"
+    fi
+  ' task-sync "$RUNTIME_DIR" &
+  writer_pids+=("$!")
 }
 
 prepare_identity
@@ -325,7 +314,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
-rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,reconciliation,scheduler,codex,claude}.pid "$RUNTIME_DIR/tasks-synced" || true
+rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,scheduler,codex,claude}.pid || true
 if [ "$configuration_degraded" = 1 ]; then
   mark_degraded configuration 'Some runtime settings are invalid; conservative defaults are in use. Correct the logged setting names and restart.'
 fi

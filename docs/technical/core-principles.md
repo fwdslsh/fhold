@@ -477,11 +477,12 @@ Guardian's own authentication and request protections remain unchanged.
 - Scheduled tasks use native AKM engine/agent selection and the operator's
   unchanged prompt, with no additional fhold tool ceiling. Removed sources are preserved; portable/manual restores stage definitions inactive.
 - Scheduler timezone is explicit intent. Restart runs future slots only.
-  `FH_SCHEDULER_ENABLED=0` disables user task sync and reconciliation.
+  `FH_SCHEDULER_ENABLED=0` disables user task sync and cron.
   Knowledge, native workers and the independent recovery timer remain available.
-  Missing scheduler processes or overdue reconciliation produce actionable
-  health-log warnings shown by CLI/Admin; they do not fail core readiness.
-  Reconciliation runs in the background and retries without blocking startup.
+  Tasks sync once at boot in the background without blocking startup; task
+  create/remove sync their own changes. A missing scheduler process or failed
+  boot sync produces actionable health-log warnings shown by CLI/Admin; they do
+  not fail core readiness.
 - Native supervisors use the installed CLI's account status to wait in
   `sign-in-needed` before launching an unsigned-in worker. See
   [the runtime contract](../harness-plugins.md).

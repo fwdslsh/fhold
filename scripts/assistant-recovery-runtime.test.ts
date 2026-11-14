@@ -476,7 +476,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
-	it('does not block native startup on slow or failing initial task reconciliation', async () => {
+	it('does not block native startup on slow or failing initial task sync', async () => {
 		const run = fixture({
 			FH_SCHEDULER_ENABLED: '1',
 			FIXTURE_SYNC_SECONDS: '30',
@@ -490,24 +490,34 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
-	for (const component of ['scheduler', 'reconciliation'])
-		it(`a stopped ${component} does not stop native sessions or the recovery owner`, async () => {
-			const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
-			try {
-				await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
-				process.kill(
-					Number(readFileSync(join(run.root, `runtime/${component}.pid`), 'utf8')),
-					'SIGTERM'
-				);
-				await Bun.sleep(150);
-				expect(run.child.exitCode).toBeNull();
-				expect(run.events()).not.toContain('native-stopped');
-				expect(run.events()).not.toContain('released');
-			} finally {
-				run.child.kill('SIGTERM');
-				await finished(run.child);
-			}
-		});
+	it('reports a failed boot task sync as degraded scheduling without stopping the agent', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: '1', FIXTURE_SYNC_EXIT: '1' });
+		try {
+			await until(() => existsSync(join(run.root, 'runtime/degraded-task-sync')));
+			expect(readFileSync(join(run.root, 'runtime/degraded-task-sync'), 'utf8')).toContain(
+				'Task sync failed'
+			);
+			expect(run.events()).toContain('native');
+			expect(run.child.exitCode).toBeNull();
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	it('a stopped scheduler does not stop native sessions or the recovery owner', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
+		try {
+			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
+			process.kill(Number(readFileSync(join(run.root, 'runtime/scheduler.pid'), 'utf8')), 'SIGTERM');
+			await Bun.sleep(150);
+			expect(run.child.exitCode).toBeNull();
+			expect(run.events()).not.toContain('native-stopped');
+			expect(run.events()).not.toContain('released');
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
 	for (const name of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE', 'FH_CODEX_SANDBOX'])
 		it(`invalid optional ${name} does not prevent native assistant startup`, async () => {
 			const run = fixture({ [name]: 'false' });
@@ -679,15 +689,16 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events.indexOf('final-checkpoint')).toBeLessThan(events.indexOf('released'));
 	});
 
-	it('default scheduler continues task synchronization', async () => {
+	it('default scheduler syncs tasks once at boot, capturing the image runtime', async () => {
 		const run = fixture({ FH_SCHEDULER_ENABLED: '1' });
 		try {
 			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
-			expect(run.events()).toContain('sync');
-			// Only the boot sync captures the image runtime; periodic syncs preserve it.
-			expect(run.events()).toContain('sync-args sync --rebind');
+			await Bun.sleep(150);
+			expect(run.events().filter((event) => event.startsWith('sync-args'))).toEqual([
+				'sync-args sync --rebind'
+			]);
 			expect(existsSync(join(run.root, 'runtime', 'scheduler.pid'))).toBe(true);
-			expect(existsSync(join(run.root, 'runtime', 'reconciliation.pid'))).toBe(true);
+			expect(existsSync(join(run.root, 'runtime', 'degraded-task-sync'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);

@@ -152,7 +152,7 @@ verify_runtime_versions() {
 
 verify_workspace_runtime_boundary() {
 	# Exercise installed helper entrypoints and AKM, not only a Bun eval. The
-	# hostile files are present before startup, reconciliation and native hooks.
+	# hostile files are present before startup, task sync and native hooks.
 	docker exec --workdir /work "$container" bun -e \
 		'if (process.env.FH_PLUGIN_ENV_SENTINEL) throw Error("Workspace .env loaded"); if (await Bun.file("/tmp/fhold-bun-preload-executed").exists()) throw Error("Workspace bunfig preload executed");'
 	docker exec --workdir /work "$container" akm --version
@@ -214,12 +214,11 @@ verify_optional_failure_isolation() {
 		import { readFileSync } from "node:fs";
 		import { spawnSync } from "node:child_process";
 		const runtime = "/tmp/fhold-runtime";
-		for (const feature of ["scheduler", "reconciliation"]) process.kill(Number(readFileSync(`${runtime}/${feature}.pid`, "utf8")), "SIGTERM");
+		process.kill(Number(readFileSync(`${runtime}/scheduler.pid`, "utf8")), "SIGTERM");
 		await new Promise(resolve => setTimeout(resolve, 1000));
 		const health = spawnSync("fhold-healthcheck", [], {encoding:"utf8", timeout:10000});
 		assert.equal(health.status, 0, "Optional process failure must not make the agent unhealthy");
 		assert.match(health.stdout, /fhold: degraded: Scheduled tasks are unavailable/);
-		assert.match(health.stdout, /Task reconciliation is unavailable/);
 		const status = spawnSync("bun", ["/etc/opencode/skills/fhold-admin/scripts/status.mjs"], {encoding:"utf8", timeout:15000});
 		assert.equal(status.status, 0);
 		const diagnostics = JSON.parse(status.stdout);
@@ -238,7 +237,7 @@ verify_optional_failure_isolation() {
 		await api(`/session/${session.id}/shell`, {command:"printf fhold-core-remains-usable"});
 		const messages = await api(`/session/${session.id}/message`);
 		assert.ok(messages.some(message => message.type === "shell" && JSON.stringify(message.output).includes("fhold-core-remains-usable")), "Native tool must remain usable");
-		console.log("Optional scheduler/reconciliation failures: native sessions/tools stay usable and report warnings");'
+		console.log("Optional scheduler failure: native sessions/tools stay usable and report warnings");'
 
 	# Ordinary standalone configuration errors degrade only the affected features.
 	# This fresh fixture uses the image defaults; no helper/CLI is substituted.

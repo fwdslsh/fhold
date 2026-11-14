@@ -120,9 +120,10 @@ The native OpenCode harness in `config/akm/config.json` runs
 `opencode run --standalone`, using native provider credentials and configuration.
 
 Startup runs `akm doctor scheduler sync --rebind` once to capture the image's AKM
-runtime; reconciliation then runs plain `akm doctor scheduler sync` every 60 seconds,
-preserving that binding. `fhold-task sync [flags]` passes flags through to the same
-native command. Operator-owned harness configuration, task sources and activation
+runtime. There is no periodic reconciliation: `fhold task create`/`remove` and
+native task enable/disable sync their own changes, and a failed boot sync is
+reported as degraded until corrected and restarted. `fhold-task sync [flags]`
+passes flags through to the same native command. Operator-owned harness configuration, task sources and activation
 are preserved. Retired launchers need explicit native configuration review;
 fhold does not rewrite them.
 

@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe('Assistant readiness and optional-feature degradation', () => {
-	it('keeps a usable authenticated agent healthy when scheduling or reconciliation fails', async () => {
+	it('keeps a usable authenticated agent healthy when scheduling fails', async () => {
 		const root = home();
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
 		const server = Bun.serve({
@@ -61,13 +61,7 @@ describe('Assistant readiness and optional-feature degradation', () => {
 		};
 		try {
 			expect((await run()).exitCode).toBe(1);
-			for (const child of ['assistant', 'scheduler', 'reconciliation'])
-				writeFileSync(join(root, `${child}.pid`), String(process.pid));
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
-			const stale = await run();
-			expect(stale.exitCode).toBe(0);
-			expect(stale.output).toContain('degraded: Task reconciliation');
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
+			writeFileSync(join(root, 'assistant.pid'), String(process.pid));
 			writeFileSync(join(root, 'scheduler.pid'), '999999999');
 			const dead = await run();
 			expect(dead.exitCode).toBe(0);
@@ -83,8 +77,6 @@ describe('Assistant readiness and optional-feature degradation', () => {
 			});
 			rmSync(join(root, 'degraded-akm-assets'));
 			rmSync(join(root, 'degraded-akm-index'));
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) + 3600));
-			expect((await run()).exitCode).toBe(0);
 			writeFileSync(join(root, 'assistant.pid'), '999999999');
 			expect((await run()).exitCode).not.toBe(0);
 		} finally {
