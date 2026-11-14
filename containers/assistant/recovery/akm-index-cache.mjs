@@ -164,11 +164,13 @@ export function createAkmIndexCache({
 		const config = JSON.parse(bytes.toString());
 		// A filesystem-only initial scope avoids source hydration, inherited host
 		// policy, and adapter-controlled network materialization during recovery.
-		if (config.extends || config.sources || config.stashes)
+		// AKM's primary is the default bundle's content root. The deprecated
+		// AKM_BUNDLE_DIR override (removed in AKM 0.11) declines caching.
+		if (config.extends || config.sources || config.stashes || env.AKM_BUNDLE_DIR)
 			throw new Error('unsupported-source-policy');
-		const sources = [env.AKM_BUNDLE_DIR || roots.stash];
+		const sources = [];
 		const bundles = [];
-		let primaryDeclared = false;
+		let primary = null;
 		for (const [id, bundle] of Object.entries(config.bundles ?? {})) {
 			if (bundle.enabled === false) continue;
 			if (!canonicalPath(bundle.path) || bundle.git || bundle.npm || bundle.website)
@@ -182,7 +184,7 @@ export function createAkmIndexCache({
 				throw new Error('unsupported-source-policy');
 			const root = path.resolve(bundle.path, component.root ?? '.');
 			if (!containsPath(bundle.path, root)) throw new Error('unsupported-source-policy');
-			if (root === sources[0]) primaryDeclared = true;
+			if (id === config.defaultBundle) primary = root;
 			sources.push(root);
 			bundles.push({
 				id,
@@ -192,10 +194,10 @@ export function createAkmIndexCache({
 				component: pick(component, ['root', 'adapter', 'writable'])
 			});
 		}
-		if (!primaryDeclared) throw new Error('unsupported-source-policy');
+		if (!primary) throw new Error('unsupported-source-policy');
 		const policy = [...catalog.policy.excludePaths, ...catalog.protectedPaths];
 		const sourceStats = [];
-		for (const root of [...new Set(sources)]) {
+		for (const root of new Set([primary, ...sources])) {
 			if (!canonicalPath(root) || policy.some((excluded) => overlapsPath(root, excluded)))
 				throw new Error('excluded-source');
 			await assertNoLinks(root);
@@ -209,7 +211,7 @@ export function createAkmIndexCache({
 		const identity = {
 			bundles,
 			defaultBundle: config.defaultBundle ?? null,
-			primary: sources[0],
+			primary,
 			sources: sourceStats,
 			selection: catalog.selection,
 			redaction: config.plugins?.redact ?? null

@@ -445,8 +445,6 @@ async function qualifyAkmIndexCache() {
 		'--env',
 		'FH_CLAUDE_REMOTE=0',
 		'--env',
-		'AKM_BUNDLE_DIR=/cache-bundle',
-		'--env',
 		`OPENCODE_SERVER_PASSWORD=${password}`,
 		...(network ? ['--network', network] : []),
 		...(credentialFile

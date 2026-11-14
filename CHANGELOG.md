@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+Prepare the Assistant for AKM 0.10.261122, where reads (`search`, `curate`)
+no longer build a missing index and return no hits with a warning instead.
+After restore and migration, startup runs one `akm index --skip-if-locked`
+beside the agent, so a fresh or restored instance becomes searchable without a
+manual `akm index`. A failed build is reported as degraded; the agent stays
+available. This replaces the previous reliance on the first search building the
+index.
+
+The experimental AKM index cache identifies the primary bundle from the
+configured `defaultBundle`, as AKM does, instead of `AKM_BUNDLE_DIR`, which
+AKM deprecates for removal in 0.11. Setting that variable now declines the
+optional cache. The managed-harness guide no longer suggests the deprecated
+`akm migrate apply --dry-run`; use `akm migrate status`.
+
 ## 0.4.1109-beta — Updated AKM and native scheduler diagnostics
 
 Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins

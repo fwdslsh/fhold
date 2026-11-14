@@ -397,7 +397,7 @@ mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
 rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration akm-assets akm-index-cache; do
+for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration akm-assets akm-index akm-index-cache; do
   rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
 done
 if [ "$configuration_degraded" = 1 ]; then
@@ -473,6 +473,14 @@ if [ "$SCHEDULER_ENABLED" = 1 ] && { ! command -v akm >/dev/null || ! command -v
   SCHEDULER_ENABLED=0
   mark_degraded scheduler 'Scheduling is unavailable: AKM or the task helper is missing. Use a complete Assistant image and restart.'
 fi
+
+# AKM reads never build the index. Build or refresh it once per boot, after
+# restore and migration, beside the agent; reads serve what is indexed so far.
+setsid env "${writer_env[@]}" bash -c '
+  akm index --skip-if-locked --format json -q >"$1/akm-index.json" 2>"$1/akm-index.log" ||
+    printf "%s\n" "The AKM index could not be built. Run akm index and check private akm-index.log; the agent remains available." >"$1/degraded-akm-index"
+' akm-index "$RUNTIME_DIR" &
+writer_pids+=("$!")
 
 cd /work
 (

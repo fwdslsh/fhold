@@ -111,6 +111,11 @@ if [ "$1 $2" = 'config set' ]; then
   printf 'redaction-%s\\n' "$3" >>"$EVENTS"
   exit "\${FIXTURE_REDACTION_EXIT:-0}"
 fi
+if [ "$1" = index ]; then
+  test "$*" = 'index --skip-if-locked --format json -q'
+  printf 'index\\n' >>"$EVENTS"
+  exit "\${FIXTURE_INDEX_EXIT:-0}"
+fi
 if [ "$1" = setup ]; then
   test "$*" = 'setup --learning off --format json -q'
   printf 'learning-off\\n' >>"$EVENTS"
@@ -351,6 +356,22 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			expect(readFileSync(join(run.root, 'runtime/akm-migration.log'), 'utf8')).toContain(
 				'private migration detail'
 			);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	}, 10_000);
+
+	it('builds the AKM index once after migration, reporting failure as degraded', async () => {
+		const run = fixture({ FH_RECOVERY_URL: 'file:///synthetic', FIXTURE_INDEX_EXIT: '1' });
+		const degraded = join(run.root, 'runtime/degraded-akm-index');
+		try {
+			await until(() => run.events().includes('native') && existsSync(degraded));
+			const events = run.events();
+			expect(events.filter((event) => event === 'index')).toHaveLength(1);
+			expect(events.indexOf('index')).toBeGreaterThan(events.indexOf('migrate'));
+			expect(readFileSync(degraded, 'utf8')).toContain('AKM index could not be built');
+			expect(run.child.exitCode).toBeNull();
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);

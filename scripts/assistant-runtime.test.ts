@@ -219,6 +219,14 @@ describe('published AKM scheduler compatibility', () => {
 		);
 		expect(new TextDecoder().decode(created.stderr)).not.toContain('error');
 		expect(created.exitCode).toBe(0);
+		// AKM reads never build the index and akm import --type task does not
+		// index the file it writes; listing shows tasks as of the last build.
+		expect(
+			Bun.spawnSync(['akm', 'index', '--skip-if-locked', '--format', 'json', '-q'], {
+				env,
+				timeout: 30000
+			}).exitCode
+		).toBe(0);
 		const listed = run('list', '--format', 'json');
 		expect(listed.stderr.toString()).not.toContain('error');
 		expect(listed.exitCode).toBe(0);
