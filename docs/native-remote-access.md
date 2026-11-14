@@ -121,7 +121,7 @@ do not exchange a real user's device code or qualify vendor-client availability.
 ```sh
 fhold remote enable claude
 fhold remote status claude
-fhold remote pair claude
+fhold remote logs claude
 ```
 
 Guided enable pauses the selected worker and opens native subscription sign-in
@@ -138,7 +138,7 @@ Remote Control needs subscription sign-in, not
 an Anthropic API key or an OpenCode provider login.
 
 Startup runs native `claude remote-control` in server mode, with one concurrent
-session, default interactive permissions, and Chrome access off. The pair command
+session, default interactive permissions, and Chrome access off. The logs command
 shows the private native output containing the connection link, or the sign-in /
 consent error if startup failed. Open the link in claude.ai/code or use Claude's
 mobile app. Claude Code uses outbound HTTPS and does not need an inbound listener.

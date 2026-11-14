@@ -219,7 +219,8 @@ describe('native remote commands', () => {
 			'pair',
 			'--json'
 		]);
-		expect(remoteExecArguments('pair', 'claude')).toEqual(['fhold-remote', 'claude', 'logs']);
+		expect(() => remoteExecArguments('pair', 'claude')).toThrow('Codex-only');
+		expect(remoteExecArguments('logs', 'claude')).toEqual(['fhold-remote', 'claude', 'logs']);
 		expect(remoteExecArguments('logs', 'codex')).toEqual(['fhold-remote', 'codex', 'logs']);
 		expect(remoteExecArguments('status', 'claude')).toEqual(['fhold-remote', 'claude', 'status']);
 		for (const tool of [

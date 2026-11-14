@@ -118,7 +118,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	connect:
 		'fhold connect <opencode|mcp|claude|remote> [--credential <username>] [--show-key] [--json]',
 	remote:
-		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | recall codex [--status | --approve --review <digest> | --off --review <digest>] | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
+		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | recall codex [--status | --approve --review <digest> | --off --review <digest>] | setup <codex|claude> | pair codex | status <codex|claude> | logs <codex|claude>',
 	restore:
 		'fhold restore --from <export-directory> [--dry-run|--apply] [--backups <unused-directory> --confirm-stopped | --full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
