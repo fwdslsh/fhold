@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, type ParseError } from 'jsonc-parser/lib/esm/main.js';
-import { asRecord } from './http-util.js';
+import { asRecord, boundedInt } from './http-util.js';
 import { createNativeClient } from './assistant-client.js';
 import { screenContent, type ContentSignal } from './content-screen.js';
 import { createLogger } from './logger.js';
@@ -15,11 +15,6 @@ export type ModerationResult = {
 	signals: ContentSignal[];
 	score: number;
 };
-
-function boundedInt(value: string | undefined, fallback: number, maximum: number): number {
-	const parsed = Number.parseInt(value ?? '', 10);
-	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
-}
 
 export function parseModerationVerdict(
 	text: string
