@@ -2,11 +2,10 @@
 // Private stdio bridge to native prompts, not a network service or auth format.
 import { createInterface } from 'node:readline';
 import { stripVTControlCharacters } from 'node:util';
-import { remoteAccount, remoteCommand, remoteEnvironment, stopGroup } from './fhold-remote.mjs';
+import { codexSandboxes, remoteAccount, remoteCommand, remoteEnvironment, stopGroup } from './fhold-remote.mjs';
 
 export function setupCommands(tool, sandbox) {
-	if (!['workspace-write', 'read-only', 'danger-full-access'].includes(sandbox))
-		throw new Error('Invalid sandbox mode');
+	if (!codexSandboxes.includes(sandbox)) throw new Error('Invalid sandbox mode');
 	if (tool === 'codex')
 		return [
 			...(sandbox === 'danger-full-access'

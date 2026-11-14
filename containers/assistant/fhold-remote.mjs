@@ -8,8 +8,9 @@ import { stripVTControlCharacters } from 'node:util';
 import { setTimeout as pause } from 'node:timers/promises';
 
 export const remoteDirectory = join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'remote');
+export const codexSandboxes = ['workspace-write', 'read-only', 'danger-full-access'];
 export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'workspace-write') {
-	if (!['workspace-write', 'read-only', 'danger-full-access'].includes(sandbox))
+	if (!codexSandboxes.includes(sandbox))
 		throw new Error('Invalid Codex sandbox');
 	if (tool === 'codex')
 		return [
