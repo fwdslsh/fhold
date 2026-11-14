@@ -110,7 +110,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	provider:
 		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
 	backup:
-		'fhold backup --to <empty-directory> [--full --confirm-stopped | --portable --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
+		'fhold backup --to <empty-directory> [--full --confirm-stopped | [--portable] --include-provider-auth --include-user-env --include-portal-maps --include-oauth] (Assistant checkpoints: recovery export)',
 	recovery:
 		'fhold recovery export --to <empty-directory> | preview --from <package> | import --from <package> --home <empty-home> --backups <unused-directory> --preview-digest <digest> --confirm-stopped | configure [--directory <absolute-path>|--to <recovery-url>] [--selection-file <json>] | disable | credential --from <private-file> | show | status | inspect | init --confirm-new-instance | restore --confirm-stopped',
 	history:
@@ -120,7 +120,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	remote:
 		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | recall codex [--status | --approve --review <digest> | --off --review <digest>] | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
 	restore:
-		'fhold restore --from <export-directory> [--dry-run|--apply] [--backups <unused-directory> --confirm-stopped | --full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
+		'fhold restore --from <export-directory> [--dry-run|--apply] [--full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth] (Assistant checkpoints: recovery preview/import)',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
 	update:
 		'fhold update [--no-start] [--pull|--no-pull] (hosted: --confirm [--container <name>] [--image <reference>] or --resume --confirm for saved changes)',

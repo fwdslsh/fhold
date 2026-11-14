@@ -319,9 +319,11 @@ and validates it before import into an empty home and unused independent backup
 destination. If repeating backups are off, export captures once through the same
 engine without changing those settings. Native sign-ins, approvals and task intent
 are retained: stop the original writers and never run both copies together.
-The imported home stays stopped for review. **Other export options** retains
-whole-home preservation and reviewed-content transfer; see
-[checkpoint packages](technical/checkpoint-packages.md) for commands and coverage.
+The imported home stays stopped for review. The CLI uses `fhold recovery export`,
+`recovery preview` and `recovery import`; `backup` and `restore` handle only the
+**Other export options**, which retain whole-home preservation and reviewed-content
+transfer. See [checkpoint packages](technical/checkpoint-packages.md) for commands
+and coverage.
 
 CLI and Admin use the same shared backup operations.
 Portable content can export while running; import it after installing a fresh

@@ -2,7 +2,6 @@ import { defineCommand } from 'citty';
 
 import {
 	createBackup,
-	exportCheckpointPackage,
 	exportInstance,
 	INSTANCE_BACKUP_NOTICE,
 	requireInstall,
@@ -13,13 +12,13 @@ export default defineCommand({
 	meta: {
 		name: 'backup',
 		description:
-			'Export an Assistant checkpoint package, reviewed portable content or a stopped whole instance'
+			'Export reviewed portable content or a stopped whole instance; Assistant checkpoints use recovery export'
 	},
 	args: {
 		to: { type: 'string', required: true, description: 'new or empty destination directory' },
 		portable: {
 			type: 'boolean',
-			description: 'export reviewed transferable files instead of the Assistant checkpoint'
+			description: 'export reviewed transferable files (the default without --full)'
 		},
 		full: {
 			type: 'boolean',
@@ -71,23 +70,6 @@ export default defineCommand({
 			return;
 		}
 		if (args['confirm-stopped']) throw new Error('--confirm-stopped applies only to --full.');
-		if (!args.portable) {
-			if (
-				[
-					args.includeProviderAuth,
-					args.includeUserEnv,
-					args.includePortalMaps,
-					args.includeOAuth
-				].some(Boolean)
-			)
-				throw new Error('Use --portable for reviewed-content include flags.');
-			if (!args.json)
-				console.log(
-					'Private Assistant backup: includes native sign-ins, approvals and task intent. Keep the package private.'
-				);
-			console.log(JSON.stringify(await exportCheckpointPackage(homeDir, String(args.to)), null, 2));
-			return;
-		}
 		const manifest = await createBackup({
 			sourceHome: homeDir,
 			destination: String(args.to),
