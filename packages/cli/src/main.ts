@@ -101,7 +101,7 @@ const subCommands = {
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	hosting:
-		'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | check <connection> | instances --connection <connection> | options --connection <connection> | preview --connection <connection> --input <json|-> | install --connection <connection> --input <json|-> --confirm | resume --connection <connection> --reference <reference> --confirm',
+		'fhold hosting login <provider> | scopes <provider> [--subscription <id>] | list | add <connection> --provider <ssh-docker|azure-container-apps> [connection options] | edit <connection> [--label <text>] [--host <host>] [--port <port|default>] [--roots <json>] [--subscription <id>] [--group <name>] [--confirm] | remove <connection> --confirm | check <connection> | instances --connection <connection> | options --connection <connection> | preview --connection <connection> --input <json|-> | install --connection <connection> --input <json|-> --confirm | resume --connection <connection> --reference <reference> --confirm',
 	console:
 		'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
@@ -118,7 +118,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	connect:
 		'fhold connect <opencode|mcp|claude|remote> [--credential <username>] [--show-key] [--json]',
 	remote:
-		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
+		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | recall codex [--status | --approve --review <digest> | --off --review <digest>] | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
 	restore:
 		'fhold restore --from <export-directory> [--dry-run|--apply] [--backups <unused-directory> --confirm-stopped | --full --confirm-stopped | --acknowledge-unrestored --include-provider-auth --include-user-env --include-portal-maps --include-oauth]',
 	task: 'fhold task list | create <id> --schedule <cron> --prompt <text> | show <id> | pause <id> | resume <id> | run <id> | history [id] | remove <id> | adopt <file>',
@@ -130,7 +130,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	portal:
 		'fhold portal enable <discord|slack> | disable <portal> | credential <portal> --credential <username> | show <portal> | access <portal> [allowlists] | token <portal> --bot-token-file <path|-> [--app-token-file <path|->]',
 	config:
-		'fhold config show | path | assistant [--bind <ip>] [--port <port>] [--timezone <IANA-zone>] [--memory <on|off>] | oauth [--resource <https-url> --issuer <https-url> --jwks-url <https-url>] [--disable]',
+		'fhold config show | path | assistant [--bind <ip>] [--port <port>] [--timezone <IANA-zone>] [--memory <on|off>] | oauth [--resource <https-url> --issuer <https-url> --jwks-url <https-url> [--audience <value>] [--scopes <list>] [--algorithms <list>]] [--disable]',
 	doctor: 'fhold doctor [--json] [--readiness]',
 	start: 'fhold start',
 	stop: 'fhold stop',
