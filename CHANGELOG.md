@@ -16,6 +16,32 @@ AKM deprecates for removal in 0.11. Setting that variable now declines the
 optional cache. The managed-harness guide no longer suggests the deprecated
 `akm migrate apply --dry-run`; use `akm migrate status`.
 
+Guardian moderates suspicious requests with the Assistant's model unless
+`config/guardian/opencode.json` sets an optional `model`, and falls back to the
+Assistant's model when that model is unavailable. Setup no longer edits that
+operator-owned file; new homes are seeded without a model.
+
+Local CLI `status`, `logs`, `connect`, `provider`, `backup`, `restore` and
+`recovery export|preview|import` use the same management session as Admin and
+hosted connections, so their output is JSON. `provider login` uses OpenCode's
+browser sign-in (`--method` takes an index or label); `setup --provider <id>`
+signs in when needed and uses the verified model. `backup --to` requires
+`--portable` or `--full`; Assistant checkpoints use `recovery export`, and
+`restore --from <checkpoint>` is replaced by `recovery preview`/`import`.
+`remote pair` is Codex-only; Claude's connection link is in `remote logs claude`.
+
+Removed: keep-alive (`FH_KEEPALIVE_*`, the activity hooks and the Codex activity
+monitor), `FH_OPENCODE_ENV_MAP`, the 60-second task reconciliation loop (boot
+sync retries each minute until schedules are installed), Guardian's
+`fhold.catalog.get` tool, its canned prompts and duplicate resources, parsing of
+pre-0.4 release versions, the old `knowledge/secrets/auth.json` converter
+(homes and portable backups without an OpenCode database need provider sign-in
+again), the test-before-use requirement for selecting a model in Admin, and
+capability negotiation with the same-build SSH helper. `fhold doctor`'s Compose
+check now reports only the shipped security defaults instead of comparing a
+hand-copied Compose file. Admin uses one allowlisted operation channel, and its
+release smoke test drives the packaged app externally.
+
 ## 0.4.1109-beta — Updated AKM and native scheduler diagnostics
 
 Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins
