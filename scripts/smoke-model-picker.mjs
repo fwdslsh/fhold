@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,7 +64,11 @@ try {
 	// directory, and "New session" does nothing without one. Register it first.
 	assert((await fetch(`${url}/api/location`, { headers })).ok, 'Native location request failed');
 	const projects = await (await fetch(`${url}/api/project`, { headers })).json();
-	assert(projects.length === 1, `Native project was not registered: ${JSON.stringify(projects)}`);
+	const directory = realpathSync(join(root, 'project'));
+	assert(
+		projects.some((project) => project.canonical === directory),
+		`Native project was not registered: ${JSON.stringify(projects)}`
+	);
 	browser = await chromium.launch();
 	// OpenCode's home page also ignores a click made before its own project state
 	// loads, and shows nothing to wait for; repeat the click until the composer opens.

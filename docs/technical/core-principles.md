@@ -411,9 +411,9 @@ only that endpoint. Sign-in removal is exact and separate from endpoint disablin
 or vendor-side revocation. Never
 silently discard restored credentials, including IDs missing from the catalog.
 No model-name heuristics, duplicate provider registry or raw JSON UI is added.
-Memory and scheduling preferences remain advanced CLI/config intent, not setup
-questions. Fresh installs enable AKM/automatic memory and default to the host OS
-timezone, preserving existing explicit choices.
+The scheduling timezone remains advanced CLI/config intent, not a setup question,
+and defaults to the host OS timezone. AKM owns learning (`akm setup --learning`);
+fresh installs use its default, on, and fhold never changes an explicit choice.
 
 `state/stack.json` requires `product: "fhold"` and owns deployment intent.
 Derived env/keyrings do not own settings. Inspection is read-only; mutations
