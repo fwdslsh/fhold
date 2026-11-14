@@ -75,6 +75,15 @@ describe('Assistant readiness and optional-feature degradation', () => {
 			expect(dead.output).toContain('degraded: Scheduled tasks');
 			writeFileSync(join(root, 'scheduler.pid'), String(process.pid));
 			expect(await run()).toEqual({ exitCode: 0, output: '' });
+			// Every degraded diagnostic is reported, in a stable order.
+			writeFileSync(join(root, 'degraded-activity'), 'activity warning');
+			writeFileSync(join(root, 'degraded-akm-assets'), 'asset warning');
+			expect(await run()).toEqual({
+				exitCode: 0,
+				output: 'fhold: degraded: activity warning\nfhold: degraded: asset warning\n'
+			});
+			rmSync(join(root, 'degraded-activity'));
+			rmSync(join(root, 'degraded-akm-assets'));
 			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) + 3600));
 			expect((await run()).exitCode).toBe(0);
 			writeFileSync(join(root, 'assistant.pid'), '999999999');

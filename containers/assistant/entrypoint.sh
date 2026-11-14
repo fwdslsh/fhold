@@ -396,10 +396,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
-rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration akm-assets akm-index akm-index-cache; do
-  rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
-done
+rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,reconciliation,scheduler,codex,claude}.pid "$RUNTIME_DIR/tasks-synced" || true
 if [ "$configuration_degraded" = 1 ]; then
   mark_degraded configuration 'Some runtime settings are invalid; conservative defaults are in use. Correct the logged setting names and restart.'
 fi

@@ -194,7 +194,7 @@ while sleep 0.1; do :; done`
 	if (extra.FIXTURE_STALE_RUNTIME === '1') {
 		const runtime = join(root, 'runtime');
 		mkdirSync(runtime);
-		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json']) {
+		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-activity']) {
 			writeFileSync(join(runtime, name), 'stale fixture');
 		}
 	}
@@ -797,6 +797,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => run.events().includes('native'));
 			expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf('seed'));
+			expect(existsSync(join(run.root, 'runtime/degraded-activity'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);
