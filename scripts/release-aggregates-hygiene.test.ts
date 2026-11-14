@@ -443,7 +443,7 @@ describe('release completeness gate', () => {
 			'--linux'
 		);
 		for (const scope of ['full', 'tools']) {
-			const assets = requiredReleaseAssets('0.3.261006-beta', productName, scope);
+			const assets = requiredReleaseAssets('0.3.261006-beta', scope);
 			expect(assets.filter((asset: string) => asset.endsWith('.AppImage'))).toHaveLength(2);
 			expect(assets.some((asset: string) => /\.(exe|dmg|zip)$/.test(asset))).toBe(false);
 			expect(assets).not.toContain('latest.yml');
@@ -597,16 +597,16 @@ describe('release completeness gate', () => {
 	});
 
 	test('only Linux Admin targets are required with unambiguous architecture', () => {
-		expect(expectedAdminAssets('0.1.2610020008-alpha.1', productName)).toEqual([
+		expect(expectedAdminAssets('0.1.2610020008-alpha.1')).toEqual([
 			'fhold-admin-0.1.2610020008-alpha.1-x86_64-linux.AppImage',
 			'fhold-admin-0.1.2610020008-alpha.1-arm64-linux.AppImage'
 		]);
 	});
 
 	test('required assets cover CLI, Admin, MCPB, checksums and both native update feeds', () => {
-		const required = requiredReleaseAssets('0.1.2610020008-beta.1', productName);
+		const required = requiredReleaseAssets('0.1.2610020008-beta.1');
 		for (const binary of CLI_BINARIES) expect(required).toContain(binary);
-		for (const asset of expectedAdminAssets('0.1.2610020008-beta.1', productName))
+		for (const asset of expectedAdminAssets('0.1.2610020008-beta.1'))
 			expect(required).toContain(asset);
 		expect(required).toContain(expectedClaudeExtensionAsset('0.1.2610020008-beta.1'));
 		expect(required.some((name) => /mac\.zip|\.exe$/.test(name))).toBe(false);
@@ -644,7 +644,7 @@ describe('release completeness gate', () => {
 	}
 
 	function writeCompleteDist(dir: string, version: string): string[] {
-		const required = requiredReleaseAssets(version, productName);
+		const required = requiredReleaseAssets(version);
 		for (const name of required.filter((name) => name !== 'checksums-sha256.txt'))
 			writeFileSync(join(dir, name), `content-of-${name}`);
 		writeChecksums(dir, required);
@@ -713,10 +713,10 @@ describe('release completeness gate', () => {
 		for (const version of ['0.4.1001-beta', '0.4.1002', '0.4.1101-rc', '0.5.101']) {
 			withDir((dir) => {
 				writeCompleteDist(dir, version);
-				expect(requiredReleaseAssets(version, productName)).toContain(
+				expect(requiredReleaseAssets(version)).toContain(
 					`fhold-admin-${version}-x86_64-linux.AppImage`
 				);
-				expect(requiredReleaseAssets(version, productName)).toContain(
+				expect(requiredReleaseAssets(version)).toContain(
 					`fhold-claude-desktop-${version}.mcpb`
 				);
 				expect(validateReleaseAssets(dir, version, productName)).toEqual([]);
@@ -730,7 +730,7 @@ describe('release completeness gate', () => {
 	test('validateReleaseAssets fails closed when every Admin artifact is missing', () => {
 		withDir((dir) => {
 			writeCompleteDist(dir, '0.1.2610020008-alpha.1');
-			const admin = expectedAdminAssets('0.1.2610020008-alpha.1', productName);
+			const admin = expectedAdminAssets('0.1.2610020008-alpha.1');
 			for (const asset of admin) rmSync(join(dir, asset));
 			const problems = validateReleaseAssets(dir, '0.1.2610020008-alpha.1', productName);
 			for (const asset of admin) expect(problems).toContain(`Missing release asset: ${asset}`);
