@@ -353,7 +353,8 @@ keyring, platform credential files, and one adapter-specific
 All four managed services:
 
 - run as the resolved non-root UID/GID;
-- enable an init process;
+- run under an init process (the Assistant image entrypoint runs tini; the
+  other services enable Compose `init`);
 - drop all Linux capabilities; and
 - set `no-new-privileges:true`.
 
