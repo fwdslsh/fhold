@@ -315,9 +315,11 @@ All four managed services:
 
 Optional `fhold doctor` diagnostics check the resolved managed file plus user
 overlay only for the shipped security defaults: root users on the product
-services, privileged containers or added capabilities, container-runtime mounts
-(such as `docker.sock`) on any service, and Compose secrets that are not files
-inside FH_HOME. These are advisory diagnostics, not start/restart/update policy
+services, privileged containers, added capabilities, host network/PID/IPC
+namespaces or devices, container-runtime mounts (such as `docker.sock`) on any
+service, any service other than Assistant and Guardian on `agent_net` (or other
+than Guardian bridging it to `ingress_net`), and Compose secrets that are not
+files inside FH_HOME. These are advisory diagnostics, not start/restart/update policy
 gates. Operators own custom
 overlay behavior. Native Compose parsing, instance targeting and actual recovery
 integrity/ownership checks still apply.

@@ -49,6 +49,30 @@ describe('Compose security defaults', () => {
 		]);
 	});
 
+	it('reports host namespaces, host devices and agent_net access beyond Guardian', () => {
+		const config = baseConfig();
+		Object.assign(config.services.assistant, {
+			network_mode: 'host',
+			pid: 'host',
+			ipc: 'host',
+			devices: ['/dev/kvm']
+		});
+		Object.assign(config.services, {
+			guardian: { user: '1000:1000', networks: ['agent_net', 'ingress_net'] },
+			discord: { user: '1000:1000', networks: ['agent_net', 'ingress_net'] },
+			sidecar: { networks: { agent_net: {} } }
+		});
+		expect(auditCompose(config, home)).toEqual([
+			'service assistant may not share the host network namespace',
+			'service assistant may not share the host PID namespace',
+			'service assistant may not share the host IPC namespace',
+			'service assistant may not mount host devices',
+			'service discord may not join the private agent_net',
+			'service discord may not bridge agent_net and ingress_net',
+			'service sidecar may not join the private agent_net'
+		]);
+	});
+
 	it('requires product services to run as a non-root user', () => {
 		for (const user of [undefined, '', '0:0', 'root']) {
 			const config = baseConfig();

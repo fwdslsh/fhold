@@ -158,6 +158,10 @@ prepare_identity() {
   for candidate in /usr/lib/*/libnss_wrapper.so /lib/*/libnss_wrapper.so; do
     if [ -e "$candidate" ]; then wrapper="$candidate"; break; fi
   done
+  if [ -z "$wrapper" ]; then
+    echo "assistant: uid $(id -u) has no passwd entry and libnss-wrapper is unavailable" >&2
+    exit 1
+  fi
   printf 'fhold:x:%s:%s:fhold Assistant:/home/fhold:/bin/bash\n' "$(id -u)" "$(id -g)" >/tmp/fhold-passwd
   printf 'fhold:x:%s:\n' "$(id -g)" >/tmp/fhold-group
   export NSS_WRAPPER_PASSWD=/tmp/fhold-passwd
@@ -294,13 +298,17 @@ start_scheduler() {
   scheduler_pid=$!
   writer_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
-  # Sync once per boot, capturing the image's AKM runtime. fhold task create
-  # and remove, and native enable/disable, sync their own changes.
+  # Install schedules once per boot, capturing the image's AKM runtime. The
+  # crontab above holds no tasks until this succeeds, so retry a failure each
+  # minute until it does; then stop. fhold task create/remove and native
+  # enable/disable sync their own changes.
   setsid env "${writer_env[@]}" bash -c '
-    if ! fhold-task sync --rebind >&2; then
-      echo "assistant: task sync failed; scheduling is degraded; OpenCode remains available" >&2
-      printf "%s\n" "Task sync failed at startup; schedules may be stale. Review task definitions, AKM settings and recent logs, then restart." >"$1/degraded-task-sync"
-    fi
+    until fhold-task sync --rebind >&2; do
+      echo "assistant: task sync failed; retrying in 60 seconds; OpenCode remains available" >&2
+      printf "%s\n" "Scheduled tasks are not installed: task sync failed at startup and retries every minute. Review task definitions, AKM settings and recent logs." >"$1/degraded-task-sync"
+      sleep 60
+    done
+    rm -f "$1/degraded-task-sync"
   ' task-sync "$RUNTIME_DIR" &
   writer_pids+=("$!")
 }

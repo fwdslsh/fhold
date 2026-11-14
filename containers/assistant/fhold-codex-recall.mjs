@@ -85,99 +85,84 @@ export async function changeRecall(rpc, action, digest) {
 	return reviewRecall(rpc);
 }
 
-// One bounded JSON-RPC session over a native Codex app-server transport.
-async function withCodexRpc(callback, { connect, client, failure, rejected, timeoutMs }) {
-	const pending = new Map();
-	let serial = 0;
-	let stopped;
-	let transport;
-	const fail = () => {
-		stopped = new Error(failure);
-		for (const entry of pending.values()) entry.reject(stopped);
-		pending.clear();
-		transport?.stop(stopped);
-	};
-	const receive = (message) => {
-		const response = JSON.parse(message);
-		const entry = pending.get(response.id);
-		if (!entry) return;
-		pending.delete(response.id);
-		if (response.error) entry.reject(new Error(rejected));
-		else entry.resolve(response.result);
-	};
-	transport = connect({ receive, fail });
-	const timer = setTimeout(fail, timeoutMs);
-	const rpc = (method, params) => new Promise((resolve, reject) => {
-		if (stopped) return reject(stopped);
-		const id = ++serial;
-		pending.set(id, { resolve, reject });
-		try { transport.send({ jsonrpc: '2.0', id, method, params }); }
-		catch { fail(); }
-	});
-	try {
-		await rpc('initialize', { clientInfo: { name: client, version: '1' } });
-		transport.send({ jsonrpc: '2.0', method: 'initialized' });
-		return await callback(rpc);
-	} finally {
-		clearTimeout(timer);
-		await transport.close();
-	}
-}
-
-/** Short-lived private app-server over stdio for native hook review/changes. */
-export function withCodexRecall(
+export async function withCodexRecall(
 	callback,
 	{ env = process.env, workdir = '/work', timeoutMs = 12_000 } = {}
 ) {
-	return withCodexRpc(callback, {
-		client: 'fhold-recall-setup',
-		failure: 'Codex hook review failed or timed out. Check native configuration and update Assistant.',
-		rejected: 'Native Codex rejected the hook configuration change; review again.',
-		timeoutMs,
-		connect: ({ receive, fail }) => {
-			const child = Bun.spawn(['codex', 'app-server'], {
-				cwd: workdir,
-				env: remoteEnvironment(env),
-				stdin: 'pipe',
-				stdout: 'pipe',
-				stderr: 'ignore'
-			});
-			const reader = (async () => {
-				let buffer = '';
-				const decoder = new TextDecoder();
-				try {
-					for await (const chunk of child.stdout) {
-						buffer += decoder.decode(chunk, { stream: true });
-						if (buffer.length > 1_048_576) throw new Error('Invalid native output');
-						while (buffer.includes('\n')) {
-							const end = buffer.indexOf('\n');
-							const line = buffer.slice(0, end);
-							buffer = buffer.slice(end + 1);
-							receive(line);
-						}
-					}
-				} catch { /* reported below */ }
-				fail();
-			})();
-			return {
-				send: (message) => {
-					child.stdin.write(`${JSON.stringify(message)}\n`);
-					child.stdin.flush();
-				},
-				stop: () => child.kill(),
-				close: async () => {
-					child.kill();
-					const force = setTimeout(() => child.kill('SIGKILL'), 2000);
-					try {
-						await child.exited;
-						await reader;
-					} finally {
-						clearTimeout(force);
-					}
-				}
-			};
-		}
+	const child = Bun.spawn(['codex', 'app-server'], {
+		cwd: workdir,
+		env: remoteEnvironment(env),
+		stdin: 'pipe',
+		stdout: 'pipe',
+		stderr: 'ignore'
 	});
+	const pending = new Map();
+	let serial = 0;
+	let stopped;
+	const fail = () => {
+		stopped = new Error(
+			'Codex hook review failed or timed out. Check native configuration and update Assistant.'
+		);
+		for (const p of pending.values()) p.reject(stopped);
+		pending.clear();
+		child.kill();
+	};
+	const timer = setTimeout(fail, timeoutMs);
+	const reader = (async () => {
+		let buffer = '';
+		const decoder = new TextDecoder();
+		try {
+			for await (const chunk of child.stdout) {
+				buffer += decoder.decode(chunk, { stream: true });
+				if (buffer.length > 1_048_576) throw new Error('Invalid native output');
+				while (buffer.includes('\n')) {
+					const end = buffer.indexOf('\n');
+					const line = buffer.slice(0, end);
+					buffer = buffer.slice(end + 1);
+					const response = JSON.parse(line);
+					const item = pending.get(response.id);
+					if (!item) continue;
+					pending.delete(response.id);
+					if (response.error)
+						item.reject(
+							new Error('Native Codex rejected the hook configuration change; review again.')
+						);
+					else item.resolve(response.result);
+				}
+			}
+		} catch {
+			fail();
+		}
+		if (pending.size) fail();
+	})();
+	const rpc = (method, params) =>
+		new Promise((resolve, reject) => {
+			if (stopped) return reject(stopped);
+			const id = ++serial;
+			pending.set(id, { resolve, reject });
+			try {
+				child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+				child.stdin.flush();
+			} catch {
+				fail();
+			}
+		});
+	try {
+		await rpc('initialize', { clientInfo: { name: 'fhold-recall-setup', version: '1' } });
+		child.stdin.write('{"jsonrpc":"2.0","method":"initialized"}\n');
+		child.stdin.flush();
+		return await callback(rpc);
+	} finally {
+		clearTimeout(timer);
+		child.kill();
+		const force = setTimeout(() => child.kill('SIGKILL'), 2000);
+		try {
+			await child.exited;
+			await reader;
+		} finally {
+			clearTimeout(force);
+		}
+	}
 }
 
 if (import.meta.main) {

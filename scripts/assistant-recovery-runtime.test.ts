@@ -495,7 +495,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => existsSync(join(run.root, 'runtime/degraded-task-sync')));
 			expect(readFileSync(join(run.root, 'runtime/degraded-task-sync'), 'utf8')).toContain(
-				'Task sync failed'
+				'retries every minute'
 			);
 			expect(run.events()).toContain('native');
 			expect(run.child.exitCode).toBeNull();

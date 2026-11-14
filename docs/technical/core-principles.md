@@ -426,7 +426,8 @@ The following container configuration rules describe shipped defaults and
 release-test expectations. A user controlling the Docker host owns their Compose
 customizations; host tooling is not a security boundary against that user.
 `fhold doctor` may report weakened security defaults (root product services,
-privileged or added capabilities, container-runtime mounts, secrets outside
+privileged or added capabilities, host namespaces or devices, container-runtime
+mounts, services other than Assistant and Guardian on agent_net, secrets outside
 FH_HOME) as advisory warnings, but this audit
 does not authorize or veto start, restart, update or offline recovery. Native
 Compose parsing, instance targeting, lifecycle locks, image compatibility and

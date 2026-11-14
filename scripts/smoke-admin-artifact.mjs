@@ -100,7 +100,9 @@ async function verifyPackagedStartup(command, args, platform) {
 			...process.env,
 			APPIMAGE: platform === 'linux' ? join(packaged, asset) : undefined,
 			FH_HOME: join(generated, 'home'),
-			// Model a native updater relaunch inheriting an obsolete AppImage mount.
+			// A native updater relaunch inherits an obsolete AppImage mount; startup must
+			// not depend on it. Packaged skeleton resolution itself is covered by
+			// admin-resources.test.ts, and the shipped bytes by verifySkeleton.
 			FH_REPO_ROOT: join(generated, 'obsolete-repo'),
 			FH_SKELETON_DIR: join(generated, 'obsolete-mount/skeleton'),
 			// Fresh host preferences, menu entries and caches; no production-profile writes.
@@ -164,7 +166,8 @@ async function verifyPackagedStartup(command, args, platform) {
 					});
 				phase('app settings');
 				const preferences = await page.evaluate(() => window.fholdAdmin.appSettings());
-				// Linux reads the seeded preference; elsewhere the profile is fresh.
+				// Linux reads the seeded preference (the shipped default is covered by
+				// admin-updates.test.ts); elsewhere the profile is fresh.
 				if (
 					preferences.settings.updates.channel !== 'stable' ||
 					preferences.settings.updates.automatic !== (platform !== 'linux')
@@ -298,6 +301,8 @@ try {
 				throw new Error(`Packaged Admin ${helperArch} management helper differs from this build`);
 		}
 		command = join(generated, 'squashfs-root', 'fhold-admin');
+		// The extracted chrome-sandbox is not SUID; CI runners cannot use it.
+		args.unshift('--no-sandbox');
 		if (!process.env.DISPLAY && process.env.XDG_SESSION_TYPE === 'wayland')
 			args.push('--ozone-platform=wayland');
 	}

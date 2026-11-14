@@ -47,8 +47,9 @@ function volumeText(value: unknown): string[] {
 
 /**
  * Optional doctor diagnostics for the shipped security defaults: non-root product
- * services, no container runtime mounts, no privilege or added capabilities, and
- * file secrets inside FH_HOME. Never a lifecycle authorization gate.
+ * services, no container runtime mounts, no privilege, added capabilities, host
+ * namespaces or devices, Guardian-only access to agent_net, and file secrets
+ * inside FH_HOME. Never a lifecycle authorization gate.
  */
 export function auditCompose(config: unknown, homeDir: string): string[] {
 	const root = record(config);
@@ -67,6 +68,21 @@ export function auditCompose(config: unknown, homeDir: string): string[] {
 		if (service.privileged === true) issues.push(`service ${name} may not be privileged`);
 		if (strings(service.cap_add).length > 0)
 			issues.push(`service ${name} may not add capabilities`);
+		for (const [field, label] of [
+			['network_mode', 'network namespace'],
+			['pid', 'PID namespace'],
+			['ipc', 'IPC namespace']
+		] as const)
+			if (service[field] === 'host') issues.push(`service ${name} may not share the host ${label}`);
+		if (Array.isArray(service.devices) && service.devices.length > 0)
+			issues.push(`service ${name} may not mount host devices`);
+		// Network membership is the Guardian boundary: only Assistant and Guardian
+		// join agent_net, and only Guardian bridges it to ingress_net.
+		const networks = new Set(strings(service.networks));
+		if (networks.has('agent_net') && name !== 'assistant' && name !== 'guardian')
+			issues.push(`service ${name} may not join the private agent_net`);
+		if (networks.has('agent_net') && networks.has('ingress_net') && name !== 'guardian')
+			issues.push(`service ${name} may not bridge agent_net and ingress_net`);
 		if (
 			volumeText(service.volumes).some((volume) =>
 				/(?:docker\.sock|containerd\.sock|\/run\/podman|\/var\/lib\/docker)/i.test(volume)

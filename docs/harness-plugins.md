@@ -1,7 +1,8 @@
 # Built-in harness plugins
 
-Assistant includes the native AKM plugin and a native fhold plugin in OpenCode,
-Claude Code and Codex. The image build runs each vendor's installer against
+Assistant includes the native AKM plugin in OpenCode, Claude Code and Codex
+(OpenCode loads it through fhold's knowledge wrapper), and a native fhold
+plugin carrying the built-in skills in Claude Code and Codex. The image build runs each vendor's installer against
 pinned local marketplaces. Startup seeds the generated caches and missing
 defaults; it never installs software or replaces customized native settings.
 The image uses the installed native plugins as the single hook registration
