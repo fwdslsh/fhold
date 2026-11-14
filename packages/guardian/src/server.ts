@@ -14,7 +14,7 @@ import { allow, allowPreAuth, USER_RATE_LIMIT, USER_RATE_WINDOW_MS } from './rat
 
 const logger = createLogger('guardian');
 const MAX_REQUEST_BYTES = 64 * 1024;
-const DEFAULT_MAX_CONCURRENCY = 32;
+const MAX_CONCURRENCY = 32;
 const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const ALLOWED_METHODS = 'GET, POST, DELETE, OPTIONS';
 const ALLOWED_HEADERS =
@@ -37,11 +37,6 @@ export type GuardianDependencies = {
 	maxConcurrency: number;
 	oauth: GuardianOAuth | null;
 };
-
-function boundedInt(value: string | undefined, fallback: number, maximum: number): number {
-	const parsed = Number.parseInt(value ?? '', 10);
-	return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
-}
 
 function validPort(value: string | undefined, fallback: number): number {
 	const parsed = Number.parseInt(value ?? '', 10);
@@ -91,7 +86,7 @@ function defaultDependencies(): GuardianDependencies {
 		allowPreAuth,
 		allowPrincipal: allow,
 		allowedOrigins: parseAllowedOrigins(Bun.env.GUARDIAN_ALLOWED_ORIGINS ?? ''),
-		maxConcurrency: boundedInt(Bun.env.GUARDIAN_MAX_CONCURRENCY, DEFAULT_MAX_CONCURRENCY, 256),
+		maxConcurrency: MAX_CONCURRENCY,
 		oauth
 	};
 }
@@ -307,7 +302,7 @@ export function startGuardian(
 	options: { port?: number; hostname?: string; dependencies?: Partial<GuardianDependencies> } = {}
 ): ReturnType<typeof Bun.serve> {
 	const port = options.port ?? validPort(Bun.env.PORT, 8080);
-	const hostname = options.hostname ?? Bun.env.GUARDIAN_HOST ?? '0.0.0.0';
+	const hostname = options.hostname ?? '0.0.0.0';
 	const credentialCount = options.dependencies ? undefined : loadCredentialRegistry().length;
 	const handle = createGuardianHandler(options.dependencies);
 	const server = Bun.serve({

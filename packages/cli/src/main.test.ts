@@ -47,6 +47,10 @@ describe('CLI help', () => {
 		expect(helpText('restore')).toContain('--acknowledge-unrestored');
 		expect(helpText('history')).toContain('--directory-map');
 		expect(helpText('task')).toContain('create <id>');
+		expect(helpText('hosting')).toContain('edit <connection>');
+		expect(helpText('hosting')).toContain('remove <connection> --confirm');
+		expect(helpText('remote')).toContain('recall codex');
+		expect(helpText('config')).toContain('--audience');
 		for (const command of ['remote', 'setup', 'config']) {
 			expect(helpText(command)).toContain('Codex and Claude Code native remote access is experimental');
 		}

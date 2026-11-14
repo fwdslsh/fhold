@@ -210,10 +210,15 @@ test('hosted setup verifies the native agent without changing deployment or clai
 			model: 'native-model'
 		};
 	});
+	f.session.agent.selectModel = supportedOperation(async (input) => {
+		f.calls.push(['select', input]);
+		return { providers: [], write: { saved: true, effective: 'verified' as const } };
+	});
 	await f.run(['setup', '--provider', 'native-provider', '--model', 'native-model']);
 	expect(f.calls).toEqual([
 		['connect', {}],
-		['readiness', { provider: 'native-provider', model: 'native-model' }]
+		['readiness', { provider: 'native-provider', model: 'native-model' }],
+		['select', { provider: 'native-provider', model: 'native-model' }]
 	]);
 	expect(f.output.at(-1)).toContain('Verified a real native Assistant response.');
 });

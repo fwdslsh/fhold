@@ -123,6 +123,10 @@ without stopping an otherwise usable Assistant. The combined native result and
 stderr remain private in the runtime directory. `akm migrate status` reports
 the current state after any manual repairs; the administration skill also
 reports native selected plugin versions.
+AKM reads never build the search index, so after migration startup runs one
+`akm index --skip-if-locked` beside the agent. Searches serve what is indexed
+so far while it runs; a failed build is reported as degraded and the agent
+stays available.
 Optional AKM/worker failures report native diagnostics and do not stop the main
 Assistant. Authentication, restore integrity and actual recovery ownership
 remain essential boundaries.
@@ -136,7 +140,6 @@ Review native recall explicitly:
 
 ```sh
 fhold-codex-recall.mjs review
-fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
 ```
 
 The result reports `approval-needed`, `ready` or `installed`, along with the exact
@@ -155,7 +158,6 @@ installed OpenCode harness when appropriate:
 
 ```sh
 akm migrate status
-akm migrate apply --dry-run
 akm migrate apply
 ```
 

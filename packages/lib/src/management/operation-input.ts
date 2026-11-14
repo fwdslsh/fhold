@@ -62,34 +62,6 @@ export type OperationInputMap = {
 	'docker.directory': OperationInputOf<DockerOperations['directory']>;
 };
 export type OperationInputName = keyof OperationInputMap;
-export type LegacyRecoveryOperation =
-	| {
-			name: 'data.recovery.package';
-			input: OperationInputMap['data.recovery.package'];
-			context: RequestContext;
-	  }
-	| { name: 'data.recovery.status'; input: undefined; context: RequestContext }
-	| { name: 'data.recovery.inspect'; input: undefined; context: RequestContext }
-	| { name: 'data.recovery.initialize'; input: undefined; context: RequestContext }
-	| { name: 'data.recovery.restore'; input: undefined; context: RequestContext }
-	| {
-			name: 'data.recovery.save';
-			input: OperationInputMap['data.recovery.save'];
-			context: RequestContext;
-	  }
-	| {
-			name: 'data.recovery.setCredential';
-			input: OperationInputMap['data.recovery.setCredential'];
-			context: RequestContext;
-	  };
-export type LegacyCredentialOperation =
-	| { name: 'apps.credentials.create'; input: OperationInputMap['apps.credentials.create'] }
-	| {
-			name: 'apps.credentials.updatePolicy';
-			input: OperationInputMap['apps.credentials.updatePolicy'];
-	  }
-	| { name: 'apps.credentials.rotate'; input: OperationInputMap['apps.credentials.rotate'] }
-	| { name: 'apps.credentials.remove'; input: OperationInputMap['apps.credentials.remove'] };
 
 function record(value: unknown, error: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(error);
@@ -140,42 +112,6 @@ export function parseRequestContext(value: unknown): RequestContext {
 	if (confirmed === undefined) return {};
 	if (typeof confirmed !== 'boolean') throw new Error('Confirmation must be true or false.');
 	return { confirmed };
-}
-
-/** Translate the retained SSH/Admin recovery action envelope exactly once at ingress. */
-export function parseLegacyRecoveryOperation(value: unknown): LegacyRecoveryOperation {
-	const input = record(value, 'Invalid recovery action.');
-	const context = parseRequestContext(input);
-	switch (input.action) {
-		case 'package':
-			return {
-				name: 'data.recovery.package',
-				input: parseOperationInput('data.recovery.package', input.request),
-				context
-			};
-		case 'status':
-			return { name: 'data.recovery.status', input: undefined, context };
-		case 'inspect':
-			return { name: 'data.recovery.inspect', input: undefined, context };
-		case 'init':
-			return { name: 'data.recovery.initialize', input: undefined, context };
-		case 'restore':
-			return { name: 'data.recovery.restore', input: undefined, context };
-		case 'save':
-			return {
-				name: 'data.recovery.save',
-				input: parseOperationInput('data.recovery.save', input),
-				context
-			};
-		case 'credential':
-			return {
-				name: 'data.recovery.setCredential',
-				input: parseOperationInput('data.recovery.setCredential', input),
-				context
-			};
-		default:
-			throw new Error('Invalid recovery action.');
-	}
 }
 
 type OperationInputParser<N extends OperationInputName> = (value: unknown) => OperationInputMap[N];
@@ -327,11 +263,6 @@ const parsers: OperationInputParsers = {
 			throw new Error('Invalid native remote request.');
 		if (tool !== 'claude' && tool !== 'codex') throw new Error('Invalid native remote request.');
 		const trusted = optionalBoolean(source?.trusted, 'Remote trust must be true or false.');
-		if (source?.restartConfirmed !== undefined)
-			optionalBoolean(
-				source.restartConfirmed,
-				'Remote restart confirmation must be true or false.'
-			);
 		const sandbox = source?.sandbox;
 		if (
 			sandbox !== undefined &&
@@ -571,33 +502,4 @@ export function parseOperationInput<N extends OperationInputName>(
 	value: unknown
 ): OperationInputMap[N] {
 	return parsers[name](value);
-}
-
-/** Shared retained wire/Admin credential action envelope parser. */
-export function parseLegacyCredentialOperation(value: unknown): LegacyCredentialOperation {
-	const source = record(value, 'Choose a credential action.');
-	switch (source.action) {
-		case 'create':
-			return {
-				name: 'apps.credentials.create',
-				input: parseOperationInput('apps.credentials.create', source)
-			};
-		case 'policy':
-			return {
-				name: 'apps.credentials.updatePolicy',
-				input: parseOperationInput('apps.credentials.updatePolicy', source)
-			};
-		case 'rotate':
-			return {
-				name: 'apps.credentials.rotate',
-				input: parseOperationInput('apps.credentials.rotate', source)
-			};
-		case 'remove':
-			return {
-				name: 'apps.credentials.remove',
-				input: parseOperationInput('apps.credentials.remove', source)
-			};
-		default:
-			throw new Error('Choose a credential action.');
-	}
 }

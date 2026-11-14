@@ -10,10 +10,6 @@ const SECRET_NAMES: Record<PortalName, readonly PortalSecretName[]> = {
 	slack: ['slack_bot_token', 'slack_app_token']
 };
 
-export function portalSecretNames(portal: PortalName): readonly PortalSecretName[] {
-	return SECRET_NAMES[portal];
-}
-
 export function normalizePortalSecret(value: string): string {
 	const normalized = value.replace(/[\r\n]+$/, '');
 	if (normalized.length < 8 || normalized.length > 4_096 || !/^[\x21-\x7e]+$/.test(normalized)) {

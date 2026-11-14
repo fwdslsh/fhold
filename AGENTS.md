@@ -97,7 +97,7 @@ repair its PATH, settings or permissions inside a test to conceal a product bug.
 Disposable fixtures may isolate accounts/data, not supply missing product behavior.
 Prefer a small, maintainable solution over another helper, service or exception.
 Default to logging, isolating an optional failure and reporting actionable degraded
-state while the agent continues. Scheduling, knowledge hooks, keep-alive and
+state while the agent continues. Scheduling, knowledge hooks and
 diagnostics must not become whole-container restart gates. Stop only when the
 core cannot run or continuing is unsafe, including authentication, incomplete
 restore and actual loss of exclusive recovery ownership.
@@ -179,11 +179,10 @@ require the affected checks on the final SHA. Follow
 `docs/operations/updating-dependencies-and-releasing.md`. Keep runtime pins exact
 and image-baked rather than floating versions or startup upgrades.
 
-Identify development candidates by commit SHA and image digest. Public version
-formats are `X.Y.YYMMNN` for 0.3 and `X.Y.MMNN` from 0.4 onward, with
-optional `-alpha`, `-beta` or `-rc` and no serial. The 0.4+ counter starts at 01
-each UTC month; January is canonical SemVer `0.4.101`. Drop the year prefix
-only from 0.4 onward. Start a new minor line at year rollover to preserve ordering.
+Identify development candidates by commit SHA and image digest. The public
+version format is `X.Y.MMNN`, with optional `-alpha`, `-beta` or `-rc` and no
+serial. The counter starts at 01 each UTC month; January is canonical SemVer
+`0.4.101`. Start a new minor line at year rollover to preserve ordering.
 Choose and stamp the release version near publication, after functional validation. Unpublished
 local builds, dry runs and candidate receipts do not consume monthly counters;
 they may be rebuilt under the same provisional version with fresh evidence.
@@ -233,8 +232,8 @@ Publication scope never narrows shared-pipeline validation: changes to the nativ
 CI pipeline require all six image jobs even for an Assistant-only or tools stamp.
 Keep native architecture, security, browser, scheduler/provider and recovery/upgrade
 checks in the release gates. Release Assistant verification uses three bounded
-lanes with independent cache/runtime/activity/lifecycle fixtures. Extended idle/unload and
-historical import cases run in two endurance lanes weekly/manually against
+lanes with independent cache/runtime/lifecycle fixtures. Historical import cases
+run in an endurance lane weekly/manually against
 published images without rebuilding. Run affected endurance cases during
 development when changing their behavior. They are not automatic blockers for
 unrelated dependency releases. Do not add timing claims without measurements.

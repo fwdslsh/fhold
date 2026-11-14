@@ -75,7 +75,6 @@ async function fixture() {
 		XDG_DATA_HOME: path.join(dir, 'xdg-data'),
 		XDG_STATE_HOME: path.join(dir, 'xdg-state'),
 		XDG_CACHE_HOME: path.join(dir, 'xdg-cache'),
-		AKM_BUNDLE_DIR: bundle,
 		AKM_CONFIG_DIR: roots.akmConfig,
 		AKM_CONFIG_FILE: undefined as string | undefined,
 		AKM_DATA_DIR: roots.akmData,
@@ -181,8 +180,8 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 	for (const inference of [
 		'missing-components',
 		'missing-adapter',
-		'implicit-primary',
-		'component-root-does-not-describe-primary'
+		'undeclared-default-bundle',
+		'deprecated-bundle-dir-override'
 	])
 		test(`${inference} declines caching without forcing native adapter detection`, async () => {
 			const f = await fixture();
@@ -191,15 +190,17 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 					? { path: f.bundle }
 					: inference === 'missing-adapter'
 						? { path: f.bundle, components: { main: {} } }
-						: inference === 'component-root-does-not-describe-primary'
-							? { path: f.bundle, components: { main: { root: 'knowledge', adapter: 'akm' } } }
-							: f.config.bundles.fixture;
-			if (inference === 'implicit-primary') {
-				f.env.AKM_BUNDLE_DIR = path.join(f.dir, 'undeclared-primary');
-				await fs.mkdir(f.env.AKM_BUNDLE_DIR);
+						: f.config.bundles.fixture;
+			if (inference === 'deprecated-bundle-dir-override') {
+				(f.env as Record<string, string | undefined>).AKM_BUNDLE_DIR = path.join(f.dir, 'override');
+				await fs.mkdir(path.join(f.dir, 'override'));
 			}
 			const configFile = path.join(f.roots.akmConfig, 'config.json');
-			const configBefore = JSON.stringify({ ...f.config, bundles: { fixture: bundle } });
+			const configBefore = JSON.stringify({
+				...f.config,
+				...(inference === 'undeclared-default-bundle' ? { defaultBundle: 'undeclared' } : {}),
+				bundles: { fixture: bundle }
+			});
 			await fs.writeFile(configFile, configBefore);
 			const source = f.engine();
 			await source.initialize();
@@ -212,9 +213,8 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			await source.release();
 		});
 
-	test('primary matching an explicitly supported component content root remains eligible', async () => {
+	test('default bundle with an explicitly supported component content root remains eligible', async () => {
 		const f = await fixture();
-		f.env.AKM_BUNDLE_DIR = path.join(f.bundle, 'knowledge');
 		await fs.writeFile(
 			path.join(f.roots.akmConfig, 'config.json'),
 			JSON.stringify({

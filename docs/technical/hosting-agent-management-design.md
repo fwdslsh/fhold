@@ -57,8 +57,8 @@ moving state, identity or recovery ownership remains a separate explicit operati
 
 The findings below describe the pre-refactor baseline, not the current branch.
 The typed composition root, normalized observations and consumer migration replace
-these couplings; retained SSH wire names are compatibility details, not a second
-public management interface.
+these couplings; the SSH session carries the same named operations rather than a
+second management vocabulary.
 
 Preserve the shared library, the built-in composition root, native authentication,
 existing local domain functions and the persistent SSH management session. Preserve
@@ -197,21 +197,17 @@ runtime with unknown support remains unknown until inspection or an explicit too
 update establishes it. Explanations are short and actionable. Unknown optional
 features must not disable unrelated operations.
 
-Transport code uses one typed method-to-request/result map for the supported
-operation set and validates unknown wire data once at each trust boundary. Replace
-caller-chosen `T` and variadic `extra` with inference from that map. Retain and
-evolve the existing SSH envelope through advertised operations and a compatible
-wire version; do not demand identical desktop and image versions. SSH executable
-and managed Skeleton bytes are content-bound to the local distribution, not an
-operator-maintained remote CLI.
+Transport code uses one typed operation-to-input/result map (`ManagementOperationMap`)
+keyed by the same named operations as the UI and validates unknown wire data once
+at each trust boundary. The SSH session carries `{operation, input, context}` JSON
+lines; context holds only explicit confirmation. SSH executable and managed
+Skeleton bytes are content-bound to the local distribution, not an
+operator-maintained remote CLI, so client and helper always come from the same
+build and need no capability negotiation. The hosting-machine `hello` (wire
+version 1) reports only the helper release and instances directory.
 Domain methods must not know IPC channels, JSON-line framing or cloud commands.
-Today the hosting-machine `hello` uses version 1 and advertises management method
-names, while the persistent management-session request itself has no version field.
-Keep currently shipped method names/request shapes during the initial extraction.
-If new contracts change the wire shape, negotiate that explicitly and translate at
-the transport boundary; do not infer wire compatibility from TypeScript types or
-add a required handshake that breaks existing clients. Test both old-client/new-server
-and new-client/old-server behavior within the declared supported protocol window.
+Admin's renderer reaches the same named operations through one allowlisted
+`admin:operation` IPC channel; composite actions keep their own channels.
 
 ### One snapshot, independent observations
 
@@ -342,9 +338,8 @@ architectural decision, not a hidden fallback in this refactor.
    updates, then releases the old session's resources.
 2. **Connect an AI account:** acquire native access explicitly, use native auth,
    preserve the live OAuth attempt, discover models, run only a user-requested test
-   and explicitly select a model. The existing first-setup moderator-placeholder
-   update and installation-complete marker are separate application-level steps
-   for deployments that have them; a missing Guardian cannot invalidate agent auth.
+   and explicitly select a model. The installation-complete marker is a separate
+   application-level step for deployments that have it; a missing Guardian cannot invalidate agent auth.
 3. **Save and apply:** save only the owning setting, preserve other drafts, report
    pending deployment changes persistently where supported, and confirm disruptive
    apply. Do not restart the whole container for a watched native preference.
@@ -371,7 +366,7 @@ if release classification confirms no runtime dependency/source changes.
 | 3. Shared consumers | Adapt Electron main/preload and CLI commands to the same named operations and normalized snapshot. Keep fixed page/component layout. Move provider-specific lifecycle effects into adapter descriptions. Keep dedicated native interactive CLI transport where it is actually required. | Remove the `phase: 'remote'` view branch, `managed` feature guesses and broad `settings/transfer` flags. Confirm unchanged local/SSH workflows and clear disabled ACA operations. |
 | 4. Native agent client | Extract injected HTTP access from `control-plane/opencode.ts`; isolate native preference and in-agent model-discovery dependencies from `provider-settings.ts`. Add explicit ACA native API connection/auth/readiness for supported operations. | No-wake passive tests, native auth flow, no redirects leaking auth, same agent-service contract on each reachable transport. Actual ACA qualification before claiming live parity. |
 | 5. Remaining runtime operations | First run the bounded ACA execution feasibility experiment. Then, only if warranted, extract existing worker/recovery commands and add narrow generic preference operations to the image. | Shipped-image verification of I/O, account/consent lifetime, runtime replacement, secrets, effective settings and persistence after replacement. This stage needs a full runtime release. |
-| 6. Retire bridges and document extension | Remove old dispatch/snapshot compatibility code once in-tree callers move; keep only necessary advertised remote protocol compatibility. Update hosting guide/core principles and provider conformance fixtures. | New adapter can satisfy contracts without modifying ordinary Admin screens, agent services or existing provider behavior. |
+| 6. Retire bridges and document extension | Remove old dispatch/snapshot compatibility code once in-tree callers move; the same-build SSH helper needs no remote protocol compatibility. Update hosting guide/core principles and provider conformance fixtures. | New adapter can satisfy contracts without modifying ordinary Admin screens, agent services or existing provider behavior. |
 
 Stage 1 has an explicit dependency direction: adapters contribute bound host and
 application ports, and management services do not import concrete host adapters.
@@ -439,9 +434,10 @@ tests and Admin browser fixtures. Test observable behavior, not class/file names
 - Watched preference change preserves unrelated JSONC and managed precedence;
   effective read-back, persisted save and recovery durability have truthful separate
   outcomes. No unnecessary container restart or stale rollback.
-- Optional metadata failure preserves other operations. Old CLI/image support is
-  reported per operation; old/new client-server combinations preserve the advertised
-  contract. Repairing tools is explicit and never updates workloads. Missing optional
+- Optional metadata failure preserves other operations. The SSH helper is the
+  content-addressed executable of the managing build, so client and server always
+  match; there is no per-operation version negotiation. Repairing tools is explicit
+  and never updates workloads. Missing optional
   observations do not introduce new mandatory preflight requests or restart gates.
 - An accepted lifecycle mutation with dropped response is not replayed. Polling
   stops on timeout/cancel with unknown outcome rather than false success. Deployment

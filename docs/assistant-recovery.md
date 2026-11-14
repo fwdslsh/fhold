@@ -316,7 +316,7 @@ files; external storage policies must protect retention/rollback independently.
 
 ## Scheduling and durability
 
-`FH_SCHEDULER_ENABLED=0` disables task synchronization, cron and reconciliation,
+`FH_SCHEDULER_ENABLED=0` disables boot task synchronization and cron,
 not recovery, AKM knowledge or native access. Explicit scheduling enablement
 preserves reviewed same-instance intent and resumes future slots only; it does
 not replay missed slots or in-flight tool calls. Portable/manual restore retains
@@ -341,11 +341,11 @@ disappear from health bookkeeping. An older restored checkpoint alone does not
 count as a fresh boot publication.
 
 Core health proves the authenticated agent is usable and, when configured,
-restoration completed with a live recovery owner. Optional task reconciliation,
-scheduler, knowledge and keep-alive failures appear as health-log warnings in
+restoration completed with a live recovery owner. Optional boot task sync,
+scheduler and knowledge failures appear as health-log warnings in
 CLI status and Admin Overview. They never trigger a whole-container restart.
-Reconciliation and heartbeat failures retry; a stopped optional process requires
-corrective action and an explicit restart. Readiness is not provider/client readiness.
+A failed boot task sync retries every minute until schedules are installed.
+A stopped optional process requires corrective action and an explicit restart. Readiness is not provider/client readiness.
 
 The potential loss window includes the timer interval, capture and upload time;
 outages make it longer. SIGTERM should stop writers and descendants before a
@@ -525,14 +525,15 @@ switching off is not erasure. Settings have no effect without ordinary recovery.
 Capture-only produces optional artifacts without restoring them. Restore-only
 can consume and carry forward an already accepted eligible reference without
 creating a new vector artifact. Both off omit the optional reference from future
-checkpoints. Native first use can build an absent index as usual. Explicit custom
+checkpoints. The Assistant's boot `akm index` builds an absent index as usual. Explicit custom
 SQLite selection of `index.db` retains its ordinary **required** semantics; remove
 that selection if the intent is best-effort caching.
 
 The first experimental scope supports plain JSON AKM configuration and materialized filesystem bundles with
 one explicitly configured native `akm` or `agent-skills` component adapter per
 bundle, including a declared component whose effective content root matches the
-primary bundle path (`/stash`, or an operator-set `AKM_BUNDLE_DIR`). Inferred adapters and undeclared primary sources skip
+primary bundle path (the configured `defaultBundle`, `/stash` by default). Inferred adapters, a `defaultBundle` that is not
+declared and enabled, and the deprecated `AKM_BUNDLE_DIR` override skip
 caching without changing native detection or indexing behavior. Readable persistent and
 read-only source mounts are supported. Inherited AKM configuration, other source providers or
 adapters, missing/unreadable roots, and source roots overlapping explicit recovery
@@ -575,7 +576,7 @@ Only a completed source scan, clean and successful native verification admits
 the new database; successful lock skips are not completion proof. A
 surviving local database or WAL/SHM is preserved. Invalid/missing/corrupt/oversized
 caches and incomplete refreshes leave the core able to start without a restored
-index; native first use can rebuild. Invalid or model-incompatible vector content
+index; the boot `akm index` rebuilds it. Invalid or model-incompatible vector content
 uses AKM's native fallback to normal embedding where it completes within the
 budget. Native fallback can make ordinary embedding requests; recovery does not
 run extract/improve/LLM enrichment or hydrate remote bundle providers.
@@ -616,7 +617,7 @@ the same native cases with source files on that filesystem; configuration, state
 and SQLite remain local. No existing bundle or stack is adopted by this test.
 The external benchmark explicitly records safe deadline fallback when a source
 scan exceeds the five-second admission budget; that adds startup work before
-ordinary native first use, so opting into caching can be slower for that workload.
+the ordinary boot index build, so opting into caching can be slower for that workload.
 Measure core-ready and first-correct-knowledge-ready time separately, including
 full artifact transfer, provider requests, checkpoint duration and retained-object
 growth before enabling this optimization for a workload.

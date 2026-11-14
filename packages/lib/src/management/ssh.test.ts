@@ -23,7 +23,7 @@ test('one native SSH process preserves setup context and delivers browser events
 			process.execPath,
 			[
 				'-e',
-				`const {createInterface}=require('node:readline');const input=createInterface({input:process.stdin});input.on('line',line=>{const request=JSON.parse(line);if(request.method==='providerOAuthStart')console.log(JSON.stringify({event:'open-url',url:'https://example.com/authorize'}));console.log(JSON.stringify({id:request.id,ok:true,value:{homeDir:request.homeDir,setupName:request.setupName,method:request.method}}));});`
+				`const {createInterface}=require('node:readline');const input=createInterface({input:process.stdin});input.on('line',line=>{const request=JSON.parse(line);if(request.operation==='agent.oauthStart')console.log(JSON.stringify({event:'open-url',url:'https://example.com/authorize'}));console.log(JSON.stringify({id:request.id,ok:true,value:{homeDir:request.homeDir,setupName:request.setupName,operation:request.operation,context:request.context}}));});`
 			],
 			{ stdio: 'pipe' }
 		);
@@ -36,9 +36,16 @@ test('one native SSH process preserves setup context and delivers browser events
 		openUrl: (url) => urls.push(url)
 	});
 	try {
-		expect(await api.call('directory')).toMatchObject({ homeDir: home, setupName: 'named-agent' });
-		await api.call('providerOAuthStart');
-		await api.call('directory');
+		expect(await api.call('docker.directory', {})).toMatchObject({
+			homeDir: home,
+			setupName: 'named-agent',
+			operation: 'docker.directory'
+		});
+		await api.call('agent.oauthStart', { provider: 'example', method: 0 });
+		expect(await api.call('docker.update', {}, { confirmed: true })).toMatchObject({
+			operation: 'docker.update',
+			context: { confirmed: true }
+		});
 		expect(commands).toHaveLength(1);
 		expect(commands[0]?.binary).toBe('ssh');
 		expect(commands[0]?.args.at(-1)).toMatch(/^exec .*\/fhold hosting session$/);
@@ -60,7 +67,9 @@ test('a disconnected submitted operation is reported, never silently replayed', 
 	}) as typeof spawn;
 	const api = new SshInstanceManagement(connection, '/opt/stacks/qa', { spawn: native, run });
 	try {
-		await expect(api.call('saveConfig', {})).rejects.toThrow('check its current state');
+		await expect(api.call('docker.saveConfig', {} as never)).rejects.toThrow(
+			'check its current state'
+		);
 		expect(starts).toBe(1);
 	} finally {
 		await api.close();
@@ -83,7 +92,7 @@ test('closing while helper preparation is pending never starts an orphan session
 			throw Error('must not spawn');
 		}) as typeof spawn
 	});
-	const pending = api.call('directory');
+	const pending = api.call('docker.directory', {});
 	await Promise.resolve();
 	await api.close();
 	release('Linux x86_64');

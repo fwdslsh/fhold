@@ -7,6 +7,7 @@ import {
 	findCredentialByUsername,
 	type AuthenticatedCredential
 } from './credentials.js';
+import { asRecord, exactKeys } from './http-util.js';
 
 const MAX_FILE_BYTES = 1_048_576;
 const MAX_IDENTITIES = 10_000;
@@ -43,17 +44,6 @@ type CreateGuardianOAuthOptions = {
 	authDirectory?: string;
 	verify?: (token: string, config: GuardianOAuthConfig) => Promise<OAuthClaims>;
 };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-	const keys = Object.keys(value);
-	return keys.length === expected.length && keys.every((key) => expected.includes(key));
-}
 
 function boundedIdentifier(value: unknown): value is string {
 	if (typeof value !== 'string' || value.length < 1 || value.length > 512) return false;

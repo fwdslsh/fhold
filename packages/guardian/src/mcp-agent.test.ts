@@ -432,11 +432,11 @@ describe('full fhold MCP gateway', () => {
 		}
 	});
 
-	it('filters the advertised capability catalog by credential policy', async () => {
+	it('filters advertised tools and resources by credential policy', async () => {
 		for (const [policy, expected] of [
-			['chat', 7],
-			['read', 9],
-			['full', 11]
+			['chat', 6],
+			['read', 8],
+			['full', 10]
 		] as const) {
 			const assistant = new FakeAssistant();
 			const { client, server } = await connect({
@@ -455,16 +455,15 @@ describe('full fhold MCP gateway', () => {
 			expect(tools.tools.some((tool) => tool.name === 'fhold.session.delete')).toBe(
 				policy === 'full'
 			);
-			expect((await client.listPrompts()).prompts).toHaveLength(4);
 			expect((await client.listResourceTemplates()).resourceTemplates.length).toBe(
-				policy === 'chat' ? 3 : 4
+				policy === 'chat' ? 0 : 1
 			);
 			await client.close();
 			await server.close();
 		}
 	});
 
-	it('returns an arbitrary registry username in the capability catalog', async () => {
+	it('names new sessions after an arbitrary registry username', async () => {
 		const assistant = new FakeAssistant();
 		const { client, server } = await connect(
 			{
@@ -479,12 +478,14 @@ describe('full fhold MCP gateway', () => {
 				policy: 'full'
 			}
 		);
-		const catalog = await client.callTool({
-			name: 'fhold.catalog.get',
-			arguments: {}
+		const run = await client.callTool({
+			name: 'fhold.agent.run',
+			arguments: { message: 'hello', waitMs: 0 }
 		});
-		expect(catalog.isError).not.toBe(true);
-		expect(body(catalog).principal).toBe('mcp-test');
+		expect(run.isError).not.toBe(true);
+		expect([...assistant.sessions.values()].map((session) => session.title)).toEqual([
+			'MCP mcp-test (full)'
+		]);
 		await client.close();
 		await server.close();
 	});
@@ -499,7 +500,6 @@ describe('full fhold MCP gateway', () => {
 		try {
 			expect((await client.listTools()).tools.map((tool) => tool.name).sort()).toEqual([
 				'fhold.agent.run',
-				'fhold.catalog.get',
 				'fhold.interaction.respond',
 				'fhold.job.cancel',
 				'fhold.job.get',
@@ -510,26 +510,12 @@ describe('full fhold MCP gateway', () => {
 				'fhold.workspace.read',
 				'fhold.workspace.search'
 			]);
-			expect((await client.listPrompts()).prompts.map((prompt) => prompt.name).sort()).toEqual([
-				'fhold.debug',
-				'fhold.explain',
-				'fhold.implement',
-				'fhold.review'
-			]);
 			const templates = (await client.listResourceTemplates()).resourceTemplates;
-			expect(templates.map((template) => template.name).sort()).toEqual([
-				'fhold-job',
-				'fhold-session-diff',
-				'fhold-session-messages',
-				'fhold-workspace-file'
-			]);
+			expect(templates.map((template) => template.name)).toEqual(['fhold-workspace-file']);
 			expect(templates.every((template) => template.uriTemplate.startsWith('fhold://'))).toBe(true);
 			await expect(
 				client.callTool({ name: 'foreign.agent.run', arguments: { message: 'hello' } })
 			).rejects.toThrow('not found');
-			await expect(
-				client.getPrompt({ name: 'foreign.review', arguments: { target: 'src/index.ts' } })
-			).rejects.toThrow();
 			await expect(
 				client.readResource({ uri: 'foreign://workspace/src/index.ts' })
 			).rejects.toThrow();
@@ -598,15 +584,8 @@ describe('full fhold MCP gateway', () => {
 			status: 'idle',
 			diff: [{ file: 'src/index.ts', additions: 2, deletions: 1, status: 'modified' }]
 		});
-		expect(Array.isArray(body(inspected).messages)).toBe(true);
-
-		const messages = await client.readResource({
-			uri: `fhold://sessions/${firstBody.session}/messages`
-		});
-		expect(messages.contents[0]?.text).toContain('answer:again');
-		const publicMessages = JSON.parse(messages.contents[0]?.text ?? '[]') as Array<
-			Record<string, unknown>
-		>;
+		const publicMessages = body(inspected).messages as Array<Record<string, unknown>>;
+		expect(publicMessages.some((message) => message.text === 'answer:again')).toBe(true);
 		expect(publicMessages.every((message) => typeof message.handle === 'string')).toBe(true);
 		expect(publicMessages.some((message) => 'id' in message || 'parentId' in message)).toBe(false);
 		const fork = await client.callTool({
@@ -629,14 +608,6 @@ describe('full fhold MCP gateway', () => {
 		expect(body(search)).toEqual({
 			mode: 'text',
 			matches: [{ path: 'src/index.ts', line: 4, text: 'export const value = 1' }]
-		});
-		const prompt = await client.getPrompt({
-			name: 'fhold.review',
-			arguments: { task: 'Check error handling', path: 'src/index.ts' }
-		});
-		expect(prompt.messages[0]?.content).toMatchObject({
-			type: 'text',
-			text: expect.stringContaining('Check error handling')
 		});
 		await client.close();
 		await server.close();
@@ -813,7 +784,7 @@ describe('full fhold MCP gateway', () => {
 			{ capabilities: {}, versionNegotiation: { mode: 'auto' } }
 		);
 		await client.connect(transport, { timeout: 5_000 });
-		expect((await client.listTools()).tools).toHaveLength(11);
+		expect((await client.listTools()).tools).toHaveLength(10);
 		expect(methods).toContain('server/discover');
 		expect(methods).not.toContain('initialize');
 		await client.close();
@@ -826,7 +797,7 @@ describe('full fhold MCP gateway', () => {
 			{ capabilities: {} }
 		);
 		await initializeClient.connect(initializeTransport, { timeout: 5_000 });
-		expect((await initializeClient.listTools()).tools).toHaveLength(11);
+		expect((await initializeClient.listTools()).tools).toHaveLength(10);
 		expect(methods).toContain('initialize');
 		await initializeClient.close();
 		await handler.close();

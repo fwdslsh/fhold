@@ -10,7 +10,7 @@ const fixtures: string[] = [];
 afterEach(() => {
 	for (const path of fixtures.splice(0)) rmSync(path, { recursive: true, force: true });
 });
-function fixture(version = '0.3.261002-beta') {
+function fixture(version = '0.4.1002-beta') {
 	const directory = mkdtempSync(join(tmpdir(), 'fhold-admin-feeds-'));
 	fixtures.push(directory);
 	for (const [index, asset] of expectedAdminAssets(version).entries()) {
@@ -45,7 +45,7 @@ test('a stale feed, swapped architecture or corrupt image cannot be published', 
 		const { directory, version } = fixture();
 		const path = join(directory, ADMIN_UPDATE_FEEDS[0]);
 		const feed = Bun.YAML.parse(readFileSync(path, 'utf8'));
-		if (mutation === 'version') feed.version = '0.3.261001-beta';
+		if (mutation === 'version') feed.version = '0.4.1001-beta';
 		if (mutation === 'architecture') feed.files[0].url = expectedAdminAssets(version)[1];
 		if (mutation === 'hash') feed.files[0].sha512 = 'invalid';
 		if (mutation === 'size') feed.files[0].size++;

@@ -108,16 +108,14 @@ describe('portable backup', async () => {
 		const destination = join(root(), 'backup');
 		mkdirSync(join(source, 'knowledge', 'secrets'), { recursive: true });
 		writeStackConfig(source, defaultStackConfig());
-		writeFileSync(
-			join(source, 'knowledge', 'secrets', 'auth.json'),
-			'{"provider":{"type":"api","key":"synthetic-backup-key"}}'
-		);
+		const legacy = '{"provider":{"type":"api","key":"synthetic-backup-key"}}';
+		writeFileSync(join(source, 'knowledge', 'secrets', 'auth.json'), legacy);
 		await createBackup({ sourceHome: source, destination, includeProviderAuth: true });
-		expect(
-			JSON.parse(
-				readFileSync(join(destination, 'knowledge/secrets/opencode-credentials.json'), 'utf8')
-			)[0].value
-		).toEqual({ type: 'key', key: 'synthetic-backup-key' });
+		// Without a native database the file is carried as-is for OpenCode to own.
+		expect(readFileSync(join(destination, 'knowledge/secrets/auth.json'), 'utf8')).toBe(legacy);
+		expect(existsSync(join(destination, 'knowledge/secrets/opencode-credentials.json'))).toBe(
+			false
+		);
 		await expect(createBackup({ sourceHome: source, destination })).rejects.toThrow(
 			'Backup destination must be empty'
 		);

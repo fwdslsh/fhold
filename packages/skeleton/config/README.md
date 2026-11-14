@@ -6,7 +6,7 @@ default but never replace an existing file.
 | Directory | Purpose |
 |---|---|
 | `assistant/` | Trusted local OpenCode preferences |
-| `guardian/` | Guardian moderator model/provider preferences |
+| `guardian/` | Optional Guardian moderator model (defaults to the Assistant's model) |
 | `akm/` | AKM configuration |
 | `portal/discord/` | Discord user-to-credential map |
 | `portal/slack/` | Slack user-to-credential map |
@@ -14,5 +14,5 @@ default but never replace an existing file.
 
 The portal maps contain platform IDs and credential usernames, never keys.
 Named bearer keys live in `state/credentials/`, other delegated runtime
-credentials live in `state/secrets/`, and provider auth lives in
-`knowledge/secrets/auth.json`.
+credentials live in `state/secrets/`, and OpenCode keeps provider sign-ins in its
+native database under `data/assistant/.local/share/opencode/`.

@@ -96,7 +96,6 @@ export type OperationInputMetadata = {
 
 export type Operation<Input, Output> =
 	| { support: 'unsupported'; reason: string }
-	| { support: 'unknown'; reason: string }
 	| {
 			support: 'supported';
 			input?: OperationInputMetadata;
@@ -106,7 +105,7 @@ export type Operation<Input, Output> =
 	  };
 
 export type OperationDescription =
-	| { support: 'unsupported' | 'unknown'; reason: string }
+	| { support: 'unsupported'; reason: string }
 	| {
 			support: 'supported';
 			availability: Availability;
@@ -386,8 +385,6 @@ export type InstanceSessionBindings = {
 	agent?: Partial<AgentOperations>;
 	apps?: AppOperations;
 	data?: DataOperations;
-	/** Adapter-owned optional capability discovery; never a consumer warm-up requirement. */
-	initialize?: () => Promise<void>;
 	inspectApplication?: () => Promise<Partial<ApplicationObservations>>;
 	docker?: DockerOperations;
 	busy?: () => boolean;
@@ -430,10 +427,6 @@ export async function invokeOperation<Input, Output>(
 
 export function unsupportedOperation<Input, Output>(reason: string): Operation<Input, Output> {
 	return { support: 'unsupported', reason };
-}
-
-export function unknownOperation<Input, Output>(reason: string): Operation<Input, Output> {
-	return { support: 'unknown', reason };
 }
 
 export function supportedOperation<Input, Output>(

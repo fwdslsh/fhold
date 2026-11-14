@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+Prepare the Assistant for AKM 0.10.261122, where reads (`search`, `curate`)
+no longer build a missing index and return no hits with a warning instead.
+After restore and migration, startup runs one `akm index --skip-if-locked`
+beside the agent, so a fresh or restored instance becomes searchable without a
+manual `akm index`. A failed build is reported as degraded; the agent stays
+available. This replaces the previous reliance on the first search building the
+index.
+
+The experimental AKM index cache identifies the primary bundle from the
+configured `defaultBundle`, as AKM does, instead of `AKM_BUNDLE_DIR`, which
+AKM deprecates for removal in 0.11. Setting that variable now declines the
+optional cache. The managed-harness guide no longer suggests the deprecated
+`akm migrate apply --dry-run`; use `akm migrate status`.
+
+Guardian moderates suspicious requests with the Assistant's model unless
+`config/guardian/opencode.json` sets an optional `model`, and falls back to the
+Assistant's model when that model is unavailable. Setup no longer edits that
+operator-owned file; new homes are seeded without a model.
+
+Local CLI `status`, `logs`, `connect`, `provider`, `backup`, `restore` and
+`recovery export|preview|import` use the same management session as Admin and
+hosted connections, so their output is JSON. `provider login` uses OpenCode's
+browser sign-in (`--method` takes an index or label); `setup --provider <id>`
+signs in when needed and uses the verified model. `backup --to` requires
+`--portable` or `--full`; Assistant checkpoints use `recovery export`, and
+`restore --from <checkpoint>` is replaced by `recovery preview`/`import`.
+`remote pair` is Codex-only; Claude's connection link is in `remote logs claude`.
+
+Removed: keep-alive (`FH_KEEPALIVE_*`, the activity hooks and the Codex activity
+monitor), `FH_OPENCODE_ENV_MAP`, the 60-second task reconciliation loop (boot
+sync retries each minute until schedules are installed), Guardian's
+`fhold.catalog.get` tool, its canned prompts and duplicate resources, parsing of
+pre-0.4 release versions, the old `knowledge/secrets/auth.json` converter
+(homes and portable backups without an OpenCode database need provider sign-in
+again), the test-before-use requirement for selecting a model in Admin, and
+capability negotiation with the same-build SSH helper. `fhold doctor`'s Compose
+check now reports only the shipped security defaults instead of comparing a
+hand-copied Compose file. Admin uses one allowlisted operation channel, and its
+release smoke test drives the packaged app externally.
+
 ## 0.4.1109-beta — Updated AKM and native scheduler diagnostics
 
 Update Assistant to AKM CLI/web **0.10.261120** and all three AKM plugins
@@ -1015,7 +1055,7 @@ UTC year/month/day plus a daily build number starting at 1. Examples:
 `0.2.2610081` and `0.3.2612225-beta.1`. Alpha, beta and rc suffixes remain
 supported. Release tools compare date and daily counter separately, including
 multi-digit builds and next-day resets, and accept the 0.1 → 0.2 boundary without
-rewriting historical tags. See the [release runbook](docs/operations/release.md#historical-02-date-and-daily-build).
+rewriting historical tags. See the [release runbook](docs/operations/release.md).
 
 The Assistant now ships AKM 0.9.30 and matching 0.9.30202610090106 plugins for
 OpenCode, Claude and Codex, installed through their standard native mechanisms.

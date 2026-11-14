@@ -149,8 +149,10 @@ in an environment variable.
 OpenCode v2 owns provider credentials in its native SQLite database under
 `data/assistant/.local/share/opencode/`. Guardian uses Assistant's tool-free
 native generation API and receives no provider credentials. The old
-`knowledge/secrets/auth.json` mount remains only as input to upstream's one-time
-v1 database migration; it is not the active v2 credential store.
+`knowledge/secrets/auth.json` is mounted at OpenCode's data-directory `auth.json`.
+OpenCode imports it once, natively, only while migrating a database created before
+its legacy-credential migration; a new database ignores it. fhold never converts
+it, and it is not the active v2 credential store.
 
 ## Assistant
 
@@ -164,7 +166,7 @@ bypasses Guardian.
 |---|---|---|
 | `data/assistant` | `/home/fhold` | read/write |
 | `config/assistant` | `/home/fhold/.config/opencode` | read/write native user settings/plugins directory; supports atomic editor saves |
-| `knowledge/secrets/auth.json` | Legacy OpenCode auth path | v1 migration input only |
+| `knowledge/secrets/auth.json` | `/home/fhold/.local/share/opencode/auth.json` | Legacy file read only by OpenCode's own one-time migration |
 | `system/assistant` | `/etc/opencode` | read-only |
 | `system/codex/config.toml` | `/etc/codex/config.toml` | read-only individual file |
 | `system/codex/requirements.toml` | `/etc/codex/requirements.toml` | read-only individual file |
@@ -199,13 +201,6 @@ root-owned read-only AKM skills source, shared with the native fhold plugins.
 Custom AKM configuration is preserved; it does not prevent the built-in skills
 from being available through the native harness integrations.
 
-`FH_KEEPALIVE_URL` optionally enables conditional HTTP heartbeats using the
-existing scheduler, including when user schedules are disabled. Authentication
-is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
-`FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
-See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
-approval, custom deployment configuration and the best-effort boundary.
-
 Invalid optional settings log their names and degrade only the affected feature.
 Malformed scheduler intent disables scheduling; numeric recovery/shutdown tuning
 falls back to its documented defaults. Core health remains successful when the
@@ -214,53 +209,13 @@ warnings into CLI status and Admin; unavailable diagnostics never restart the
 container. Authentication, safe restore and actual exclusive ownership remain
 required.
 
-### Scoped workload environment (standalone deployments)
-
-An external deployer can optionally supply `FH_OPENCODE_ENV_MAP`, a comma-separated
-list of exact `SOURCE=ALIAS` environment **names**, for example:
-
-```text
-FH_OPENCODE_ENV_MAP=WORKLOAD_IDENTITY_ENDPOINT=MY_PLUGIN_ENDPOINT,WORKLOAD_IDENTITY_HEADER=MY_PLUGIN_HEADER
-```
-
-The platform supplies the source values separately. fhold reads them at startup,
-removes the configured sources from native writer launch environments and exports
-only the aliases into OpenCode. Existing identity/recovery filtering remains in
-place. Aliases are not supplied to the scheduler or Claude/Codex supervisors, and
-the map itself is removed from writer environments. Unmapped variables retain
-their existing behavior. There is no wildcard forwarding, cloud API, startup
-installer or additional service. The default is off (unset/empty).
-
-Use the plugin's own established alias names. Names must be ordinary environment
-identifiers; destinations must be unique, unset and distinct from sources.
-Mappings cannot replace native/fhold settings or process controls such as `PATH`,
-`HOME`, `LD_PRELOAD` or `NODE_OPTIONS`, nor restore the filtered identity names.
-An invalid map disables this optional feature with a degraded-health warning;
-the agent continues. A missing source skips only that alias with a warning.
-Values are never written to settings, diagnostic files or launch arguments.
-Changing the map requires a normal restart; fhold does not refresh credentials
-or implement the workload plugin's token exchange.
-
-**This is launch-environment scoping, not a security sandbox.** OpenCode tools
-and child processes inherit its aliases. Scheduled requests use the same server,
-so its plugins can consume them during scheduled work even though the scheduler
-process has no aliases. A plugin needing per-session restrictions must enforce
-them itself. Same-UID processes and trusted native agents are not isolated from
-container credentials by environment filtering. Choose the workload's actual
-permissions accordingly. The managed Compose template keeps its existing defaults;
-operator overlays remain operator-owned. `fhold doctor` can report differences
-from the recommended environment without blocking lifecycle operations. This
-setting targets externally provisioned containers, not a new Admin surface.
-
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at
 `/recovery`. The destination must be outside the instance home and cannot be its
 parent; links are refused before saving. Off/Blob mode uses an empty private bind
-placeholder. Existing operator directories are not chmodded. Optional `fhold
-doctor` diagnostics report changes to these mounts, the storage-only secret or
-the recommended recovery shutdown budget; they do not veto lifecycle operations.
-Operators own custom overlays and their effects. The native recovery engine still
+placeholder. Existing operator directories are not chmodded. Operators own
+custom overlays and their effects. The native recovery engine still
 validates checkpoint identity, integrity and ownership. No new service is introduced.
 
 Standalone recovery optionally uses externally supplied
@@ -353,16 +308,18 @@ keyring, platform credential files, and one adapter-specific
 All four managed services:
 
 - run as the resolved non-root UID/GID;
-- enable an init process;
+- run under an init process (the Assistant image entrypoint runs tini; the
+  other services enable Compose `init`);
 - drop all Linux capabilities; and
 - set `no-new-privileges:true`.
 
-Optional `fhold doctor` diagnostics compare the complete managed file plus user
-overlay with recommended boundaries, reporting replaced core images or
-commands, changed mounts, secrets, networks, health commands, logging, runtime
-users or published ports beyond the StackConfig choices, plaintext secret-like environment values, custom
-managed-secret grants or access to `agent_net`, privileged containers, added
-capabilities, host namespaces/devices, and container-runtime mounts. These are
-advisory diagnostics, not start/restart/update policy gates. Operators own custom
+Optional `fhold doctor` diagnostics check the resolved managed file plus user
+overlay only for the shipped security defaults: root users on the product
+services, privileged containers, added capabilities, host network/PID/IPC
+namespaces or devices, container-runtime mounts (such as `docker.sock`) on any
+service, any service other than Assistant and Guardian on `agent_net` (or other
+than Guardian bridging it to `ingress_net`), and Compose secrets that are not
+files inside FH_HOME. These are advisory diagnostics, not start/restart/update policy
+gates. Operators own custom
 overlay behavior. Native Compose parsing, instance targeting and actual recovery
 integrity/ownership checks still apply.

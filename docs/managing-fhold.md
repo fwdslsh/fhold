@@ -74,14 +74,23 @@ fhold update --no-start
 ```
 
 Status/logs inspect without reconciliation or key creation. Explicit start,
-configuration and update reconcile safely. Stop removes containers/networks,
+configuration and update reconcile safely.
+
+Local `status`, `logs`, `connect`, `provider`, `backup`, `restore` and
+`recovery export|preview|import` open the same management session that Admin and
+`--connection` hosts use, so their output is the same JSON. They act only on the
+selected local instance. Following that session contract, local operations need no
+`--confirm`: `--confirm-stopped` still guards full-instance and checkpoint import,
+while `start`, `stop`, `restart` and `update` stay direct local lifecycle commands.
+Remote lifecycle and deployment changes still require `--confirm`. Stop removes containers/networks,
 not durable volumes or user data; there is no purge command. Offline update
 refreshes managed files only and does not upgrade running containers.
 
 A healthy agent can have optional-feature warnings. `fhold status` includes
 those warnings on the running Assistant; Admin Overview shows **Running · needs
-attention** with the affected feature and corrective action. Task reconciliation,
-knowledge hooks and heartbeat requests retry without stopping OpenCode. A stopped
+attention** with the affected feature and corrective action. Knowledge hooks
+retry without stopping OpenCode; a failed boot task sync is reported and
+retried every minute until schedules are installed. A stopped
 optional process needs an explicit restart after correction. Unavailable diagnostics
 are not proof that the agent stopped, or that a provider/client works.
 
@@ -319,9 +328,11 @@ and validates it before import into an empty home and unused independent backup
 destination. If repeating backups are off, export captures once through the same
 engine without changing those settings. Native sign-ins, approvals and task intent
 are retained: stop the original writers and never run both copies together.
-The imported home stays stopped for review. **Other export options** retains
-whole-home preservation and reviewed-content transfer; see
-[checkpoint packages](technical/checkpoint-packages.md) for commands and coverage.
+The imported home stays stopped for review. The CLI uses `fhold recovery export`,
+`recovery preview` and `recovery import`; `backup` and `restore` handle only the
+**Other export options** (`backup` requires `--portable` or `--full`), which retain whole-home preservation and reviewed-content
+transfer. See [checkpoint packages](technical/checkpoint-packages.md) for commands
+and coverage.
 
 CLI and Admin use the same shared backup operations.
 Portable content can export while running; import it after installing a fresh
@@ -395,9 +406,11 @@ Live credential keys, policies and portal-user mappings still take effect
 without a restart; deferring settings does not defer credential revocation.
 Provider sign-in and native provider/model API edits do not restart containers.
 In-place native preference changes do not create a pending-restart alert.
-If provider readiness also
-changes Guardian's moderator configuration, the pending-restart alert lets you
-choose when to apply it; verification does not open a restart prompt.
+Guardian moderates suspicious requests with the Assistant's model. An optional
+`model` in `config/guardian/opencode.json` selects another; Guardian reads it on
+each moderation call, so changes need no restart, and falls back to the
+Assistant's model when that model is unavailable, retrying it after five minutes.
+The `opencode/big-pickle` placeholder seeded by earlier releases counts as not set.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider
@@ -427,9 +440,9 @@ To change or add a service:
 4. **Test response** makes a small, potentially billed, no-tool request to that
    exact model. Endpoint details are saved before this explicit test; a failed
    response does not erase them or imply sign-in was not saved.
-5. **Use this model** explicitly sets the default for new conversations. Existing
-   conversations and clients can retain their own model selection. Testing alone
-   never switches your default or navigates away.
+5. **Use this model** explicitly sets the default for new conversations; a prior
+   test is optional. Existing conversations and clients can retain their own model
+   selection. Testing alone never switches your default or navigates away.
 
 Ollama, LM Studio and llama.cpp must already have a model/API server running.
 The request originates inside Assistant: `localhost` means that container, not
@@ -467,7 +480,7 @@ Task-binding status comes from the same read-only report's native `scheduler`
 field; run `akm doctor` in Assistant when you want binding details, and
 `akm doctor scheduler sync --rebind` to repair them. Doctor does not start a stopped
 Assistant, run an agent/task, apply migrations or write proposals. Legacy
-`knowledge/secrets/auth.json` is migration input, not proof of current sign-in;
+`knowledge/secrets/auth.json` is legacy OpenCode input, not proof of current sign-in;
 connected endpoints can also work without credentials.
 
 AKM configuration and executable availability do not prove successful agent

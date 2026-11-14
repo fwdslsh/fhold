@@ -125,14 +125,24 @@ test('OAuth stays in one selected session and preserves the whole code', async (
 	expect(f.output.join('\n')).not.toContain('code#state');
 	await f.session.close();
 });
+test('a sign-in method can be chosen by its index or its label', async () => {
+	for (const method of ['2', 'Sign in']) {
+		const f = fixture();
+		await f.run(['login', 'example', '--method', method, '--password-file', f.password]);
+		expect(f.calls[1]).toEqual(['start', { provider: 'example', method: 2 }]);
+		await expect(
+			f.run(['login', 'example', '--method', 'missing', '--password-file', f.password])
+		).rejects.toThrow('--method <index|label>');
+		await f.session.close();
+	}
+});
 test('invalid inputs do not wake or mutate the selected agent', async () => {
 	const f = fixture();
 	for (const args of [
 		['list', 'unexpected'],
 		['key', 'example'],
 		['test', '--model', 'missing-provider'],
-		['key', 'example', '--password-file', '-', '--key-file', '-'],
-		['login', 'example', '--method', 'bad']
+		['key', 'example', '--password-file', '-', '--key-file', '-']
 	])
 		await expect(f.run(args)).rejects.toThrow();
 	expect(f.calls).toEqual([]);

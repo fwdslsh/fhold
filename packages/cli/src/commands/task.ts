@@ -2,18 +2,13 @@ import { defineCommand } from 'citty';
 import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { basename, join, relative, resolve, sep } from 'node:path';
 
-import {
-	buildComposeCliArgs,
-	createFholdState,
-	requireInstall,
-	runComposeStreaming
-} from '@fhold/lib';
+import { createFholdState, requireInstall } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-import { runStartAction } from './lifecycle.js';
+import { execAssistant, runStartAction } from './lifecycle.js';
 
 const TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
+/** Reject an invalid id before starting the stack for it. */
 function id(value: unknown): string {
 	const parsed = String(value ?? '');
 	if (!TASK_ID_RE.test(parsed)) {
@@ -26,10 +21,7 @@ async function runTask(args: string[]): Promise<void> {
 	const state = createFholdState();
 	requireInstall(state.homeDir);
 	await runStartAction();
-	await runComposeStreaming(
-		[...buildComposeCliArgs(state), 'exec', '-T', 'assistant', 'fhold-task', ...args],
-		{ envFiles: [`${state.homeDir}/state/stack.env`] }
-	);
+	await execAssistant(state.homeDir, ['-T', 'assistant', 'fhold-task', ...args]);
 }
 
 function positional(args: { _?: unknown[] }, index = 0): unknown {
@@ -39,9 +31,7 @@ function positional(args: { _?: unknown[] }, index = 0): unknown {
 const list = defineCommand({
 	meta: { name: 'list', description: 'List recurring tasks' },
 	args: { json: { type: 'boolean', description: 'print JSON' } },
-	run: defineAction(async ({ args }) =>
-		runTask(['list', ...(args.json ? ['--format', 'json'] : [])])
-	)
+	run: async ({ args }) => runTask(['list', ...(args.json ? ['--format', 'json'] : [])])
 });
 
 const create = defineCommand({
@@ -55,7 +45,7 @@ const create = defineCommand({
 			description: 'native AKM harness (otherwise AKM selects its default)'
 		}
 	},
-	run: defineAction(async ({ args }) =>
+	run: async ({ args }) =>
 		runTask([
 			'create',
 			id(positional(args)),
@@ -65,13 +55,12 @@ const create = defineCommand({
 			String(args.prompt),
 			...(args.harness ? ['--harness', String(args.harness)] : [])
 		])
-	)
 });
 
 const show = defineCommand({
 	meta: { name: 'show', description: 'Show one task definition' },
 	args: { id: { type: 'positional', required: true, description: 'task id or native AKM ref' } },
-	run: defineAction(async ({ args }) => runTask(['show', String(positional(args))]))
+	run: async ({ args }) => runTask(['show', String(positional(args))])
 });
 
 function oneIdCommand(name: string, description: string, localFile = false) {
@@ -84,9 +73,8 @@ function oneIdCommand(name: string, description: string, localFile = false) {
 				description: localFile ? 'task id' : 'task id or native AKM ref'
 			}
 		},
-		run: defineAction(async ({ args }) =>
+		run: async ({ args }) =>
 			runTask([name, localFile ? id(positional(args)) : String(positional(args))])
-		)
 	});
 }
 
@@ -102,13 +90,13 @@ const history = defineCommand({
 		limit: { type: 'string', description: 'maximum history entries' },
 		json: { type: 'boolean', description: 'print JSON' }
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const command = ['history'];
 		if (positional(args)) command.push(String(positional(args)));
 		if (args.limit) command.push('--limit', String(args.limit));
 		if (args.json) command.push('--format', 'json');
 		await runTask(command);
-	})
+	}
 });
 
 const adopt = defineCommand({
@@ -117,7 +105,7 @@ const adopt = defineCommand({
 		description: 'Validate and adopt one staged imported task in paused state'
 	},
 	args: { file: { type: 'positional', required: true, description: 'staged task file' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		const stagedRoot = realpathSync(join(state.homeDir, 'knowledge', 'imported-tasks'));
 		const requested = resolve(String(positional(args) ?? ''));
@@ -130,7 +118,7 @@ const adopt = defineCommand({
 			throw new Error('Task adoption is limited to files directly under knowledge/imported-tasks.');
 		}
 		await runTask(['adopt', `/stash/imported-tasks/${basename(source)}`]);
-	})
+	}
 });
 
 export default defineCommand({

@@ -11,7 +11,7 @@ import {
 	parseStackConfig
 } from '@fhold/lib';
 
-import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
+import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
 import { completeSetup } from './setup.js';
 
 export type InstallOptions = {
@@ -53,14 +53,11 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 		);
 	}
 
-	await seedSkeletonFromEmbedded(
-		(homeDir) =>
-			installHome({
-				homeDir,
-				...(supplied?.ok ? { config: supplied.config } : {})
-			}),
-		state.homeDir
-	);
+	await useEmbeddedSkeleton();
+	await installHome({
+		homeDir: state.homeDir,
+		...(supplied?.ok ? { config: supplied.config } : {})
+	});
 
 	if (options.start) await completeSetup({ homeDir: state.homeDir });
 	const configPath = `${state.homeDir}/state/stack.json`;

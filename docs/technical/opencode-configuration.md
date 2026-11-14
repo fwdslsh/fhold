@@ -54,8 +54,10 @@ that the account works; only the explicit response test verifies inference.
 
 Sign-in uses native integration/authentication/credential APIs. v2 owns active
 credentials in its SQLite database. The old `knowledge/secrets/auth.json` mount
-is retained solely for upstream's one-time v1 database migration.
-Portable provider exports use native credential APIs and exclude MCP credentials.
+is read only by OpenCode's own one-time import when it migrates a database created
+before that import; fhold does not convert it. Portable provider exports use native
+credential APIs and exclude MCP credentials; a home without a native database
+carries the old file unchanged, so sign in again if the target's OpenCode ignores it.
 
 Changing container environment, mounts, ports, the selected preferences filename,
 read-only operator policy or image-baked tools requires normal managed activation.
@@ -79,7 +81,8 @@ expose a previously private server, start it or download its models.
 
 The authenticated native API uses username `opencode` and the file-backed
 server password. The default bind is `127.0.0.1:3810`; fresh setup chooses a
-free port when occupied. `fhold connect opencode` reports the saved address.
+free port when occupied. `fhold connect opencode` reports the running instance's
+published address.
 Other addresses require explicit operator choice.
 
 The OpenCode client connects using `--server <url>`; use the native
@@ -119,8 +122,11 @@ Supercronic and AKM run inside Assistant. Operator task definitions live in
 The native OpenCode harness in `config/akm/config.json` runs
 `opencode run --standalone`, using native provider credentials and configuration.
 
-`fhold-task sync` delegates to `akm doctor scheduler sync --rebind` at startup and every
-60 seconds. Operator-owned harness configuration, task sources and activation
+Startup runs `akm doctor scheduler sync --rebind` once to capture the image's AKM
+runtime. There is no periodic reconciliation: `fhold task create`/`remove` and
+native task enable/disable sync their own changes. A failed boot sync is
+reported as degraded and retried every minute until it succeeds, then stops. `fhold-task sync [flags]`
+passes flags through to the same native command. Operator-owned harness configuration, task sources and activation
 are preserved. Retired launchers need explicit native configuration review;
 fhold does not rewrite them.
 

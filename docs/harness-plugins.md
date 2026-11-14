@@ -1,12 +1,13 @@
-# Built-in harness plugins and keep-alive
+# Built-in harness plugins
 
-Assistant includes the native AKM plugin and a native fhold plugin in OpenCode,
-Claude Code and Codex. The image build runs each vendor's installer against
+Assistant includes the native AKM plugin in OpenCode, Claude Code and Codex
+(OpenCode loads it through fhold's knowledge wrapper), and a native fhold
+plugin carrying the built-in skills in Claude Code and Codex. The image build runs each vendor's installer against
 pinned local marketplaces. Startup seeds the generated caches and missing
 defaults; it never installs software or replaces customized native settings.
 The image uses the installed native plugins as the single hook registration
-path, preserving native trust/consent and user/project hooks. The fhold plugins share one activity reporter and the same
-release-owned skills.
+path, preserving native trust/consent and user/project hooks. The fhold plugins
+carry the same release-owned skills and register no hooks.
 
 The exact AKM CLI and OpenCode plugin pins live in
 `containers/assistant/tools/package.json` and the workspace lockfile. Claude and
@@ -84,117 +85,20 @@ No network install is needed. The fhold plugin version follows the product
 release so a new image never reuses a stale versioned plugin cache. Managed
 handlers always come from the pinned read-only packages in the running image.
 
-## Conditional HTTP heartbeat
-
-Set `FH_KEEPALIVE_URL` to enable keep-alive. Leave it unset to disable it.
-For managed Compose, put the following in `config/stack/custom.compose.yml`,
-using an ingress endpoint backed by this OpenCode instance:
-
-```yaml
-services:
-  assistant:
-    environment:
-      FH_KEEPALIVE_URL: https://agent.example.com/api/info
-      FH_KEEPALIVE_AUTH: opencode
-```
-
-The deployment can interpolate the URL from its provisioned hostname. fhold
-does not guess a cloud provider or assume that a local server address is an
-externally routed ingress. Use the URL that the hosting platform measures for
-activity; a localhost probe does not count as ingress traffic.
-Standalone container deployments use the same environment variables.
-
-For another HTTP endpoint, omit `FH_KEEPALIVE_AUTH` for an unauthenticated GET,
-or mount a private file and set `FH_KEEPALIVE_AUTHORIZATION_FILE` to its path.
-The file contains the complete Authorization header value, such as a bearer
-credential. Do not combine the file with `FH_KEEPALIVE_AUTH=opencode`. Native
-OpenCode credentials are sent to the external heartbeat endpoint only after that
-explicit authentication choice. Native observation uses the same credentials
-only against OpenCode on container loopback.
-Redirects are refused, requests have a five-second timeout, response bodies are
-discarded, and diagnostics contain no URL, credential or conversation content.
-Environment configuration is read on boot; restart after changing it.
-In managed Compose, keep the file private under the existing assistant home
-mount (for example `/home/fhold/.config/keepalive-authorization`); this option
-does not add credential grants or widen the managed mount boundary.
-
-The existing Supercronic scheduler runs a bounded command every 20 seconds.
-No model call or additional service is involved. With `FH_SCHEDULER_ENABLED=0`,
-user tasks stay disabled while configured keep-alive still runs in Supercronic.
-AKM's reconciliation preserves the product's cron entry.
-
-Native plugins report starts and completions for turns, tools and subagents.
-OpenCode's events cover each loaded workspace. Claude's Stop metadata also
-accounts for background tasks and session wakeups. Activity has no age-based
-expiry: hours of thinking or waiting for approval continue to keep the instance
-awake. Markers contain only hashed identifiers and are reset at container boot,
-outside recovered user state.
-
-Normal OpenCode idle eviction preserves its last valid observation. Before
-reporting idle, the existing keep-alive command reads the native loaded-location
-list and verifies an active `fhold.activity` plugin in every listed location.
-This catches plugin removal even when it happened while the location was
-unloaded. Missing/failed plugins, ambiguous or changing location lists and failed
-inventory reads remain unknown. Inventories have one shared five-second deadline
-and never establish coverage themselves. Empty location lists cause no scoped
-requests; inventory reads do not reset native idle TTL. A location evicted between
-listing and inspection may be reloaded by the native scoped inventory request.
-These are conservative snapshots, not an atomic guarantee against concurrent changes.
-
-Any active work or unknown observation sends a heartbeat. All observed work
-must be idle before heartbeats stop. A running process by itself is never
-classified as busy or idle. An enabled native worker with no observed fhold
-hooks is unknown. Codex's existing supervisor makes a bounded read-only check of
-that same running server's native Unix WebSocket every 20 seconds. It verifies
-the enabled and natively approved activity hooks and a complete empty loaded-thread list
-before establishing initial coverage. It creates no session, sends no model request,
-changes no native configuration and starts no second server. If threads already
-exist, normal session hooks must provide coverage. A later native hook approval
-can establish unused coverage without a user turn or a worker restart; lost
-coverage becomes unknown again.
-
-Codex 0.164 does not emit `Stop` when a model request fails. The same check reads
-up to 100 recent turn metadata records per loaded thread, without conversation
-items. A native `failed` status retires only that exact turn's observation.
-Per-turn identifiers prevent an older failure from clearing a newer prompt;
-independent tool and subagent observations remain protected. Missing, malformed,
-unavailable or out-of-window metadata never clears activity. No age timeout,
-synthetic event, native approval or second server is involved. Changed plugin
-definitions still require ordinary native hook review after an update.
+## Optional failures
 
 Before launching a remote worker, its supervisor asks the native CLI for
 the required subscription-account status. A confirmed missing account reports
-`sign-in-needed` and waits without starting that worker, so a fresh unsigned-in
-instance can become idle normally. Native sign-in is rechecked on the existing
-retry interval; the built-in setup skills can restart that supervisor immediately.
-No new switch, auth file, credential inspection or idle marker is required.
-A failed/unrecognized status check is not proof of inactivity: normal native
-startup continues and missing coverage stays unknown. A stopped worker or a
-worker waiting to retry is not active by itself. Stale markers after crashes, other missed completion events, or
-unsupported background-task metadata conservatively keep the instance awake;
-they never expire to make scaling appear successful. Session-end events or a
-new container boot clear the corresponding observations.
+`sign-in-needed` and waits without starting that worker. Native sign-in is
+rechecked on the existing retry interval; the built-in setup skills can restart
+that supervisor immediately. A failed/unrecognized status check does not block
+normal native startup.
 
-Inspect the redacted current decision with `fhold-keepalive status`. The private
-`$FH_RUNTIME_DIR/keepalive-status.json` records the last tick and whether its
-request succeeded. A failed request is retried on the next tick and is logged
-without its target or response. It does not stop the native agent. Invalid
-keep-alive configuration disables only heartbeats for that boot and reports
-an actionable warning. A stopped scheduler or stale/failed heartbeat appears
-in CLI status and Admin Overview without making OpenCode unhealthy.
-
-AKM plugin initialization and hook errors likewise warn without rejecting native
+AKM plugin initialization and hook errors warn without rejecting native
 agent startup or prompts. Failed hooks retry on subsequent events; automatic
 memory capture retries on a later eligible turn. Correct AKM settings and reload
 OpenCode after an initialization failure. Native tool errors and security policy
 remain owned by their respective tools, not silently converted into success.
-
-This is best-effort activity signaling, not an atomic scale-in veto. Transport
-failures or work beginning after termination was committed can interrupt work.
-Native hooks must remain enabled; bypassing or disabling activity hooks defeats
-observation, particularly for manually launched harnesses outside the managed
-supervisors. It cannot detect arbitrary detached OS jobs that the harness no
-longer tracks. Hosts still own cooldown, shutdown grace and recovery policy.
 
 ## Native approval and verification
 
@@ -203,14 +107,13 @@ trust and consent still apply. OpenCode loads the existing image-baked plugins. 
 task permission policies and MCP configuration through the files documented in
 [managed harness configuration](managed-harness-configuration.md).
 
-The existing fhold review helper can also select the built-in fhold plugin:
+The fhold review helper reviews the AKM plugin's native Codex hooks:
 
 ```sh
-fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
+fhold-codex-recall.mjs review
 ```
 
-The default selection remains AKM. The helper reviews native plugin hooks and
-reports `approval-needed`, `ready` or `installed`. Explicit approval is bound to
+It reports `approval-needed`, `ready` or `installed`. Explicit approval is bound to
 the reviewed command hashes and uses version-checked native configuration APIs;
 changed definitions require another native review. It never approves unrelated
 hooks. Account sign-in, hook readiness, native remote consent and a working

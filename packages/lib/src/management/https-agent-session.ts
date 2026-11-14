@@ -1,12 +1,5 @@
 import type { HostingSnapshot } from '../hosting/types.js';
-import {
-	discoverProviderModels,
-	listProviderSettings,
-	removeProviderSetup,
-	saveProviderEndpoint,
-	useProviderModel,
-	type ProviderSettings
-} from '../control-plane/provider-settings.js';
+import { listProviderSettings, type ProviderSettings } from '../control-plane/provider-settings.js';
 import {
 	createHttpsNativeAgentService,
 	httpsNativeAgentAccess,
@@ -16,6 +9,7 @@ import { createNativeManagement } from '../control-plane/native-management.js';
 import type { NativePtyOptions, NativePtySession } from '../control-plane/native-pty.js';
 import type { RemoteProgress } from '../control-plane/remote.js';
 import type { InstanceSessionBindings } from './instance-session.js';
+import { AgentServices } from './agent-services.js';
 import {
 	supportedOperation,
 	unsupportedOperation,
@@ -34,7 +28,6 @@ type Options = {
 	readinessTimeoutMs?: number;
 	recoveryEnvironment?(): Promise<Record<string, string>>;
 };
-type OAuthAttempt = { provider: string; method: number; id: string; runtime: string };
 type ConnectionState =
 	| { state: 'idle' }
 	| { state: 'closed' }
@@ -45,7 +38,6 @@ type ConnectionState =
 			management: ReturnType<typeof createNativeManagement>;
 			route: AbortController;
 			runtime: string;
-			attempt?: OAuthAttempt;
 	  };
 
 /** Native HTTP capabilities over an explicitly acquired, private session route. */
@@ -57,7 +49,12 @@ export function httpsAgentBindings(options: Options): Pick<
 	recoveryInspect: Operation<void, string>;
 } {
 	let connection: ConnectionState = { state: 'idle' };
-	let verifiedModel: { provider: string; model: string } | undefined;
+	const services = new AgentServices({
+		async bind(context, writing) {
+			await bound(context, writing);
+			return assertCurrent(context).management.settings;
+		}
+	});
 	let remote:
 		| {
 				session?: NativePtySession;
@@ -90,7 +87,7 @@ export function httpsAgentBindings(options: Options): Pick<
 		if (connection.state === 'connected' || connection.state === 'connecting')
 			connection.route.abort();
 		connection = { state: 'idle' };
-		verifiedModel = undefined;
+		services.reset();
 		remote = undefined;
 		access =
 			phase === 'connecting'
@@ -196,6 +193,8 @@ export function httpsAgentBindings(options: Options): Pick<
 		models = known(selectedModel ?? {});
 		account = known({ signedIn: inventory.some((item) => item.authenticated) });
 		try {
+			// Reuse this bound connection; a second bind could clear it and the
+			// fallback below would then report a stale inventory as current.
 			return await listProviderSettings(assertCurrent(context).management.settings, {
 				signal: context.signal
 			});
@@ -207,6 +206,19 @@ export function httpsAgentBindings(options: Options): Pick<
 	async function management(context: RequestContext, writing = true) {
 		await bound(context, writing);
 		return assertCurrent(context).management;
+	}
+	/** Fail rather than report a result from a connection replaced mid-operation. */
+	function sameConnection<I, O>(
+		run: (input: I, context: RequestContext) => Promise<O>
+	): (input: I, context: RequestContext) => Promise<O> {
+		return async (input, context) => {
+			const selected = assertCurrent(context);
+			const result = await run(input, context);
+			if (connection === selected) return result;
+			// Drop any attempt or verification recorded against the replaced route.
+			services.reset();
+			throw new Error('The agent connection was closed.');
+		};
 	}
 	const agent: Partial<AgentOperations> = {
 		browserLink: connected(async (_input, context) =>
@@ -287,87 +299,27 @@ export function httpsAgentBindings(options: Options): Pick<
 		),
 		providers: connected(async (_input, context) => providers(context)),
 		modelInventory: connected(async (_input, context) => (await providers(context)).providers),
-		setKey: connected(async (input, context) => {
-			verifiedModel = undefined;
-			await (await bound(context)).setProviderApiKey(input.provider, input.key, {
-				signal: context.signal
-			});
-		}),
-		removeProvider: connected(async (input, context) => {
-			verifiedModel = undefined;
-			if (input.endpoint)
-				return removeProviderSetup((await management(context)).settings, input.provider, {
-					endpoint: true,
-					signal: context.signal
-				});
-			await (await bound(context)).removeProviderAuth(input.provider, { signal: context.signal });
-			return providers(context);
-		}),
-		oauthStart: connected(async (input, context) => {
-			verifiedModel = undefined;
-			const selected = await bound(context);
-			const result = await selected.beginProviderOAuth(input.provider, input.method, input.inputs, {
-				signal: context.signal
-			});
-			if (connection.state !== 'connected' || connection.service !== selected)
-				throw new Error('The agent connection closed during sign-in.');
-			connection.attempt = {
-				provider: input.provider,
-				method: input.method,
-				id: result.attemptID,
-				runtime: connection.runtime
-			};
-			return result;
-		}),
-		oauthFinish: connected(async (input, context) => {
-			const selected = await bound(context);
-			const current = assertCurrent(context);
-			const pending = current.attempt;
-			if (
-				!pending ||
-				pending.provider !== input.provider ||
-				pending.method !== input.method ||
-				pending.runtime !== current.runtime
-			)
-				throw new Error('Start sign-in for this account in the current agent connection first.');
-			// Completion may consume the native code even if its response is lost.
-			current.attempt = undefined;
-			await selected.completeProviderOAuth(pending.provider, pending.id, input.code, {
-				signal: context.signal
-			});
-		}),
-		readiness: connected(async (input, context) => {
-			const selected = await bound(context);
-			const result = await selected.testReadiness({
-				provider: input.provider,
-				model: input.model,
-				signal: context.signal
-			});
-			if (connection.state !== 'connected' || connection.service !== selected)
-				throw new Error('The agent connection closed during the test.');
-			readiness = known({ ready: result.ok, ...(!result.ok ? { detail: result.error } : {}) });
-			verifiedModel =
-				result.ok && result.provider && result.model
-					? { provider: result.provider, model: result.model }
-					: undefined;
-			return result;
-		}),
-		selectModel: connected(async (input, context) => {
-			if (verifiedModel?.provider !== input.provider || verifiedModel.model !== input.model)
-				throw new Error('Test this model before using it for your agent.');
-			return useProviderModel((await management(context)).settings, input.provider, input.model, {
-				signal: context.signal
-			});
-		}),
-		saveEndpoint: connected(async (input, context) => {
-			verifiedModel = undefined;
-			return saveProviderEndpoint((await management(context)).settings, input, {
-				signal: context.signal
-			});
-		}),
-		discoverModels: connected(async (input, context) =>
-			discoverProviderModels((await management(context)).settings, input)
+		setKey: connected(sameConnection((input, context) => services.setKey(input, context))),
+		removeProvider: connected(
+			sameConnection(async (input, context) => {
+				const result = await services.remove(input, context);
+				// Refresh the account and model observations after a sign-out.
+				await providers(context).catch(() => undefined);
+				return result;
+			})
 		),
+		oauthStart: connected(sameConnection((input, context) => services.oauthStart(input, context))),
+		oauthFinish: connected(
+			sameConnection((input, context) => services.oauthFinish(input, context))
+		),
+		readiness: connected(async (input, context) => {
+			const result = await sameConnection(services.readiness.bind(services))(input, context);
+			readiness = known({ ready: result.ok, ...(!result.ok ? { detail: result.error } : {}) });
+			return result;
+		}),
+		selectModel: connected(sameConnection((input, context) => services.use(input, context))),
+		saveEndpoint: connected(sameConnection((input, context) => services.endpoint(input, context))),
+		discoverModels: connected(sameConnection((input, context) => services.models(input, context))),
 		remote: connected(async (input, context) => {
 			if (!['claude', 'codex'].includes(input.tool)) throw new Error('Choose claude or codex.');
 			if (input.action === 'disable')
@@ -515,6 +467,7 @@ export function httpsAgentBindings(options: Options): Pick<
 		inspectApplication: async () => ({ agent: { access, account, models, readiness } }),
 		async close() {
 			clearConnection('The native agent connection is closed.');
+			services.close();
 			connection = { state: 'closed' };
 		}
 	};

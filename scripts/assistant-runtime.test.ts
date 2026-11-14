@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe('Assistant readiness and optional-feature degradation', () => {
-	it('keeps a usable authenticated agent healthy when scheduling or reconciliation fails', async () => {
+	it('keeps a usable authenticated agent healthy when scheduling fails', async () => {
 		const root = home();
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
 		const server = Bun.serve({
@@ -43,7 +43,6 @@ describe('Assistant readiness and optional-feature degradation', () => {
 					FH_RUNTIME_DIR: root,
 					FH_SCHEDULER_ENABLED: '1',
 					FH_RECOVERY_URL: '',
-					FH_KEEPALIVE_URL: '',
 					FH_CODEX_REMOTE: '0',
 					FH_CLAUDE_REMOTE: '0',
 					OPENCODE_PORT: String(server.port),
@@ -62,21 +61,22 @@ describe('Assistant readiness and optional-feature degradation', () => {
 		};
 		try {
 			expect((await run()).exitCode).toBe(1);
-			for (const child of ['assistant', 'scheduler', 'reconciliation'])
-				writeFileSync(join(root, `${child}.pid`), String(process.pid));
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) - 181));
-			const stale = await run();
-			expect(stale.exitCode).toBe(0);
-			expect(stale.output).toContain('degraded: Task reconciliation');
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000)));
+			writeFileSync(join(root, 'assistant.pid'), String(process.pid));
 			writeFileSync(join(root, 'scheduler.pid'), '999999999');
 			const dead = await run();
 			expect(dead.exitCode).toBe(0);
 			expect(dead.output).toContain('degraded: Scheduled tasks');
 			writeFileSync(join(root, 'scheduler.pid'), String(process.pid));
 			expect(await run()).toEqual({ exitCode: 0, output: '' });
-			writeFileSync(join(root, 'tasks-synced'), String(Math.floor(Date.now() / 1000) + 3600));
-			expect((await run()).exitCode).toBe(0);
+			// Every degraded diagnostic is reported, in a stable order.
+			writeFileSync(join(root, 'degraded-akm-assets'), 'asset warning');
+			writeFileSync(join(root, 'degraded-akm-index'), 'index warning');
+			expect(await run()).toEqual({
+				exitCode: 0,
+				output: 'fhold: degraded: asset warning\nfhold: degraded: index warning\n'
+			});
+			rmSync(join(root, 'degraded-akm-assets'));
+			rmSync(join(root, 'degraded-akm-index'));
 			writeFileSync(join(root, 'assistant.pid'), '999999999');
 			expect((await run()).exitCode).not.toBe(0);
 		} finally {
@@ -207,8 +207,9 @@ describe('published AKM scheduler compatibility', () => {
 				stderr: 'pipe',
 				timeout: 30000
 			});
-		const keepalive = '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick';
-		writeFileSync(env.FH_TEST_CRONTAB, `${keepalive}\n`);
+		// AKM's native crontab sync preserves the entrypoint's environment header.
+		const header = '# fhold managed environment\nSHELL=/bin/bash';
+		writeFileSync(env.FH_TEST_CRONTAB, `${header}\n`);
 		const created = run(
 			'create',
 			'published-check',
@@ -219,6 +220,14 @@ describe('published AKM scheduler compatibility', () => {
 		);
 		expect(new TextDecoder().decode(created.stderr)).not.toContain('error');
 		expect(created.exitCode).toBe(0);
+		// AKM reads never build the index and akm import --type task does not
+		// index the file it writes; listing shows tasks as of the last build.
+		expect(
+			Bun.spawnSync(['akm', 'index', '--skip-if-locked', '--format', 'json', '-q'], {
+				env,
+				timeout: 30000
+			}).exitCode
+		).toBe(0);
 		const listed = run('list', '--format', 'json');
 		expect(listed.stderr.toString()).not.toContain('error');
 		expect(listed.exitCode).toBe(0);
@@ -293,7 +302,7 @@ describe('published AKM scheduler compatibility', () => {
 		expect(run('remove', 'published-check').exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(configFile, 'utf8')).scheduler.enabled).toEqual([]);
 		expect(existsSync(join(knowledge, 'tasks', 'published-check.yml'))).toBe(false);
-		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(keepalive);
+		expect(readFileSync(env.FH_TEST_CRONTAB, 'utf8')).toContain(header);
 		// Native writes may target a different bundle from unqualified reads.
 		// Creation must activate the imported ref, leaving the default untouched.
 		const writeBundle = join(root, 'write-bundle');

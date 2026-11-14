@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import {
 	chmodSync,
 	existsSync,
@@ -28,7 +28,6 @@ import {
 import { main } from '../main.js';
 import { diagnoseStack } from './doctor.js';
 import { bootstrapInstall } from './install.js';
-import { readStatus } from './lifecycle.js';
 import { updateStack } from './update.js';
 
 const roots: string[] = [];
@@ -61,11 +60,11 @@ function fixture(): string {
 }
 
 describe('operational command wiring', () => {
-	it('reports customized Compose as advisory without failing an otherwise healthy doctor result', async () => {
+	it('reports a weakened Compose security default as advisory without failing an otherwise healthy doctor result', async () => {
 		const root = fixture();
 		const home = await install(root);
 		markInstalled(home);
-		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n');
+		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n    cap_add: [SYS_ADMIN]\n');
 		const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
 		if (!resolved.ok) throw new Error(resolved.stderr);
 		const binary = join(root, 'docker');
@@ -74,8 +73,8 @@ describe('operational command wiring', () => {
 		const diagnosis = await diagnoseStack();
 		expect(diagnosis.ok).toBe(true);
 		expect(diagnosis.checks.filter((check) => !check.ok && check.status !== 'not-checked')).toEqual([{
-			name: 'managed Compose recommendations', ok: false, advisory: true,
-			detail: 'service assistant has unsupported environment key OPERATOR_SETTING'
+			name: 'Compose security defaults', ok: false, advisory: true,
+			detail: 'service assistant may not add capabilities'
 		}]);
 	});
 	it('enables Guardian and updates managed files without a running Docker daemon', async () => {
@@ -217,11 +216,17 @@ if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'te
 		const fakeDocker = join(root, 'docker');
 		writeFileSync(
 			fakeDocker,
-			'#!/bin/sh\ncase " $* " in *" ps --format json "*) exit 0;; esac\nexit 1\n'
+			'#!/bin/sh\ncase " $* " in *" ps -a --format json "*) exit 0;; esac\nexit 1\n'
 		);
 		chmodSync(fakeDocker, 0o755);
 		process.env.FH_DOCKER_BIN = fakeDocker;
-		const status = await readStatus();
-		expect(status.services).toEqual([]);
+		const output = spyOn(console, 'log').mockImplementation(() => {});
+		try {
+			await main(['status']);
+			const status = JSON.parse(String(output.mock.calls.at(-1)?.[0]));
+			expect(status.services).toMatchObject({ state: 'known', value: [] });
+		} finally {
+			output.mockRestore();
+		}
 	});
 });

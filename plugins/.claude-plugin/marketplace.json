@@ -5,7 +5,7 @@
 		{
 			"name": "fhold",
 			"source": "./fhold",
-			"description": "fhold runtime skills and conditional keep-alive"
+			"description": "fhold runtime skills"
 		}
 	]
 }

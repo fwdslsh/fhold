@@ -1,8 +1,6 @@
 import { applyRestore, planRestore } from '../control-plane/restore.js';
 import { classifyInstall, markInstalled } from '../control-plane/state.js';
-import { configureGuardianModeratorModel } from '../control-plane/opencode.js';
 import { mutateStack } from '../control-plane/operations.js';
-import type { AssistantReadiness } from '../control-plane/native-agent.js';
 import { createBackup } from '../control-plane/backup.js';
 import { installHome } from '../control-plane/install.js';
 import {
@@ -33,14 +31,8 @@ import type { HostingActionEffect } from '../hosting/types.js';
 import type { StackAction } from './types.js';
 
 /** Host application completion is separate from the native agent verification. */
-export async function completeInstanceSetup(
-	homeDir: string,
-	readiness: Extract<AssistantReadiness, { ok: true }>
-): Promise<void> {
-	mutateStack(homeDir, () => {
-		configureGuardianModeratorModel(homeDir, readiness.provider, readiness.model);
-		markInstalled(homeDir);
-	});
+export async function completeInstanceSetup(homeDir: string): Promise<void> {
+	mutateStack(homeDir, () => markInstalled(homeDir));
 }
 
 export function interruptionPrompt(action: unknown, effect?: HostingActionEffect) {

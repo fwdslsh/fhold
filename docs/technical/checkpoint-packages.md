@@ -6,16 +6,17 @@ persistent disk and a replaceable container should not need different backup
 settings or competing Assistant capture implementations.
 
 Directory packages, bounded preview and same-Assistant empty-home import are
-implemented. Local `fhold backup` defaults to a checkpoint package. With automatic
-backups enabled it exports the last accepted generation; with backups off it
-captures once through the same native engine and a temporary local destination.
-No recurring setting or configured source authority changes.
+implemented through `fhold recovery export`, `recovery preview` and `recovery
+import`; `backup` and `restore` no longer accept checkpoint packages. With
+automatic backups enabled, export packages the last accepted generation; with
+backups off it captures once through the same native engine and a temporary
+local destination. No recurring setting or configured source authority changes.
 
 ```sh
-fhold --name original backup --to /private/assistant-backup
-fhold --name /absolute/empty-home restore --from /private/assistant-backup --dry-run
-fhold --name /absolute/empty-home restore --from /private/assistant-backup \
-  --apply --confirm-stopped --backups /private/new-independent-backups
+fhold --name original recovery export --to /private/assistant-backup
+fhold recovery preview --from /private/assistant-backup
+fhold recovery import --from /private/assistant-backup --home /absolute/empty-home \
+  --backups /private/new-independent-backups --preview-digest <digest> --confirm-stopped
 ```
 
 Use the matching release's Assistant image. Preview/import can use the CLI's
@@ -23,8 +24,8 @@ pinned image when the original home is gone; the image must already be available
 locally. An existing selected instance supplies its exact resolved image instead.
 Admin exposes **System → Backup and recovery → Export / import Assistant backup**.
 Package and target paths in this form belong to the selected instance host,
-including SSH. SSH CLI uses the same operations through `recovery export`,
-`recovery preview` and `recovery import`; its paths likewise belong to that host.
+including SSH. Local and SSH CLI use the same operations; with `--connection`,
+paths likewise belong to the selected host.
 ACA package transfer to a management-host folder is explicitly unavailable;
 automatic mounted backups and startup restoration remain available.
 
@@ -34,9 +35,9 @@ leaves containers stopped. An interrupted import retains the existing startup
 blocker; it is not silently resumed or overwritten. Review the partial target
 and retry with another empty home. Original writers must remain stopped.
 
-Existing archives remain readable. `backup --portable` retains reviewed-content
-export; `backup --full --confirm-stopped` retains whole-home preservation. Admin
-keeps these under **Other export options**. No live migration or archive
+Existing archives remain readable. `backup --portable` retains
+reviewed-content export; `backup --full --confirm-stopped` retains whole-home
+preservation. Admin keeps these under **Other export options**. No live migration or archive
 conversion runs automatically.
 
 ## Reuse the existing implementation
@@ -143,7 +144,7 @@ External mounts need their own explicit coverage and access review.
 - Retire `createBackup` and its independent file collection/capture in
   `packages/lib/src/control-plane/backup.ts` with checkpoint packaging for normal
   reviewed-content exports once native selective import covers their actual
-  semantics. Normal Assistant exports already use the checkpoint engine.
+  semantics. Assistant exports (`recovery export`) already use the checkpoint engine.
   Retain reviewed-content selection rules as an import-purpose
   operation until native selective transfer covers them.
 - Replace duplicate Assistant payload planning/copying in `restore.ts`

@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
 	capabilities,
 	composeInstanceSession,
@@ -210,7 +213,7 @@ test('shared archive operations receive caller paths and confirmation only in co
 	});
 	await runSessionDataCommand(
 		f.session,
-		['backup', '--to=/local/export', '--full', '--confirm-stopped', '--includeProviderAuth'],
+		['backup', '--to=/local/export', '--full', '--confirm-stopped'],
 		() => {}
 	);
 	expect(calls).toEqual([
@@ -218,7 +221,7 @@ test('shared archive operations receive caller paths and confirmation only in co
 			{
 				destination: '/local/export',
 				full: true,
-				includeProviderAuth: true,
+				includeProviderAuth: false,
 				includeUserEnv: false,
 				includePortalMaps: false,
 				includeOAuth: false
@@ -227,6 +230,37 @@ test('shared archive operations receive caller paths and confirmation only in co
 		]
 	]);
 	expect(f.inspections()).toBe(0);
+});
+
+test('backup requires an explicit export scope before running the data adapter', async () => {
+	const f = fixture();
+	let called = false;
+	f.session.data.backup = supportedOperation(async () => {
+		called = true;
+		throw new Error('must not run');
+	});
+	for (const [args, message] of [
+		[['backup', '--to', '/local/export'], 'Choose --portable'],
+		[['backup', '--to', '/local/export', '--full', '--include-provider-auth'], 'do not combine'],
+		[['backup', '--to', '/local/export', '--portable', '--confirm-stopped'], 'only to --full']
+	] as const)
+		await expect(runSessionDataCommand(f.session, [...args], () => {})).rejects.toThrow(message);
+	expect(called).toBe(false);
+});
+
+test('restore points a checkpoint package to recovery preview and import', async () => {
+	const f = fixture();
+	const directory = mkdtempSync(join(tmpdir(), 'fhold-checkpoint-package-'));
+	writeFileSync(join(directory, 'checkpoint.json'), '{}');
+	let called = false;
+	f.session.data.restoreData = supportedOperation(async () => {
+		called = true;
+		throw new Error('must not run');
+	});
+	await expect(
+		runSessionDataCommand(f.session, ['restore', '--from', directory], () => {})
+	).rejects.toThrow('recovery preview');
+	expect(called).toBe(false);
 });
 
 test('shared full restore applies exactly its preview digest through the same operation', async () => {
@@ -270,7 +304,7 @@ test('shared full restore applies exactly its preview digest through the same op
 test('unsupported operations and malformed archive arguments never run a data adapter', async () => {
 	const f = fixture();
 	await expect(
-		runSessionDataCommand(f.session, ['backup', '--to', '/unused'], () => {})
+		runSessionDataCommand(f.session, ['backup', '--to', '/unused', '--portable'], () => {})
 	).rejects.toThrow('not configured');
 	for (const args of [
 		['backup', '--to', '/unused', '--typo'],

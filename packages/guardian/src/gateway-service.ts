@@ -6,6 +6,7 @@ import type {
 	AssistantSession
 } from './assistant-client.js';
 import { randomBytes } from 'node:crypto';
+import { setTimeout as pause } from 'node:timers/promises';
 import { createAssistantClient } from './assistant-client.js';
 import {
 	createGuardianOwnership,
@@ -166,23 +167,6 @@ function bounded(value: number | undefined, fallback: number, maximum: number): 
 	return Number.isInteger(value) && (value ?? 0) >= 0
 		? Math.min(value ?? fallback, maximum)
 		: fallback;
-}
-
-async function pause(ms: number, signal: AbortSignal): Promise<void> {
-	if (signal.aborted) throw signal.reason;
-	await new Promise<void>((resolve, reject) => {
-		const complete = () => {
-			signal.removeEventListener('abort', abort);
-			resolve();
-		};
-		const timer = setTimeout(complete, ms);
-		const abort = () => {
-			clearTimeout(timer);
-			signal.removeEventListener('abort', abort);
-			reject(signal.reason);
-		};
-		signal.addEventListener('abort', abort, { once: true });
-	});
 }
 
 function publicError(error: unknown): GatewayError {
@@ -566,7 +550,12 @@ export class GatewayService {
 		};
 		await report();
 		while (result.status === 'running' && this.now() < stopAt) {
-			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), signal);
+			// Surface the caller's own abort reason, as other waits here do.
+			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), undefined, {
+				signal
+			}).catch((error) => {
+				throw signal.aborted ? signal.reason : error;
+			});
 			result = await this.inspectJob(job, jobHandle, signal);
 			await report();
 		}
@@ -951,48 +940,5 @@ export class GatewayService {
 			signal
 		);
 		return { accepted: true, kind: 'permission' };
-	}
-
-	async sessionMessages(handle: string, signal: AbortSignal): Promise<PublicMessage[]> {
-		const session = await this.ownedSession(handle, signal);
-		const messages = await this.assistant.listMessages(session.id, MAX_MESSAGES, signal);
-		return this.publicMessages(session.id, messages);
-	}
-
-	async sessionDiff(handle: string, signal: AbortSignal) {
-		const session = await this.ownedSession(handle, signal);
-		return this.publicDiff(await this.assistant.sessionDiff(session.id, signal));
-	}
-
-	catalog() {
-		const commonTools = [
-			'fhold.agent.run',
-			'fhold.job.get',
-			'fhold.job.cancel',
-			'fhold.session.list',
-			'fhold.session.get',
-			'fhold.interaction.respond',
-			'fhold.catalog.get'
-		];
-		return {
-			service: 'fhold-guardian',
-			policy: this.policy,
-			principal: this.username,
-			tools: [
-				...commonTools,
-				...(this.policy === 'read' || this.policy === 'full'
-					? ['fhold.workspace.search', 'fhold.workspace.read']
-					: []),
-				...(this.policy === 'full' ? ['fhold.session.fork', 'fhold.session.delete'] : [])
-			],
-			resources: [
-				'fhold://sessions/{session}/messages',
-				'fhold://sessions/{session}/diff',
-				'fhold://jobs/{job}',
-				...(this.policy === 'read' || this.policy === 'full' ? ['fhold://workspace/{path}'] : [])
-			],
-			prompts: ['fhold.implement', 'fhold.debug', 'fhold.review', 'fhold.explain'],
-			nativeAssistantAccess: 'configured separately; not proxied by Guardian'
-		};
 	}
 }

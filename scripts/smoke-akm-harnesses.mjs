@@ -15,8 +15,7 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withCodexControl, withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
-import { bootstrapCodexActivity } from '/usr/local/bin/fhold-remote.mjs';
+import { withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
 const prompt = 'Find the lean release verification knowledge for the personal agent rollout';
@@ -341,16 +340,6 @@ function recalled(file, harness) {
 			1,
 			'Managed and plugin hooks must not execute the same Claude recall twice'
 		);
-		assert.ok(
-			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/claude.ready')),
-			'Claude did not load its native fhold hooks'
-		);
-		assert.ok(
-			(await import('node:fs'))
-				.readdirSync(join(f.env.FH_RUNTIME_DIR, 'activity'))
-				.some((name) => name.startsWith('claude-')),
-			'Claude did not report the active prompt'
-		);
 	} finally {
 		proc.kill();
 		await proc.exited;
@@ -376,37 +365,9 @@ function recalled(file, harness) {
 	const options = { env: f.env, workdir: f.cwd };
 	// Explicit consent in this disposable fixture uses the same native APIs as
 	// an operator review; image/startup code must never create these approvals.
-	for (const plugin of ['akm@akm-plugins', 'fhold@fhold-plugins']) {
-		const fresh = await withCodexRecall((rpc) => reviewRecall(rpc, plugin), options);
-		assert.equal(fresh.status, 'approval-needed');
-		await withCodexRecall((rpc) => changeRecall(rpc, 'approve', fresh.digest, plugin), options);
-	}
-	// Native SessionStart is thread-scoped. A fresh/restored, unused server
-	// must prove installed hook coverage without a synthetic session or user turn.
-	for (let boot = 0; boot < 2; boot++) {
-		const server = Bun.spawn(['codex', 'app-server', '--listen', 'unix://'], {
-			env: f.env, cwd: f.cwd, stdout: 'ignore', stderr: 'ignore'
-		});
-		try {
-			await waitFor(() => existsSync(join(f.env.CODEX_HOME, 'app-server-control/app-server-control.sock')), 'native Codex control socket');
-			assert.equal(await bootstrapCodexActivity({ env: f.env, alive: () => server.exitCode === null }), true);
-			assert.equal(existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')), false, 'Inspection must not fabricate a SessionStart event');
-			if (boot === 1) {
-				// Only this disposable test creates a thread; the production bootstrap
-				// remains read-only. No prompt, model request or account is involved.
-				await withCodexControl(async (rpc) => {
-					const started = await rpc('thread/start', { cwd: f.cwd, ephemeral: true });
-					assert.equal(typeof started.thread?.id, 'string');
-					const loaded = await rpc('thread/loaded/list', {});
-					assert.ok(loaded.data.includes(started.thread.id), 'Native thread must really be loaded');
-					assert.equal(await bootstrapCodexActivity({ env: f.env, alive: () => server.exitCode === null }), false,
-						'A real loaded native thread cannot prove initial idle coverage');
-				}, { env: f.env });
-			}
-		} finally { server.kill(); await server.exited; }
-	}
-	await assert.rejects(bootstrapCodexActivity({ env: f.env, alive: () => true }), /coverage/,
-		'A missing native server cannot prove coverage, even with a stale live-worker observation');
+	const fresh = await withCodexRecall(reviewRecall, options);
+	assert.equal(fresh.status, 'approval-needed');
+	await withCodexRecall((rpc) => changeRecall(rpc, 'approve', fresh.digest), options);
 	writeFileSync(
 		join(f.env.CODEX_HOME, 'hooks.json'),
 		JSON.stringify({
@@ -435,12 +396,6 @@ function recalled(file, harness) {
 		'Native approved hooks remain ready in a fresh native process'
 	);
 	const inventory = await withCodexRecall((rpc) => rpc('hooks/list', { cwds: ['/work'] }), options);
-	const fholdReview = await withCodexRecall(
-		(rpc) => reviewRecall(rpc, 'fhold@fhold-plugins'),
-		options
-	);
-	assert.equal(fholdReview.status, 'ready');
-	assert.equal(fholdReview.hooks.length, 9);
 	assert.ok(
 		inventory.data[0].hooks.some((h) => !h.isManaged && !h.pluginId),
 		'Operator hooks must coexist with native plugin hooks'
@@ -461,16 +416,6 @@ function recalled(file, harness) {
 	]);
 	try {
 		await waitFor(() => recalled(eventFile, 'codex'), 'Codex recall', [log, eventFile]);
-		assert.ok(
-			existsSync(join(f.env.FH_RUNTIME_DIR, 'activity/codex.ready')),
-			'Codex did not load its native fhold hooks'
-		);
-		assert.ok(
-			(await import('node:fs'))
-				.readdirSync(join(f.env.FH_RUNTIME_DIR, 'activity'))
-				.some((name) => name.startsWith('codex-')),
-			'Codex did not report the active prompt'
-		);
 	} finally {
 		proc.kill();
 		await proc.exited;

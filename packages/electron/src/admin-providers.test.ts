@@ -13,6 +13,8 @@ import {
 } from '../admin/providers.js';
 import { createAdminState, state } from '../admin/state.js';
 
+let operations: Record<string, (input?: never) => unknown> = {};
+
 // Decision/action tests, not evidence of browser layout or live native inference.
 class Control {
 	id = '';
@@ -231,7 +233,15 @@ beforeEach(() => {
 	globalThis.HTMLInputElement = Control as unknown as typeof HTMLInputElement;
 	globalThis.window = { confirm: () => false } as unknown as Window & typeof globalThis;
 	state.currentSnapshot = snapshot();
-	state.api = { snapshot: async () => state.currentSnapshot, providers: async () => settings() };
+	operations = { 'agent.providers': async () => settings() };
+	state.api = {
+		snapshot: async () => state.currentSnapshot,
+		operation: (name: string, input?: unknown) => {
+			const handler = operations[name];
+			if (!handler) throw new Error(`Unexpected operation ${name}`);
+			return handler(input as never);
+		}
+	};
 	bindProvidersEvents();
 	renderProviders(settings());
 });
@@ -278,7 +288,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('lists and refreshes settings without sending an inference request', async () => {
 		let billed = 0;
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			billed++;
 		};
 		await loadProviders(false, true);
@@ -287,13 +297,13 @@ describe('Model-first provider manager', () => {
 	});
 	it('saves a key and shows model choices without testing or switching the default', async () => {
 		const calls: unknown[] = [];
-		state.api.providerKey = async (value: unknown) => {
+		operations['agent.setKey'] = async (value: unknown) => {
 			calls.push(value);
 		};
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			throw new Error('Save must not call readiness');
 		};
-		state.api.providerUse = async () => {
+		operations['agent.selectModel'] = async () => {
 			throw new Error('Save must not choose default');
 		};
 		openProviderEditor('edit', 'current-service');
@@ -306,14 +316,14 @@ describe('Model-first provider manager', () => {
 		expect(state.providerCurrentModel).toEqual(settings().currentModel);
 		expect(control('use-provider-model').disabled).toBe(true);
 	});
-	it('verifies the exact selected model and allows only explicit matching Use', async () => {
+	it('tests the exact selected model and changes the default only on explicit Use', async () => {
 		const calls: unknown[] = [];
 		state.currentView = 'provider';
-		state.api.readiness = async (value: { provider: string; model: string }) => {
+		operations['agent.readiness'] = async (value: { provider: string; model: string }) => {
 			calls.push(value);
 			return { ok: true, ...value, response: 'FH_READY' };
 		};
-		state.api.providerUse = async (value: { provider: string; model: string }) => {
+		operations['agent.selectModel'] = async (value: { provider: string; model: string }) => {
 			calls.push({ use: value });
 			return { ...settings(), currentModel: value };
 		};
@@ -325,22 +335,20 @@ describe('Model-first provider manager', () => {
 		expect(calls).toEqual([{ provider: 'current-service', model: 'first-model' }]);
 		expect(state.providerCurrentModel).toEqual(settings().currentModel);
 		expect(control('use-provider-model').disabled).toBe(false);
+		// Selecting a model does not require a prior response test.
 		control('provider-model').value = 'team/second-model';
 		fire('provider-model', 'change');
-		expect(control('use-provider-model').disabled).toBe(true);
-		fire('use-provider-model');
-		await settled();
+		expect(control('use-provider-model').disabled).toBe(false);
 		expect(calls).toHaveLength(1);
-		fire('test-provider');
-		await settled();
 		fire('use-provider-model');
 		await settled();
-		expect(calls.at(-1)).toEqual({
-			use: { provider: 'current-service', model: 'team/second-model' }
-		});
+		expect(calls).toEqual([
+			{ provider: 'current-service', model: 'first-model' },
+			{ use: { provider: 'current-service', model: 'team/second-model' } }
+		]);
 		expect(state.currentView).toBe('provider');
 	});
-	it('rejects a native result for a different model rather than enabling Use', async () => {
+	it('reports a native result for a different model as unverified', async () => {
 		openProviderEditor('change', 'current-service');
 		control('provider-model').value = 'first-model';
 		fire('provider-model', 'change');
@@ -351,7 +359,6 @@ describe('Model-first provider manager', () => {
 				model: 'other-model'
 			}))
 		).toBe(false);
-		expect(control('use-provider-model').disabled).toBe(true);
 		expect(content(control('provider-status'))).toContain('different model');
 	});
 	it('invalidates passing readiness on failed recheck and never automatically advances management', async () => {
@@ -363,17 +370,17 @@ describe('Model-first provider manager', () => {
 			provider: 'current-service',
 			model: 'first-model'
 		}));
-		expect(control('use-provider-model').disabled).toBe(false);
+		expect(state.lastReadiness.ok).toBe(true);
 		await verifyProvider('Fail', async () => {
 			throw new Error('Test account denied');
 		});
-		expect(control('use-provider-model').disabled).toBe(true);
+		expect(state.lastReadiness.ok).toBe(false);
 		expect(content(control('provider-status'))).toContain('Test account denied');
 		expect(state.currentView).toBe('provider');
 	});
 	it('requires confirmation and sends an exact auth-only removal request', async () => {
 		const calls: unknown[] = [];
-		state.api.providerRemove = async (value: unknown) => {
+		operations['agent.removeProvider'] = async (value: unknown) => {
 			calls.push(value);
 			return settings();
 		};
@@ -389,7 +396,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('does not publish a slow prior-instance inventory into the newly selected home', async () => {
 		let finish!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
@@ -404,7 +411,7 @@ describe('Model-first provider manager', () => {
 	it('retains the same-instance initial catalog when Add then Cancel happens before it resolves', async () => {
 		resetProviderState();
 		let finish!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
@@ -426,7 +433,7 @@ describe('Model-first provider manager', () => {
 			...settings(),
 			currentModel: { provider: 'current-service', model: 'first-model' }
 		};
-		state.api.providers = () => {
+		operations['agent.providers'] = () => {
 			reads++;
 			return reads === 1
 				? new Promise((resolve) => {
@@ -445,7 +452,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('does not overwrite effective returned settings with a late pre-mutation catalog response', async () => {
 		let finishOld!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finishOld = resolve;
 			});
@@ -473,7 +480,7 @@ describe('Model-first provider manager', () => {
 		control('provider-model-id').value = 'team/test-model';
 		fire('provider-model-id', 'input');
 		const provider = state.providerEditor.provider;
-		state.api.providerEndpoint = async () => ({
+		operations['agent.saveEndpoint'] = async () => ({
 			...settings(),
 			providers: [
 				...settings().providers,
@@ -481,7 +488,7 @@ describe('Model-first provider manager', () => {
 			]
 		});
 		let requests = 0;
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			requests++;
 			return { ok: true, provider, model: 'team/test-model' };
 		};
@@ -527,11 +534,11 @@ describe('Model-first provider manager', () => {
 		fire('provider-model-id', 'input');
 		let finish!: (value: unknown) => void;
 		let tests = 0;
-		state.api.providerEndpoint = () =>
+		operations['agent.saveEndpoint'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			tests++;
 			return { ok: true };
 		};

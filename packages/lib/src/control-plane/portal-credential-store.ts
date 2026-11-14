@@ -1,11 +1,10 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readCredentialKey } from './credential-store.js';
-import { writeFileAtomic } from './foundation.js';
+import { asRecord, ensurePrivateDirectory, hasOnlyKeys, writeFileAtomic } from './foundation.js';
 import { isCredentialUsername, type StackConfig } from './stack-config.js';
 
-const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const MAX_MAP_BYTES = 1_048_576;
 const MAX_USER_MAPPINGS = 10_000;
@@ -26,17 +25,6 @@ export type PortalCredentialBundle = {
 	users: Record<string, string>;
 	credentials: Record<string, string>;
 };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
-}
-
-function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-	const allowed = new Set(keys);
-	return Object.keys(value).every((key) => allowed.has(key));
-}
 
 export function isPortalName(value: unknown): value is PortalName {
 	return typeof value === 'string' && PORTAL_NAMES.includes(value as PortalName);
@@ -61,13 +49,6 @@ export function portalCredentialBundleFile(homeDir: string, portal: PortalName):
 
 function emptyMap(): PortalCredentialMap {
 	return { version: PORTAL_CREDENTIAL_MAP_VERSION, users: {} };
-}
-
-function ensurePrivateDirectory(path: string): void {
-	if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: PRIVATE_DIR_MODE });
-	if (!lstatSync(path).isDirectory())
-		throw new Error(`Refusing non-directory portal path: ${path}`);
-	chmodSync(path, PRIVATE_DIR_MODE);
 }
 
 export function parsePortalCredentialMap(portal: PortalName, value: unknown): PortalCredentialMap {
@@ -122,7 +103,7 @@ export function writePortalCredentialMap(
 ): PortalCredentialMap {
 	const parsed = parsePortalCredentialMap(portal, value);
 	const path = portalCredentialMapFile(homeDir, portal);
-	ensurePrivateDirectory(join(homeDir, 'config', 'portal', portal));
+	ensurePrivateDirectory(join(homeDir, 'config', 'portal', portal), 'portal');
 	if (existsSync(path) && !lstatSync(path).isFile()) {
 		throw new Error(`Refusing non-file portal credential map: ${path}`);
 	}
@@ -183,7 +164,7 @@ export function syncPortalCredentialBundles(homeDir: string, config: StackConfig
 	ensurePortalCredentialMaps(homeDir);
 	for (const portal of PORTAL_NAMES) {
 		const directory = portalCredentialBundleDir(homeDir, portal);
-		ensurePrivateDirectory(directory);
+		ensurePrivateDirectory(directory, 'portal');
 		const path = portalCredentialBundleFile(homeDir, portal);
 		if (existsSync(path) && !lstatSync(path).isFile()) {
 			throw new Error(`Refusing non-file portal credential bundle: ${path}`);
