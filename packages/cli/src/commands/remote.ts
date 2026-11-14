@@ -7,19 +7,17 @@ import {
 	isCodexSandbox,
 	remoteBrowserUrls,
 	remoteTool,
-	buildComposeCliArgs,
 	buildComposeOptions,
 	composePs,
 	parseComposePsRows,
 	createFholdState,
 	readStackConfig,
-	requireInstall,
-	runComposeStreaming
+	requireInstall
 } from '@fhold/lib';
 import { reviewCodexRecall, changeCodexRecall } from '@fhold/lib';
 import type { CodexSandbox, CodexRecallReview } from '@fhold/lib';
 
-import { runStartAction } from './lifecycle.js';
+import { execAssistant, runStartAction } from './lifecycle.js';
 
 export function describeRecall(review: CodexRecallReview): string {
 	return (
@@ -334,18 +332,13 @@ function command(action: 'setup' | 'pair' | 'status' | 'logs') {
 					reader.close();
 				}
 			}
-			await runComposeStreaming(
-				[
-					...buildComposeCliArgs(state),
-					'exec',
-					...(action === 'setup' ? [] : ['-T']),
-					'--workdir',
-					'/work',
-					'assistant',
-					...nativeArgs
-				],
-				{ envFiles: [`${state.homeDir}/state/stack.env`] }
-			);
+			await execAssistant(state.homeDir, [
+				...(action === 'setup' ? [] : ['-T']),
+				'--workdir',
+				'/work',
+				'assistant',
+				...nativeArgs
+			]);
 			if (action === 'setup') console.log(`Enable startup when ready: fhold remote enable ${tool}`);
 			if (action === 'pair' || action === 'logs')
 				console.log(

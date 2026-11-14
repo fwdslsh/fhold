@@ -1,21 +1,20 @@
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
 import {
-	buildComposeCliArgs,
 	configureGuardianModeratorModel,
 	createFholdState,
-	ensureDockerReady,
 	listProviders,
 	markInstalled,
+	readStackConfig,
 	removeProviderAuth,
 	requireInstall,
-	runComposeStreaming,
 	setProviderApiKey,
 	testAssistantReadiness,
-	waitForAssistant
+	waitForAssistant,
+	type AssistantReadiness
 } from '@fhold/lib';
 
-import { runStartAction } from './lifecycle.js';
+import { execAssistant, runRestartAction, runStartAction } from './lifecycle.js';
 
 function readKey(path: string): string {
 	const value = readFileSync(path === '-' ? 0 : path, 'utf8').replace(/[\r\n]+$/, '');
@@ -30,27 +29,38 @@ export async function runNativeProviderLogin(options: {
 	method?: string;
 }): Promise<void> {
 	const state = createFholdState(options.homeDir);
-	requireInstall(state.homeDir);
-	const docker = await ensureDockerReady();
-	if (!docker.ok) throw new Error(docker.message);
 	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
-	const args = [...buildComposeCliArgs(state), 'exec', 'assistant', 'opencode', 'auth', 'login'];
+	const args = ['assistant', 'opencode', 'auth', 'login'];
 	if (options.provider) args.push(options.provider);
 	args.push('--server', 'http://127.0.0.1:4096');
 	if (options.method) args.push('--method', options.method);
-	await runComposeStreaming(args, { envFiles: [`${state.homeDir}/state/stack.env`] });
+	await execAssistant(state.homeDir, args);
 }
 
-async function verifyAndComplete(homeDir: string, provider?: string): Promise<void> {
-	const readiness = await testAssistantReadiness(homeDir, provider ? { provider } : {});
+/** Record a verified provider for Guardian moderation and finish installation. */
+export async function completeProviderReadiness(
+	homeDir: string,
+	readiness: AssistantReadiness
+): Promise<Extract<AssistantReadiness, { ok: true }>> {
 	if (!readiness.ok) throw new Error(`Provider readiness failed: ${readiness.error}`);
-	configureGuardianModeratorModel(
+	const moderatorUpdated = configureGuardianModeratorModel(
 		homeDir,
 		readiness.provider,
 		readiness.model
 	);
 	markInstalled(homeDir);
+	const config = readStackConfig(homeDir);
+	if (!config.ok) throw new Error(config.error);
+	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction(homeDir);
+	return readiness;
+}
+
+async function verifyAndComplete(homeDir: string, provider?: string): Promise<void> {
+	const readiness = await completeProviderReadiness(
+		homeDir,
+		await testAssistantReadiness(homeDir, provider ? { provider } : {})
+	);
 	console.log(
 		`Provider ready${readiness.provider ? `: ${readiness.provider}` : ''}${readiness.model ? `/${readiness.model}` : ''}.`
 	);

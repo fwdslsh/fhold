@@ -2,33 +2,15 @@ import { defineCommand } from 'citty';
 import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { basename, join, relative, resolve, sep } from 'node:path';
 
-import {
-	buildComposeCliArgs,
-	createFholdState,
-	requireInstall,
-	runComposeStreaming
-} from '@fhold/lib';
+import { createFholdState, requireInstall } from '@fhold/lib';
 
-import { runStartAction } from './lifecycle.js';
-
-const TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-
-function id(value: unknown): string {
-	const parsed = String(value ?? '');
-	if (!TASK_ID_RE.test(parsed)) {
-		throw new Error('Task id must contain only letters, digits, dot, underscore, or dash.');
-	}
-	return parsed;
-}
+import { execAssistant, runStartAction } from './lifecycle.js';
 
 async function runTask(args: string[]): Promise<void> {
 	const state = createFholdState();
 	requireInstall(state.homeDir);
 	await runStartAction();
-	await runComposeStreaming(
-		[...buildComposeCliArgs(state), 'exec', '-T', 'assistant', 'fhold-task', ...args],
-		{ envFiles: [`${state.homeDir}/state/stack.env`] }
-	);
+	await execAssistant(state.homeDir, ['-T', 'assistant', 'fhold-task', ...args]);
 }
 
 function positional(args: { _?: unknown[] }, index = 0): unknown {
@@ -55,7 +37,7 @@ const create = defineCommand({
 	run: async ({ args }) =>
 		runTask([
 			'create',
-			id(positional(args)),
+			String(positional(args)),
 			'--schedule',
 			String(args.schedule),
 			'--prompt',
@@ -81,7 +63,7 @@ function oneIdCommand(name: string, description: string, localFile = false) {
 			}
 		},
 		run: async ({ args }) =>
-			runTask([name, localFile ? id(positional(args)) : String(positional(args))])
+			runTask([name, String(positional(args))])
 	});
 }
 

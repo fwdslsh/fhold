@@ -4,9 +4,9 @@ import {
 	buildComposeOptions,
 	createFholdState,
 	inspectLocalInstance,
+	localInstanceLogs,
 	operateLocalInstance,
 	resolveFholdHome,
-	requireInstall,
 	runComposeStreaming
 } from '@fhold/lib';
 
@@ -22,12 +22,11 @@ export async function runRestartAction(homeDir?: string): Promise<void> {
 	await operateLocalInstance(resolveFholdHome(homeDir), 'restart');
 }
 
-export async function runLogsAction(): Promise<void> {
-	const state = createFholdState();
-	requireInstall(state.homeDir);
-	const options = buildComposeOptions(state);
-	await runComposeStreaming([...buildComposeCliArgs(state), 'logs', '--tail', '100'], {
-		envFiles: options.envFiles
+/** Run `docker compose exec <execArgs>` in the selected instance's Compose project. */
+export async function execAssistant(homeDir: string, execArgs: string[]): Promise<void> {
+	const state = createFholdState(homeDir);
+	await runComposeStreaming([...buildComposeCliArgs(state), 'exec', ...execArgs], {
+		envFiles: buildComposeOptions(state).envFiles
 	});
 }
 
@@ -58,7 +57,9 @@ export const restartCommand = defineCommand({
 
 export const logsCommand = defineCommand({
 	meta: { name: 'logs', description: 'Print the last 100 service log lines' },
-	run: runLogsAction
+	run: async () => {
+		process.stdout.write(await localInstanceLogs(resolveFholdHome()));
+	}
 });
 
 export const statusCommand = defineCommand({
