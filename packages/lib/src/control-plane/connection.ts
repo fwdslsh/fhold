@@ -9,7 +9,7 @@ import { stateSecretFile } from './foundation.js';
 import { FH_BRIDGE_VERSION } from './release.js';
 
 export type ConnectionDetails = {
-	type: 'opencode' | 'mcp' | 'claude' | 'remote';
+	type: 'opencode' | 'mcp' | 'claude';
 	url: string;
 	username?: string;
 	passwordFile?: string;
@@ -58,13 +58,6 @@ export function connectionDetails(
 			passwordFile: stateSecretFile(homeDir, 'fhold_opencode_password'),
 			...(options.showAssistantPassword ? { password: assistantPassword(homeDir) } : {}),
 			note: 'Trusted native access bypasses Guardian and should remain on loopback or a trusted private network.'
-		};
-	}
-	if (type === 'remote') {
-		return {
-			type,
-			url: 'https://your-public-host.example/mcp',
-			note: 'Publish Guardian through trusted TLS termination and configure Guardian OAuth before adding this URL as a remote connector.'
 		};
 	}
 	const username = options.credential ?? 'owner';

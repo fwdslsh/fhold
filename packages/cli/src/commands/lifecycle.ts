@@ -3,8 +3,6 @@ import {
 	buildComposeCliArgs,
 	buildComposeOptions,
 	createFholdState,
-	inspectLocalInstance,
-	localInstanceLogs,
 	operateLocalInstance,
 	resolveFholdHome,
 	runComposeStreaming
@@ -30,16 +28,6 @@ export async function execAssistant(homeDir: string, execArgs: string[]): Promis
 	});
 }
 
-export async function readStatus(): Promise<Record<string, unknown>> {
-	const snapshot = await inspectLocalInstance(resolveFholdHome());
-	return {
-		homeDir: snapshot.location, config: snapshot.config,
-		pendingRestart: snapshot.pendingRestart,
-		services: snapshot.services.map(row => ({ ...row, service: row.name })),
-		...(snapshot.warnings.length ? { dockerError: snapshot.warnings.join(' ') } : {})
-	};
-}
-
 export const startCommand = defineCommand({
 	meta: { name: 'start', description: 'Start the configured stack' },
 	run: () => runStartAction()
@@ -53,16 +41,4 @@ export const stopCommand = defineCommand({
 export const restartCommand = defineCommand({
 	meta: { name: 'restart', description: 'Recreate the configured stack' },
 	run: () => runRestartAction()
-});
-
-export const logsCommand = defineCommand({
-	meta: { name: 'logs', description: 'Print the last 100 service log lines' },
-	run: async () => {
-		process.stdout.write(await localInstanceLogs(resolveFholdHome()));
-	}
-});
-
-export const statusCommand = defineCommand({
-	meta: { name: 'status', description: 'Show stack intent and container status' },
-	run: async () => console.log(JSON.stringify(await readStatus(), null, 2))
 });

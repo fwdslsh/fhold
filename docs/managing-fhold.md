@@ -74,7 +74,15 @@ fhold update --no-start
 ```
 
 Status/logs inspect without reconciliation or key creation. Explicit start,
-configuration and update reconcile safely. Stop removes containers/networks,
+configuration and update reconcile safely.
+
+Local `status`, `logs`, `connect`, `provider`, `backup`, `restore` and
+`recovery export|preview|import` open the same management session that Admin and
+`--connection` hosts use, so their output is the same JSON. They act only on the
+selected local instance. Following that session contract, local operations need no
+`--confirm`: `--confirm-stopped` still guards full-instance and checkpoint import,
+while `start`, `stop`, `restart` and `update` stay direct local lifecycle commands.
+Remote lifecycle and deployment changes still require `--confirm`. Stop removes containers/networks,
 not durable volumes or user data; there is no purge command. Offline update
 refreshes managed files only and does not upgrade running containers.
 

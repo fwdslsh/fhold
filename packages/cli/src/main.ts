@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import {
 	assistantEndpoint,
 	classifyInstall,
+	LOCAL_CONNECTION,
+	openInstanceSession,
 	readStackConfig,
 	resolveFholdHome,
 	stateSecretFile
@@ -12,6 +14,7 @@ import {
 
 import cliPackage from '../package.json' with { type: 'json' };
 import { instanceArguments, resolveInstanceHome } from './lib/instance.js';
+import { useEmbeddedSkeleton } from './lib/embedded-assets.js';
 import { configureSshHelperDirectory } from '@fhold/lib';
 import { join } from 'node:path';
 
@@ -78,13 +81,9 @@ const subCommands = {
 	hosting: () => import('./commands/hosting.js').then((module) => module.default),
 	install: () => import('./commands/install.js').then((module) => module.default),
 	setup: () => import('./commands/setup.js').then((module) => module.default),
-	provider: () => import('./commands/provider.js').then((module) => module.default),
-	backup: () => import('./commands/backup.js').then((module) => module.default),
 	recovery: () => import('./commands/recovery.js').then((module) => module.default),
 	history: () => import('./commands/history.js').then((module) => module.default),
-	connect: () => import('./commands/connect.js').then((module) => module.default),
 	remote: () => import('./commands/remote.js').then((module) => module.default),
-	restore: () => import('./commands/restore.js').then((module) => module.default),
 	task: () => import('./commands/task.js').then((module) => module.default),
 	update: () => import('./commands/update.js').then((module) => module.default),
 	guardian: () => import('./commands/guardian.js').then((module) => module.default),
@@ -94,10 +93,11 @@ const subCommands = {
 	doctor: () => import('./commands/doctor.js').then((module) => module.default),
 	start: () => import('./commands/lifecycle.js').then((module) => module.startCommand),
 	stop: () => import('./commands/lifecycle.js').then((module) => module.stopCommand),
-	restart: () => import('./commands/lifecycle.js').then((module) => module.restartCommand),
-	logs: () => import('./commands/lifecycle.js').then((module) => module.logsCommand),
-	status: () => import('./commands/lifecycle.js').then((module) => module.statusCommand)
+	restart: () => import('./commands/lifecycle.js').then((module) => module.restartCommand)
 } as const;
+
+/** Local commands that run the same named session operations as hosted instances. */
+const SESSION_COMMANDS = new Set(['provider', 'connect', 'backup', 'restore', 'logs', 'status']);
 
 const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	hosting:
@@ -106,9 +106,9 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 		'fhold console [--revision <name> --replica <name> --container <name>] (select --connection and --name)',
 	install: 'fhold install [--no-start] [--config <stack.json>]',
 	setup:
-		'fhold setup [--provider <id>] [--method <label>] [--claude-remote] [--codex-remote] (hosted native setup: [--model <id>] [--password-file <private-file|->])',
+		'fhold setup [--provider <id>] [--method <index>] [--claude-remote] [--codex-remote] (hosted native setup: [--model <id>] [--password-file <private-file|->])',
 	provider:
-		'fhold provider list | login [provider] [--method <label>] | key <provider> --key-file <path|-> | logout <provider> | test',
+		'fhold provider list | login <provider> [--method <index>] | key <provider> --key-file <path|-> | logout <provider> | test [provider] [--model <id>] (hosted: [--password-file <private-file|->])',
 	backup:
 		'fhold backup --to <empty-directory> [--full --confirm-stopped | [--portable] --include-provider-auth --include-user-env --include-portal-maps --include-oauth] (Assistant checkpoints: recovery export)',
 	recovery:
@@ -116,7 +116,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	history:
 		'fhold history export --from <source-home> --image <source-assistant-image> --to <new-private-archive> [--runtime <resolved-opencode-data-directory>] | restore --from <archive> --directory-map <file> [--archive-interrupted] [--apply --same-instance]',
 	connect:
-		'fhold connect <opencode|mcp|claude|remote> [--credential <username>] [--show-key] [--json]',
+		'fhold connect [opencode|mcp|claude] [--credential <username>] [--show-key] [--show-password] [--json]',
 	remote:
 		'fhold remote enable <codex|claude> [--trust] [--sandbox <workspace-write|read-only|danger-full-access>] [--no-browser] | disable <codex|claude> | recall codex [--status | --approve --review <digest> | --off --review <digest>] | setup <codex|claude> | pair <codex|claude> | status <codex|claude> | logs <codex|claude>',
 	restore:
@@ -135,7 +135,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	start: 'fhold start',
 	stop: 'fhold stop',
 	restart: 'fhold restart',
-	logs: 'fhold logs',
+	logs: 'fhold logs [--tail <lines>]',
 	status: 'fhold status'
 };
 
@@ -173,7 +173,13 @@ export const mainCommand = defineCommand({
 	subCommands
 });
 
-const commandNames = new Set([...Object.keys(subCommands), '--help', '-h', 'help']);
+const commandNames = new Set([
+	...Object.keys(subCommands),
+	...SESSION_COMMANDS,
+	'--help',
+	'-h',
+	'help'
+]);
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
 	const selected = await instanceArguments(argv, mainCommand);
@@ -211,11 +217,29 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		await runHostedCommand(selected.connection, selected.instance, argv);
 		return;
 	}
+	const homeDir = resolveInstanceHome(selected.instance);
 	const previousHome = process.env.FH_HOME;
-	process.env.FH_HOME = resolveInstanceHome(selected.instance);
+	process.env.FH_HOME = homeDir;
 	try {
 		if (argv.length === 0) await autoRun();
-		else await runCommand(mainCommand, { rawArgs: argv });
+		else if (
+			SESSION_COMMANDS.has(argv[0] ?? '') ||
+			(argv[0] === 'recovery' && ['export', 'preview', 'import'].includes(argv[1] ?? ''))
+		) {
+			// The same session handlers as Admin and hosted targets; never another host.
+			if (argv[0] === 'recovery') await useEmbeddedSkeleton();
+			const { runSessionCommand } = await import('./lib/hosting-command.js');
+			const session = openInstanceSession(LOCAL_CONNECTION, {
+				kind: 'local-docker',
+				connectionId: 'local',
+				homeDir
+			});
+			try {
+				await runSessionCommand(session, argv);
+			} finally {
+				await session.close();
+			}
+		} else await runCommand(mainCommand, { rawArgs: argv });
 	} finally {
 		if (previousHome === undefined) delete process.env.FH_HOME;
 		else process.env.FH_HOME = previousHome;

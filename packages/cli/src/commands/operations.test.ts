@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import {
 	chmodSync,
 	existsSync,
@@ -28,7 +28,6 @@ import {
 import { main } from '../main.js';
 import { diagnoseStack } from './doctor.js';
 import { bootstrapInstall } from './install.js';
-import { readStatus } from './lifecycle.js';
 import { updateStack } from './update.js';
 
 const roots: string[] = [];
@@ -217,11 +216,17 @@ if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify({ Id: 'te
 		const fakeDocker = join(root, 'docker');
 		writeFileSync(
 			fakeDocker,
-			'#!/bin/sh\ncase " $* " in *" ps --format json "*) exit 0;; esac\nexit 1\n'
+			'#!/bin/sh\ncase " $* " in *" ps -a --format json "*) exit 0;; esac\nexit 1\n'
 		);
 		chmodSync(fakeDocker, 0o755);
 		process.env.FH_DOCKER_BIN = fakeDocker;
-		const status = await readStatus();
-		expect(status.services).toEqual([]);
+		const output = spyOn(console, 'log').mockImplementation(() => {});
+		try {
+			await main(['status']);
+			const status = JSON.parse(String(output.mock.calls.at(-1)?.[0]));
+			expect(status.services).toMatchObject({ state: 'known', value: [] });
+		} finally {
+			output.mockRestore();
+		}
 	});
 });

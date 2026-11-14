@@ -77,7 +77,7 @@ describe('fhold installation contract', () => {
 		const alias = join(aliasRoot, 'selected-instance');
 		symlinkSync(home, alias, 'dir');
 		const before = inventory(home);
-		run(alias, 'status', '--json');
+		run(alias, 'status');
 		expect(inventory(home)).toEqual(before);
 		run(alias, 'logs');
 		expect(inventory(home)).toEqual(before);

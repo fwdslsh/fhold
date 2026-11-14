@@ -1,11 +1,7 @@
 import { defineCommand } from 'citty';
 import { lstatSync, readFileSync } from 'node:fs';
-import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
 import {
 	directoryRecoveryDestination,
-	exportCheckpointPackage,
-	previewCheckpointPackage,
-	importCheckpointPackage,
 	recoverySnapshot,
 	recoveryStatus,
 	resolveFholdHome,
@@ -205,75 +201,6 @@ const restore = defineCommand({
 	}
 });
 
-const exportPackage = defineCommand({
-	meta: {
-		name: 'export',
-		description:
-			'Export the accepted Assistant checkpoint; capture once with the same engine if automatic backups are off'
-	},
-	args: {
-		to: {
-			type: 'string',
-			required: true,
-			description: 'new or empty private checkpoint package directory'
-		}
-	},
-	async run({ args }) {
-		console.log(
-			JSON.stringify(await exportCheckpointPackage(resolveFholdHome(), String(args.to)), null, 2)
-		);
-	}
-});
-const previewPackage = defineCommand({
-	meta: {
-		name: 'preview',
-		description: 'Validate and inspect a private Assistant checkpoint package without restoring'
-	},
-	args: { from: { type: 'string', required: true, description: 'checkpoint package directory' } },
-	async run({ args }) {
-		console.log(
-			JSON.stringify(await previewCheckpointPackage(resolveFholdHome(), String(args.from)), null, 2)
-		);
-	}
-});
-const importPackage = defineCommand({
-	meta: {
-		name: 'import',
-		description:
-			'Restore the same Assistant checkpoint into an empty home and unused independent backup destination'
-	},
-	args: {
-		from: { type: 'string', required: true, description: 'checkpoint package directory' },
-		home: { type: 'string', required: true, description: 'new empty destination home' },
-		backups: { type: 'string', required: true, description: 'unused private backup directory' },
-		previewDigest: { type: 'string', required: true, description: 'digest from recovery preview' },
-		confirmStopped: {
-			type: 'boolean',
-			description:
-				'confirm original writers remain stopped, private credentials and task intent are retained'
-		}
-	},
-	async run({ args }) {
-		await useEmbeddedSkeleton();
-		console.log(
-			JSON.stringify(
-				await importCheckpointPackage(
-					resolveFholdHome(),
-					{
-						directory: String(args.from),
-						destinationHome: String(args.home),
-						backupDirectory: String(args.backups),
-						previewDigest: String(args.previewDigest)
-					},
-					args.confirmStopped === true
-				),
-				null,
-				2
-			)
-		);
-	}
-});
-
 export default defineCommand({
 	meta: {
 		name: 'recovery',
@@ -287,9 +214,6 @@ export default defineCommand({
 		inspect,
 		status,
 		init,
-		restore,
-		export: exportPackage,
-		preview: previewPackage,
-		import: importPackage
+		restore
 	}
 });

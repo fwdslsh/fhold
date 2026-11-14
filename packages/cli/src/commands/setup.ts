@@ -3,20 +3,20 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import {
 	createFholdState,
+	LOCAL_CONNECTION,
+	openInstanceSession,
 	requireInstall,
-	testAssistantReadiness,
 	waitForAssistant,
 	invokeOperation,
 	type ComposedInstanceSession
 } from '@fhold/lib';
 
 import { runStartAction } from './lifecycle.js';
-import { completeProviderReadiness, runNativeProviderLogin } from './provider.js';
 import { enableRemote } from './remote.js';
 import { runSessionProviderCommand } from '../lib/session-provider-command.js';
 
-/** The same native Connect/Ready steps, without treating a hosted target as a folder. */
-export async function completeHostedSetup(
+/** The native Connect/Ready steps shared by local and hosted instances. */
+export async function completeSessionSetup(
 	session: ComposedInstanceSession,
 	argv: string[],
 	write: (text: string) => void = console.log
@@ -85,28 +85,19 @@ export async function completeSetup(options: {
 	requireInstall(state.homeDir);
 	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
-
-	let readiness = await testAssistantReadiness(state.homeDir);
-	if (!readiness.ok) {
-		const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
-		if (!interactive && !options.provider) {
-			throw new Error(
-				`Provider sign-in is required (${readiness.error}). Run \`fhold provider login <provider>\` in a terminal, or use \`fhold provider key <provider> --key-file <path>\`.`
-			);
-		}
-		console.log(`Provider readiness needs attention: ${readiness.error}`);
-		await runNativeProviderLogin({ ...options, homeDir: state.homeDir });
-		readiness = await testAssistantReadiness(
-			state.homeDir,
-			options.provider ? { provider: options.provider } : {}
-		);
+	const session = openInstanceSession(LOCAL_CONNECTION, {
+		kind: 'local-docker',
+		connectionId: 'local',
+		homeDir: state.homeDir
+	});
+	try {
+		await completeSessionSetup(session, [
+			...(options.provider ? ['--provider', options.provider] : []),
+			...(options.method ? ['--method', options.method] : [])
+		]);
+	} finally {
+		await session.close();
 	}
-
-	const ready = await completeProviderReadiness(state.homeDir, readiness);
-	console.log('fhold setup is complete.');
-	console.log(
-		`Verified a real Assistant response${ready.provider ? ` from ${ready.provider}` : ''}${ready.model ? `/${ready.model}` : ''}.`
-	);
 	if (options.claudeRemote) await enableRemote('claude', { homeDir: state.homeDir });
 	if (options.codexRemote) await enableRemote('codex', { homeDir: state.homeDir });
 }
@@ -117,8 +108,8 @@ export default defineCommand({
 		description: 'Start Assistant, sign in to a provider, and verify readiness'
 	},
 	args: {
-		provider: { type: 'string', description: 'Provider id or name' },
-		method: { type: 'string', description: 'OpenCode login method label' },
+		provider: { type: 'string', description: 'Provider id' },
+		method: { type: 'string', description: 'Numeric OAuth method index from provider list' },
 		'claude-remote': {
 			type: 'boolean',
 			description: 'Guide experimental Claude Remote Control sign-in after provider setup'

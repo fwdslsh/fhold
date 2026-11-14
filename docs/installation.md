@@ -12,6 +12,7 @@ For example, on Linux x64:
 curl -fL -o fhold https://github.com/fwdslsh/fhold/releases/download/0.4.1001/fhold-cli-linux-x64
 chmod +x fhold
 ./fhold install --name personal-agent
+./fhold --name personal-agent provider login <provider-id>
 ./fhold --name personal-agent setup
 ```
 
@@ -42,6 +43,8 @@ docker build --build-arg GUARDIAN_VERSION="$fhold_build_version" --build-arg VCS
 docker build --build-arg PLATFORM_VERSION="$fhold_build_version" --build-arg VCS_REF="$fhold_build_revision" --build-arg BUILD_DATE="$fhold_build_date" -f containers/portal/Dockerfile -t "fhold/fhold-portal:$fhold_build_version" .
 ./packages/cli/dist/fhold-cli --version
 FH_IMAGE_NAMESPACE=fhold ./packages/cli/dist/fhold-cli install --name personal-agent --no-start
+./packages/cli/dist/fhold-cli -n personal-agent start
+./packages/cli/dist/fhold-cli -n personal-agent provider login <provider-id>
 ./packages/cli/dist/fhold-cli -n personal-agent setup
 ```
 
@@ -105,23 +108,27 @@ Foreign/unrelated nonempty folders are refused without adoption.
 The compiled CLI does not automatically load the invoking directory's `.env`
 or `bunfig.toml`; set intended environment variables explicitly in the shell.
 
-Assistant is the only default container. Setup delegates provider sign-in to
-OpenCode and completes only after a real no-tool request succeeds. Normal
+Assistant is the only default container. Setup starts the instance and completes
+only after a real no-tool request to the default model succeeds; sign in first
+with `provider login` or `provider key`, or let `setup --provider <id>` run that
+provider's native browser sign-in when it is not ready. Normal
 provider usage may be billed. OpenCode owns authentication and models; fhold
 does not introduce another provider credential format.
 
 ```bash
+fhold start
 fhold provider list
-fhold provider login
+fhold provider login <provider> [--method <oauth-method-index>]
 fhold provider key <provider> --key-file /private/path/to/key
 fhold provider test
 fhold doctor --readiness
 ```
 
+Provider commands use OpenCode's HTTP API on the running instance, the same
+session Admin and hosted connections use; start the instance first. `login`
+prints the native browser sign-in link and asks for a code only when the method
+needs one. Providers with extra sign-in fields use Admin or OpenCode.
 Use `--key-file -` for standard input. Do not paste keys into command arguments.
-When Guardian is enabled and a verified provider changes its moderator model,
-setup and the provider `login`, `key` and `test` commands restart the stack to
-apply it.
 Native v2 credentials persist in the OpenCode database under
 `data/assistant/.local/share/opencode/`. Portable exports include them only
 with the explicit provider-auth option.

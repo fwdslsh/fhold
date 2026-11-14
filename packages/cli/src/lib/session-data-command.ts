@@ -20,7 +20,7 @@ export async function runSessionDataCommand(
 	};
 	const options: ParseArgsOptionsConfig = {
 		...(action === 'backup'
-			? { to: { type: 'string' as const } }
+			? { to: { type: 'string' as const }, portable: { type: 'boolean' as const } }
 			: {
 					from: { type: 'string' as const },
 					apply: { type: 'boolean' as const },
@@ -49,6 +49,7 @@ export async function runSessionDataCommand(
 	});
 	if (positionals.length) throw new Error(`Unexpected argument for ${action}.`);
 	if (values.apply && values['dry-run']) throw new Error('Choose either --apply or --dry-run.');
+	if (values.full && values.portable) throw new Error('Choose --full or --portable.');
 	const context = { confirmed: values['confirm-stopped'] === true };
 	const included = {
 		includeProviderAuth: values['include-provider-auth'] === true,
