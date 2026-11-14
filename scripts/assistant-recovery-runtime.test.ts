@@ -133,14 +133,9 @@ exit "\${FIXTURE_MIGRATE_EXIT:-0}"`
 		'fhold-task',
 		'printf "sync\\nsync-args %s\\n" "$*" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
 	);
-	stub('fhold-keepalive', 'exit "${FIXTURE_KEEPALIVE_EXIT:-0}"');
 	stub(
 		'curl',
-		`if [ "\${FIXTURE_DELAY_READY:-0}" = 1 ]; then test -e "$FIXTURE_ROOT/native-ready"; fi
-if [[ "\${!#}" = */api/config ]]; then
-  printf 'workspace-init\\n' >>"$EVENTS"
-  exit "\${FIXTURE_WORKSPACE_EXIT:-0}"
-fi`
+		`if [ "\${FIXTURE_DELAY_READY:-0}" = 1 ]; then test -e "$FIXTURE_ROOT/native-ready"; fi`
 	);
 	stub('supercronic', "trap 'exit 0' TERM; while sleep 0.1; do :; done");
 	stub(
@@ -194,7 +189,7 @@ while sleep 0.1; do :; done`
 	if (extra.FIXTURE_STALE_RUNTIME === '1') {
 		const runtime = join(root, 'runtime');
 		mkdirSync(runtime);
-		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-activity']) {
+		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-scheduler']) {
 			writeFileSync(join(runtime, name), 'stale fixture');
 		}
 	}
@@ -598,72 +593,6 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
-	it('a keep-alive initialization failure disables only keep-alive', async () => {
-		const run = fixture({
-			FH_SCHEDULER_ENABLED: '1',
-			FH_KEEPALIVE_URL: 'invalid',
-			FIXTURE_KEEPALIVE_EXIT: '1'
-		});
-		try {
-			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
-			expect(run.child.exitCode).toBeNull();
-			expect(readFileSync(join(run.root, 'runtime/degraded-keepalive'), 'utf8')).toContain(
-				'Correct'
-			);
-			expect(readFileSync(join(run.root, 'crontabs/fhold'), 'utf8')).not.toContain(
-				'fhold-keepalive tick'
-			);
-		} finally {
-			run.child.kill('SIGTERM');
-			await finished(run.child);
-		}
-	});
-	for (const recovery of ['', 'file:///fixture'])
-		it(`initializes native workspace once for unused keepalive with recovery ${Boolean(recovery)}`, async () => {
-			const run = fixture({
-				FH_KEEPALIVE_URL: 'http://synthetic.invalid/tick',
-				FH_RECOVERY_URL: recovery,
-				FIXTURE_DELAY_READY: '1'
-			});
-			try {
-				await until(() => run.events().includes('native'));
-				expect(run.events()).not.toContain('workspace-init');
-				writeFileSync(join(run.root, 'native-ready'), 'ready');
-				await until(() => run.events().includes('workspace-init'));
-				await Bun.sleep(150);
-				expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
-				expect(run.child.exitCode).toBeNull();
-				expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(
-					Boolean(recovery)
-				);
-				// Only the actual native plugin may establish activity coverage.
-				expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
-			} finally {
-				run.child.kill('SIGTERM');
-				await finished(run.child);
-			}
-		});
-	it('failed workspace activation stays conservative without blocking essential recovery', async () => {
-		const run = fixture({
-			FH_KEEPALIVE_URL: 'http://synthetic.invalid/tick',
-			FH_RECOVERY_URL: 'file:///fixture',
-			FIXTURE_WORKSPACE_EXIT: '22'
-		});
-		try {
-			await until(() => existsSync(join(run.root, 'runtime/degraded-activity')));
-			expect(run.child.exitCode).toBeNull();
-			expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(true);
-			expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
-			expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
-			run.child.kill('SIGTERM');
-			expect(await finished(run.child)).toBe(0);
-			expect(run.events()).toContain('final-complete');
-			expect(run.events()).toContain('released');
-		} finally {
-			run.child.kill('SIGTERM');
-			await finished(run.child);
-		}
-	});
 	for (const component of ['scheduler', 'reconciliation'])
 		it(`a stopped ${component} does not stop native sessions or the recovery owner`, async () => {
 			const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
@@ -797,7 +726,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => run.events().includes('native'));
 			expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf('seed'));
-			expect(existsSync(join(run.root, 'runtime/degraded-activity'))).toBe(false);
+			expect(existsSync(join(run.root, 'runtime/degraded-scheduler'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);

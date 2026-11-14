@@ -140,7 +140,6 @@ Review native recall explicitly:
 
 ```sh
 fhold-codex-recall.mjs review
-fhold-codex-recall.mjs review --plugin=fhold@fhold-plugins
 ```
 
 The result reports `approval-needed`, `ready` or `installed`, along with the exact

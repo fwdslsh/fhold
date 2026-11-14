@@ -3,6 +3,7 @@
 // remain operator-owned; no directory sweep or native syntax converter exists.
 export const RETIRED_MANAGED_FILES: Readonly<Record<string, readonly string[]>> = {
 	'system/assistant/agents/memory.md': ['58e03aad55d2899103f43d11c432881adab59d42ea7705f57607f95bb1ff047c'],
+	'system/assistant/plugins/fhold.js': ['123c6dbc51a0906e7a0e2aa2fb90ae6519e99f67d0acec297d6d3daec6e6ed39'],
 	'system/assistant/agents/scheduled.md': [
 		'47873278faa10c8f129662056af27af4e505fce253d3172b52882ba6905d64bc',
 		'167f1135ddeaeda2369c27f316250a16b53217ec99999b3534d59ab777205f91'
@@ -28,7 +29,6 @@ export const MANAGED_FILES = [
 	'system/assistant/agents/remote-read.md',
 	'system/assistant/agents/remote-full.md',
 	'system/assistant/plugins/akm.js',
-	'system/assistant/plugins/fhold.js',
 	'system/assistant/skills/claude-code-login/SKILL.md',
 	'system/assistant/skills/claude-code-login/scripts/login.sh',
 	'system/assistant/skills/claude-code-login/scripts/remote.sh',

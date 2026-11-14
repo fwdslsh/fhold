@@ -339,12 +339,7 @@ write_cron_environment() {
   for name in TZ HOME AKM_CONFIG_DIR AKM_CACHE_DIR AKM_DATA_DIR AKM_STATE_DIR OPENCODE_API_URL OPENCODE_CONFIG_DIR; do
       if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
     done
-  } >"$file" || return
-  if [ "$KEEPALIVE_ENABLED" = 1 ]; then
-    # Supercronic's seven-field format includes seconds. AKM preserves this
-    # product-owned line while reconciling its own marked task blocks.
-    printf '%s\n' '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick' >>"$file" || return
-  fi
+  } >"$file"
 }
 
 sync_tasks() {
@@ -449,12 +444,6 @@ fi
 if ! refresh_native_plugins >"$RUNTIME_DIR/native-plugins.log" 2>&1; then
   mark_degraded native-plugins 'Built-in native plugin refresh needs attention. Inspect native plugin lists and private startup diagnostics; account state and hook consent remain unchanged.'
 fi
-KEEPALIVE_ENABLED=0
-if fhold-keepalive init >/dev/null; then
-  if [ -n "${FH_KEEPALIVE_URL:-}" ]; then KEEPALIVE_ENABLED=1; fi
-else
-  mark_degraded keepalive 'Keep-alive could not initialize. Correct its URL or authorization-file settings and restart; the agent remains available.'
-fi
 
 # AKM reads never build the index. Build or refresh it once per boot, after
 # restore and migration, beside the agent; reads serve what is indexed so far.
@@ -481,9 +470,9 @@ writer_pids+=("$assistant_pid")
 essential_pids+=("$assistant_pid")
 printf '%s\n' "$assistant_pid" >"$RUNTIME_DIR/assistant.pid"
 
-if [ "$SCHEDULER_ENABLED" = 1 ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
+if [ "$SCHEDULER_ENABLED" = 1 ]; then
   if ! start_scheduler; then
-    mark_degraded scheduler 'Scheduling and keep-alive could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
+    mark_degraded scheduler 'Scheduling could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
   fi
 fi
 
@@ -497,7 +486,7 @@ for tool in codex claude; do
   esac
 done
 
-if [ -n "$recovery_pid" ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
+if [ -n "$recovery_pid" ]; then
   # Do not snapshot SQLite while the native server is opening/migrating it.
   # Ownership renewal is already running; this gates only periodic captures,
   # not the server or optional workers. Shutdown stops this waiter as well.
@@ -507,19 +496,7 @@ if [ -n "$recovery_pid" ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
       kill -0 "$assistant_pid" 2>/dev/null || exit 0
       sleep 0.2
     done
-    if [ -n "$recovery_pid" ]; then
-      printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
-    fi
-    # OpenCode 2 loads location plugins lazily. Initialize the ordinary default
-    # workspace once so an unused native worker can establish whole-instance
-    # idle without an operator opening OpenCode first. The plugin itself owns
-    # coverage; a failed request must not fabricate readiness. Never repeat this
-    # request as a health check or keep a naturally evicted workspace loaded.
-    if [ "$KEEPALIVE_ENABLED" = 1 ] && ! curl --max-time 30 -sf --get \
-      --data-urlencode 'location[directory]=/work' -u "opencode:$OPENCODE_SERVER_PASSWORD" \
-      "http://127.0.0.1:$OPENCODE_PORT/api/config" >/dev/null; then
-      mark_degraded activity 'Default workspace activity could not initialize. Keep-alive remains conservative; check native OpenCode configuration and open the workspace normally.'
-    fi
+    printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
   ) &
   writer_pids+=("$!")
 fi

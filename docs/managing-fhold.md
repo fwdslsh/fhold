@@ -80,8 +80,8 @@ refreshes managed files only and does not upgrade running containers.
 
 A healthy agent can have optional-feature warnings. `fhold status` includes
 those warnings on the running Assistant; Admin Overview shows **Running · needs
-attention** with the affected feature and corrective action. Task reconciliation,
-knowledge hooks and heartbeat requests retry without stopping OpenCode. A stopped
+attention** with the affected feature and corrective action. Task reconciliation
+and knowledge hooks retry without stopping OpenCode. A stopped
 optional process needs an explicit restart after correction. Unavailable diagnostics
 are not proof that the agent stopped, or that a provider/client works.
 

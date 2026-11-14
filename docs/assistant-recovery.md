@@ -342,9 +342,9 @@ count as a fresh boot publication.
 
 Core health proves the authenticated agent is usable and, when configured,
 restoration completed with a live recovery owner. Optional task reconciliation,
-scheduler, knowledge and keep-alive failures appear as health-log warnings in
+scheduler and knowledge failures appear as health-log warnings in
 CLI status and Admin Overview. They never trigger a whole-container restart.
-Reconciliation and heartbeat failures retry; a stopped optional process requires
+Reconciliation failures retry; a stopped optional process requires
 corrective action and an explicit restart. Readiness is not provider/client readiness.
 
 The potential loss window includes the timer interval, capture and upload time;

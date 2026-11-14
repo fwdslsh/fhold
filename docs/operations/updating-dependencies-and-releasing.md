@@ -174,7 +174,6 @@ docker build --pull -f containers/portal/Dockerfile \
 bash scripts/smoke-image.sh fhold/assistant:dependency-check assistant
 bash scripts/smoke-image.sh fhold/guardian:dependency-check guardian
 bash scripts/smoke-image.sh fhold/portal:dependency-check portal
-node scripts/smoke-keepalive.mjs fhold/assistant:dependency-check
 node scripts/smoke-workload-environment.mjs fhold/assistant:dependency-check
 node scripts/smoke-managed-policy.mjs fhold/assistant:dependency-check
 docker tag fhold/assistant:dependency-check fhold/fhold-assistant:dependency-check
@@ -330,8 +329,8 @@ their existing local image path; only trusted candidate jobs stage registry
 images. Partial component CI cannot qualify a full release.
 Caches only accelerate builds and never substitute for qualified artifacts.
 
-Essential native security/browser, scheduler/provider, core keep-alive and recovery/
-upgrade checks remain release gates. Extended idle/unload and historical import
+Essential native security/browser, scheduler/provider and recovery/
+upgrade checks remain release gates. Historical import
 cases run weekly or manually through `assistant-endurance.yml`, testing published
 images on both native architectures without rebuilding. Run affected endurance
 cases during development when changing those behaviors. To investigate a released
@@ -339,8 +338,7 @@ image, dispatch that workflow with its immutable version tag; unrelated releases
 do not wait for scheduled endurance work.
 
 Release Assistant suites use three bounded lanes, including independent cache,
-runtime, activity and lifecycle fixtures. The Codex activity observer retains its
-existing checks in its own fixture. Source/image overlap, shared caching and registry
+runtime and lifecycle fixtures. Source/image overlap, shared caching and registry
 promotion reduce repeated work; actual savings depend on cache hits, runner load
 and the affected components. Record measured job timings rather than promising a
 fixed release duration.

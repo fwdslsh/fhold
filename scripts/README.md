@@ -78,12 +78,10 @@ inventory produces a passing timing report. GitHub uploads logs even on failure.
 Cancellation terminates every lane's process group; use a disposable Docker host because
 forced cancellation can interrupt a suite's normal container cleanup.
 
-Add `--endurance` for extended idle/unload and historical import cases in two lanes. The
+Add `--endurance` for historical import cases. The
 weekly/manual `assistant-endurance.yml` runs this profile against published images
 on native x64/ARM64 without rebuilding them. Run affected endurance cases when
 changing that behavior; unrelated releases do not wait for the weekly workflow.
-For keep-alive alone, `node scripts/smoke-keepalive.mjs IMAGE` exercises core native
-activity and real cron ticks; add `--endurance` for extended unload/disable cases.
 
 Release stamping accepts `SCOPE=full`, `tools`, or comma-separated image names
 (`assistant`, `guardian`, `portal`). For example, an AKM-only release uses

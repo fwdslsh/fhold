@@ -199,13 +199,6 @@ root-owned read-only AKM skills source, shared with the native fhold plugins.
 Custom AKM configuration is preserved; it does not prevent the built-in skills
 from being available through the native harness integrations.
 
-`FH_KEEPALIVE_URL` optionally enables conditional HTTP heartbeats using the
-existing scheduler, including when user schedules are disabled. Authentication
-is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
-`FH_KEEPALIVE_AUTHORIZATION_FILE`. URLs and credentials are never logged.
-See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
-approval, custom deployment configuration and the best-effort boundary.
-
 Invalid optional settings log their names and degrade only the affected feature.
 Malformed scheduler intent disables scheduling; numeric recovery/shutdown tuning
 falls back to its documented defaults. Core health remains successful when the

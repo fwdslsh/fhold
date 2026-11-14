@@ -101,10 +101,8 @@ test('suite inventory partitions startup coverage across independent fixtures wi
 	).toEqual([
 		'blob-recovery',
 		'directory-recovery',
-		'keepalive',
 		'native-policy',
 		'providers-guardian-scheduler',
-		'startup-activity',
 		'startup-cache',
 		'startup-lifecycle',
 		'startup-runtime',
@@ -117,7 +115,7 @@ test('suite inventory partitions startup coverage across independent fixtures wi
 			.filter((item) => item.command.includes('scripts/smoke-image.sh'))
 			.map((item) => item.command.at(-1))
 			.sort()
-	).toEqual(['activity', 'cache', 'lifecycle', 'runtime']);
+	).toEqual(['cache', 'lifecycle', 'runtime']);
 	const upgrades = lanes.find((lane) => lane.some((item) => item.name === 'upgrade-source'))!;
 	expect(upgrades.findIndex((item) => item.name === 'upgrade-source')).toBeLessThan(
 		upgrades.findIndex((item) => item.name === 'upgrade-empty')
@@ -129,16 +127,13 @@ test('suite inventory partitions startup coverage across independent fixtures wi
 		suites.find((item) => item.name === 'upgrade-surviving')?.env.FH_RECOVERY_TEST_SURVIVING_HOME
 	).toBe('1');
 	const enduranceLanes = assistantLanes('fixture-image', 'native-image', 'endurance');
-	expect(enduranceLanes).toHaveLength(2);
+	expect(enduranceLanes).toHaveLength(1);
 	const endurance = enduranceLanes.flat();
 	expect(endurance.map((item) => item.name)).toEqual([
 		'history-v1-source',
 		'history-v2-source',
-		'history',
-		'keepalive'
+		'history'
 	]);
-	expect(endurance.find((item) => item.name === 'keepalive')?.command).toContain('--endurance');
-	expect(suites.find((item) => item.name === 'keepalive')?.command).not.toContain('--endurance');
 	expect(endurance.find((item) => item.name === 'history')?.env.FH_HISTORY_V2_SOURCE_IMAGE).toBe(
 		'fwdslsh/fhold-assistant:0.3.261006-beta'
 	);

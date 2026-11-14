@@ -112,12 +112,6 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 	const suite = (name, command, env) => ({ name, command, env });
 	const recovery = { FH_RECOVERY_TEST_IMAGE: image };
 	const source = 'fwdslsh/fhold-assistant:0.3.261006-beta';
-	const keepalive = suite('keepalive', [
-		'node',
-		'scripts/smoke-keepalive.mjs',
-		image,
-		...(profile === 'endurance' ? ['--endurance'] : [])
-	]);
 	if (profile === 'endurance') {
 		const historySource = 'fwdslsh/fhold-assistant:0.1.2610081904-beta.2';
 		return [
@@ -129,8 +123,7 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 					FH_HISTORY_SOURCE_IMAGE: historySource,
 					FH_HISTORY_V2_SOURCE_IMAGE: source
 				})
-			],
-			[keepalive]
+			]
 		];
 	}
 	const smoke = (phase) =>
@@ -146,7 +139,6 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 		],
 		[
 			smoke('cache'),
-			smoke('activity'),
 			suite('blob-recovery', ['node', 'scripts/smoke-blob-recovery.mjs'], recovery)
 		],
 		[
@@ -169,8 +161,7 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 				...recovery,
 				FH_RECOVERY_UPGRADE_FROM_IMAGE: source,
 				FH_RECOVERY_TEST_SURVIVING_HOME: '1'
-			}),
-			keepalive
+			})
 		]
 	];
 }

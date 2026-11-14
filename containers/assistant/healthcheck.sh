@@ -38,12 +38,6 @@ if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ] && [ ! -s "$runtime/degraded-scheduler" ]
     warning 'Task reconciliation is overdue or failing. It will retry; review task definitions, AKM settings and recent logs.'
   fi
 fi
-if [ -n "${FH_KEEPALIVE_URL:-}" ] && [ ! -s "$runtime/degraded-keepalive" ]; then
-  alive scheduler || warning 'Keep-alive is unavailable. Check scheduler logs and restart; the agent is still usable.'
-  if ! fhold-keepalive status >/dev/null; then
-    warning 'Keep-alive needs attention. Review its configuration and recent logs; failed requests retry automatically.'
-  fi
-fi
 for tool in codex claude; do
   variable="FH_${tool^^}_REMOTE"
   if [ "${!variable-1}" = 1 ] && [ ! -s "$runtime/degraded-$tool" ]; then

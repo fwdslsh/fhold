@@ -164,9 +164,6 @@ const DYNAMIC_ENVIRONMENT: Readonly<Record<string, ReadonlySet<string>>> = {
 		'FH_CODEX_REMOTE',
 		'FH_CODEX_SANDBOX',
 		'FH_CLAUDE_REMOTE',
-		'FH_KEEPALIVE_URL',
-		'FH_KEEPALIVE_AUTH',
-		'FH_KEEPALIVE_AUTHORIZATION_FILE',
 		...Object.keys(recoveryEnvironment({ enabled: false, destination: '', instanceId: 'fhold', intervalSeconds: 60, maxUnsavedSeconds: 300, operationTimeoutSeconds: 120, akmIndexCapture: false, akmIndexRestore: false, authentication: 'connection-string', clientId: '' }))
 	]),
 	guardian: new Set([
@@ -382,22 +379,6 @@ function auditCoreEnvironment(
 	if (name === 'assistant') {
 		if (environment.OPENCODE_CONFIG !== `/home/fhold/.config/opencode/${nativePreferencesFile(homeDir)}`)
 			issues.push('Assistant must select its mounted native preferences file.');
-		if (environment.FH_KEEPALIVE_URL) {
-			try {
-				const url = new URL(String(environment.FH_KEEPALIVE_URL));
-				if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash)
-					throw new Error('invalid target');
-			} catch {
-				issues.push(
-					'service assistant keep-alive requires an HTTP(S) URL without inline credentials or a fragment'
-				);
-			}
-		}
-		const keepaliveAuth = environment.FH_KEEPALIVE_AUTH ?? 'none';
-		if (!['none', 'opencode'].includes(String(keepaliveAuth)))
-			issues.push('service assistant keep-alive authentication must be none or opencode');
-		if (environment.FH_KEEPALIVE_AUTHORIZATION_FILE && keepaliveAuth === 'opencode')
-			issues.push('service assistant keep-alive must select only one authentication source');
 		if (!isCodexSandbox(environment.FH_CODEX_SANDBOX))
 			issues.push('service assistant must use a supported Codex sandbox');
 		for (const key of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE']) {

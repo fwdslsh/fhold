@@ -173,31 +173,6 @@ describe('Compose security audit', () => {
 		mount.source = `${home}/workspace/managed-mcp.json`;
 		expect(auditCompose(config, home).length).toBeGreaterThan(0);
 	});
-	it('accepts the generic keep-alive overlay without granting additional secrets or mounts', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://agent.example/api/info',
-			FH_KEEPALIVE_AUTH: 'opencode'
-		});
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_AUTH: 'none',
-			FH_KEEPALIVE_AUTHORIZATION_FILE: '/home/fhold/.config/keepalive-authorization'
-		});
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant.environment, { FH_KEEPALIVE_AUTH: 'opencode' });
-		expect(auditCompose(config, home)).toContain(
-			'service assistant keep-alive must select only one authentication source'
-		);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://user:secret@agent.example/'
-		});
-		expect(auditCompose(config, home)).toContain(
-			'service assistant keep-alive requires an HTTP(S) URL without inline credentials or a fragment'
-		);
-	});
-
 	it('requires native remote startup to match explicit intent, never an overlay override', () => {
 		const home = auditHome();
 		const config = baseConfig(home);

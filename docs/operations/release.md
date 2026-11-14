@@ -505,9 +505,9 @@ cache remains available as a fallback. Cache hits are build acceleration, never
 qualification evidence. Measure successful end-to-end runs before claiming a
 release-time improvement.
 
-Release Assistant tests retain native harness/security, browser, core keep-alive,
-provider/scheduler, directory/blob recovery and upgrade checks. Extended idle/unload
-and historical import cases run in `assistant-endurance.yml` weekly or by manual
+Release Assistant tests retain native harness/security, browser,
+provider/scheduler, directory/blob recovery and upgrade checks. Historical import
+cases run in `assistant-endurance.yml` weekly or by manual
 dispatch against a published image, on native x64/ARM64, without building an image.
 Run these cases before merging changes to their behavior; unrelated dependency
 releases do not wait for the weekly job. Failures still need investigation, not

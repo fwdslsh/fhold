@@ -2,14 +2,11 @@
 // Short-lived stdio client of Codex's native hook/config APIs. No model calls,
 // plugin installation, blanket trust, or independent approval store.
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
 import { remoteEnvironment } from './fhold-remote.mjs';
 
-export function recallReview(value, plugin = 'akm@akm-plugins') {
-	if (!['akm@akm-plugins', 'fhold@fhold-plugins'].includes(plugin))
-		throw new Error('Unsupported built-in plugin.');
+export function recallReview(value) {
 	if (!Array.isArray(value)) throw new Error('Invalid Codex hook inventory.');
-	const hooks = value.filter((h) => h?.pluginId === plugin);
+	const hooks = value.filter((h) => h?.pluginId === 'akm@akm-plugins');
 	if (!hooks.length || hooks.length > 16)
 		throw new Error('Plugin hooks are unavailable. Check the native Codex plugin installation.');
 	const reviewed = hooks
@@ -52,7 +49,7 @@ export function recallReview(value, plugin = 'akm@akm-plugins') {
 	return { status, digest, hooks: reviewed };
 }
 
-export async function reviewRecall(rpc, plugin = 'akm@akm-plugins') {
+export async function reviewRecall(rpc) {
 	const result = await rpc('hooks/list', { cwds: ['/work'] });
 	if (!Array.isArray(result?.data) || result.data.length !== 1)
 		throw new Error('Invalid Codex hook inventory.');
@@ -60,17 +57,17 @@ export async function reviewRecall(rpc, plugin = 'akm@akm-plugins') {
 		throw new Error(
 			'Native Codex reported hook configuration errors. Review its configuration first.'
 		);
-	return recallReview(result.data[0].hooks, plugin);
+	return recallReview(result.data[0].hooks);
 }
 
-export async function changeRecall(rpc, action, digest, plugin = 'akm@akm-plugins') {
+export async function changeRecall(rpc, action, digest) {
 	if (!['approve', 'disable'].includes(action) || !/^[a-f0-9]{64}$/.test(digest))
 		throw new Error('Review the current plugin hooks and explicitly approve your choice first.');
 	const config = await rpc('config/read', { includeLayers: true, cwd: '/work' });
 	const layer = config.layers?.find((l) => l.name?.type === 'user' && l.name.profile === null);
 	if (!layer || typeof layer.version !== 'string')
 		throw new Error('Native Codex user configuration is unavailable.');
-	const review = await reviewRecall(rpc, plugin);
+	const review = await reviewRecall(rpc);
 	if (digest !== review.digest)
 		throw new Error('Plugin hooks changed since review. Review the current definitions again.');
 	const edits = review.hooks.flatMap((h) => {
@@ -85,11 +82,11 @@ export async function changeRecall(rpc, action, digest, plugin = 'akm@akm-plugin
 	const result = await rpc('config/batchWrite', { edits, expectedVersion: layer.version });
 	if (result.overriddenMetadata)
 		throw new Error('Native policy overrides plugin hooks. Review your Codex configuration.');
-	return reviewRecall(rpc, plugin);
+	return reviewRecall(rpc);
 }
 
 // One bounded JSON-RPC session over a native Codex app-server transport.
-async function withCodexRpc(callback, { connect, client, failure, rejected, signal, timeoutMs }) {
+async function withCodexRpc(callback, { connect, client, failure, rejected, timeoutMs }) {
 	const pending = new Map();
 	let serial = 0;
 	let stopped;
@@ -110,7 +107,6 @@ async function withCodexRpc(callback, { connect, client, failure, rejected, sign
 	};
 	transport = connect({ receive, fail });
 	const timer = setTimeout(fail, timeoutMs);
-	signal?.addEventListener('abort', fail, { once: true });
 	const rpc = (method, params) => new Promise((resolve, reject) => {
 		if (stopped) return reject(stopped);
 		const id = ++serial;
@@ -119,14 +115,11 @@ async function withCodexRpc(callback, { connect, client, failure, rejected, sign
 		catch { fail(); }
 	});
 	try {
-		if (signal?.aborted) fail();
-		await transport.ready;
 		await rpc('initialize', { clientInfo: { name: client, version: '1' } });
 		transport.send({ jsonrpc: '2.0', method: 'initialized' });
 		return await callback(rpc);
 	} finally {
 		clearTimeout(timer);
-		signal?.removeEventListener('abort', fail);
 		await transport.close();
 	}
 }
@@ -187,57 +180,11 @@ export function withCodexRecall(
 	});
 }
 
-/** Read-only, bounded connection to the existing vendor server. Bun implements
- * the native WebSocket-over-Unix transport; no second server or proxy is run.
- */
-export async function withCodexControl(callback, { env = process.env, signal, timeoutMs = 8_000 } = {}) {
-	const home = env.CODEX_HOME || (env.HOME && join(env.HOME, '.codex'));
-	if (!home) throw new Error('Codex home is unavailable.');
-	return withCodexRpc(callback, {
-		client: 'fhold-activity-bootstrap',
-		failure: 'Native Codex activity coverage could not be established.',
-		rejected: 'Native Codex rejected the activity inspection.',
-		signal,
-		timeoutMs,
-		connect: ({ receive, fail }) => {
-			const socket = new WebSocket(`ws+unix://${join(home, 'app-server-control', 'app-server-control.sock')}`);
-			let opened;
-			const ready = new Promise((resolve, reject) => { opened = { resolve, reject }; });
-			socket.onopen = () => opened.resolve();
-			socket.onerror = fail;
-			socket.onclose = fail;
-			socket.onmessage = (event) => {
-				try {
-					if (typeof event.data !== 'string' || event.data.length > 1_048_576) throw new Error('Invalid native response.');
-					receive(event.data);
-				} catch { fail(); }
-			};
-			return {
-				ready,
-				send: (message) => socket.send(JSON.stringify(message)),
-				stop: (error) => {
-					opened.reject(error);
-					socket.close();
-				},
-				close: async () => {
-					socket.onclose = null;
-					socket.onerror = null;
-					socket.onmessage = null;
-					socket.close();
-				}
-			};
-		}
-	});
-}
-
 if (import.meta.main) {
 	try {
-		const args = process.argv.slice(2);
-		const selector = args.find((arg) => arg.startsWith('--plugin='));
-		const plugin = selector?.slice('--plugin='.length) ?? 'akm@akm-plugins';
-		const [action = 'review', digest] = args.filter((arg) => arg !== selector);
+		const [action = 'review', digest] = process.argv.slice(2);
 		const result = await withCodexRecall((rpc) =>
-			action === 'review' ? reviewRecall(rpc, plugin) : changeRecall(rpc, action, digest, plugin)
+			action === 'review' ? reviewRecall(rpc) : changeRecall(rpc, action, digest)
 		);
 		console.log(JSON.stringify(result));
 	} catch (error) {

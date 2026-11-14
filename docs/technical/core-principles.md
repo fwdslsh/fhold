@@ -147,7 +147,7 @@ settings to hide a product defect. Fix the owning layer and keep the normal path
 small and maintainable.
 
 Optional failures are logged, isolated and reported as degraded state while the
-agent continues. Scheduling, knowledge hooks, keep-alive, native remote workers
+agent continues. Scheduling, knowledge hooks, native remote workers
 and diagnostics do not become whole-container restart gates. Core readiness is
 the authenticated native API with its required recovery restoration and owner.
 Only an unusable core or unsafe continuation stops startup/writers, including
@@ -490,15 +490,9 @@ Guardian's own authentication and request protections remain unchanged.
   Missing scheduler processes or overdue reconciliation produce actionable
   health-log warnings shown by CLI/Admin; they do not fail core readiness.
   Reconciliation runs in the background and retries without blocking startup.
-- Optional conditional HTTP keep-alive uses native fhold activity hooks and
-  the existing Supercronic process, independently of user task enablement. It
-  has no cloud API authority or work-age expiry. Unknown activity keeps the
-  instance awake; managed hooks must remain enabled. Native supervisors use the
-  installed CLI's account status to wait in `sign-in-needed` before launching an
-  unsigned-in worker. This inactive state permits idle without fabricating native
-  hook observations. Failed status checks and missing signed-in worker coverage
-  remain unknown, not proof of idle. This is best-effort signaling,
-  not a scale-in veto. See [the runtime contract](../harness-plugins.md).
+- Native supervisors use the installed CLI's account status to wait in
+  `sign-in-needed` before launching an unsigned-in worker. See
+  [the runtime contract](../harness-plugins.md).
 - Native AKM plugins own automatic context, learning and reviewable memory
   proposals for native/custom agents. fhold does not filter prompts or implement
   its own extractor. Explicit off choices remain off. Guardian's current
