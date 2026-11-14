@@ -5,7 +5,7 @@ Only a small script surface remains active.
 | Script | Purpose |
 |---|---|
 | `dev-setup.sh` | Materialize an isolated `.dev` home for the stack |
-| `release-version.mjs` | Validate historical UTC versions and 0.4+ MMNN patches, precedence and immutable retry identity |
+| `release-version.mjs` | Validate `X.Y.MMNN` release versions and precedence |
 | `set-version.mjs` | Stamp package/Compose versions using the shared release contract |
 | `bump-release.mjs` | Stamp the complete product release |
 | `smoke-image.sh` | Assert image startup and runtime security boundaries |
@@ -16,7 +16,7 @@ Only a small script surface remains active.
 | `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |
 | `smoke-recovery.mjs` | Real-image directory checkpoints, required/excluded mounts, cold replacement and offline restore |
 | `smoke-blob-recovery.mjs` | Standard Blob transport conformance and native recovery against Azurite or an explicitly scoped live destination |
-| `smoke-admin-artifact.mjs` | Extract and launch a fresh Linux Admin AppImage on its build runner |
+| `smoke-admin-artifact.mjs` | Extract a freshly packaged Admin on its build runner and drive its startup journey through Playwright's Electron support |
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
 | `validate-admin-update-feeds.mjs` | Verify both generated Electron feeds match their exact AppImage version, architecture, size and SHA-512 |

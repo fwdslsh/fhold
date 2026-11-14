@@ -142,7 +142,7 @@ export async function enableRemote(
 			const result = await session.done;
 			if (result.error) throw new Error(result.error);
 			console.log(
-				`\n${tool} remote startup enabled. Pairing details are above; use a supported client and verify a real tool request. To refresh: fhold remote pair ${tool}.`
+				`\n${tool} remote startup enabled. Pairing details are above; use a supported client and verify a real tool request. To refresh: fhold remote ${tool === 'codex' ? 'pair' : 'logs'} ${tool}.`
 			);
 		} finally {
 			reader.off('line', input);
@@ -256,10 +256,10 @@ export function remoteExecArguments(action: string, tool: string): string[] {
 	if (tool !== 'codex' && tool !== 'claude') throw new Error('Choose codex or claude.');
 	if (action === 'setup')
 		return tool === 'codex' ? ['codex', 'login', '--device-auth'] : ['claude'];
-	if (action === 'pair')
-		return tool === 'codex'
-			? ['codex', 'remote-control', 'pair', '--json']
-			: ['fhold-remote', 'claude', 'logs'];
+	if (action === 'pair') {
+		if (tool !== 'codex') throw new Error('Pairing is Codex-only. Use fhold remote logs claude.');
+		return ['codex', 'remote-control', 'pair', '--json'];
+	}
 	if (action === 'status') return ['fhold-remote', tool, 'status'];
 	if (action === 'logs') return ['fhold-remote', tool, 'logs'];
 	throw new Error('Choose setup, pair, status, or logs.');
@@ -271,7 +271,13 @@ function command(action: 'setup' | 'pair' | 'status' | 'logs') {
 			name: action,
 			description: `${action} an experimental vendor-native remote coding agent (not Guardian MCP)`
 		},
-		args: { tool: { type: 'positional', required: true, description: 'codex or claude' } },
+		args: {
+			tool: {
+				type: 'positional',
+				required: true,
+				description: action === 'pair' ? 'codex' : 'codex or claude'
+			}
+		},
 		run: async ({ args }) => {
 			const tool = String(args.tool);
 			const nativeArgs = remoteExecArguments(action, tool);

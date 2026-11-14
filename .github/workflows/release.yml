@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Stamped publication version: 0.3 uses YYMMNN; 0.4+ uses MMNN (for example 0.4.1001-beta)'
+        description: 'Stamped publication version X.Y.MMNN (for example 0.4.1001-beta)'
         required: true
         type: string
       candidate_sha:
@@ -99,7 +99,7 @@ jobs:
             const actual = JSON.parse(readFileSync(manifest, 'utf8')).version;
             if (actual !== version) throw new Error(`${manifest} is ${actual}; expected ${version}`);
           }
-          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nimages=${JSON.stringify(images)}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre?.split('.')[0] ?? 'latest'}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nscope=${scope}\nimages=${JSON.stringify(images)}\nprerelease=${parsed.pre !== null}\nchannel=${parsed.pre ?? 'latest'}\n`);
           NODE
 
       - id: qualification

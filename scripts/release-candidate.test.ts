@@ -28,7 +28,7 @@ const temporary = () => {
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-const identity = { sha: 'a'.repeat(40), version: '0.3.261010-beta', run: 123, attempt: 2 };
+const identity = { sha: 'a'.repeat(40), version: '0.4.1010-beta', run: 123, attempt: 2 };
 const hash = (value: string) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 
 function artifacts(scope = 'full') {
@@ -85,7 +85,7 @@ test('receipt rejects changed bytes, extra files, identity drift and symlinks', 
 	await expect(verify(directory, 'cli-x64', identity)).resolves.toBeDefined();
 	for (const changed of [
 		{ sha: 'b'.repeat(40) },
-		{ version: '0.3.261011-beta' },
+		{ version: '0.4.1011-beta' },
 		{ run: 124 },
 		{ attempt: 3 }
 	])
