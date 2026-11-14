@@ -207,44 +207,6 @@ warnings into CLI status and Admin; unavailable diagnostics never restart the
 container. Authentication, safe restore and actual exclusive ownership remain
 required.
 
-### Scoped workload environment (standalone deployments)
-
-An external deployer can optionally supply `FH_OPENCODE_ENV_MAP`, a comma-separated
-list of exact `SOURCE=ALIAS` environment **names**, for example:
-
-```text
-FH_OPENCODE_ENV_MAP=WORKLOAD_IDENTITY_ENDPOINT=MY_PLUGIN_ENDPOINT,WORKLOAD_IDENTITY_HEADER=MY_PLUGIN_HEADER
-```
-
-The platform supplies the source values separately. fhold reads them at startup,
-removes the configured sources from native writer launch environments and exports
-only the aliases into OpenCode. Existing identity/recovery filtering remains in
-place. Aliases are not supplied to the scheduler or Claude/Codex supervisors, and
-the map itself is removed from writer environments. Unmapped variables retain
-their existing behavior. There is no wildcard forwarding, cloud API, startup
-installer or additional service. The default is off (unset/empty).
-
-Use the plugin's own established alias names. Names must be ordinary environment
-identifiers; destinations must be unique, unset and distinct from sources.
-Mappings cannot replace native/fhold settings or process controls such as `PATH`,
-`HOME`, `LD_PRELOAD` or `NODE_OPTIONS`, nor restore the filtered identity names.
-An invalid map disables this optional feature with a degraded-health warning;
-the agent continues. A missing source skips only that alias with a warning.
-Values are never written to settings, diagnostic files or launch arguments.
-Changing the map requires a normal restart; fhold does not refresh credentials
-or implement the workload plugin's token exchange.
-
-**This is launch-environment scoping, not a security sandbox.** OpenCode tools
-and child processes inherit its aliases. Scheduled requests use the same server,
-so its plugins can consume them during scheduled work even though the scheduler
-process has no aliases. A plugin needing per-session restrictions must enforce
-them itself. Same-UID processes and trusted native agents are not isolated from
-container credentials by environment filtering. Choose the workload's actual
-permissions accordingly. The managed Compose template keeps its existing defaults;
-operator overlays remain operator-owned. `fhold doctor` can report differences
-from the recommended environment without blocking lifecycle operations. This
-setting targets externally provisioned containers, not a new Admin surface.
-
 Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery/include.json`, `data/recovery` read/write at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at

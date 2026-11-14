@@ -254,14 +254,6 @@ existing start/recreate path, while ACA preserves final stopped intent. Failed
 application retains pending state; discarding a draft never reverses already
 saved instance settings. All deployment timezone input uses FH_TIMEZONE; only
 the native ACA template adapter translates it to the image's TZ variable.
-Standalone deployers may opt into exact-name workload environment aliases using
-`FH_OPENCODE_ENV_MAP`. Values are exported only for OpenCode, not persisted,
-logged or passed as command arguments. Original configured names are stripped
-from writer environments; scheduler and native remote-worker launches get no
-aliases. Invalid optional mappings warn without stopping the agent. This is
-process launch scoping, not plugin/tool isolation: OpenCode subprocesses inherit
-aliases and its plugins may use them during scheduled requests. No cloud-specific
-authority, token broker, wrapper or new managed settings layer is introduced.
 
 The managed/seed-once asset allowlists in `packages/lib/src/control-plane/seed-manifest.ts`
 drive CLI, Admin and the standalone Assistant image. Updates replace only release-owned

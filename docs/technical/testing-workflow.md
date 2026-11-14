@@ -117,8 +117,8 @@ cover reconnecting to the same job, lost initial responses, bounded failed
 recovery, partial answers, terminal/native/authentication rejection and explicit
 approval/cancellation without replay. Slack tests preserve native Markdown after
 Stop cleanup and exercise explicit unsupported-block fallback. Assistant launch
-fixtures verify exact environment aliases, ordinary tool-child inheritance,
-clean scheduler/remote launches and optional-error isolation without logging values.
+fixtures verify clean writer launches and optional-error isolation without
+logging values.
 
 Admin's lightweight DOM suite checks CSP, masking, IPC, preview invalidation,
 accessibility decisions and unchanged window size. The rendered E2E checks real
