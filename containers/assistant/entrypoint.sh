@@ -352,7 +352,7 @@ write_cron_environment() {
 }
 
 sync_tasks() {
-  if fhold-task sync >&2; then
+  if fhold-task sync "$@" >&2; then
     date +%s >"$RUNTIME_DIR/tasks-synced"
   else
     rm -f "$RUNTIME_DIR/tasks-synced"
@@ -371,7 +371,9 @@ start_scheduler() {
   writer_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
   if [ "$SCHEDULER_ENABLED" = 1 ]; then
-    setsid env "${writer_env[@]}" bash -c 'sync_tasks || true; while sleep 60; do sync_tasks || true; done' &
+    # Capture the image's AKM runtime once per boot; periodic reconciliation
+    # preserves that binding, as AKM documents for ordinary sync.
+    setsid env "${writer_env[@]}" bash -c 'sync_tasks --rebind || true; while sleep 60; do sync_tasks || true; done' &
     reconciliation_pid=$!
     writer_pids+=("$reconciliation_pid")
     printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
