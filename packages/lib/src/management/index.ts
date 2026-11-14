@@ -3,14 +3,9 @@ export * from './contracts.js';
 export {
 	parseOperationInput,
 	parseRequestContext,
-	type OperationInputMap,
 	type OperationInputName
 } from './operation-input.js';
-export {
-	composeInstanceSession,
-	type ApplicationObservations,
-	type InstanceSessionBindings
-} from './instance-session.js';
+export { composeInstanceSession } from './instance-session.js';
 export * from './domain.js';
 export * from '../control-plane/native-agent.js';
 export { serveManagementSession } from './session.js';
