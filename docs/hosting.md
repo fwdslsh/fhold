@@ -39,7 +39,7 @@ when names are ambiguous. Remote paths are never resolved against this computer,
 and remote commands never override this computer's `FH_HOME`.
 
 The private management executable executes the existing lifecycle, lock, recovery drain, Compose
-parsing and pending-settings receipt paths. Compose policy recommendations are
+parsing and pending-settings receipt paths. Compose security-default checks are
 optional `fhold doctor` diagnostics, not lifecycle gates. Updating local tooling
 selects its matching management bytes on the next connection. This does not update
 an operator-installed CLI or change an instance until you request an operation.

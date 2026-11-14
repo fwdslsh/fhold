@@ -212,10 +212,8 @@ Managed recovery additionally binds `config/recovery/include.json` read-only at
 `/run/fhold-recovery-state`, and the exact selected private backup directory at
 `/recovery`. The destination must be outside the instance home and cannot be its
 parent; links are refused before saving. Off/Blob mode uses an empty private bind
-placeholder. Existing operator directories are not chmodded. Optional `fhold
-doctor` diagnostics report changes to these mounts, the storage-only secret or
-the recommended recovery shutdown budget; they do not veto lifecycle operations.
-Operators own custom overlays and their effects. The native recovery engine still
+placeholder. Existing operator directories are not chmodded. Operators own
+custom overlays and their effects. The native recovery engine still
 validates checkpoint identity, integrity and ownership. No new service is introduced.
 
 Standalone recovery optionally uses externally supplied
@@ -313,12 +311,11 @@ All four managed services:
 - drop all Linux capabilities; and
 - set `no-new-privileges:true`.
 
-Optional `fhold doctor` diagnostics compare the complete managed file plus user
-overlay with recommended boundaries, reporting replaced core images or
-commands, changed mounts, secrets, networks, health commands, logging, runtime
-users or published ports beyond the StackConfig choices, plaintext secret-like environment values, custom
-managed-secret grants or access to `agent_net`, privileged containers, added
-capabilities, host namespaces/devices, and container-runtime mounts. These are
-advisory diagnostics, not start/restart/update policy gates. Operators own custom
+Optional `fhold doctor` diagnostics check the resolved managed file plus user
+overlay only for the shipped security defaults: root users on the product
+services, privileged containers or added capabilities, container-runtime mounts
+(such as `docker.sock`) on any service, and Compose secrets that are not files
+inside FH_HOME. These are advisory diagnostics, not start/restart/update policy
+gates. Operators own custom
 overlay behavior. Native Compose parsing, instance targeting and actual recovery
 integrity/ownership checks still apply.

@@ -425,7 +425,9 @@ homes are refused, not adopted. fhold has no foreign-home importer or aliases.
 The following container configuration rules describe shipped defaults and
 release-test expectations. A user controlling the Docker host owns their Compose
 customizations; host tooling is not a security boundary against that user.
-`fhold doctor` may report differences as advisory warnings, but the policy audit
+`fhold doctor` may report weakened security defaults (root product services,
+privileged or added capabilities, container-runtime mounts, secrets outside
+FH_HOME) as advisory warnings, but this audit
 does not authorize or veto start, restart, update or offline recovery. Native
 Compose parsing, instance targeting, lifecycle locks, image compatibility and
 the recovery engine's identity/integrity/ownership checks remain operational
