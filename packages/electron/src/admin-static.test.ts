@@ -3586,12 +3586,11 @@ describe('Admin renderer behavior', () => {
 		).toBe(true);
 	});
 
-	it('omits memory/timezone controls without duplicate remote toggles or false connection readiness', () => {
+	it('omits timezone controls without duplicate remote toggles or false connection readiness', () => {
 		const snapshot = {
 			config: {
 				assistant: {
 					timezone: 'America/Chicago',
-					automaticMemory: false,
 					codexRemote: true,
 					claudeRemote: false
 				}
@@ -3599,7 +3598,6 @@ describe('Admin renderer behavior', () => {
 		};
 		renderRemoteStatus(snapshot);
 		expect(html).not.toContain('id="agent-timezone"');
-		expect(html).not.toContain('id="automatic-memory"');
 		expect(html).not.toContain('id="preferences-form"');
 		expect(control('codex-remote-status').textContent).toContain('Unavailable for this instance');
 		expect(control('claude-remote-status').textContent).toBe('Unavailable for this instance');
@@ -3607,13 +3605,12 @@ describe('Admin renderer behavior', () => {
 		expect(html).not.toContain('id="claude-remote"');
 	});
 
-	it('preserves memory and timezone preferences when network settings change', async () => {
+	it('preserves the timezone preference when network settings change', async () => {
 		state.currentConfig = {
 			assistant: {
 				bindAddress: '127.0.0.1',
 				port: 4096,
-				timezone: 'Europe/London',
-				automaticMemory: false
+				timezone: 'Europe/London'
 			},
 			gateway: { bindAddress: '127.0.0.1', port: 9180, enabled: true }
 		};
@@ -3635,8 +3632,7 @@ describe('Admin renderer behavior', () => {
 			assistant: {
 				bindAddress: '127.0.0.1',
 				port: 4200,
-				timezone: 'Europe/London',
-				automaticMemory: false
+				timezone: 'Europe/London'
 			},
 			gateway: { bindAddress: '127.0.0.1', port: 9180, enabled: true }
 		});

@@ -1,7 +1,7 @@
 // Populated older native state, followed by the image's ordinary startup.
 // Only disposable fixture data is written here; product files stay read-only.
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const fixture = '/tmp/environment-upgrade';
 const home = '/home/fhold';
@@ -36,7 +36,10 @@ function verifyReadOnlyDiagnostics() {
 			for (const item of readdirSync(path, { withFileTypes: true })) {
 				const file = `${path}/${item.name}`;
 				if (item.isDirectory()) visit(file);
-				else if (item.isFile() && !file.endsWith('-shm')) hashes[file] = createHash('sha256').update(readFileSync(file)).digest('hex');
+				// SQLite creates an empty WAL file for any open connection to a WAL
+				// database (AKM's metrics.db too since 0.10.261125); it holds no data.
+				else if (item.isFile() && !file.endsWith('-shm') && !(file.endsWith('-wal') && statSync(file).size === 0))
+					hashes[file] = createHash('sha256').update(readFileSync(file)).digest('hex');
 			}
 		}
 		for (const directory of ['/etc/akm', '/stash', '/opt/akm/data']) visit(directory);
@@ -286,7 +289,7 @@ if (process.argv[2] === 'prepare') {
 	while (!existsSync(`${fixture}/task-ran`) && Date.now() < deadline) await Bun.sleep(250);
 	assert.equal(readFileSync(`${fixture}/task-ran`, 'utf8'), 'native scheduler');
 	const config = readFileSync(configPath, 'utf8');
-	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false, highEntropy: true } });
+	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false } });
 	run(['akm', 'migrate', 'apply', '--format', 'json'], [0, 1]);
 	assert.equal(readFileSync(configPath, 'utf8'), config);
 	// The scheduled command has been verified. Quiesce this synthetic writer

@@ -91,7 +91,7 @@ The control plane writes or preserves these non-secret values in
 | `FH_ENABLED_ADDONS` | Derived profiles: `gateway,discord,slack` |
 | `FH_ASSISTANT_BIND_ADDRESS` | Derived native OpenCode host bind |
 | `FH_ASSISTANT_PORT` | Derived native OpenCode host port |
-| `FH_TIMEZONE`, `FH_AUTOMATIC_MEMORY` | Derived schedule timezone and learning intent: memory `1` defers to native choices; `0` persists native `akm setup --learning off` after restore and before writers. The native off setting also applies to `docker exec`. Returning to `1` does not enable learning; use native `akm setup --learning on` after removing the fhold off request. |
+| `FH_TIMEZONE` | Derived schedule timezone. Learning is AKM's own setting (`akm setup --learning`), not a Compose variable. |
 | `FH_CODEX_REMOTE`, `FH_CLAUDE_REMOTE` | Independent native supervisor startup switches, both default `1`; optional `0` keeps a worker off without removing account state. Native sign-in/consent is still required. |
 | `FH_CODEX_SANDBOX` | Native Codex isolation: `workspace-write` default, `read-only`, or explicit `danger-full-access` container isolation; task approvals follow native policy |
 | `FH_GUARDIAN_BIND_ADDRESS` | Derived Guardian host bind |

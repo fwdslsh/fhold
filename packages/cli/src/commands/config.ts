@@ -85,7 +85,7 @@ export const guardianConfig = defineCommand({
 const assistant = defineCommand({
 	meta: {
 		name: 'assistant',
-		description: 'Set Assistant access, schedule timezone, or plugin memory hooks'
+		description: 'Set Assistant access or schedule timezone'
 	},
 	args: {
 		bind: { type: 'string', description: 'exact IPv4 or IPv6 address' },
@@ -94,11 +94,6 @@ const assistant = defineCommand({
 			type: 'string',
 			description: 'IANA schedule timezone, for example America/Chicago'
 		},
-		memory: {
-			type: 'string',
-			description:
-				'managed plugin memory hooks: on uses native choices; off disables unless explicitly overridden'
-		},
 		apply: {
 			type: 'boolean',
 			description: 'Apply the stack immediately (use --no-apply to defer)',
@@ -106,24 +101,12 @@ const assistant = defineCommand({
 		}
 	},
 	async run({ args }) {
-		if (
-			!args.bind &&
-			!args.port &&
-			!args.timezone &&
-			!args.memory
-		)
-			throw new Error(
-				'Pass --bind, --port, --timezone, or --memory.'
-			);
+		if (!args.bind && !args.port && !args.timezone)
+			throw new Error('Pass --bind, --port, or --timezone.');
 		const { homeDir, config, baseline } = current();
 		if (args.bind) config.assistant.bindAddress = String(args.bind);
 		if (args.port) config.assistant.port = Number(args.port);
 		if (args.timezone) config.assistant.timezone = String(args.timezone);
-		if (args.memory) {
-			if (args.memory !== 'on' && args.memory !== 'off')
-				throw new Error('--memory must be on or off.');
-			config.assistant.automaticMemory = args.memory === 'on';
-		}
 		warnExposure('the native OpenCode API', config.assistant.bindAddress);
 		const written = await save(homeDir, config, args.apply !== false, baseline);
 		console.log(JSON.stringify(written.assistant, null, 2));

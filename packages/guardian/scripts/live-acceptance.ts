@@ -28,10 +28,7 @@ assert(
 	config.assistant.bindAddress === '127.0.0.1' && config.gateway.bindAddress === '127.0.0.1',
 	'Live tests require loopback'
 );
-assert(
-	config.gateway.enabled && config.assistant.automaticMemory,
-	'Enable Guardian and automatic memory in this test fixture'
-);
+assert(config.gateway.enabled, 'Enable Guardian in this test fixture');
 const tag = crypto.randomUUID().slice(0, 8);
 const marker = `cedar-signal-${tag}`;
 const taskId = `live-timer-${tag}`;

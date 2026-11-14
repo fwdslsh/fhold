@@ -67,32 +67,19 @@ describe('config commands', () => {
 		expect(Object.keys(bundle.credentials)).toEqual(['support-bot']);
 	});
 
-	it('changes timezone and memory without resetting unrelated Assistant preferences', async () => {
+	it('changes timezone without resetting unrelated Assistant preferences', async () => {
 		const home = await setup();
-		await main([
-			'config',
-			'assistant',
-			'--timezone',
-			'America/Chicago',
-			'--memory',
-			'off',
-			'--no-apply'
-		]);
+		await main(['config', 'assistant', '--timezone', 'America/Chicago', '--no-apply']);
 		await main(['config', 'assistant', '--port', '4911', '--no-apply']);
 		const path = join(home, 'state', 'stack.json');
 		const before = readFileSync(path, 'utf8');
 		expect(JSON.parse(before).assistant).toMatchObject({
 			port: 4911,
-			timezone: 'America/Chicago',
-			automaticMemory: false
+			timezone: 'America/Chicago'
 		});
 		await expect(
 			main(['config', 'assistant', '--timezone', 'Not/AZone', '--no-apply'])
 		).rejects.toThrow();
-		expect(readFileSync(path, 'utf8')).toBe(before);
-		await expect(main(['config', 'assistant', '--memory', 'maybe', '--no-apply'])).rejects.toThrow(
-			'--memory must be on or off'
-		);
 		expect(readFileSync(path, 'utf8')).toBe(before);
 	});
 

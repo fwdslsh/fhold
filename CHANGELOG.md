@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.4.1111-beta — AKM 0.10.261125 and no AKM settings writes at startup
+
+Update Assistant to AKM CLI/web **0.10.261125**, the OpenCode plugin
+`akm-opencode-v2` **0.10.261126** and the Claude Code/Codex AKM plugins
+**0.10.261126** (marketplace tag `v0.10.261126`, commit `86ac347`), which
+require that CLI exactly. AKM now reclaims a lock left by a killed process even
+when its PID is alive again, as PID 1 is in a container; before, a boot
+`akm index --skip-if-locked` could skip forever and reads reported a build in
+progress. `akm index` rebuilds a damaged or half-created `index.db`, and reads
+report it instead of exiting 70. A closed pipe no longer fails a command, and a
+library reached through a symlink is the same library to the index.
+
+Startup no longer writes AKM settings. It no longer fills missing
+`plugins.redact.pii`/`highEntropy` keys, and no longer runs
+`akm setup --learning off` on every boot for `assistant.automaticMemory=false`.
+New homes are seeded with redaction on, and AKM keeps a saved learning-off
+choice across restarts. `fhold config assistant --memory`, the
+`assistant.automaticMemory` setting and `FH_AUTOMATIC_MEMORY` are removed; use
+`akm setup --learning off|on`. Existing stack configs with the old key still
+load. A home that last started before 0.4.1107-beta should set both redaction
+keys explicitly, and one that wanted learning off and last started before
+0.4.1106-beta should run `akm setup --learning off` once.
+
+The OpenCode model-picker image check no longer fails intermittently. A fresh
+OpenCode server lists no project until its directory is registered, and the web
+UI ignores "New session" until then; the check now registers the project first
+and repeats the click if the UI was not ready.
+
 ## 0.4.1110-beta — AKM 0.10.261123, Guardian model fallback and simplification
 
 Update Assistant to AKM CLI/web **0.10.261123**, the OpenCode plugin

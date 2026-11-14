@@ -62,7 +62,6 @@ export type StackConfig = {
 		bindAddress: string;
 		port: number;
 		timezone: string;
-		automaticMemory: boolean;
 		codexRemote: boolean;
 		codexSandbox: (typeof CODEX_SANDBOX_MODES)[number];
 		claudeRemote: boolean;
@@ -136,7 +135,6 @@ export function defaultStackConfig(homeDir?: string): StackConfig {
 			bindAddress: DEFAULT_BIND_ADDRESS,
 			port: DEFAULT_ASSISTANT_PORT,
 			timezone: hostTimezone(),
-			automaticMemory: true,
 			codexRemote: true,
 			codexSandbox: 'workspace-write',
 			claudeRemote: true
@@ -360,6 +358,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			'bindAddress',
 			'port',
 			'timezone',
+			// Retired: AKM owns learning (`akm setup --learning`); older configs keep the key.
 			'automaticMemory',
 			'codexRemote',
 			'codexSandbox',
@@ -382,7 +381,6 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 		return { ok: false, error: 'assistant.port must be an integer between 1 and 65535' };
 	}
 	const timezone = assistant.timezone ?? hostTimezone();
-	const automaticMemory = assistant.automaticMemory ?? true;
 	const codexRemote = assistant.codexRemote === undefined ? true : assistant.codexRemote;
 	const claudeRemote = assistant.claudeRemote === undefined ? true : assistant.claudeRemote;
 	const codexSandbox =
@@ -396,8 +394,6 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 		};
 	if (!validTimezone(timezone))
 		return { ok: false, error: 'assistant.timezone must be a valid IANA timezone' };
-	if (typeof automaticMemory !== 'boolean')
-		return { ok: false, error: 'assistant.automaticMemory must be a boolean' };
 	if (typeof gateway.enabled !== 'boolean') {
 		return { ok: false, error: 'gateway.enabled must be a boolean' };
 	}
@@ -445,7 +441,6 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			bindAddress: assistant.bindAddress,
 			port: assistantPort,
 			timezone,
-			automaticMemory,
 			codexRemote,
 			codexSandbox,
 			claudeRemote
@@ -532,7 +527,6 @@ export function stackConfigEnv(config: StackConfig): Record<string, string> {
 		FH_ASSISTANT_BIND_ADDRESS: config.assistant.bindAddress,
 		FH_ASSISTANT_PORT: String(config.assistant.port),
 		FH_TIMEZONE: config.assistant.timezone,
-		FH_AUTOMATIC_MEMORY: config.assistant.automaticMemory ? '1' : '0',
 		FH_CODEX_REMOTE: config.assistant.codexRemote ? '1' : '0',
 		FH_CODEX_SANDBOX: config.assistant.codexSandbox,
 		FH_CLAUDE_REMOTE: config.assistant.claudeRemote ? '1' : '0',

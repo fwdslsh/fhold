@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -59,19 +59,38 @@ try {
 		await delay(100);
 	}
 	const url = log.match(/http:\/\/127\.0\.0\.1:\d+/)[0];
+	const headers = { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` };
+	// A fresh server lists no project until a location request registers its
+	// directory, and "New session" does nothing without one. Register it first.
+	assert((await fetch(`${url}/api/location`, { headers })).ok, 'Native location request failed');
+	const projects = await (await fetch(`${url}/api/project`, { headers })).json();
+	const directory = realpathSync(join(root, 'project'));
+	assert(
+		projects.some((project) => project.canonical === directory),
+		`Native project was not registered: ${JSON.stringify(projects)}`
+	);
 	browser = await chromium.launch();
+	// OpenCode's home page also ignores a click made before its own project state
+	// loads, and shows nothing to wait for; repeat the click until the composer opens.
+	const newSession = async (page) => {
+		for (let attempt = 1; ; attempt++) {
+			await page.getByRole('button', { name: 'New session', exact: true }).click();
+			try {
+				return await page.locator('[data-action="composer-model"]').waitFor({ timeout: 10_000 });
+			} catch (error) {
+				if (attempt === 3) throw error;
+			}
+		}
+	};
 	const newPage = async () => {
 		const context = await browser.newContext();
-		const response = await fetch(`${url}/api/pair`, {
-			method: 'POST',
-			headers: { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` }
-		});
+		const response = await fetch(`${url}/api/pair`, { method: 'POST', headers });
 		assert(response.ok, 'Native browser pairing failed');
 		const { code } = await response.json();
 		const page = await context.newPage();
 		page.setDefaultTimeout(15_000);
 		await page.goto(`${url}/auth/connect/${code}`);
-		await page.getByRole('button', { name: 'New session', exact: true }).click();
+		await newSession(page);
 		return page;
 	};
 	const picker = async (page) => {
@@ -88,7 +107,7 @@ try {
 		assert.equal(await control.isChecked(), expected);
 		await page.keyboard.press('Escape');
 		await page.reload();
-		await page.getByRole('button', { name: 'New session', exact: true }).click();
+		await newSession(page);
 	};
 	const page = await newPage();
 	await (await picker(page)).waitFor({ state: 'visible' });

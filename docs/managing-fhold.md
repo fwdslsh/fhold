@@ -511,17 +511,10 @@ remain unchanged. Advanced operators can configure these through the CLI/config,
 not Agent settings. Automatic context, learning and memory proposals use the native AKM plugins
 for all native/custom agents, subject to native settings and consent. Never paste credentials into conversations.
 
-`fhold config assistant --memory on` leaves native plugin settings and defaults in
-charge; it does not force learning on or rewrite AKM configuration. `--memory off`
-sets `AKM_AUTO_MEMORY=0` and `AKM_AUTO_LEARNING=0` for entrypoint-managed agents and
-scheduler processes unless you explicitly supply those native environment options.
-This controls plugin memory/proposal hooks, not every AKM learning operation:
-native improvement tasks, manual commands and core learning configuration remain
-AKM-owned. Commands launched separately with `docker exec` use the container's
-environment and native settings; they do not inherit entrypoint exports. Use native
-plugin settings or explicit native environment options in your Compose overlay
-when those separate processes also need an off choice. Headless controls for the
-broader native learning settings are tracked in [AKM #1506](https://github.com/itlackey/akm/issues/1506).
+AKM owns learning. Turn it off or on inside the Assistant with
+`akm setup --learning off` or `--learning on`, and check it with `akm doctor info`.
+The choice is saved in AKM's own configuration, so it survives restarts and also
+applies to commands run with `docker exec`.
 
 For project-specific knowledge, use AKM's native `projects` configuration and run
 the agent in the corresponding project directory (normally under `/work`). The
