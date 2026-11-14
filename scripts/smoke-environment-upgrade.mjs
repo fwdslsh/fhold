@@ -286,7 +286,7 @@ if (process.argv[2] === 'prepare') {
 	while (!existsSync(`${fixture}/task-ran`) && Date.now() < deadline) await Bun.sleep(250);
 	assert.equal(readFileSync(`${fixture}/task-ran`, 'utf8'), 'native scheduler');
 	const config = readFileSync(configPath, 'utf8');
-	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false, highEntropy: true } });
+	assert.deepEqual(read(configPath).plugins, { curateLimit: 9, redact: { pii: false } });
 	run(['akm', 'migrate', 'apply', '--format', 'json'], [0, 1]);
 	assert.equal(readFileSync(configPath, 'utf8'), config);
 	// The scheduled command has been verified. Quiesce this synthetic writer

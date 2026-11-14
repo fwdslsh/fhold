@@ -130,7 +130,6 @@ test.each(['0.1.2610011200-alpha.1', '0.2.2610211-beta.13'])('update advances hi
 		images: { assistant: prior, guardian: prior, portal: 'reviewed-portal-pin' }
 	};
 	config.assistant.timezone = 'America/Chicago';
-	config.assistant.automaticMemory = false;
 	writeStackConfig(home, config);
 	writeFileSync(
 		join(home, 'state/installation.json'),
@@ -156,7 +155,6 @@ test.each(['0.1.2610011200-alpha.1', '0.2.2610211-beta.13'])('update advances hi
 		}
 	});
 	expect(after.config.assistant.timezone).toBe('America/Chicago');
-	expect(after.config.assistant.automaticMemory).toBe(false);
 	expect(after.config.assistant.port).toBe(config.assistant.port);
 	expect(after.config.gateway.port).toBe(config.gateway.port);
 	expect(readFileSync(join(home, 'state/credentials/owner/key'))).toEqual(key);

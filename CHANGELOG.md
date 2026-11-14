@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+Startup no longer writes AKM settings. It no longer fills missing
+`plugins.redact.pii`/`highEntropy` keys, and no longer runs
+`akm setup --learning off` on every boot for `assistant.automaticMemory=false`.
+New homes are seeded with redaction on, and AKM keeps a saved learning-off
+choice across restarts. `fhold config assistant --memory`, the
+`assistant.automaticMemory` setting and `FH_AUTOMATIC_MEMORY` are removed; use
+`akm setup --learning off|on`. Existing stack configs with the old key still
+load. A home that last started before 0.4.1107-beta should set both redaction
+keys explicitly, and one that wanted learning off and last started before
+0.4.1106-beta should run `akm setup --learning off` once.
+
+The OpenCode model-picker image check no longer fails intermittently. A fresh
+OpenCode server lists no project until its directory is registered, and the web
+UI ignores "New session" until then; the check now registers the project first
+and repeats the click if the UI was not ready.
+
 ## 0.4.1110-beta — AKM 0.10.261123, Guardian model fallback and simplification
 
 Update Assistant to AKM CLI/web **0.10.261123**, the OpenCode plugin

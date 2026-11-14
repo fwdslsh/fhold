@@ -67,7 +67,6 @@ function fixture(harness) {
 		BUN_OPTIONS: bunOptions,
 		DISABLE_AUTOUPDATER: '1',
 		CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-		FH_AUTOMATIC_MEMORY: '0',
 		FH_RUNTIME_DIR: join(dir, 'runtime'),
 		// NSS maps explicit host UIDs in Compose, but carries no credentials.
 		...(process.env.LD_PRELOAD

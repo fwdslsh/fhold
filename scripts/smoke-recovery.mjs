@@ -97,7 +97,6 @@ await writeFile(
 		'FH_RECOVERY_INTERVAL_SECONDS=2',
 		'FH_RECOVERY_MAX_UNSAVED_SECONDS=120',
 		'FH_SHUTDOWN_SECONDS=25',
-		'FH_AUTOMATIC_MEMORY=0',
 		`OPENCODE_SERVER_PASSWORD=${password}`,
 		...(credentialFile ? ['FH_RECOVERY_CREDENTIAL_FILE=/run/secrets/recovery-storage'] : []),
 		...(process.env.FH_RECOVERY_TEST_ALLOW_INSECURE === '1' ? ['FH_RECOVERY_ALLOW_INSECURE=1'] : [])
@@ -438,8 +437,6 @@ async function qualifyAkmIndexCache() {
 		'FH_RECOVERY_MAX_UNSAVED_SECONDS=120',
 		'--env',
 		'FH_SCHEDULER_ENABLED=0',
-		'--env',
-		'FH_AUTOMATIC_MEMORY=0',
 		'--env',
 		'FH_CODEX_REMOTE=0',
 		'--env',

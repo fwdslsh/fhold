@@ -118,7 +118,7 @@ test('a failed apply or stop does not clear pending settings; successful recreat
 	const state = createFholdState(home);
 	const baseline = config(home);
 	const changed = structuredClone(baseline);
-	changed.assistant.automaticMemory = !baseline.assistant.automaticMemory;
+	changed.assistant.timezone = baseline.assistant.timezone === 'UTC' ? 'America/Chicago' : 'UTC';
 	saveStackIntent(home, changed, baseline);
 	const resolved = await composeConfigJson(buildComposeOptions(state));
 	if (!resolved.ok) throw new Error(resolved.stderr);

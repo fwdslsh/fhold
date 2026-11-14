@@ -109,7 +109,6 @@ describe('StackConfig', () => {
 				bindAddress: '127.0.0.1',
 				port: 3810,
 				timezone: hostTimezone(),
-				automaticMemory: true,
 				codexRemote: true,
 				codexSandbox: 'workspace-write',
 				claudeRemote: true
@@ -135,15 +134,12 @@ describe('StackConfig', () => {
 		});
 	});
 
-	it('validates timezone and memory preferences and derives nonsecret runtime values', () => {
+	it('validates timezone preferences and derives nonsecret runtime values', () => {
 		const config = defaultStackConfig();
 		config.assistant.timezone = 'America/Chicago';
-		config.assistant.automaticMemory = false;
 		expect(parseStackConfig(config).ok).toBe(true);
-		expect(stackConfigEnv(config)).toMatchObject({
-			FH_TIMEZONE: 'America/Chicago',
-			FH_AUTOMATIC_MEMORY: '0'
-		});
+		expect(stackConfigEnv(config)).toMatchObject({ FH_TIMEZONE: 'America/Chicago' });
+		expect(stackConfigEnv(config)).not.toHaveProperty('FH_AUTOMATIC_MEMORY');
 		expect(
 			parseStackConfig({ ...config, assistant: { ...config.assistant, timezone: 'No/Such_Zone' } })
 				.ok
@@ -151,18 +147,12 @@ describe('StackConfig', () => {
 		expect(
 			parseStackConfig({ ...config, assistant: { ...config.assistant, timezone: 'UTC\nBAD=1' } }).ok
 		).toBe(false);
-		expect(
-			parseStackConfig({ ...config, assistant: { ...config.assistant, automaticMemory: 'false' } })
-				.ok
-		).toBe(false);
 		const existing = parseStackConfig({
 			...config,
-			assistant: { bindAddress: '127.0.0.1', port: 3810 }
+			assistant: { bindAddress: '127.0.0.1', port: 3810, automaticMemory: false }
 		});
-		expect(existing.ok && existing.config.assistant).toMatchObject({
-			timezone: hostTimezone(),
-			automaticMemory: true
-		});
+		expect(existing.ok && existing.config.assistant).toMatchObject({ timezone: hostTimezone() });
+		expect(existing.ok && existing.config.assistant).not.toHaveProperty('automaticMemory');
 	});
 
 	it('rejects invalid versions, binds, credentials, and portal references', () => {

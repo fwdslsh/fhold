@@ -1843,13 +1843,7 @@ async function run(): Promise<Record<string, unknown>> {
 			return result.stdout.trim();
 		};
 		const runtimeSettings = async () => {
-			const result = await runDocker([
-				'exec',
-				`${projectName}-assistant-1`,
-				'printenv',
-				'TZ',
-				'FH_AUTOMATIC_MEMORY'
-			]);
+			const result = await runDocker(['exec', `${projectName}-assistant-1`, 'printenv', 'TZ']);
 			assert(result.ok, 'Could not read non-secret runtime settings.');
 			return result.stdout.trim();
 		};
@@ -1857,15 +1851,14 @@ async function run(): Promise<Record<string, unknown>> {
 		const sizeBeforeSave = window.getSize();
 		// Advanced native settings are CLI-owned, not controls in the AI-account UI.
 		// The normal CLI creates pending intent; Admin owns the explicit apply action.
-		await configureFixtureAssistant(homeDir, ['--timezone', 'Europe/London', '--memory', 'off']);
+		await configureFixtureAssistant(homeDir, ['--timezone', 'Europe/London']);
 		await window.webContents.executeJavaScript(
 			"(async () => { await (await import('./snapshot.js')).refresh(); })()"
 		);
 		await waitForRenderer(
 			window,
 			`document.body.dataset.busy !== 'true' && !document.querySelector('#pending-restart').hidden &&
-				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
-				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false`,
+				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London'`,
 			'CLI-generated pending intent visible in Admin without restarting'
 		);
 		assert((await containerId()) === beforeDeferredSave.id, 'Postponed save recreated Assistant.');
@@ -1912,7 +1905,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'Confirmed apply did not recreate Assistant.'
 		);
 		assert(
-			(await runtimeSettings()) === 'Europe/London\n0',
+			(await runtimeSettings()) === 'Europe/London',
 			'Recreated Assistant did not load saved settings.'
 		);
 		assert(
@@ -2265,7 +2258,6 @@ async function run(): Promise<Record<string, unknown>> {
 					document.querySelector('#assistant-port')?.value === ${JSON.stringify(String(assistantPort))} &&
 				document.querySelector('#gateway-port')?.value === ${JSON.stringify(String(guardianPort))} &&
 				(await import('./state.js')).state.currentConfig.assistant.timezone === 'Europe/London' &&
-				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === false &&
 				document.querySelector('#discord-mappings')?.textContent.includes('123456789012345678')`,
 			'persistent configuration after renderer reload'
 		);
@@ -2373,33 +2365,13 @@ async function run(): Promise<Record<string, unknown>> {
 
 		const savedPreferences = await adminSnapshot();
 		assert(
-			dockerConfig(savedPreferences).assistant.timezone === 'Europe/London' &&
-				dockerConfig(savedPreferences).assistant.automaticMemory === false,
+			dockerConfig(savedPreferences).assistant.timezone === 'Europe/London',
 			'Agent preferences were not persisted after restart and renderer reload.'
-		);
-		confirmations.push(1);
-		await configureFixtureAssistant(homeDir, ['--memory', 'on']);
-		await window.webContents.executeJavaScript(
-			"(async () => { await (await import('./snapshot.js')).refresh(); document.querySelector('[data-view=overview]').click(); document.querySelector('#apply-pending-restart').click(); })()"
-		);
-		await waitForRenderer(
-			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
-				(await import('./state.js')).state.currentConfig.assistant.automaticMemory === true &&
-				[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
-			'automatic memory to be restored for runtime acceptance'
-		);
-		progress(
-			'CLI automatic memory re-enabled through explicit Admin apply after verifying the persisted opt-out'
 		);
 		const finalSnapshot = await adminSnapshot();
 		assert(
 			dockerConfig(finalSnapshot).gateway.enabled,
 			'Guardian configuration was not persisted.'
-		);
-		assert(
-			dockerConfig(finalSnapshot).assistant.automaticMemory,
-			'Automatic memory was not restored.'
 		);
 		assert(
 			appConfig(finalSnapshot).portalMappings.discord?.users['123456789012345678']?.startsWith(
@@ -3286,9 +3258,7 @@ async function run(): Promise<Record<string, unknown>> {
 				windowSizeStable: true
 			},
 			agentPreferencesVerified: {
-				timezone: 'Europe/London',
-				memoryOptOutPersisted: true,
-				automaticMemoryRestored: true
+				timezone: 'Europe/London'
 			},
 			connectionRecipesVerified: ['opencode', 'claude', 'mcp'],
 			appSettingsVerified: {

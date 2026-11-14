@@ -24,13 +24,12 @@ writable and are not converted or overwritten.
 
 Normal user/project settings and hooks need no custom policy mount.
 Plugin redaction is configured in native `config/akm/config.json` under
-`plugins.redact.pii` and `plugins.redact.highEntropy`. Both default to `true` in
-fhold. Startup fills only missing keys through AKM's native config command after
-restore/migration and before writers start; explicit values, including `false`,
-remain unchanged. Image/Compose defaults no longer use the retired
-`AKM_REDACT_*` variables. Do not remove native settings to disable redaction: set
-the desired key to `false` explicitly. Failure to persist a missing default stops
-startup rather than silently starting plugins with redaction disabled.
+`plugins.redact.pii` and `plugins.redact.highEntropy`. New homes are seeded with
+both set to `true`, and 0.4.1107-beta through 0.4.1110-beta filled them into
+older homes at startup. fhold no longer changes these keys: AKM's plugins treat a
+missing key as off, so a home that skipped those releases should set both
+explicitly. Image/Compose defaults no longer use the retired `AKM_REDACT_*`
+variables.
 
 For an explicit system-level policy, operators can supply native files through
 their existing Compose overlay. That optional policy is their choice and
@@ -97,15 +96,11 @@ prevention; fhold adds no extraction subprocess wrapper or model pipeline.
 The pinned Codex plugin has prompt learning but no SessionEnd extractor;
 fhold does not invent unsupported parity.
 
-The existing instance `assistant.automaticMemory=false` intent (standalone:
-`FH_AUTOMATIC_MEMORY=0`) invokes native `akm setup --learning off` after restore
-and migration, before agents or scheduled writers start. This persists AKM's
-host-wide off choice, including for later `docker exec` commands. Failure to
-save an explicit off choice stops startup with an actionable error.
-Setting fhold's value to `true`/`1` defers to native settings and never enables
-learning itself. To enable it, first remove the fhold off request, then use
-native `akm setup --learning on` or AKM web. No task, cron or model settings
-are rewritten by this mapping.
+fhold does not set learning at startup. A learning-off choice saved with
+`akm setup --learning off` stays in AKM's configuration across restarts. Homes
+with fhold's retired `assistant.automaticMemory=false` that started on
+0.4.1106-beta or later already have that native choice saved; others should run
+`akm setup --learning off` once.
 
 ## Startup, recovery and verification
 

@@ -77,15 +77,15 @@ verify_explicit_remote_modes() {
 		docker run -d --name "$container" --network none \
 			--init --cap-drop=ALL --security-opt no-new-privileges:true \
 			-e OPENCODE_SERVER_PASSWORD=assistant-explicit-remotes-fixture \
-			-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE="$mode" -e FH_CLAUDE_REMOTE="$mode" -e FH_AUTOMATIC_MEMORY="$mode" \
+			-e FH_SCHEDULER_ENABLED=0 -e FH_CODEX_REMOTE="$mode" -e FH_CLAUDE_REMOTE="$mode" \
 			"$image" >/dev/null
 		wait_for_health
 		expected=sign-in-needed
 		if [ "$mode" = 0 ]; then expected=not-started; fi
 		verify_remote_state "$expected"
-		docker exec "$container" sh -ec "akm doctor info --format json -q | jq -e '.learning.on == $([ "$mode" = 1 ] && echo true || echo false)'" >/dev/null
+		docker exec "$container" sh -ec 'akm doctor info --format json -q | jq -e ".learning.on == true"' >/dev/null
 		if [ "$mode" = 1 ]; then
-			# Default/on must preserve a native off choice across normal restart.
+			# A native off choice persists across a normal restart.
 			docker exec "$container" akm setup --learning off --format json -q >/dev/null
 			docker restart "$container" >/dev/null
 			wait_for_health
