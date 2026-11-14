@@ -221,9 +221,9 @@ test('root build scripts can change without runtime qualification, but install h
 	).toBe('full');
 });
 test('tooling assets omit the bridge and fresh installs use the published runtime cohort', () => {
-	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools')).toHaveLength(7);
+	expect(requiredReleaseAssets('0.2.2610121-beta.9', 'tools')).toHaveLength(7);
 	expect(
-		requiredReleaseAssets('0.2.2610121-beta.9', 'fhold Admin', 'tools').some((name) =>
+		requiredReleaseAssets('0.2.2610121-beta.9', 'tools').some((name) =>
 			name.endsWith('.mcpb')
 		)
 	).toBe(false);
@@ -267,7 +267,7 @@ test('tooling-only checksums and manifest validate without a new extension', () 
 	const dir = mkdtempSync(join(tmpdir(), 'fhold-release-preview-'));
 	try {
 		const version = '0.2.2610121-beta.9';
-		const names = requiredReleaseAssets(version, 'fhold Admin', 'tools').filter(
+		const names = requiredReleaseAssets(version, 'tools').filter(
 			(name) => name !== 'checksums-sha256.txt'
 		);
 		for (const name of names) writeFileSync(join(dir, name), name);

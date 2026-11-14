@@ -6,6 +6,7 @@ import type {
 	AssistantSession
 } from './assistant-client.js';
 import { randomBytes } from 'node:crypto';
+import { setTimeout as pause } from 'node:timers/promises';
 import { createAssistantClient } from './assistant-client.js';
 import {
 	createGuardianOwnership,
@@ -166,23 +167,6 @@ function bounded(value: number | undefined, fallback: number, maximum: number): 
 	return Number.isInteger(value) && (value ?? 0) >= 0
 		? Math.min(value ?? fallback, maximum)
 		: fallback;
-}
-
-async function pause(ms: number, signal: AbortSignal): Promise<void> {
-	if (signal.aborted) throw signal.reason;
-	await new Promise<void>((resolve, reject) => {
-		const complete = () => {
-			signal.removeEventListener('abort', abort);
-			resolve();
-		};
-		const timer = setTimeout(complete, ms);
-		const abort = () => {
-			clearTimeout(timer);
-			signal.removeEventListener('abort', abort);
-			reject(signal.reason);
-		};
-		signal.addEventListener('abort', abort, { once: true });
-	});
 }
 
 function publicError(error: unknown): GatewayError {
@@ -566,7 +550,9 @@ export class GatewayService {
 		};
 		await report();
 		while (result.status === 'running' && this.now() < stopAt) {
-			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), signal);
+			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), undefined, {
+				signal
+			});
 			result = await this.inspectJob(job, jobHandle, signal);
 			await report();
 		}

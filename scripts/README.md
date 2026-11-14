@@ -20,7 +20,6 @@ Only a small script surface remains active.
 | `test-isolate-fh-home.ts` | Force every Bun test into a throwaway `FH_HOME` |
 | `validate-release-assets.mjs` | Verify the complete checksummed release set |
 | `validate-admin-update-feeds.mjs` | Verify both generated Electron feeds match their exact AppImage version, architecture, size and SHA-512 |
-| `live-acceptance.ts` | Opt-in real-provider runtime acceptance after a retained Admin E2E run |
 | `provider-settings-native.test.ts` | Opt-in shipped-image native provider settings, live file watching and controlled compatible-transport regression |
 | `smoke-opencode-v2-live.mjs` | Image-internal native settings and plugin hot-update checks, including atomic saves and existing-session permission changes |
 
@@ -71,15 +70,15 @@ Ollama, LM Studio or llama.cpp engines. It is disabled in the ordinary source su
 ## Assistant CI lanes
 
 `node scripts/smoke-assistant-ci.mjs fhold/assistant:<candidate>` runs the essential
-native release suites in two bounded lanes after preparing the CLI and local image alias.
+native release suites in three bounded lanes after preparing the CLI and local image alias.
 Each suite owns separate disposable fixtures; no native observation window is
 shortened. `FH_CI_LOG_DIR` selects the private log/timing directory. A lane failure
-stops that lane, waits for the other, and fails the run. Only a complete passing
+stops that lane, waits for the others, and fails the run. Only a complete passing
 inventory produces a passing timing report. GitHub uploads logs even on failure.
-Cancellation terminates both process groups; use a disposable Docker host because
+Cancellation terminates every lane's process group; use a disposable Docker host because
 forced cancellation can interrupt a suite's normal container cleanup.
 
-Add `--endurance` for extended idle/unload and historical import cases. The
+Add `--endurance` for extended idle/unload and historical import cases in two lanes. The
 weekly/manual `assistant-endurance.yml` runs this profile against published images
 on native x64/ARM64 without rebuilding them. Run affected endurance cases when
 changing that behavior; unrelated releases do not wait for the weekly workflow.
@@ -105,11 +104,10 @@ Build runtime images with the version from the root `package.json`, then run
 ```bash
 FH_LIVE_TEST_HOME=/absolute/path/to/disposable-e2e/home \
 FH_LIVE_TEST_REPORT=/absolute/path/to/private/live-report.json \
-  bun run scripts/live-acceptance.ts
+  bun run packages/guardian/scripts/live-acceptance.ts
 ```
 
-The thin entrypoint imports the runner beside Guardian's private MCP client
-dependency. It verifies native Guardian interactions and natural-language task
+The runner lives beside Guardian's private MCP client dependency. It verifies native Guardian interactions and natural-language task
 creation and real timer history/output, recall after update/restart, MCP policy
 boundaries, resumable job and identity isolation, explicit permission approval
 with cross-identity rejection, and credential rotation.

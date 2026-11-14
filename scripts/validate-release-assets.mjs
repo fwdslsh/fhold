@@ -16,11 +16,6 @@ export const CLI_BINARIES = [
 ];
 export const ADMIN_UPDATE_FEEDS = ['latest-linux.yml', 'latest-linux-arm64.yml'];
 
-const ADMIN_TARGETS = [
-	{ platform: 'linux', arch: 'x64', extension: 'AppImage' },
-	{ platform: 'linux', arch: 'arm64', extension: 'AppImage' }
-];
-
 export function readElectronProductName(path = ELECTRON_BUILDER_YML) {
 	const text = readFileSync(path, 'utf8');
 	const match = /^productName:\s*(.+?)\s*$/m.exec(text);
@@ -29,26 +24,9 @@ export function readElectronProductName(path = ELECTRON_BUILDER_YML) {
 	return value.startsWith('"') || value.startsWith("'") ? value.slice(1, -1) : value;
 }
 
-function productSlug(productName) {
-	const slug = productName
-		.trim()
-		.replace(/[^A-Za-z0-9._-]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-	if (!slug) throw new Error('Electron productName does not produce a safe artifact prefix');
-	return slug;
-}
-
-export function adminAssetName(productName, version, { platform, arch, extension }) {
-	productSlug(productName);
+export function expectedAdminAssets(version) {
 	if (!parseSemver(version)) throw new Error('Invalid fhold release version');
-	const prefix = 'fhold-admin';
-	if (platform === 'windows') return `${prefix}-Setup-${version}.${extension}`;
-	const artifactArch = platform === 'linux' && arch === 'x64' ? 'x86_64' : arch;
-	return `${prefix}-${version}-${artifactArch}-${platform}.${extension}`;
-}
-
-export function expectedAdminAssets(version, productName = readElectronProductName()) {
-	return ADMIN_TARGETS.map((target) => adminAssetName(productName, version, target));
+	return ['x86_64', 'arm64'].map((arch) => `fhold-admin-${version}-${arch}-linux.AppImage`);
 }
 
 export function expectedClaudeExtensionAsset(version) {
@@ -56,12 +34,12 @@ export function expectedClaudeExtensionAsset(version) {
 	return `fhold-claude-desktop-${version}.mcpb`;
 }
 
-export function requiredReleaseAssets(version, productName = readElectronProductName(), scope = 'full') {
+export function requiredReleaseAssets(version, scope = 'full') {
 	if (!parseSemver(version)) throw new Error('Invalid fhold release version');
 	releaseImages(scope);
 	return [
 		...CLI_BINARIES,
-		...expectedAdminAssets(version, productName),
+		...expectedAdminAssets(version),
 		...ADMIN_UPDATE_FEEDS,
 		...(scope === 'full' ? [expectedClaudeExtensionAsset(version)] : []),
 		'checksums-sha256.txt'
@@ -79,7 +57,7 @@ export function checksumFor(checksumsText, filename) {
 // Derived local build evidence, not a reservation of a public release version.
 // Publication owns remote immutability; read-only validation never rewrites it.
 export function writeReleaseAssetManifest(dir, version, productName = readElectronProductName(), scope = 'full') {
-	const hashes = Object.fromEntries(requiredReleaseAssets(version, productName, scope).map((name) => {
+	const hashes = Object.fromEntries(requiredReleaseAssets(version, scope).map((name) => {
 		const path = join(dir, name);
 		if (!lstatSync(path, { throwIfNoEntry: false })?.isFile()) throw new Error(`Missing regular asset: ${name}`);
 		return [name, createHash('sha256').update(readFileSync(path)).digest('hex')];
@@ -90,7 +68,7 @@ export function writeReleaseAssetManifest(dir, version, productName = readElectr
 		platforms: ['linux-x64', 'linux-arm64'],
 		product: productName,
 		hashes,
-		assets: [...requiredReleaseAssets(version, productName, scope)].sort()
+		assets: [...requiredReleaseAssets(version, scope)].sort()
 	};
 	const output = `${JSON.stringify(manifest, null, 2)}\n`;
 	const path = join(dir, 'release-assets-manifest.json');
@@ -132,7 +110,7 @@ export function validateReleaseAssets(dir, version, productName = readElectronPr
 		problems.push('Release asset manifest has the wrong version, product, or asset list');
 	}
 
-	const required = requiredReleaseAssets(version, productName, scope);
+	const required = requiredReleaseAssets(version, scope);
 	let unsafeFiles = false;
 	for (const name of readdirSync(dir)) {
 		if (![...required, 'release-assets-manifest.json'].includes(name)) {
@@ -201,6 +179,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 		process.exit(1);
 	}
 	console.log(
-		`Validated ${requiredReleaseAssets(version, readElectronProductName(), scope).length} required ${scope} release assets for ${version}`
+		`Validated ${requiredReleaseAssets(version, scope).length} required ${scope} release assets for ${version}`
 	);
 }

@@ -239,11 +239,6 @@ jobs:
           CANDIDATE_ATTEMPT: ${{ needs.candidates.outputs.attempt }}
           RELEASE_SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: GITHUB_SHA="$RELEASE_SOURCE_SHA" node scripts/release-candidate.mjs assemble candidate dist
-      - name: Verify the Claude Desktop extension is present
-        if: needs.validate.outputs.scope == 'full'
-        env:
-          VERSION: ${{ needs.validate.outputs.version }}
-        run: test -f "dist/fhold-claude-desktop-${VERSION}.mcpb"
       - name: Create checksums
         run: |
           cd dist
