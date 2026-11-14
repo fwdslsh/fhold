@@ -316,7 +316,7 @@ describe('Model-first provider manager', () => {
 		expect(state.providerCurrentModel).toEqual(settings().currentModel);
 		expect(control('use-provider-model').disabled).toBe(true);
 	});
-	it('verifies the exact selected model and allows only explicit matching Use', async () => {
+	it('tests the exact selected model and changes the default only on explicit Use', async () => {
 		const calls: unknown[] = [];
 		state.currentView = 'provider';
 		operations['agent.readiness'] = async (value: { provider: string; model: string }) => {
@@ -335,22 +335,20 @@ describe('Model-first provider manager', () => {
 		expect(calls).toEqual([{ provider: 'current-service', model: 'first-model' }]);
 		expect(state.providerCurrentModel).toEqual(settings().currentModel);
 		expect(control('use-provider-model').disabled).toBe(false);
+		// Selecting a model does not require a prior response test.
 		control('provider-model').value = 'team/second-model';
 		fire('provider-model', 'change');
-		expect(control('use-provider-model').disabled).toBe(true);
-		fire('use-provider-model');
-		await settled();
+		expect(control('use-provider-model').disabled).toBe(false);
 		expect(calls).toHaveLength(1);
-		fire('test-provider');
-		await settled();
 		fire('use-provider-model');
 		await settled();
-		expect(calls.at(-1)).toEqual({
-			use: { provider: 'current-service', model: 'team/second-model' }
-		});
+		expect(calls).toEqual([
+			{ provider: 'current-service', model: 'first-model' },
+			{ use: { provider: 'current-service', model: 'team/second-model' } }
+		]);
 		expect(state.currentView).toBe('provider');
 	});
-	it('rejects a native result for a different model rather than enabling Use', async () => {
+	it('reports a native result for a different model as unverified', async () => {
 		openProviderEditor('change', 'current-service');
 		control('provider-model').value = 'first-model';
 		fire('provider-model', 'change');
@@ -361,7 +359,6 @@ describe('Model-first provider manager', () => {
 				model: 'other-model'
 			}))
 		).toBe(false);
-		expect(control('use-provider-model').disabled).toBe(true);
 		expect(content(control('provider-status'))).toContain('different model');
 	});
 	it('invalidates passing readiness on failed recheck and never automatically advances management', async () => {
@@ -373,11 +370,11 @@ describe('Model-first provider manager', () => {
 			provider: 'current-service',
 			model: 'first-model'
 		}));
-		expect(control('use-provider-model').disabled).toBe(false);
+		expect(state.lastReadiness.ok).toBe(true);
 		await verifyProvider('Fail', async () => {
 			throw new Error('Test account denied');
 		});
-		expect(control('use-provider-model').disabled).toBe(true);
+		expect(state.lastReadiness.ok).toBe(false);
 		expect(content(control('provider-status'))).toContain('Test account denied');
 		expect(state.currentView).toBe('provider');
 	});

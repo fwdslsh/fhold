@@ -427,9 +427,9 @@ To change or add a service:
 4. **Test response** makes a small, potentially billed, no-tool request to that
    exact model. Endpoint details are saved before this explicit test; a failed
    response does not erase them or imply sign-in was not saved.
-5. **Use this model** explicitly sets the default for new conversations. Existing
-   conversations and clients can retain their own model selection. Testing alone
-   never switches your default or navigates away.
+5. **Use this model** explicitly sets the default for new conversations; a prior
+   test is optional. Existing conversations and clients can retain their own model
+   selection. Testing alone never switches your default or navigates away.
 
 Ollama, LM Studio and llama.cpp must already have a model/API server running.
 The request originates inside Assistant: `localhost` means that container, not

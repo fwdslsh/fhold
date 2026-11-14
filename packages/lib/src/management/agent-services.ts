@@ -78,14 +78,17 @@ export class AgentServices {
 		return discoverProviderModels(await this.bind(context), input);
 	}
 	async use(input: AgentInput<'selectModel'>, context: RequestContext = {}) {
-		if (this.verifiedModel?.provider !== input.provider || this.verifiedModel.model !== input.model)
-			throw new Error('Test this model before using it for your agent.');
 		const verified = this.verifiedModel;
 		const settings = await useProviderModel(await this.bind(context), input.provider, input.model, {
 			signal: this.signal(context)
 		});
 		this.requireOpen();
-		if (settings.write?.effective === 'verified') {
+		// Setup completion still needs a passed native test of the selected model.
+		if (
+			settings.write?.effective === 'verified' &&
+			verified?.provider === input.provider &&
+			verified.model === input.model
+		) {
 			const warning = await this.completeReadiness(verified);
 			if (warning)
 				settings.configurationIssue = [settings.configurationIssue, warning]

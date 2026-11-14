@@ -111,25 +111,3 @@ test('a failed host setup-completion write does not invalidate a successful nati
 		globalThis.fetch = original;
 	}
 });
-test('only the exact model a native test verified may become the agent default', async () => {
-	const f = fixture();
-	const original = globalThis.fetch;
-	globalThis.fetch = (async (input, init) =>
-		f.request(new URL(new Request(input, init).url).pathname)) as typeof fetch;
-	const service = new AgentServices({
-		bind: async () => localProviderSettings(f.home, localNativeAgent(f.home))
-	});
-	try {
-		const gate = 'Test this model before using it for your agent.';
-		await expect(service.use({ provider: 'example', model: 'tool-model' })).rejects.toThrow(gate);
-		expect(await service.readiness({ provider: 'example', model: 'tool-model' })).toMatchObject({
-			ok: true
-		});
-		await expect(service.use({ provider: 'example', model: 'other-model' })).rejects.toThrow(gate);
-		service.reset();
-		await expect(service.use({ provider: 'example', model: 'tool-model' })).rejects.toThrow(gate);
-	} finally {
-		service.close();
-		globalThis.fetch = original;
-	}
-});

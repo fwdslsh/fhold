@@ -3445,7 +3445,6 @@ describe('Admin renderer behavior', () => {
 		expect(control('provider-status').getAttribute('aria-live')).toBe('assertive');
 		expect(control('provider-status').children[1].textContent).toBe('Sign-in expired');
 		expect(control('provider-badge').hidden).toBe(true);
-		expect(control('use-provider-model').disabled).toBe(true);
 		expect(state.noticeTimer).toBeUndefined();
 		expect(state.operationInFlight).toBe(false);
 		await operation('Saving', async () => {

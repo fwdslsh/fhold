@@ -628,10 +628,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		});
 		await capture('model-tested-explicit-use.png');
 		await value('#provider-model', 'team/second-model', 'change');
-		expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(true);
-		const uses = await count('use');
-		await click('#use-provider-model');
-		expect(await count('use')).toBe(uses);
+		// Use does not require a prior response test.
+		expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(false);
 		await click('#test-provider');
 		await evaluate("document.querySelector('#test-provider').focus()");
 		await keypress('Tab', 'Tab', 9);
@@ -679,7 +677,9 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				expect(
 					String(await evaluate("document.querySelector('#provider-editor-message').textContent"))
 				).toContain('saved');
-				expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(true);
+				expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(
+					false
+				);
 				await capture('model-custom-saved-response-failed.png');
 				await evaluate('window.providerQa.failCheck=false');
 			}
@@ -776,7 +776,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate('window.providerQa.rejectUse=true');
 		await click('#use-provider-model');
 		expect(await evaluate("document.querySelector('#provider-editor').hidden")).toBe(false);
-		expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(true);
+		expect(await evaluate("document.querySelector('#use-provider-model').disabled")).toBe(false);
 		expect(await evaluate('window.providerQa.settings.currentModel')).toEqual({
 			provider: 'openai',
 			model: 'team/second-model'

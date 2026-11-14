@@ -398,7 +398,7 @@ Agent settings starts with the resolved native default model, not a directory of
 apparently connected accounts. Saved sign-ins and endpoint definitions are a
 secondary, reviewable inventory; they never prove a working connection. Add AI
 service guides native sign-in or an OpenAI-compatible endpoint, model selection,
-an explicit short response test and an explicit Use this model action. Listing,
+an optional explicit short response test and an explicit Use this model action. Listing,
 saving credentials and discovering model IDs make no inference request. Model
 discovery runs from the Assistant's network, not the Admin host. Keys remain in
 native auth, never inline in generated provider configuration. Native OAuth

@@ -69,10 +69,6 @@ function clearTest() {
 	state.lastReadinessModel = null;
 	state.lastReadinessAuthSaved = false;
 	state.providerTestTarget = null;
-	if (byId('use-provider-model')) byId('use-provider-model').disabled = true;
-	hide('use-provider-model', true);
-	const useActions = byId('use-provider-model')?.closest('.provider-use-actions');
-	if (useActions) useActions.hidden = true;
 	hide('finish-provider-setup', true);
 }
 
@@ -380,12 +376,8 @@ function updateModelControls() {
 	);
 	const saved = editor && (!editor.endpoint || editor.saved);
 	if (byId('use-provider-model'))
-		byId('use-provider-model').disabled =
-			disabled || !editor?.provider || !model || !saved || !testedModel(editor.provider, model);
-	hide(
-		'use-provider-model',
-		!editor?.provider || !model || !saved || !testedModel(editor.provider, model)
-	);
+		byId('use-provider-model').disabled = disabled || !editor?.provider || !model || !saved;
+	hide('use-provider-model', !editor?.provider || !model || !saved);
 	const useActions = byId('use-provider-model')?.closest('.provider-use-actions');
 	if (useActions) useActions.hidden = byId('use-provider-model').hidden;
 	hide('provider-model-id-field', !byId('provider-model-manual')?.checked);
@@ -1118,7 +1110,7 @@ export function bindProvidersEvents() {
 	on('use-provider-model', 'click', async () => {
 		const provider = selectedId();
 		const model = selectedModel();
-		if (byId('use-provider-model').disabled || !testedModel(provider, model)) return;
+		if (byId('use-provider-model').disabled) return;
 		const request = captureRequest();
 		const outcome = await providerOperation('Changing your agent’s default model', () =>
 			state.api.operation('agent.selectModel', { provider, model })
@@ -1134,7 +1126,7 @@ export function bindProvidersEvents() {
 			clearTest();
 			text(
 				'provider-editor-message',
-				'Your agent did not confirm this model as its default. Review its current settings and test again.'
+				'Your agent did not confirm this model as its default. Review its current settings and try again.'
 			);
 			notice('Your agent did not confirm the selected default model.', 'error', { persist: true });
 			renderProviderSelection();
