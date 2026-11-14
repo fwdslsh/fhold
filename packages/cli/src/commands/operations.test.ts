@@ -61,11 +61,11 @@ function fixture(): string {
 }
 
 describe('operational command wiring', () => {
-	it('reports customized Compose as advisory without failing an otherwise healthy doctor result', async () => {
+	it('reports a weakened Compose security default as advisory without failing an otherwise healthy doctor result', async () => {
 		const root = fixture();
 		const home = await install(root);
 		markInstalled(home);
-		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n');
+		writeFileSync(join(home, 'config/stack/custom.compose.yml'), 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n    cap_add: [SYS_ADMIN]\n');
 		const resolved = await composeConfigJson(buildComposeOptions(createFholdState(home)));
 		if (!resolved.ok) throw new Error(resolved.stderr);
 		const binary = join(root, 'docker');
@@ -74,8 +74,8 @@ describe('operational command wiring', () => {
 		const diagnosis = await diagnoseStack();
 		expect(diagnosis.ok).toBe(true);
 		expect(diagnosis.checks.filter((check) => !check.ok && check.status !== 'not-checked')).toEqual([{
-			name: 'managed Compose recommendations', ok: false, advisory: true,
-			detail: 'service assistant has unsupported environment key OPERATOR_SETTING'
+			name: 'Compose security defaults', ok: false, advisory: true,
+			detail: 'service assistant may not add capabilities'
 		}]);
 	});
 	it('enables Guardian and updates managed files without a running Docker daemon', async () => {

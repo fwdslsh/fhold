@@ -72,32 +72,7 @@ fi
 		const check = ['akm', 'fhold-task', 'supercronic', 'opencode', 'fhold-remote'].includes(name)
 			? writerCheck
 			: '';
-		const mapCheck = !['akm', 'opencode', 'supercronic', 'fhold-task', 'fhold-remote'].includes(
-			name
-		)
-			? ''
-			: `
-if [ "\${FIXTURE_MAP_CHECK:-0}" = 1 ]; then
-  test -z "\${WORKLOAD_ENDPOINT+x}"
-  test -z "\${IDENTITY_HEADER+x}"
-  test -z "\${FH_OPENCODE_ENV_MAP+x}"
-  ${
-		name === 'opencode'
-			? `
-  test "$PLUGIN_ENDPOINT" = "$FIXTURE_ENDPOINT"
-  test "$PLUGIN_HEADER" = "$FIXTURE_HEADER"
-  bash -c 'test "$PLUGIN_HEADER" = "$FIXTURE_HEADER"'
-  printf 'opencode-aliases-and-child-inheritance\\n' >>"$EVENTS"
-  `
-			: `
-  test -z "\${PLUGIN_ENDPOINT+x}"
-  test -z "\${PLUGIN_HEADER+x}"
-  printf 'clean-${name}-environment\\n' >>"$EVENTS"
-  `
-	}
-fi
-`;
-		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${mapCheck}${body}\n`);
+		writeFileSync(path, `#!/usr/bin/env bash\nset -eu\n${check}${body}\n`);
 		chmodSync(path, 0o755);
 	};
 	stub(
@@ -133,14 +108,9 @@ exit "\${FIXTURE_MIGRATE_EXIT:-0}"`
 		'fhold-task',
 		'printf "sync\\nsync-args %s\\n" "$*" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
 	);
-	stub('fhold-keepalive', 'exit "${FIXTURE_KEEPALIVE_EXIT:-0}"');
 	stub(
 		'curl',
-		`if [ "\${FIXTURE_DELAY_READY:-0}" = 1 ]; then test -e "$FIXTURE_ROOT/native-ready"; fi
-if [[ "\${!#}" = */api/config ]]; then
-  printf 'workspace-init\\n' >>"$EVENTS"
-  exit "\${FIXTURE_WORKSPACE_EXIT:-0}"
-fi`
+		`if [ "\${FIXTURE_DELAY_READY:-0}" = 1 ]; then test -e "$FIXTURE_ROOT/native-ready"; fi`
 	);
 	stub('supercronic', "trap 'exit 0' TERM; while sleep 0.1; do :; done");
 	stub(
@@ -194,7 +164,7 @@ while sleep 0.1; do :; done`
 	if (extra.FIXTURE_STALE_RUNTIME === '1') {
 		const runtime = join(root, 'runtime');
 		mkdirSync(runtime);
-		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-activity']) {
+		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-scheduler']) {
 			writeFileSync(join(runtime, name), 'stale fixture');
 		}
 	}
@@ -213,7 +183,6 @@ while sleep 0.1; do :; done`
 			FH_SCHEDULER_ENABLED: '0',
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0',
-			FH_OPENCODE_ENV_MAP: undefined,
 			FH_AUTOMATIC_MEMORY: undefined,
 			AKM_AUTO_MEMORY: undefined,
 			AKM_AUTO_LEARNING: undefined,
@@ -378,83 +347,6 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		}
 	}, 10_000);
 
-	it('maps exact capability names only into OpenCode and its normal subprocesses', async () => {
-		const header = 'synthetic value with spaces\nand $literal; not shell code';
-		const run = fixture({
-			FH_OPENCODE_ENV_MAP: 'WORKLOAD_ENDPOINT=PLUGIN_ENDPOINT,IDENTITY_HEADER=PLUGIN_HEADER',
-			WORKLOAD_ENDPOINT: 'https://synthetic.invalid/identity',
-			IDENTITY_HEADER: header,
-			FIXTURE_ENDPOINT: 'https://synthetic.invalid/identity',
-			FIXTURE_HEADER: header,
-			FIXTURE_MAP_CHECK: '1',
-			FH_SCHEDULER_ENABLED: '1',
-			FH_CODEX_REMOTE: '1',
-			FH_CLAUDE_REMOTE: '1'
-		});
-		try {
-			await until(() =>
-				[
-					'clean-akm-environment',
-					'opencode-aliases-and-child-inheritance',
-					'clean-supercronic-environment',
-					'clean-fhold-task-environment',
-					'clean-fhold-remote-environment'
-				].every((event) => run.events().includes(event))
-			);
-			expect(run.child.exitCode).toBeNull();
-			expect(run.stderr()).not.toContain(header);
-			expect(readFileSync(join(run.root, 'entrypoint.sh'), 'utf8')).not.toContain(header);
-		} finally {
-			run.child.kill('SIGTERM');
-			await finished(run.child);
-		}
-	});
-
-	it('skips missing capability sources with a warning while the agent remains available', async () => {
-		const run = fixture({ FH_OPENCODE_ENV_MAP: 'MISSING_CAPABILITY=PLUGIN_MISSING' });
-		try {
-			await until(() => run.events().includes('native'));
-			expect(run.child.exitCode).toBeNull();
-			expect(run.stderr()).toContain('source MISSING_CAPABILITY is missing');
-			expect(readFileSync(join(run.root, 'runtime/degraded-environment'), 'utf8')).toContain(
-				'skipped'
-			);
-		} finally {
-			run.child.kill('SIGTERM');
-			await finished(run.child);
-		}
-	});
-
-	for (const mapping of [
-		'IDENTITY_HEADER=PATH',
-		'IDENTITY_HEADER=FH_RECOVERY_URL',
-		'IDENTITY_HEADER=LD_PRELOAD',
-		'IDENTITY_HEADER=OPENCODE_SERVER_PASSWORD',
-		'IDENTITY_HEADER=PLUGIN_ONE,MSI_ENDPOINT=PLUGIN_ONE',
-		'IDENTITY_HEADER=IDENTITY_HEADER',
-		'IDENTITY_HEADER=*',
-		'IDENTITY_HEADER=PLUGIN_ONE,',
-		'IDENTITY_HEADER=PLUGIN_ONE\nMSI_ENDPOINT=PLUGIN_TWO',
-		'IDENTITY_HEADER=PLUGIN_ONE,PLUGIN_ONE=PLUGIN_TWO',
-		'IDENTITY_HEADER=EXISTING_PLUGIN'
-	]) {
-		it(`degrades a malformed/reserved/colliding optional environment map without stopping startup: ${mapping}`, async () => {
-			const run = fixture({
-				FH_OPENCODE_ENV_MAP: mapping,
-				IDENTITY_HEADER: 'never-log-this-value',
-				EXISTING_PLUGIN: 'existing-value'
-			});
-			try {
-				await until(() => run.events().includes('native'));
-				expect(run.child.exitCode).toBeNull();
-				expect(run.stderr()).toContain('no aliases were applied');
-				expect(run.stderr()).not.toContain('never-log-this-value');
-			} finally {
-				run.child.kill('SIGTERM');
-				await finished(run.child);
-			}
-		});
-	}
 	it('uses safe default recovery budgets when numeric settings are malformed', async () => {
 		for (const value of ['0', '-1', 'false', '1.5', '3601']) {
 			const run = fixture({ FH_RECOVERY_OPERATION_TIMEOUT_SECONDS: value });
@@ -584,7 +476,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
-	it('does not block native startup on slow or failing initial task reconciliation', async () => {
+	it('does not block native startup on slow or failing initial task sync', async () => {
 		const run = fixture({
 			FH_SCHEDULER_ENABLED: '1',
 			FIXTURE_SYNC_SECONDS: '30',
@@ -598,90 +490,34 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
-	it('a keep-alive initialization failure disables only keep-alive', async () => {
-		const run = fixture({
-			FH_SCHEDULER_ENABLED: '1',
-			FH_KEEPALIVE_URL: 'invalid',
-			FIXTURE_KEEPALIVE_EXIT: '1'
-		});
+	it('reports a failed boot task sync as degraded scheduling without stopping the agent', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: '1', FIXTURE_SYNC_EXIT: '1' });
+		try {
+			await until(() => existsSync(join(run.root, 'runtime/degraded-task-sync')));
+			expect(readFileSync(join(run.root, 'runtime/degraded-task-sync'), 'utf8')).toContain(
+				'Task sync failed'
+			);
+			expect(run.events()).toContain('native');
+			expect(run.child.exitCode).toBeNull();
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	it('a stopped scheduler does not stop native sessions or the recovery owner', async () => {
+		const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
 		try {
 			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
+			process.kill(Number(readFileSync(join(run.root, 'runtime/scheduler.pid'), 'utf8')), 'SIGTERM');
+			await Bun.sleep(150);
 			expect(run.child.exitCode).toBeNull();
-			expect(readFileSync(join(run.root, 'runtime/degraded-keepalive'), 'utf8')).toContain(
-				'Correct'
-			);
-			expect(readFileSync(join(run.root, 'crontabs/fhold'), 'utf8')).not.toContain(
-				'fhold-keepalive tick'
-			);
+			expect(run.events()).not.toContain('native-stopped');
+			expect(run.events()).not.toContain('released');
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);
 		}
 	});
-	for (const recovery of ['', 'file:///fixture'])
-		it(`initializes native workspace once for unused keepalive with recovery ${Boolean(recovery)}`, async () => {
-			const run = fixture({
-				FH_KEEPALIVE_URL: 'http://synthetic.invalid/tick',
-				FH_RECOVERY_URL: recovery,
-				FIXTURE_DELAY_READY: '1'
-			});
-			try {
-				await until(() => run.events().includes('native'));
-				expect(run.events()).not.toContain('workspace-init');
-				writeFileSync(join(run.root, 'native-ready'), 'ready');
-				await until(() => run.events().includes('workspace-init'));
-				await Bun.sleep(150);
-				expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
-				expect(run.child.exitCode).toBeNull();
-				expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(
-					Boolean(recovery)
-				);
-				// Only the actual native plugin may establish activity coverage.
-				expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
-			} finally {
-				run.child.kill('SIGTERM');
-				await finished(run.child);
-			}
-		});
-	it('failed workspace activation stays conservative without blocking essential recovery', async () => {
-		const run = fixture({
-			FH_KEEPALIVE_URL: 'http://synthetic.invalid/tick',
-			FH_RECOVERY_URL: 'file:///fixture',
-			FIXTURE_WORKSPACE_EXIT: '22'
-		});
-		try {
-			await until(() => existsSync(join(run.root, 'runtime/degraded-activity')));
-			expect(run.child.exitCode).toBeNull();
-			expect(existsSync(join(run.root, 'runtime/recovery-writers-started'))).toBe(true);
-			expect(existsSync(join(run.root, 'runtime/activity/opencode.ready'))).toBe(false);
-			expect(run.events().filter((event) => event === 'workspace-init')).toHaveLength(1);
-			run.child.kill('SIGTERM');
-			expect(await finished(run.child)).toBe(0);
-			expect(run.events()).toContain('final-complete');
-			expect(run.events()).toContain('released');
-		} finally {
-			run.child.kill('SIGTERM');
-			await finished(run.child);
-		}
-	});
-	for (const component of ['scheduler', 'reconciliation'])
-		it(`a stopped ${component} does not stop native sessions or the recovery owner`, async () => {
-			const run = fixture({ FH_SCHEDULER_ENABLED: '1', FH_RECOVERY_URL: 'file:///fixture' });
-			try {
-				await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
-				process.kill(
-					Number(readFileSync(join(run.root, `runtime/${component}.pid`), 'utf8')),
-					'SIGTERM'
-				);
-				await Bun.sleep(150);
-				expect(run.child.exitCode).toBeNull();
-				expect(run.events()).not.toContain('native-stopped');
-				expect(run.events()).not.toContain('released');
-			} finally {
-				run.child.kill('SIGTERM');
-				await finished(run.child);
-			}
-		});
 	for (const name of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE', 'FH_CODEX_SANDBOX'])
 		it(`invalid optional ${name} does not prevent native assistant startup`, async () => {
 			const run = fixture({ [name]: 'false' });
@@ -797,7 +633,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => run.events().includes('native'));
 			expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf('seed'));
-			expect(existsSync(join(run.root, 'runtime/degraded-activity'))).toBe(false);
+			expect(existsSync(join(run.root, 'runtime/degraded-scheduler'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);
@@ -853,15 +689,16 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		expect(events.indexOf('final-checkpoint')).toBeLessThan(events.indexOf('released'));
 	});
 
-	it('default scheduler continues task synchronization', async () => {
+	it('default scheduler syncs tasks once at boot, capturing the image runtime', async () => {
 		const run = fixture({ FH_SCHEDULER_ENABLED: '1' });
 		try {
 			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
-			expect(run.events()).toContain('sync');
-			// Only the boot sync captures the image runtime; periodic syncs preserve it.
-			expect(run.events()).toContain('sync-args sync --rebind');
+			await Bun.sleep(150);
+			expect(run.events().filter((event) => event.startsWith('sync-args'))).toEqual([
+				'sync-args sync --rebind'
+			]);
 			expect(existsSync(join(run.root, 'runtime', 'scheduler.pid'))).toBe(true);
-			expect(existsSync(join(run.root, 'runtime', 'reconciliation.pid'))).toBe(true);
+			expect(existsSync(join(run.root, 'runtime', 'degraded-task-sync'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);

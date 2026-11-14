@@ -24,11 +24,11 @@ Confirm this hostname before modifying an instance—local and hosted sessions
 can look alike. Use `fhold-healthcheck` for runtime health and `fhold-task list`
 for existing tasks; neither is proof of a working provider or remote client.
 
-A usable agent can have degraded scheduling, knowledge, keep-alive or a native
+A usable agent can have degraded scheduling, knowledge or a native
 remote connection. Report the warning and the affected feature, not a stopped
-agent. Task reconciliation, knowledge hooks and failed heartbeat requests retry;
-do not restart the whole container merely because one fails. A stopped optional
-process needs the operator's corrective action and an explicitly approved restart.
+agent. Knowledge hooks retry; do not restart the whole container merely because
+one fails. A failed boot task sync or a stopped optional process needs the
+operator's corrective action and an explicitly approved restart.
 Missing recovery diagnostics are not proof of lost ownership. Actual restoration
 or ownership failure remains a reason to stop writers and investigate safely.
 

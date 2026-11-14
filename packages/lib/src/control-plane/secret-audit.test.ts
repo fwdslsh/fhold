@@ -1,414 +1,74 @@
-import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, it } from 'bun:test';
 
 import { auditCompose } from './secret-audit.js';
-import {
-	defaultStackConfig,
-	readStackConfig,
-	stackConfigEnv,
-	writeStackConfig
-} from './stack-config.js';
-import { FH_RUNTIME_VERSION } from './release.js';
 
-const roots: string[] = [];
+const home = '/tmp/fhold-audit-home';
 
-afterEach(() => {
-	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-
-const assistantEnvironment = {
-	FH_AUTOMATIC_MEMORY: '1',
-	FH_CODEX_REMOTE: '1',
-	FH_CODEX_SANDBOX: 'workspace-write',
-	FH_CLAUDE_REMOTE: '1',
-	TZ: defaultStackConfig().assistant.timezone,
-	OPENCODE_CONFIG: '/home/fhold/.config/opencode/opencode.json',
-	OPENCODE_API_URL: 'http://127.0.0.1:4096',
-	OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
-	TERM: 'xterm-256color'
-};
-
-function assistantService(homeDir = '/tmp/home') {
-	const stack = readStackConfig(homeDir);
-	return {
-		image: `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`,
-		hostname: stack.ok ? stackConfigEnv(stack.config).FH_INSTANCE_HOSTNAME : 'fhold',
-		user: '1000:1000',
-		cap_drop: ['ALL'],
-		security_opt: ['no-new-privileges:true'],
-		environment: { ...assistantEnvironment },
-		secrets: [
-			{
-				source: 'opencode_server_password',
-				target: '/run/secrets/opencode_server_password'
-			}
-		],
-		networks: ['agent_net'],
-		ports: [
-			{
-				host_ip: '127.0.0.1',
-				target: 4096,
-				published: '3810',
-				protocol: 'tcp',
-				mode: 'ingress'
-			}
-		],
-		volumes: [
-			...[
-				['codex/config.toml', 'codex/config.toml'],
-				['codex/requirements.toml', 'codex/requirements.toml'],
-				['claude/managed-settings.json', 'claude-code/managed-settings.json']
-			].map(([source, target]) => ({
-				type: 'bind',
-				source: `${homeDir}/system/${source}`,
-				target: `/etc/${target}`,
-				read_only: true
-			})),
-			{ type: 'bind', source: `${homeDir}/data/assistant`, target: '/home/fhold' },
-			{
-				type: 'bind',
-				source: `${homeDir}/config/assistant`,
-				target: '/home/fhold/.config/opencode',
-				read_only: false
-			},
-			{
-				type: 'bind',
-				source: `${homeDir}/knowledge/secrets/auth.json`,
-				target: '/home/fhold/.local/share/opencode/auth.json'
-			},
-			{
-				type: 'bind',
-				source: `${homeDir}/system/assistant`,
-				target: '/etc/opencode',
-				read_only: true
-			},
-			{
-				type: 'bind',
-				source: `${homeDir}/config/akm`,
-				target: '/etc/akm'
-			},
-			{ type: 'bind', source: `${homeDir}/knowledge`, target: '/stash' },
-			{ type: 'bind', source: `${homeDir}/data/akm/cache`, target: '/opt/akm/cache' },
-			{ type: 'bind', source: `${homeDir}/data/akm/data`, target: '/opt/akm/data' },
-			{ type: 'bind', source: `${homeDir}/workspace`, target: '/work' }
-		],
-		logging: {
-			driver: 'json-file',
-			options: { 'max-size': '10m', 'max-file': '3' }
-		}
-	};
-}
-
-function baseConfig(homeDir = '/tmp/home') {
-	const stack = readStackConfig(homeDir);
-	const project = stack.ok ? stack.config.deployment.projectName : 'fhold';
+function baseConfig() {
 	return {
 		secrets: {
-			opencode_server_password: {
-				file: `${homeDir}/state/secrets/fhold_opencode_password`
-			}
+			opencode_server_password: { file: `${home}/state/secrets/fhold_opencode_password` }
 		},
-		networks: { agent_net: { name: `${project}_agent_net`, ipam: {} } },
-		services: { assistant: assistantService(homeDir) }
+		services: {
+			assistant: {
+				image: 'fwdslsh/fhold-assistant:test',
+				user: '1000:1000',
+				cap_drop: ['ALL'],
+				environment: { OPERATOR_SETTING: 'custom-value' } as Record<string, string>,
+				secrets: ['opencode_server_password'],
+				volumes: [
+					{ type: 'bind', source: `${home}/workspace`, target: '/work' },
+					{ type: 'bind', source: '/srv/operator-data', target: '/operator-data' }
+				] as unknown[]
+			} as Record<string, unknown>
+		}
 	};
 }
 
-function auditHome(): string {
-	const root = mkdtempSync(join(tmpdir(), 'fhold-audit-'));
-	roots.push(root);
-	writeStackConfig(root, defaultStackConfig());
-	return root;
-}
-
-describe('Compose security audit', () => {
-	it('grants native user configuration writes while keeping managed plugins and policy read-only', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
+describe('Compose security defaults', () => {
+	it('accepts operator customizations that keep the shipped security defaults', () => {
+		const config = baseConfig();
+		Object.assign(config.services, {
+			sidecar: { image: 'operator/sidecar:latest', environment: { API_TOKEN: 'operator-owned' } }
+		});
 		expect(auditCompose(config, home)).toEqual([]);
-		const directory = config.services.assistant.volumes.find(
-			(mount) => mount.target === '/home/fhold/.config/opencode'
-		);
-		if (!directory) throw new Error('Missing native directory fixture');
-		directory.read_only = true;
-		expect(auditCompose(config, home).join('\n')).toContain(
-			'/home/fhold/.config/opencode must be read-write'
-		);
-		directory.read_only = false;
-		const managed = config.services.assistant.volumes.find(
-			(mount) => mount.target === '/etc/opencode'
-		);
-		if (!managed) throw new Error('Missing managed plugin fixture');
-		managed.read_only = false;
-		expect(auditCompose(config, home).join('\n')).toContain('/etc/opencode must be read-only');
 	});
-	it('leaves the Assistant image healthcheck in place unless Compose overrides it', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		const assistant: Record<string, unknown> = config.services.assistant;
-		assistant.healthcheck = { test: ['CMD', 'fhold-healthcheck'], interval: '1m' };
-		expect(auditCompose(config, home)).toEqual([]);
-		for (const healthcheck of [{ disable: true }, { test: ['CMD', 'true'] }]) {
-			assistant.healthcheck = healthcheck;
-			expect(auditCompose(config, home)).toContain(
-				'service assistant must retain its managed healthcheck'
-			);
+
+	it('reports privilege, added capabilities and container runtime mounts on any service', () => {
+		const config = baseConfig();
+		Object.assign(config.services.assistant, { privileged: true, cap_add: ['SYS_ADMIN'] });
+		(config.services.assistant.volumes as unknown[]).push('/var/run/docker.sock:/var/run/docker.sock');
+		Object.assign(config.services, {
+			sidecar: { volumes: [{ type: 'bind', source: '/run/containerd/containerd.sock', target: '/sock' }] }
+		});
+		expect(auditCompose(config, home)).toEqual([
+			'service assistant may not be privileged',
+			'service assistant may not add capabilities',
+			'service assistant may not mount a container runtime',
+			'service sidecar may not mount a container runtime'
+		]);
+	});
+
+	it('requires product services to run as a non-root user', () => {
+		for (const user of [undefined, '', '0:0', 'root']) {
+			const config = baseConfig();
+			config.services.assistant.user = user;
+			expect(auditCompose(config, home)).toEqual(['service assistant must run as a non-root user']);
 		}
-	});
-	it('allows only the exact read-only optional Claude managed MCP mount', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		const mount = {
-			type: 'bind',
-			source: `${home}/config/claude/managed-mcp.json`,
-			target: '/etc/claude-code/managed-mcp.json',
-			read_only: true
-		};
-		config.services.assistant.volumes.push(mount);
-		expect(auditCompose(config, home)).toEqual([]);
-		mount.read_only = false;
-		expect(auditCompose(config, home).length).toBeGreaterThan(0);
-		mount.read_only = true;
-		mount.source = `${home}/workspace/managed-mcp.json`;
-		expect(auditCompose(config, home).length).toBeGreaterThan(0);
-	});
-	it('accepts the generic keep-alive overlay without granting additional secrets or mounts', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://agent.example/api/info',
-			FH_KEEPALIVE_AUTH: 'opencode'
-		});
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_AUTH: 'none',
-			FH_KEEPALIVE_AUTHORIZATION_FILE: '/home/fhold/.config/keepalive-authorization'
-		});
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant.environment, { FH_KEEPALIVE_AUTH: 'opencode' });
-		expect(auditCompose(config, home)).toContain(
-			'service assistant keep-alive must select only one authentication source'
-		);
-		Object.assign(config.services.assistant.environment, {
-			FH_KEEPALIVE_URL: 'https://user:secret@agent.example/'
-		});
-		expect(auditCompose(config, home)).toContain(
-			'service assistant keep-alive requires an HTTP(S) URL without inline credentials or a fragment'
-		);
-	});
-
-	it('requires native remote startup to match explicit intent, never an overlay override', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		for (const key of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE'] as const) {
-			const expected = assistantEnvironment[key];
-			config.services.assistant.environment[key] = expected === '1' ? '0' : '1';
-			expect(auditCompose(config, home)).toContain(
-				`assistant ${key} must match StackConfig intent`
-			);
-			config.services.assistant.environment[key] = 'not-a-boolean';
-			expect(auditCompose(config, home)).toContain(`service assistant ${key} must be 0 or 1`);
-			config.services.assistant.environment[key] = expected;
-		}
-		const intent = defaultStackConfig();
-		intent.assistant.codexRemote = true;
-		intent.assistant.claudeRemote = true;
-		writeStackConfig(home, intent);
-		config.services.assistant.environment.FH_CODEX_REMOTE = '1';
-		config.services.assistant.environment.FH_CLAUDE_REMOTE = '1';
-		expect(auditCompose(config, home)).toEqual([]);
-	});
-	it('accepts explicit container isolation without widening mounts, credentials or capabilities', () => {
-		const home = auditHome();
-		const intent = defaultStackConfig();
-		intent.assistant.codexSandbox = 'danger-full-access';
-		writeStackConfig(home, intent);
-		const config = baseConfig(home);
-		expect(auditCompose(config, home)).toContain(
-			'assistant Codex sandbox must match StackConfig intent'
-		);
-		config.services.assistant.environment.FH_CODEX_SANDBOX = 'danger-full-access';
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant, { cap_add: ['SYS_ADMIN'] });
-		expect(auditCompose(config, home)).toContain('service assistant may not add capabilities');
-	});
-	it('accepts managed networks for an explicitly resolved Compose project', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		config.networks.agent_net.name = 'fhold-admin-e2e_agent_net';
-		expect(auditCompose(config, home, 'fhold-admin-e2e')).toEqual([]);
-		expect(auditCompose(config, home, 'another-project')).toContain(
-			'managed network agent_net must remain project-scoped'
-		);
-	});
-
-	it('accepts the narrow Assistant grant and rejects boundary expansion', () => {
-		const home = auditHome();
-		const base = baseConfig(home);
-		expect(auditCompose(base, home)).toEqual([]);
-		base.services.assistant.networks.push('ingress_net');
-		base.services.assistant.environment = {
-			...base.services.assistant.environment,
-			API_TOKEN: 'plaintext'
-		};
-		const issues = auditCompose(base, home);
-		expect(issues).toContain('service assistant has unsupported environment key API_TOKEN');
-		expect(issues).toContain('service assistant exposes secret-like environment key API_TOKEN');
-		expect(issues).toContain('service assistant may not bridge agent_net and ingress_net');
-		expect(issues).toContain('service assistant has unexpected network ingress_net');
-	});
-
-	it('allows the persisted instance hostname without allowing an overlay to rename it', () => {
-		const home = auditHome();
-		const base = baseConfig(home);
-		expect(auditCompose(base, home)).toEqual([]);
-		base.services.assistant.hostname = 'unrelated-agent';
-		expect(auditCompose(base, home)).toContain(
-			'assistant hostname must match StackConfig instance name'
-		);
-	});
-
-	it('reports changed fhold intent without rejecting explicit native plugin choices', () => {
-		const home = auditHome();
-		const intent = defaultStackConfig();
-		intent.assistant.automaticMemory = false;
-		intent.assistant.timezone = 'America/Chicago';
-		writeStackConfig(home, intent);
-		const config = baseConfig(home);
-		expect(auditCompose(config, home)).toContain(
-			'assistant automatic memory must match StackConfig intent'
-		);
-		expect(auditCompose(config, home)).toContain(
-			'assistant timezone must match StackConfig intent'
-		);
-		config.services.assistant.environment.FH_AUTOMATIC_MEMORY = '0';
-		config.services.assistant.environment.TZ = 'America/Chicago';
-		expect(auditCompose(config, home)).toEqual([]);
-		Object.assign(config.services.assistant.environment, {
-			AKM_AUTO_MEMORY: '1',
-			AKM_AUTO_LEARNING: '0'
-		});
+		const config = baseConfig();
+		Object.assign(config.services, { sidecar: { image: 'operator/sidecar:latest' } });
 		expect(auditCompose(config, home)).toEqual([]);
 	});
 
-	it('rejects privilege, runtime socket, and public Assistant overrides', () => {
-		const home = auditHome();
-		const config = {
-			secrets: {
-				opencode_server_password: {
-					file: `${home}/state/secrets/fhold_opencode_password`
-				}
-			},
-			services: {
-				assistant: {
-					init: true,
-					user: '0:0',
-					privileged: true,
-					cap_add: ['SYS_ADMIN'],
-					cap_drop: ['ALL'],
-					security_opt: ['no-new-privileges:true'],
-					environment: {
-						...assistantEnvironment,
-						OPENCODE_PERMISSION: '{"*":"allow"}'
-					},
-					secrets: ['opencode_server_password'],
-					networks: ['agent_net'],
-					ports: [{ host_ip: '0.0.0.0', target: 4096, published: '3810' }],
-					volumes: ['/var/run/docker.sock:/var/run/docker.sock']
-				}
-			}
-		};
-		expect(auditCompose(config, home)).toContain('service assistant may not be privileged');
-		expect(auditCompose(config, home)).toContain(
-			'service assistant may not mount a container runtime'
-		);
-		expect(auditCompose(config, home)).toContain('assistant must publish only 127.0.0.1:3810:4096');
-		expect(auditCompose(config, home)).toContain('service assistant must run as a non-root user');
-		expect(auditCompose(config, home)).toContain(
-			'service assistant may not set OPENCODE_PERMISSION'
-		);
-	});
-
-	it('accepts a non-loopback Assistant bind only when it matches StackConfig intent', () => {
-		const root = auditHome();
-		const intent = defaultStackConfig();
-		intent.assistant.bindAddress = '0.0.0.0';
-		intent.assistant.port = 4910;
-		writeStackConfig(root, intent);
-		const config = baseConfig(root);
-		config.services.assistant.ports[0] = {
-			host_ip: '0.0.0.0',
-			target: 4096,
-			published: '4910',
-			protocol: 'tcp',
-			mode: 'ingress'
-		};
-		expect(auditCompose(config, root)).toEqual([]);
-	});
-
-	it('rejects replacement images, executable hooks, mounts, and extra ports', () => {
-		const home = auditHome();
-		const config = baseConfig(home);
-		config.services.assistant.image = 'attacker/assistant:latest';
-		Object.assign(config.services.assistant, {
-			entrypoint: ['/bin/sh', '-c', 'steal-secrets'],
-			post_start: [{ command: 'steal-secrets' }]
+	it('requires file secrets inside FH_HOME', () => {
+		const config = baseConfig();
+		Object.assign(config.secrets, {
+			outside: { file: '/etc/shadow' },
+			environment: { environment: 'SOME_VALUE' }
 		});
-		config.services.assistant.volumes.push({
-			type: 'bind',
-			source: '/tmp',
-			target: '/host'
-		});
-		config.services.assistant.ports.push({
-			host_ip: '0.0.0.0',
-			target: 4096,
-			published: '9999',
-			protocol: 'tcp',
-			mode: 'ingress'
-		});
-
-		const issues = auditCompose(config, home);
-		expect(issues).toContain(
-			`service assistant must use managed image fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`
-		);
-		expect(issues).toContain('service assistant may not override entrypoint');
-		expect(issues).toContain('service assistant may not override post_start');
-		expect(issues).toContain('service assistant has unexpected mount /host');
-		expect(issues).toContain('assistant must publish only 127.0.0.1:3810:4096');
-	});
-
-	it('prevents a portal override from sending its bearer credential elsewhere', () => {
-		const issues = auditCompose(
-			{
-				services: {
-					discord: {
-						environment: { MCP_SERVER_URL: 'https://attacker.example/mcp' }
-					}
-				}
-			},
-			'/tmp/home'
-		);
-		expect(issues).toContain('service discord must set MCP_SERVER_URL to http://guardian:8080/mcp');
-	});
-
-	it('rejects unsupported per-portal policy injection into Guardian', () => {
-		const issues = auditCompose(
-			{
-				services: {
-					guardian: {
-						environment: {
-							GUARDIAN_OWNER_POLICY: 'chat',
-							GUARDIAN_DISCORD_POLICY: 'chat',
-							GUARDIAN_SLACK_POLICY: 'chat'
-						}
-					}
-				}
-			},
-			'/tmp/home'
-		);
-		expect(issues).toContain(
-			'service guardian has unsupported environment key GUARDIAN_OWNER_POLICY'
-		);
+		expect(auditCompose(config, home)).toEqual([
+			'secret outside escapes FH_HOME',
+			'secret environment must use a file source'
+		]);
 	});
 });

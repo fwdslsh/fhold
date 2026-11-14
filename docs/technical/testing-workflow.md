@@ -56,20 +56,17 @@ build cache and stage tested images by digest. Neither a cache hit nor a staged
 image substitutes for complete candidate qualification.
 
 Assistant release verification uses three bounded lanes with separate disposable
-fixtures. Cache, runtime, activity and lifecycle smoke cases can run independently;
-the unchanged Codex activity observer has its own fixture rather than extending
-the runtime suite. The default full startup smoke still runs all four phases. Security
+fixtures. Cache, runtime and lifecycle smoke cases can run independently;
+the default full startup smoke still runs all three phases. Security
 and native harness coverage remains required, with additional small explicit-on
-and explicit-off startup assertions. Keepalive and quiet-work observation periods
-are unchanged for the core checks. The remaining workload, policy, provider/Guardian/scheduler,
+and explicit-off startup assertions. The remaining workload, policy, provider/Guardian/scheduler,
 directory/Blob recovery and both upgrade cases remain required. Each suite gets a
 log and timing; failures wait for the other lanes and make the job fail. Cancellation
 terminates the process groups; GitHub disposes the isolated runner and its Docker
 fixtures. Failed/cancelled jobs never qualify a release. Local runs should use a
 disposable Docker host if interruption could prevent suite cleanup.
-Extended unload/disable observation windows and historical import fixtures run in
-the weekly/manual endurance workflow against published images, without builds,
-using two lanes.
+Historical import fixtures run in
+the weekly/manual endurance workflow against published images, without builds.
 Use `--endurance` with the lane runner to exercise them locally. Run these cases
 for relevant behavior changes; they do not automatically block unrelated releases.
 
@@ -120,14 +117,8 @@ cover reconnecting to the same job, lost initial responses, bounded failed
 recovery, partial answers, terminal/native/authentication rejection and explicit
 approval/cancellation without replay. Slack tests preserve native Markdown after
 Stop cleanup and exercise explicit unsupported-block fallback. Assistant launch
-fixtures verify exact environment aliases, ordinary tool-child inheritance,
-clean scheduler/remote launches and optional-error isolation without logging values.
-
-The Assistant's conditional heartbeat has a separate offline image check:
-`node scripts/smoke-keepalive.mjs fhold/assistant:<candidate>` starts a native
-OpenCode shell task and observes real Supercronic HTTP requests while work is
-active, then verifies requests stop when idle. It also checks that user tasks
-remain disabled. This qualifies local activity signaling, not a cloud autoscaler.
+fixtures verify clean writer launches and optional-error isolation without
+logging values.
 
 Admin's lightweight DOM suite checks CSP, masking, IPC, preview invalidation,
 accessibility decisions and unchanged window size. The rendered E2E checks real

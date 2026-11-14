@@ -52,8 +52,7 @@ descendant_pids=()
 essential_pids=()
 recovery_pid=""
 stopping=0
-writer_env=(-u FH_RECOVERY_PARENT_PID -u FH_OPENCODE_ENV_MAP)
-opencode_aliases=()
+writer_env=(-u FH_RECOVERY_PARENT_PID)
 # Storage and managed-identity selectors belong only to the recovery worker.
 # This is environment minimization, not isolation from same-UID private files.
 while IFS= read -r variable; do
@@ -66,60 +65,6 @@ done < <(compgen -e)
 mark_degraded() {
   echo "assistant: $2" >&2
   printf '%s\n' "$2" >"$RUNTIME_DIR/degraded-$1" || true
-}
-
-# Optional deployer-owned SOURCE=ALIAS pairs. Values stay in process memory,
-# never arguments, logs or files. This scopes launch environments, not tools
-# or scheduled requests running inside the same OpenCode server.
-prepare_opencode_environment() {
-  local mapping="${FH_OPENCODE_ENV_MAP:-}" pair source target variable i
-  local -a pairs=() sources=() targets=()
-  local -A aliases=() inherited=()
-  [ -n "$mapping" ] || return 0
-  while IFS= read -r variable; do inherited[$variable]=1; done < <(compgen -e)
-  IFS=, read -r -a pairs <<<"$mapping"
-  for pair in "${pairs[@]}"; do
-    source="${pair%%=*}"; target="${pair#*=}"
-    if [[ "$pair" != *=* ]] || ! [[ "$source" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && "$target" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || [ "$source" = "$target" ]; then
-      mark_degraded environment 'FH_OPENCODE_ENV_MAP must contain comma-separated SOURCE=ALIAS names; no aliases were applied.'
-      return 0
-    fi
-    # Aliases must not replace runtime controls or restore filtered originals.
-    case "$target" in
-      FH_*|OPENCODE_*|AKM_*|CODEX_*|CLAUDE_*|IDENTITY_*|MSI_*|IMDS_*|AZURE_CLIENT_ID|PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|TZ|TMP*|IFS|ENV|BASH*|SHELLOPTS|BASHOPTS|LD_*|BUN_*|NODE_*|NODE_OPTIONS)
-        mark_degraded environment 'FH_OPENCODE_ENV_MAP contains a reserved alias; no aliases were applied.'; return 0 ;;
-    esac
-    case "$source" in
-      FH_*|OPENCODE_*|AKM_*|CODEX_*|CLAUDE_*|PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|TZ|TMP*|IFS|ENV|BASH*|SHELLOPTS|BASHOPTS|LD_*|BUN_*|NODE_*)
-        mark_degraded environment 'FH_OPENCODE_ENV_MAP cannot rename runtime settings; no aliases were applied.'; return 0 ;;
-    esac
-    if [[ -v aliases[$target] ]] || [[ -v "$target" ]]; then
-      mark_degraded environment 'FH_OPENCODE_ENV_MAP aliases must be unique and unset; no aliases were applied.'
-      return 0
-    fi
-    aliases[$target]=1
-    sources+=("$source"); targets+=("$target")
-  done
-  if [[ "$mapping" == *, ]] || [[ "$mapping" == *$'\n'* ]]; then
-    mark_degraded environment 'FH_OPENCODE_ENV_MAP contains an empty or multiline mapping; no aliases were applied.'
-    return 0
-  fi
-  for source in "${sources[@]}"; do
-    if [[ -v aliases[$source] ]]; then
-      mark_degraded environment 'FH_OPENCODE_ENV_MAP sources and aliases must not overlap; no aliases were applied.'
-      return 0
-    fi
-  done
-  for ((i=0; i<${#sources[@]}; i++)); do
-    source="${sources[i]}"; target="${targets[i]}"
-    writer_env+=(-u "$target")
-    if [[ -v inherited[$source] ]]; then
-      writer_env+=(-u "$source")
-      opencode_aliases+=("$target=${!source}")
-    else
-      mark_degraded environment "FH_OPENCODE_ENV_MAP source $source is missing; its alias was skipped."
-    fi
-  done
 }
 
 signal_descendants() {
@@ -339,41 +284,25 @@ write_cron_environment() {
   for name in TZ HOME AKM_CONFIG_DIR AKM_CACHE_DIR AKM_DATA_DIR AKM_STATE_DIR OPENCODE_API_URL OPENCODE_CONFIG_DIR; do
       if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
     done
-  } >"$file" || return
-  if [ "$KEEPALIVE_ENABLED" = 1 ]; then
-    # Supercronic's seven-field format includes seconds. AKM preserves this
-    # product-owned line while reconciling its own marked task blocks.
-    printf '%s\n' '*/20 * * * * * * /usr/local/bin/fhold-keepalive tick' >>"$file" || return
-  fi
-}
-
-sync_tasks() {
-  if fhold-task sync "$@" >&2; then
-    date +%s >"$RUNTIME_DIR/tasks-synced"
-  else
-    rm -f "$RUNTIME_DIR/tasks-synced"
-    echo 'assistant: task sync failed; scheduling is degraded and will retry; OpenCode remains available' >&2
-    return 1
-  fi
+  } >"$file"
 }
 
 start_scheduler() {
   mkdir -p "$TASK_SPOOL_DIR" || return
   write_cron_environment || return
-  export -f sync_tasks
-  export RUNTIME_DIR
   setsid env "${writer_env[@]}" supercronic -inotify "$TASK_CRONTAB" &
   scheduler_pid=$!
   writer_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
-  if [ "$SCHEDULER_ENABLED" = 1 ]; then
-    # Capture the image's AKM runtime once per boot; periodic reconciliation
-    # preserves that binding, as AKM documents for ordinary sync.
-    setsid env "${writer_env[@]}" bash -c 'sync_tasks --rebind || true; while sleep 60; do sync_tasks || true; done' &
-    reconciliation_pid=$!
-    writer_pids+=("$reconciliation_pid")
-    printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
-  fi
+  # Sync once per boot, capturing the image's AKM runtime. fhold task create
+  # and remove, and native enable/disable, sync their own changes.
+  setsid env "${writer_env[@]}" bash -c '
+    if ! fhold-task sync --rebind >&2; then
+      echo "assistant: task sync failed; scheduling is degraded; OpenCode remains available" >&2
+      printf "%s\n" "Task sync failed at startup; schedules may be stale. Review task definitions, AKM settings and recent logs, then restart." >"$1/degraded-task-sync"
+    fi
+  ' task-sync "$RUNTIME_DIR" &
+  writer_pids+=("$!")
 }
 
 prepare_identity
@@ -385,7 +314,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
-rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,reconciliation,scheduler,codex,claude}.pid "$RUNTIME_DIR/tasks-synced" || true
+rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,scheduler,codex,claude}.pid || true
 if [ "$configuration_degraded" = 1 ]; then
   mark_degraded configuration 'Some runtime settings are invalid; conservative defaults are in use. Correct the logged setting names and restart.'
 fi
@@ -411,7 +340,6 @@ if [ -n "${FH_RECOVERY_URL:-}" ]; then
 fi
 prepare_filesystem
 load_opencode_password
-prepare_opencode_environment
 # Restore and seed first; let AKM perform its own backed-up migrations before
 # any native agent or task writer starts. Blocked external assets are optional
 # degradation, not a reason to restart an otherwise usable Assistant.
@@ -449,12 +377,6 @@ fi
 if ! refresh_native_plugins >"$RUNTIME_DIR/native-plugins.log" 2>&1; then
   mark_degraded native-plugins 'Built-in native plugin refresh needs attention. Inspect native plugin lists and private startup diagnostics; account state and hook consent remain unchanged.'
 fi
-KEEPALIVE_ENABLED=0
-if fhold-keepalive init >/dev/null; then
-  if [ -n "${FH_KEEPALIVE_URL:-}" ]; then KEEPALIVE_ENABLED=1; fi
-else
-  mark_degraded keepalive 'Keep-alive could not initialize. Correct its URL or authorization-file settings and restart; the agent remains available.'
-fi
 
 # AKM reads never build the index. Build or refresh it once per boot, after
 # restore and migration, beside the agent; reads serve what is indexed so far.
@@ -469,7 +391,6 @@ cd /work
   # Remove export attributes rather than mutating shell variables (including
   # readonly environment imports); exec receives only the resulting environment.
   for ((i=1; i<${#writer_env[@]}; i+=2)); do export -n "${writer_env[i]}"; done
-  for alias in "${opencode_aliases[@]}"; do export "$alias"; done
   exec setsid opencode serve \
     --hostname 0.0.0.0 \
     --port "$OPENCODE_PORT" \
@@ -481,9 +402,9 @@ writer_pids+=("$assistant_pid")
 essential_pids+=("$assistant_pid")
 printf '%s\n' "$assistant_pid" >"$RUNTIME_DIR/assistant.pid"
 
-if [ "$SCHEDULER_ENABLED" = 1 ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
+if [ "$SCHEDULER_ENABLED" = 1 ]; then
   if ! start_scheduler; then
-    mark_degraded scheduler 'Scheduling and keep-alive could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
+    mark_degraded scheduler 'Scheduling could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
   fi
 fi
 
@@ -497,7 +418,7 @@ for tool in codex claude; do
   esac
 done
 
-if [ -n "$recovery_pid" ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
+if [ -n "$recovery_pid" ]; then
   # Do not snapshot SQLite while the native server is opening/migrating it.
   # Ownership renewal is already running; this gates only periodic captures,
   # not the server or optional workers. Shutdown stops this waiter as well.
@@ -507,19 +428,7 @@ if [ -n "$recovery_pid" ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
       kill -0 "$assistant_pid" 2>/dev/null || exit 0
       sleep 0.2
     done
-    if [ -n "$recovery_pid" ]; then
-      printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
-    fi
-    # OpenCode 2 loads location plugins lazily. Initialize the ordinary default
-    # workspace once so an unused native worker can establish whole-instance
-    # idle without an operator opening OpenCode first. The plugin itself owns
-    # coverage; a failed request must not fabricate readiness. Never repeat this
-    # request as a health check or keep a naturally evicted workspace loaded.
-    if [ "$KEEPALIVE_ENABLED" = 1 ] && ! curl --max-time 30 -sf --get \
-      --data-urlencode 'location[directory]=/work' -u "opencode:$OPENCODE_SERVER_PASSWORD" \
-      "http://127.0.0.1:$OPENCODE_PORT/api/config" >/dev/null; then
-      mark_degraded activity 'Default workspace activity could not initialize. Keep-alive remains conservative; check native OpenCode configuration and open the workspace normally.'
-    fi
+    printf 'ready\n' >"$RUNTIME_DIR/recovery-writers-started"
   ) &
   writer_pids+=("$!")
 fi

@@ -104,7 +104,7 @@ export async function diagnoseStack(
 		if (compose.ok) {
 			const issues = auditCompose(compose.config, state.homeDir);
 			checks.push({
-				name: 'managed Compose recommendations',
+				name: 'Compose security defaults',
 				ok: issues.length === 0,
 				advisory: true,
 				detail: issues.length === 0 ? 'valid' : issues.join('; ')

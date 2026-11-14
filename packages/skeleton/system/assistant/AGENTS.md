@@ -69,7 +69,7 @@ missed occurrences are not replayed.
 
 If `FH_SCHEDULER_ENABLED=0`, recurring tasks are inactive on this runtime.
 Do not promise automatic execution while scheduling is disabled. Knowledge,
-native access, configured keep-alive and any configured durability timer still work.
+native access and any configured durability timer still work.
 
 Before `fhold-task remove <id>`, ask for approval naming that exact task.
 Removal unschedules the task but preserves its source under

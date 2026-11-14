@@ -59,7 +59,7 @@ export function createAkmIndexCache({
 	const nativeEnv = Object.fromEntries(
 		Object.entries(env).filter(
 			([key]) =>
-				!/^(FH_RECOVERY_|FH_INSTANCE_ID$|AZURE_CLIENT_ID$|IDENTITY_|MSI_|IMDS_|FH_OPENCODE_ENV_MAP$)/.test(
+				!/^(FH_RECOVERY_|FH_INSTANCE_ID$|AZURE_CLIENT_ID$|IDENTITY_|MSI_|IMDS_)/.test(
 					key
 				)
 		)

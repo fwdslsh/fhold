@@ -32,17 +32,6 @@ for file in "$runtime"/degraded-*; do
 done
 if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ] && [ ! -s "$runtime/degraded-scheduler" ]; then
   alive scheduler || warning 'Scheduled tasks are unavailable. Check scheduler logs and restart to resume them; the agent is still usable.'
-  alive reconciliation || warning 'Task reconciliation is unavailable. Check AKM settings and logs, then restart.'
-  synced=$(cat "$runtime/tasks-synced" 2>/dev/null || true)
-  if ! [[ "$synced" =~ ^[0-9]+$ ]] || [ "$(( $(date +%s) - synced ))" -ge 180 ]; then
-    warning 'Task reconciliation is overdue or failing. It will retry; review task definitions, AKM settings and recent logs.'
-  fi
-fi
-if [ -n "${FH_KEEPALIVE_URL:-}" ] && [ ! -s "$runtime/degraded-keepalive" ]; then
-  alive scheduler || warning 'Keep-alive is unavailable. Check scheduler logs and restart; the agent is still usable.'
-  if ! fhold-keepalive status >/dev/null; then
-    warning 'Keep-alive needs attention. Review its configuration and recent logs; failed requests retry automatically.'
-  fi
 fi
 for tool in codex claude; do
   variable="FH_${tool^^}_REMOTE"

@@ -316,7 +316,7 @@ files; external storage policies must protect retention/rollback independently.
 
 ## Scheduling and durability
 
-`FH_SCHEDULER_ENABLED=0` disables task synchronization, cron and reconciliation,
+`FH_SCHEDULER_ENABLED=0` disables boot task synchronization and cron,
 not recovery, AKM knowledge or native access. Explicit scheduling enablement
 preserves reviewed same-instance intent and resumes future slots only; it does
 not replay missed slots or in-flight tool calls. Portable/manual restore retains
@@ -341,10 +341,10 @@ disappear from health bookkeeping. An older restored checkpoint alone does not
 count as a fresh boot publication.
 
 Core health proves the authenticated agent is usable and, when configured,
-restoration completed with a live recovery owner. Optional task reconciliation,
-scheduler, knowledge and keep-alive failures appear as health-log warnings in
+restoration completed with a live recovery owner. Optional boot task sync,
+scheduler and knowledge failures appear as health-log warnings in
 CLI status and Admin Overview. They never trigger a whole-container restart.
-Reconciliation and heartbeat failures retry; a stopped optional process requires
+A failed task sync or stopped optional process requires
 corrective action and an explicit restart. Readiness is not provider/client readiness.
 
 The potential loss window includes the timer interval, capture and upload time;

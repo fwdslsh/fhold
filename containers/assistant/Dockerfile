@@ -175,8 +175,6 @@ RUN test -n "$PLATFORM_VERSION" \
     && groupmod -n fhold ubuntu \
     && chmod -R a-w /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && chmod -R a+rX /assistant-defaults /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
-    && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
-    && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
     && for command in opencode akm akm-migrate akm-web codex claude playwright; do \
       test -x "/opt/fhold/tools/node_modules/.bin/$command" || exit 1; \
       ln -s "/opt/fhold/tools/node_modules/.bin/$command" "/usr/local/bin/$command" || exit 1; \
