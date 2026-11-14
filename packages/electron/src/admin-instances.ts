@@ -1,5 +1,5 @@
-import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { existsSync, statSync, readdirSync } from 'node:fs';
+import { dirname, isAbsolute } from 'node:path';
 import {
 	classifyInstall,
 	defaultFholdHome,
@@ -97,50 +97,23 @@ export class AdminInstances {
 	private recent: AdminTarget[] = [];
 	private preferenceError?: string;
 	private operations = 0;
-	private readonly preferences: string;
 	readonly defaultInstance: AdminInstance;
 
 	constructor(
-		userData: string,
+		// Unused since recents moved to hosting preferences; kept for the admin-app caller.
+		_userData: string,
 		defaultHome = resolveFholdHome(),
 		readonly hosting = new HostingPreferencesStore()
 	) {
 		this.defaultInstance = localInstance({ kind: 'local', homeDir: defaultHome });
-		this.preferences = join(userData, 'instances.json');
 		try {
-			if (existsSync(hosting.path)) {
-				this.recent = hosting
-					.read()
-					.recent.map((ref) =>
-						ref.kind === 'local-docker'
-							? localInstance({ kind: 'local', homeDir: ref.homeDir })
-							: { kind: 'hosted', ref }
-					);
-				if (this.recent.length) {
-					this.reopenPrevious();
-					return;
-				}
-			}
-			if (!existsSync(this.preferences)) return;
-			const data: unknown = JSON.parse(readFileSync(this.preferences, 'utf8'));
-			if (
-				!data ||
-				typeof data !== 'object' ||
-				!('version' in data) ||
-				data.version !== 1 ||
-				!('recent' in data) ||
-				!Array.isArray(data.recent)
-			)
-				throw new Error('Invalid recent-instance preferences.');
-			for (const value of data.recent.slice(0, 20)) {
-				const target = localInstance(value);
-				if (
-					!this.recent.some(
-						(item) => instanceKey(adminInstanceRef(item)) === instanceKey(adminInstanceRef(target))
-					)
-				)
-					this.recent.push(target);
-			}
+			this.recent = hosting
+				.read()
+				.recent.map((ref) =>
+					ref.kind === 'local-docker'
+						? localInstance({ kind: 'local', homeDir: ref.homeDir })
+						: { kind: 'hosted', ref }
+				);
 		} catch {
 			this.recent = [];
 			this.preferenceError =
@@ -183,14 +156,6 @@ export class AdminInstances {
 	current(): AdminTarget {
 		if (!this.selected) throw new Error('Open an instance from the welcome screen first.');
 		return this.selected;
-	}
-	currentLocal(): AdminInstance {
-		const target = this.current();
-		if (target.kind !== 'local')
-			throw new Error(
-				'This feature is managed on the instance’s host, not this computer. No local files or containers were changed.'
-			);
-		return target;
 	}
 
 	get setupName(): string | undefined {

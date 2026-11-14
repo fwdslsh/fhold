@@ -7,20 +7,17 @@ import {
 	isCodexSandbox,
 	remoteBrowserUrls,
 	remoteTool,
-	buildComposeCliArgs,
 	buildComposeOptions,
 	composePs,
 	parseComposePsRows,
 	createFholdState,
 	readStackConfig,
-	requireInstall,
-	runComposeStreaming
+	requireInstall
 } from '@fhold/lib';
 import { reviewCodexRecall, changeCodexRecall } from '@fhold/lib';
 import type { CodexSandbox, CodexRecallReview } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-import { runStartAction } from './lifecycle.js';
+import { execAssistant, runStartAction } from './lifecycle.js';
 
 export function describeRecall(review: CodexRecallReview): string {
 	return (
@@ -180,9 +177,8 @@ const enable = defineCommand({
 				'Codex: workspace-write (default), read-only, or explicit danger-full-access container isolation; retains on-request approvals'
 		}
 	},
-	run: defineAction(async ({ args }) =>
+	run: async ({ args }) =>
 		enableRemote(args.tool, { trust: args.trust, browser: args.browser, sandbox: args.sandbox })
-	)
 });
 
 const disable = defineCommand({
@@ -191,12 +187,12 @@ const disable = defineCommand({
 		description: 'Stop native remote startup without removing account state'
 	},
 	args: { tool: { type: 'positional', required: true, description: 'codex or claude' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		await disableRemote(createFholdState(), args.tool);
 		console.log(
 			'Remote startup disabled. Account state is retained; revoke devices through the vendor.'
 		);
-	})
+	}
 });
 
 const recall = defineCommand({
@@ -226,7 +222,7 @@ const recall = defineCommand({
 			description: 'Disable the exact reviewed hooks; requires --review'
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		if (args.tool !== 'codex') throw new Error('Knowledge hook review is for codex.');
 		if ((args.approve && args.off) || (args.status && (args.approve || args.off)))
 			throw new Error('Choose status, approve, or off.');
@@ -253,7 +249,7 @@ const recall = defineCommand({
 				reader.close();
 			}
 		}
-	})
+	}
 });
 
 export function remoteExecArguments(action: string, tool: string): string[] {
@@ -276,7 +272,7 @@ function command(action: 'setup' | 'pair' | 'status' | 'logs') {
 			description: `${action} an experimental vendor-native remote coding agent (not Guardian MCP)`
 		},
 		args: { tool: { type: 'positional', required: true, description: 'codex or claude' } },
-		run: defineAction(async ({ args }) => {
+		run: async ({ args }) => {
 			const tool = String(args.tool);
 			const nativeArgs = remoteExecArguments(action, tool);
 			const state = createFholdState();
@@ -336,18 +332,13 @@ function command(action: 'setup' | 'pair' | 'status' | 'logs') {
 					reader.close();
 				}
 			}
-			await runComposeStreaming(
-				[
-					...buildComposeCliArgs(state),
-					'exec',
-					...(action === 'setup' ? [] : ['-T']),
-					'--workdir',
-					'/work',
-					'assistant',
-					...nativeArgs
-				],
-				{ envFiles: [`${state.homeDir}/state/stack.env`] }
-			);
+			await execAssistant(state.homeDir, [
+				...(action === 'setup' ? [] : ['-T']),
+				'--workdir',
+				'/work',
+				'assistant',
+				...nativeArgs
+			]);
 			if (action === 'setup') console.log(`Enable startup when ready: fhold remote enable ${tool}`);
 			if (action === 'pair' || action === 'logs')
 				console.log(
@@ -359,7 +350,7 @@ function command(action: 'setup' | 'pair' | 'status' | 'logs') {
 						tool +
 						' or repeat setup after disabling startup.'
 				);
-		})
+		}
 	});
 }
 

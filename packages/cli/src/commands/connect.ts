@@ -1,22 +1,6 @@
 import { defineCommand } from 'citty';
 
-import {
-	connectionDetails as sharedConnectionDetails,
-	resolveFholdHome,
-	type ConnectionDetails
-} from '@fhold/lib';
-
-export function connectionDetails(
-	homeDir: string,
-	type: ConnectionDetails['type'],
-	options: { credential?: string; showKey?: boolean; showPassword?: boolean } = {}
-): ConnectionDetails {
-	return sharedConnectionDetails(homeDir, type, {
-		credential: options.credential,
-		showCredentialKey: options.showKey,
-		showAssistantPassword: options.showPassword
-	});
-}
+import { connectionDetails, resolveFholdHome, type ConnectionDetails } from '@fhold/lib';
 
 export default defineCommand({
 	meta: { name: 'connect', description: 'Show exact connection settings for a client' },
@@ -38,8 +22,8 @@ export default defineCommand({
 		}
 		const details = connectionDetails(resolveFholdHome(), client as ConnectionDetails['type'], {
 			credential: args.credential ? String(args.credential) : undefined,
-			showKey: args.showKey === true,
-			showPassword: args['show-password'] === true
+			showCredentialKey: args.showKey === true,
+			showAssistantPassword: args['show-password'] === true
 		});
 		if (args.json) console.log(JSON.stringify(details, null, 2));
 		else {

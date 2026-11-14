@@ -29,6 +29,14 @@ function fixture() {
 	return { root, home: join(root, 'default'), profile: join(root, 'profile') };
 }
 
+function recentPreferences(...homeDirs: string[]): string {
+	return JSON.stringify({
+		version: 1,
+		connections: [],
+		recent: homeDirs.map((homeDir) => ({ kind: 'local-docker', connectionId: 'local', homeDir }))
+	});
+}
+
 function installed(home: string) {
 	mkdirSync(join(home, 'system', 'stack'), { recursive: true });
 	writeFileSync(join(home, 'system', 'stack', 'stack.compose.yml'), 'services: {}\n');
@@ -52,7 +60,6 @@ describe('Admin instance selection', () => {
 		const target = { kind: 'hosted', ref: { kind: 'ssh-docker', connectionId: 'lab', remoteHome: join(root, 'must-not-create') } };
 		instances.open(target);
 		expect(instances.current()).toEqual(target);
-		expect(() => instances.currentLocal()).toThrow('not this computer');
 		expect(existsSync(target.ref.remoteHome)).toBe(false);
 		expect(instances.hosting.read().recent).toEqual([target.ref]);
 		expect(new AdminInstances(profile, home).current()).toEqual(target);
@@ -150,10 +157,8 @@ describe('Admin instance selection', () => {
 		for (const [index, folder] of [missing, empty, foreign, broken, file].entries()) {
 			const profile = join(root, `profile-${index}`);
 			mkdirSync(profile);
-			const preferences = JSON.stringify({ version: 1, recent: [
-				{ kind: 'local', homeDir: folder }, { kind: 'local', homeDir: home }
-			] });
-			writeFileSync(join(profile, 'instances.json'), preferences);
+			const preferences = recentPreferences(folder, home);
+			writeFileSync(join(profile, 'hosting.json'), preferences);
 			// Even a missing default must not silently open fresh setup on launch.
 			const instances = new AdminInstances(profile, folder);
 			expect(instances.welcome().selectedInstance).toBeUndefined();
@@ -161,7 +166,7 @@ describe('Admin instance selection', () => {
 			expect(instances.welcome().recentInstances.map((item) => item.homeDir)).toEqual([folder, home]);
 			expect(instances.welcome().recentInstances.map((item) => item.available)).toEqual([false, true]);
 			expect(instances.welcome().defaultInstance.available).toBe(false);
-			expect(readFileSync(join(profile, 'instances.json'), 'utf8')).toBe(preferences);
+			expect(readFileSync(join(profile, 'hosting.json'), 'utf8')).toBe(preferences);
 		}
 		expect(existsSync(missing)).toBe(false);
 		expect(existsSync(join(empty, 'state'))).toBe(false);
@@ -226,26 +231,25 @@ describe('Admin instance selection', () => {
 		);
 		mkdirSync(profile);
 		const missing = { kind: 'local', homeDir: join(root, 'missing') };
-		writeFileSync(
-			join(profile, 'instances.json'),
-			JSON.stringify({ version: 1, recent: [missing] })
-		);
+		writeFileSync(join(profile, 'hosting.json'), recentPreferences(missing.homeDir));
 		const instances = new AdminInstances(profile, home);
 		expect(() => instances.open(missing)).toThrow('no longer available');
 		expect(existsSync(missing.homeDir)).toBe(false);
 	});
 
-	it('recovers from corrupt preferences without overwriting them until an explicit open', () => {
+	it('recovers from corrupt preferences without overwriting them', () => {
 		const { home, profile } = fixture();
 		installed(home);
 		mkdirSync(profile);
-		const preferences = join(profile, 'instances.json');
+		const preferences = join(profile, 'hosting.json');
 		writeFileSync(preferences, '{');
 		const instances = new AdminInstances(profile, home);
 		expect(instances.welcome().preferenceError).toContain('could not be loaded');
 		expect(readFileSync(preferences, 'utf8')).toBe('{');
 		instances.open({ kind: 'local', homeDir: home });
-		expect(instances.welcome().preferenceError).toBeUndefined();
+		expect(instances.current()).toEqual({ kind: 'local', homeDir: home });
+		expect(instances.welcome().preferenceError).toContain('not overwritten');
+		expect(readFileSync(preferences, 'utf8')).toBe('{');
 	});
 
 	it('blocks switching during in-flight work, releases on error and never changes global FH_HOME', async () => {
@@ -354,10 +358,7 @@ describe('Admin instance selection', () => {
 		const { root, home, profile } = fixture();
 		mkdirSync(profile);
 		const missing = { kind: 'local' as const, homeDir: join(root, 'missing') };
-		writeFileSync(
-			join(profile, 'instances.json'),
-			JSON.stringify({ version: 1, recent: [missing] })
-		);
+		writeFileSync(join(profile, 'hosting.json'), recentPreferences(missing.homeDir));
 		const instances = new AdminInstances(profile, home);
 		expect(() => instances.open(missing)).toThrow('no longer available');
 		instances.prepareNew(missing);

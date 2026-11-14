@@ -23,7 +23,7 @@ import {
 import { main } from '../main.js';
 import { sshHelperCommand, sshArgs } from '@fhold/lib';
 import { runHostingProcess } from '@fhold/lib';
-import { seedSkeletonFromEmbedded } from '../lib/embedded-assets.js';
+import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
 import { runSessionCommand } from '../lib/hosting-command.js';
 
 const store = () => new HostingPreferencesStore();
@@ -123,7 +123,10 @@ export const hostingCommand = defineCommand({
 				name: 'session',
 				description: 'Target-bound management over native SSH stdin/stdout'
 			},
-			run: () => seedSkeletonFromEmbedded(() => serveManagementSession(), process.cwd())
+			run: async () => {
+				await useEmbeddedSkeleton();
+				await serveManagementSession();
+			}
 		}),
 		edit: defineCommand({
 			meta: {

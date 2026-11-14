@@ -1,22 +1,20 @@
 import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
 import {
-	buildComposeCliArgs,
 	configureGuardianModeratorModel,
 	createFholdState,
-	ensureDockerReady,
 	listProviders,
 	markInstalled,
+	readStackConfig,
 	removeProviderAuth,
 	requireInstall,
-	runComposeStreaming,
 	setProviderApiKey,
 	testAssistantReadiness,
-	waitForAssistant
+	waitForAssistant,
+	type AssistantReadiness
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-import { runStartAction } from './lifecycle.js';
+import { execAssistant, runRestartAction, runStartAction } from './lifecycle.js';
 
 function readKey(path: string): string {
 	const value = readFileSync(path === '-' ? 0 : path, 'utf8').replace(/[\r\n]+$/, '');
@@ -31,27 +29,38 @@ export async function runNativeProviderLogin(options: {
 	method?: string;
 }): Promise<void> {
 	const state = createFholdState(options.homeDir);
-	requireInstall(state.homeDir);
-	const docker = await ensureDockerReady();
-	if (!docker.ok) throw new Error(docker.message);
 	await runStartAction(state.homeDir);
 	await waitForAssistant(state.homeDir);
-	const args = [...buildComposeCliArgs(state), 'exec', 'assistant', 'opencode', 'auth', 'login'];
+	const args = ['assistant', 'opencode', 'auth', 'login'];
 	if (options.provider) args.push(options.provider);
 	args.push('--server', 'http://127.0.0.1:4096');
 	if (options.method) args.push('--method', options.method);
-	await runComposeStreaming(args, { envFiles: [`${state.homeDir}/state/stack.env`] });
+	await execAssistant(state.homeDir, args);
 }
 
-async function verifyAndComplete(homeDir: string, provider?: string): Promise<void> {
-	const readiness = await testAssistantReadiness(homeDir, provider ? { provider } : {});
+/** Record a verified provider for Guardian moderation and finish installation. */
+export async function completeProviderReadiness(
+	homeDir: string,
+	readiness: AssistantReadiness
+): Promise<Extract<AssistantReadiness, { ok: true }>> {
 	if (!readiness.ok) throw new Error(`Provider readiness failed: ${readiness.error}`);
-	configureGuardianModeratorModel(
+	const moderatorUpdated = configureGuardianModeratorModel(
 		homeDir,
 		readiness.provider,
 		readiness.model
 	);
 	markInstalled(homeDir);
+	const config = readStackConfig(homeDir);
+	if (!config.ok) throw new Error(config.error);
+	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction(homeDir);
+	return readiness;
+}
+
+async function verifyAndComplete(homeDir: string, provider?: string): Promise<void> {
+	const readiness = await completeProviderReadiness(
+		homeDir,
+		await testAssistantReadiness(homeDir, provider ? { provider } : {})
+	);
 	console.log(
 		`Provider ready${readiness.provider ? `: ${readiness.provider}` : ''}${readiness.model ? `/${readiness.model}` : ''}.`
 	);
@@ -60,7 +69,7 @@ async function verifyAndComplete(homeDir: string, provider?: string): Promise<vo
 const listCommand = defineCommand({
 	meta: { name: 'list', description: 'List providers and authentication methods from OpenCode' },
 	args: { json: { type: 'boolean', default: false, description: 'Print JSON' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
@@ -81,7 +90,7 @@ const listCommand = defineCommand({
 			const methods = provider.authMethods.map((method) => method.label).join(', ') || 'configured';
 			console.log(`${provider.id.padEnd(24)} ${status.padEnd(14)} ${methods}`);
 		}
-	})
+	}
 });
 
 const loginCommand = defineCommand({
@@ -90,7 +99,7 @@ const loginCommand = defineCommand({
 		provider: { type: 'positional', required: false, description: 'Provider id or name' },
 		method: { type: 'string', description: 'Native OpenCode login method ID' }
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		await runNativeProviderLogin({
 			provider: args.provider ? String(args.provider) : undefined,
 			method: args.method ? String(args.method) : undefined
@@ -99,7 +108,7 @@ const loginCommand = defineCommand({
 			createFholdState().homeDir,
 			args.provider ? String(args.provider) : undefined
 		);
-	})
+	}
 });
 
 const keyCommand = defineCommand({
@@ -112,7 +121,7 @@ const keyCommand = defineCommand({
 			description: 'Read the key from this file, or - for stdin'
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
@@ -123,31 +132,31 @@ const keyCommand = defineCommand({
 			readKey(String(args['key-file']))
 		);
 		await verifyAndComplete(state.homeDir, String(args.provider));
-	})
+	}
 });
 
 const logoutCommand = defineCommand({
 	meta: { name: 'logout', description: 'Remove one provider credential through OpenCode' },
 	args: { provider: { type: 'positional', required: true, description: 'Provider id' } },
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
 		await waitForAssistant(state.homeDir, { timeoutMs: 5_000 });
 		await removeProviderAuth(state.homeDir, String(args.provider));
 		console.log(`Removed provider credential: ${String(args.provider)}`);
-	})
+	}
 });
 
 const testCommand = defineCommand({
 	meta: { name: 'test', description: 'Run a real no-tool Assistant readiness request' },
-	run: defineAction(async () => {
+	run: async () => {
 		const state = createFholdState();
 		requireInstall(state.homeDir);
 		await runStartAction();
 		await waitForAssistant(state.homeDir);
 		await verifyAndComplete(state.homeDir);
-	})
+	}
 });
 
 export default defineCommand({

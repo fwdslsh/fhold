@@ -2,10 +2,7 @@ import { defineCommand } from 'citty';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import {
-	configureGuardianModeratorModel,
 	createFholdState,
-	markInstalled,
-	readStackConfig,
 	requireInstall,
 	testAssistantReadiness,
 	waitForAssistant,
@@ -13,9 +10,8 @@ import {
 	type ComposedInstanceSession
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-import { runRestartAction, runStartAction } from './lifecycle.js';
-import { runNativeProviderLogin } from './provider.js';
+import { runStartAction } from './lifecycle.js';
+import { completeProviderReadiness, runNativeProviderLogin } from './provider.js';
 import { enableRemote } from './remote.js';
 import { runSessionProviderCommand } from '../lib/session-provider-command.js';
 
@@ -106,19 +102,10 @@ export async function completeSetup(options: {
 		);
 	}
 
-	if (!readiness.ok) throw new Error(`Provider readiness failed: ${readiness.error}`);
-	const moderatorUpdated = configureGuardianModeratorModel(
-		state.homeDir,
-		readiness.provider,
-		readiness.model
-	);
-	markInstalled(state.homeDir);
-	const config = readStackConfig(state.homeDir);
-	if (!config.ok) throw new Error(config.error);
-	if (moderatorUpdated && config.config.gateway.enabled) await runRestartAction(state.homeDir);
+	const ready = await completeProviderReadiness(state.homeDir, readiness);
 	console.log('fhold setup is complete.');
 	console.log(
-		`Verified a real Assistant response${readiness.provider ? ` from ${readiness.provider}` : ''}${readiness.model ? `/${readiness.model}` : ''}.`
+		`Verified a real Assistant response${ready.provider ? ` from ${ready.provider}` : ''}${ready.model ? `/${ready.model}` : ''}.`
 	);
 	if (options.claudeRemote) await enableRemote('claude', { homeDir: state.homeDir });
 	if (options.codexRemote) await enableRemote('codex', { homeDir: state.homeDir });
@@ -141,12 +128,12 @@ export default defineCommand({
 			description: 'Guide experimental Codex remote sign-in after provider setup'
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		await completeSetup({
 			provider: args.provider ? String(args.provider) : undefined,
 			method: args.method ? String(args.method) : undefined,
 			claudeRemote: args['claude-remote'] === true,
 			codexRemote: args['codex-remote'] === true
 		});
-	})
+	}
 });

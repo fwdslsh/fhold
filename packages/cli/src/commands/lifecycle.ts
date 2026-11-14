@@ -4,13 +4,11 @@ import {
 	buildComposeOptions,
 	createFholdState,
 	inspectLocalInstance,
+	localInstanceLogs,
 	operateLocalInstance,
 	resolveFholdHome,
-	requireInstall,
 	runComposeStreaming
 } from '@fhold/lib';
-
-import { defineAction } from '../lib/action.js';
 
 export async function runStartAction(homeDir?: string): Promise<void> {
 	await operateLocalInstance(resolveFholdHome(homeDir), 'start');
@@ -24,12 +22,11 @@ export async function runRestartAction(homeDir?: string): Promise<void> {
 	await operateLocalInstance(resolveFholdHome(homeDir), 'restart');
 }
 
-export async function runLogsAction(): Promise<void> {
-	const state = createFholdState();
-	requireInstall(state.homeDir);
-	const options = buildComposeOptions(state);
-	await runComposeStreaming([...buildComposeCliArgs(state), 'logs', '--tail', '100'], {
-		envFiles: options.envFiles
+/** Run `docker compose exec <execArgs>` in the selected instance's Compose project. */
+export async function execAssistant(homeDir: string, execArgs: string[]): Promise<void> {
+	const state = createFholdState(homeDir);
+	await runComposeStreaming([...buildComposeCliArgs(state), 'exec', ...execArgs], {
+		envFiles: buildComposeOptions(state).envFiles
 	});
 }
 
@@ -45,25 +42,27 @@ export async function readStatus(): Promise<Record<string, unknown>> {
 
 export const startCommand = defineCommand({
 	meta: { name: 'start', description: 'Start the configured stack' },
-	run: defineAction(() => runStartAction())
+	run: () => runStartAction()
 });
 
 export const stopCommand = defineCommand({
 	meta: { name: 'stop', description: 'Stop the stack without deleting volumes' },
-	run: defineAction(runStopAction)
+	run: runStopAction
 });
 
 export const restartCommand = defineCommand({
 	meta: { name: 'restart', description: 'Recreate the configured stack' },
-	run: defineAction(() => runRestartAction())
+	run: () => runRestartAction()
 });
 
 export const logsCommand = defineCommand({
 	meta: { name: 'logs', description: 'Print the last 100 service log lines' },
-	run: defineAction(runLogsAction)
+	run: async () => {
+		process.stdout.write(await localInstanceLogs(resolveFholdHome()));
+	}
 });
 
 export const statusCommand = defineCommand({
 	meta: { name: 'status', description: 'Show stack intent and container status' },
-	run: defineAction(async () => console.log(JSON.stringify(await readStatus(), null, 2)))
+	run: async () => console.log(JSON.stringify(await readStatus(), null, 2))
 });

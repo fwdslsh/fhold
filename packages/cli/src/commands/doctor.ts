@@ -21,8 +21,6 @@ import {
 	unavailableNativeDiagnostics
 } from '@fhold/lib';
 
-import { defineAction } from '../lib/action.js';
-
 type Check = DiagnosticCheck;
 
 function fileCheck(
@@ -131,7 +129,7 @@ export default defineCommand({
 			default: false
 		}
 	},
-	run: defineAction(async ({ args }) => {
+	run: async ({ args }) => {
 		const result = await diagnoseStack({ readiness: args.readiness === true });
 		if (args.json) {
 			console.log(JSON.stringify(result, null, 2));
@@ -141,5 +139,5 @@ export default defineCommand({
 			}
 		}
 		if (!result.ok) throw new Error('One or more checks failed.');
-	})
+	}
 });

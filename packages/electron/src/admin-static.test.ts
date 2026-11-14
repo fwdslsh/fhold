@@ -20,7 +20,6 @@ import { bindConfigurationEvents, loadDeploymentSettings } from '../admin/config
 import { parseDeploymentPatch } from '../../lib/src/control-plane/provisioning-input.js';
 import { offerRestart, renderRestartStatus, requestStackAction } from '../admin/restart.js';
 import {
-	endpoint,
 	isHealthy,
 	known as observationValue,
 	promptVisible,
@@ -3336,10 +3335,7 @@ describe('Admin renderer behavior', () => {
 		expect(control('claude-extension-download').getAttribute('href')).toBe('about:blank');
 	});
 
-	it('uses dialable wildcard and IPv6 addresses and reports unhealthy services', () => {
-		expect(endpoint('0.0.0.0', 4096)).toBe('http://127.0.0.1:4096');
-		expect(endpoint('::', 9180, '/mcp')).toBe('http://[::1]:9180/mcp');
-		expect(endpoint('::1', 4096)).toBe('http://[::1]:4096');
+	it('reports unhealthy services', () => {
 		expect(isHealthy({ state: 'running', health: 'unhealthy' })).toBe(false);
 		expect(isHealthy({ state: 'running', health: 'healthy' })).toBe(true);
 		expect(isHealthy({ state: 'exited', health: 'healthy' })).toBe(false);
