@@ -106,7 +106,9 @@ stop_children() {
   for pid in "${writer_pids[@]}"; do
     signal_descendants "$pid" KILL
     kill -KILL -- "-$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
+    # A writer that already exited and was reaped can leave bash waiting
+    # forever inside this trap; only wait for a process that still exists.
+    if kill -0 "$pid" 2>/dev/null; then wait "$pid" 2>/dev/null || true; fi
   done
   for pid in "${descendant_pids[@]}"; do kill -KILL "$pid" 2>/dev/null || true; done
   # SIGKILL is asynchronous. Do not checkpoint while a killed descendant is

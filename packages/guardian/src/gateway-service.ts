@@ -550,8 +550,11 @@ export class GatewayService {
 		};
 		await report();
 		while (result.status === 'running' && this.now() < stopAt) {
+			// Surface the caller's own abort reason, as other waits here do.
 			await pause(Math.min(POLL_INTERVAL_MS, Math.max(1, stopAt - this.now())), undefined, {
 				signal
+			}).catch((error) => {
+				throw signal.aborted ? signal.reason : error;
 			});
 			result = await this.inspectJob(job, jobHandle, signal);
 			await report();

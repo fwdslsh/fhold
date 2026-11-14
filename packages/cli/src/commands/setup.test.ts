@@ -9,7 +9,7 @@ import {
 import { completeSessionSetup } from './setup.js';
 
 function fixture(effective: 'verified' | 'unconfirmed' = 'verified') {
-	const calls: unknown[] = [];
+	const calls: [string, unknown][] = [];
 	const ref = {
 		kind: 'azure-container-apps' as const,
 		connectionId: 'cloud',
@@ -65,6 +65,22 @@ test('setup without a provider verifies the default model and changes nothing', 
 	const f = fixture();
 	await completeSessionSetup(f.session, [], () => {});
 	expect(f.calls).toEqual([['readiness', {}]]);
+	await f.session.close();
+});
+
+test('setup saves the selection again when OpenCode has not applied it yet', async () => {
+	const f = fixture('unconfirmed');
+	let attempts = 0;
+	f.session.agent.selectModel = supportedOperation(async (input) => {
+		f.calls.push(['select', input]);
+		return {
+			providers: [],
+			write: { saved: true, effective: ++attempts === 1 ? 'unconfirmed' : 'verified' }
+		};
+	});
+	await completeSessionSetup(f.session, ['--provider', 'example'], () => {});
+	expect(f.calls.filter(([name]) => name === 'select')).toHaveLength(2);
+	expect(f.calls.filter(([name]) => name === 'readiness')).toHaveLength(1);
 	await f.session.close();
 });
 

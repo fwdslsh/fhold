@@ -22,7 +22,12 @@ describe('Guardian moderator model', () => {
 			providerID: 'example',
 			id: 'small/v2'
 		});
-		for (const text of ['{ "$schema": "x" }', '{ "model": "no-provider" }', '{ invalid'])
+		for (const text of [
+			'{ "$schema": "x" }',
+			'{ "model": "no-provider" }',
+			'{ invalid',
+			'{ "model": "opencode/big-pickle" }'
+		])
 			expect(moderatorModel(config(text))).toBeUndefined();
 		expect(moderatorModel('/nonexistent/opencode.json')).toBeUndefined();
 	});
@@ -52,6 +57,28 @@ describe('Guardian moderator model', () => {
 		).toBe('assistant');
 		expect(await moderatorCall('message', [], { model: undefined, generate })).toBe('assistant');
 		expect(calls).toEqual([{ providerID: 'gone', id: 'model' }, undefined, undefined]);
+	});
+
+	it('skips a failed Guardian model for five minutes, then tries it again', async () => {
+		const calls: unknown[] = [];
+		let clock = 1_000;
+		let available = false;
+		const options = {
+			model: { providerID: 'flaky', id: 'model' },
+			now: () => clock,
+			generate: async (_prompt: string, model?: { providerID: string; id: string }) => {
+				calls.push(model?.providerID ?? 'assistant');
+				if (model && !available) throw new Error('timed out');
+				return model ? 'guardian' : 'assistant';
+			}
+		};
+		expect(await moderatorCall('message', [], options)).toBe('assistant');
+		expect(await moderatorCall('message', [], options)).toBe('assistant');
+		expect(calls).toEqual(['flaky', 'assistant', 'assistant']);
+		clock += 5 * 60_000;
+		available = true;
+		expect(await moderatorCall('message', [], options)).toBe('guardian');
+		expect(calls.at(-1)).toBe('flaky');
 	});
 
 	it('fails when the Assistant model is unavailable too', async () => {

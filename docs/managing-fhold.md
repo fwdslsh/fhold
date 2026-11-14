@@ -409,7 +409,8 @@ In-place native preference changes do not create a pending-restart alert.
 Guardian moderates suspicious requests with the Assistant's model. An optional
 `model` in `config/guardian/opencode.json` selects another; Guardian reads it on
 each moderation call, so changes need no restart, and falls back to the
-Assistant's model when that model is unavailable.
+Assistant's model when that model is unavailable, retrying it after five minutes.
+The `opencode/big-pickle` placeholder seeded by earlier releases counts as not set.
 
 Restart tracking covers stack intent, release/seeded startup files, native
 harness policy and enabled portal tokens. It excludes agent data and provider

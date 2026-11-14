@@ -47,6 +47,14 @@ function moderationPrompt(message: string, signals: ContentSignal[]): string {
 type ModelSelection = { providerID: string; id: string };
 type Generate = (prompt: string, model?: ModelSelection) => Promise<string>;
 
+// Earlier releases seeded this placeholder into the operator's file and setup
+// replaced it. It was never an operator choice, so it means "not set".
+const SEEDED_PLACEHOLDER = 'opencode/big-pickle';
+// After a Guardian model fails, use the Assistant's model directly for a while
+// instead of paying for the failing call (up to its timeout) on every request.
+const UNAVAILABLE_RETRY_MS = 5 * 60_000;
+let unavailable: { model: string; until: number } | undefined;
+
 /** The operator's optional moderator model; absent or unusable means not set. */
 export function moderatorModel(
 	path = join(Bun.env.HOME ?? '/home/fhold', '.config/opencode/opencode.json')
@@ -68,6 +76,7 @@ export function moderatorModel(
 		return undefined;
 	}
 	const selection = typeof config?.model === 'string' ? config.model : '';
+	if (selection === SEEDED_PLACEHOLDER) return undefined;
 	const separator = selection.indexOf('/');
 	if (separator < 1 || separator === selection.length - 1) return undefined;
 	return { providerID: selection.slice(0, separator), id: selection.slice(separator + 1) };
@@ -77,9 +86,10 @@ export function moderatorModel(
 export async function moderatorCall(
 	message: string,
 	signals: ContentSignal[],
-	options: { model?: ModelSelection; generate?: Generate } = {}
+	options: { model?: ModelSelection; generate?: Generate; now?: () => number } = {}
 ): Promise<string> {
 	const model = 'model' in options ? options.model : moderatorModel();
+	const now = options.now ?? Date.now;
 	const generate =
 		options.generate ??
 		(async (prompt, selection) => {
@@ -94,12 +104,17 @@ export async function moderatorCall(
 			return response.text;
 		});
 	const prompt = moderationPrompt(message, signals);
-	if (model) {
+	const name = model ? `${model.providerID}/${model.id}` : '';
+	const skipped = unavailable?.model === name && now() < (unavailable?.until ?? 0);
+	if (model && !skipped) {
 		try {
-			return await generate(prompt, model);
+			const text = await generate(prompt, model);
+			unavailable = undefined;
+			return text;
 		} catch (error) {
+			unavailable = { model: name, until: now() + UNAVAILABLE_RETRY_MS };
 			log.warn('moderator_model_unavailable', {
-				model: `${model.providerID}/${model.id}`,
+				model: name,
 				error: error instanceof Error ? error.message : String(error)
 			});
 		}

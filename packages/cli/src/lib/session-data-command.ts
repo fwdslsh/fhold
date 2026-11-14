@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseArgs, type ParseArgsOptionsConfig } from 'node:util';
 import { invokeOperation, type ComposedInstanceSession } from '@fhold/lib';
 
@@ -64,6 +66,12 @@ export async function runSessionDataCommand(
 			throw new Error(
 				'Choose --portable (reviewed transferable content) or --full (stopped whole instance). Assistant checkpoints use recovery export.'
 			);
+		if (values.full && Object.values(included).some(Boolean))
+			throw new Error(
+				'--full already includes all credentials and settings; do not combine portable include flags.'
+			);
+		if (!values.full && context.confirmed)
+			throw new Error('--confirm-stopped applies only to --full.');
 		write(
 			JSON.stringify(
 				await invokeOperation(
@@ -83,6 +91,10 @@ export async function runSessionDataCommand(
 	}
 	if (typeof values.from !== 'string' || !values.from)
 		throw new Error('Choose a local export directory with --from.');
+	if (existsSync(join(values.from, 'checkpoint.json')))
+		throw new Error(
+			'This is an Assistant checkpoint package. Use recovery preview --from <package>, then recovery import.'
+		);
 	const input = {
 		sourceHome: values.from,
 		...included,

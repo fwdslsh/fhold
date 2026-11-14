@@ -134,11 +134,10 @@ Paths are relative to the fhold repository. Revalidate them on the chosen branch
 | Area | Starting files | Required outcome |
 | --- | --- | --- |
 | Dependencies and image | `containers/assistant/tools/package.json`, `packages/guardian/package.json`, `containers/assistant/Dockerfile` | New native packages, platform binaries and plugin dependency cache are pinned and installed at build time. |
-| Startup and health | `containers/assistant/entrypoint.sh`, `containers/assistant/opencode-run.sh`, `containers/assistant/healthcheck.sh`, `containers/assistant/fhold-recovery.mjs` | Foreground launch, authentication and readiness work through the selected V2 contracts. |
+| Startup and health | `containers/assistant/entrypoint.sh`, `containers/assistant/healthcheck.sh`, `containers/assistant/fhold-recovery.mjs` | Foreground launch, authentication and readiness work through the selected V2 contracts. |
 | Guardian adapter | `packages/guardian/src/assistant-client.ts`, `packages/guardian/src/gateway-service.ts`, `packages/guardian/src/conversation.ts`, `packages/guardian/src/mcp-agent.ts` | Native API changes stay behind the existing domain boundary; MCP ownership and policy remain enforceable. |
 | Provider/Admin operations | `packages/lib/src/control-plane/opencode.ts`, `packages/electron/src/` | Native sign-in, discovery, configuration and model verification remain usable. |
 | AKM and memory | `packages/skeleton/system/assistant/plugins/akm.js`, `packages/skeleton/system/assistant/lib/memory.js` | Released V2 AKM integration plus trusted-only, redacted memory behavior. |
-| Native activity | `plugins/fhold/opencode.js`, `plugins/fhold/scripts/activity.mjs`, `packages/skeleton/system/assistant/plugins/fhold.js` | Actual turn/tool/subagent activity still drives the existing keep-alive mechanism. |
 | Recurring work | `packages/skeleton/config/akm/config.json`, `containers/assistant/fhold-task.mjs` | Native invocation and the scheduled profile still produce durable results. |
 | History and recovery | `packages/lib/src/control-plane/history.ts`, `packages/lib/src/control-plane/instance-backup.ts`, `packages/lib/src/control-plane/restore.ts`, `containers/assistant/recovery/catalog.mjs` | Native history conversion and database snapshots preserve user state. |
 | Managed installation | `packages/lib/src/control-plane/seed-manifest.ts` | CLI/Admin and standalone image receive the same supported assets. |
@@ -204,8 +203,8 @@ Account listings must not imply that imported credentials work.
 
 Check the selected CLI's server-attachment arguments before updating the current
 `run --attach ... --agent scheduled` definition. Verify permissions, task results,
-failure history, future-only restart behavior and independent keep-alive/recovery
-timers with scheduling disabled.
+failure history, future-only restart behavior and the independent recovery
+timer with scheduling disabled.
 
 Determine the candidate database location with native `opencode debug paths db`;
 do not guess a new filename. Inspect its schema and upstream V1 migration on
@@ -247,16 +246,16 @@ not pointing an old binary at the converted database.
   credential privacy and persistent native configuration are verified.
 - [ ] All AKM/fhold plugins work in OpenCode; existing Claude/Codex native
   integrations and consent are regression-tested. A listed plugin is not proof.
-- [ ] Real curation, five AKM tools, trusted memory, scheduled execution and
-  keep-alive activity are exercised through normal interfaces. Cancellation,
-  subagents, idle transitions and reload do not leak activity or duplicate hooks.
+- [ ] Real curation, five AKM tools, trusted memory and scheduled execution are
+  exercised through normal interfaces. Cancellation, subagents and reload do not
+  duplicate hooks.
 - [ ] Synthetic V1 history converts faithfully and remains usable. Native V2
   export/import, full-instance restore and directory/Blob-emulator checkpoint
   restore preserve sessions, configuration and custom path/database selections.
   SIGTERM, cold resume and failed/incomplete restore are covered.
 - [ ] Existing recovery and plugin smokes pass, including
-  `scripts/smoke-akm-harnesses.mjs`, `scripts/smoke-keepalive.mjs`,
-  `scripts/smoke-recovery.mjs` and `scripts/smoke-blob-recovery.mjs`.
+  `scripts/smoke-akm-harnesses.mjs`, `scripts/smoke-recovery.mjs` and
+  `scripts/smoke-blob-recovery.mjs`.
   Real hosting qualification stays outside the product repository.
 
 ## Required delivery

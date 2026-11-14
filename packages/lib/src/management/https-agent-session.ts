@@ -300,7 +300,14 @@ export function httpsAgentBindings(options: Options): Pick<
 		providers: connected(async (_input, context) => providers(context)),
 		modelInventory: connected(async (_input, context) => (await providers(context)).providers),
 		setKey: connected(sameConnection((input, context) => services.setKey(input, context))),
-		removeProvider: connected(sameConnection((input, context) => services.remove(input, context))),
+		removeProvider: connected(
+			sameConnection(async (input, context) => {
+				const result = await services.remove(input, context);
+				// Refresh the account and model observations after a sign-out.
+				await providers(context).catch(() => undefined);
+				return result;
+			})
+		),
 		oauthStart: connected(sameConnection((input, context) => services.oauthStart(input, context))),
 		oauthFinish: connected(
 			sameConnection((input, context) => services.oauthFinish(input, context))
