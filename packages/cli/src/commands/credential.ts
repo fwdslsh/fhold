@@ -175,6 +175,8 @@ const map = defineCommand({
 	run({ args }) {
 		const target = positional(args, 0);
 		const username = positional(args, target === 'oauth' ? 3 : 2);
+		// The shared map operations treat an empty username as removal; that is unmap.
+		if (!username) throw new Error('Choose a credential username. Use unmap to remove a mapping.');
 		const { homeDir, config } = current();
 		if (target === 'oauth') {
 			const issuer = positional(args, 1);
