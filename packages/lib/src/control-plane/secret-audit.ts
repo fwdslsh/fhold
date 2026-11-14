@@ -118,15 +118,7 @@ const MANAGED_SECRET_FILES: Readonly<Record<string, string>> = {
 
 const FIXED_ENVIRONMENT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
 	assistant: {
-		AKM_CACHE_DIR: '/opt/akm/cache',
-		AKM_CONFIG_DIR: '/etc/akm',
-		AKM_DATA_DIR: '/opt/akm/data',
-		AKM_STATE_DIR: '/opt/akm/data/state',
-		HOME: '/home/fhold',
-		OPENCODE_CONFIG_DIR: '/etc/opencode',
-		OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 		OPENCODE_API_URL: 'http://127.0.0.1:4096',
-		OPENCODE_PORT: '4096',
 		OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 		TERM: 'xterm-256color'
 	},
@@ -570,7 +562,9 @@ export function auditCompose(
 			}
 		}
 		if (isCore) {
-			if (service.init !== true) issues.push(`service ${name} must enable init`);
+			// Assistant's image entrypoint already runs tini as PID 1.
+			if (name !== 'assistant' && service.init !== true)
+				issues.push(`service ${name} must enable init`);
 			if (isRootUser(service.user)) issues.push(`service ${name} must run as a non-root user`);
 			else if (service.user !== expectedUser)
 				issues.push(`service ${name} must run as ${expectedUser}`);
@@ -617,9 +611,11 @@ export function auditCompose(
 				issues.push(`service ${name} must retain its managed profiles`);
 			}
 			const healthcheck = record(service.healthcheck);
+			// Assistant's image owns its HEALTHCHECK; Compose may only keep it.
 			if (
 				healthcheck?.disable === true ||
-				!exactStringArray(healthcheck?.test, expectedHealthcheck(name))
+				(!(name === 'assistant' && healthcheck?.test === undefined) &&
+					!exactStringArray(healthcheck?.test, expectedHealthcheck(name)))
 			) {
 				issues.push(`service ${name} must retain its managed healthcheck`);
 			}

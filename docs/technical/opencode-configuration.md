@@ -119,8 +119,10 @@ Supercronic and AKM run inside Assistant. Operator task definitions live in
 The native OpenCode harness in `config/akm/config.json` runs
 `opencode run --standalone`, using native provider credentials and configuration.
 
-`fhold-task sync` delegates to `akm doctor scheduler sync --rebind` at startup and every
-60 seconds. Operator-owned harness configuration, task sources and activation
+Startup runs `akm doctor scheduler sync --rebind` once to capture the image's AKM
+runtime; reconciliation then runs plain `akm doctor scheduler sync` every 60 seconds,
+preserving that binding. `fhold-task sync [flags]` passes flags through to the same
+native command. Operator-owned harness configuration, task sources and activation
 are preserved. Retired launchers need explicit native configuration review;
 fhold does not rewrite them.
 

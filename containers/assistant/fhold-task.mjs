@@ -144,7 +144,7 @@ const [command, ...args] = process.argv.slice(2);
 try {
 	switch (command) {
 		case 'sync':
-			run('akm', ['doctor', 'scheduler', 'sync', '--rebind']);
+			run('akm', ['doctor', 'scheduler', 'sync', ...args]);
 			break;
 		case 'create':
 			create(taskId(args[0]), args.slice(1));
@@ -181,7 +181,7 @@ try {
 			adopt(args[0]);
 			break;
 		default:
-			fail('usage: fhold-task create|list|show|history|run|pause|resume|remove|adopt');
+			fail('usage: fhold-task sync|create|list|show|history|run|pause|resume|remove|adopt');
 	}
 } catch (error) {
 	fail(error instanceof Error ? error.message : String(error));

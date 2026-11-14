@@ -19,21 +19,13 @@ afterEach(() => {
 });
 
 const assistantEnvironment = {
-	AKM_CACHE_DIR: '/opt/akm/cache',
-	AKM_CONFIG_DIR: '/etc/akm',
-	AKM_DATA_DIR: '/opt/akm/data',
-	AKM_STATE_DIR: '/opt/akm/data/state',
 	FH_AUTOMATIC_MEMORY: '1',
 	FH_CODEX_REMOTE: '1',
 	FH_CODEX_SANDBOX: 'workspace-write',
 	FH_CLAUDE_REMOTE: '1',
 	TZ: defaultStackConfig().assistant.timezone,
-	HOME: '/home/fhold',
-	OPENCODE_CONFIG_DIR: '/etc/opencode',
 	OPENCODE_CONFIG: '/home/fhold/.config/opencode/opencode.json',
-	OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
 	OPENCODE_API_URL: 'http://127.0.0.1:4096',
-	OPENCODE_PORT: '4096',
 	OPENCODE_SERVER_PASSWORD_FILE: '/run/secrets/opencode_server_password',
 	TERM: 'xterm-256color'
 };
@@ -43,7 +35,6 @@ function assistantService(homeDir = '/tmp/home') {
 	return {
 		image: `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`,
 		hostname: stack.ok ? stackConfigEnv(stack.config).FH_INSTANCE_HOSTNAME : 'fhold',
-		init: true,
 		user: '1000:1000',
 		cap_drop: ['ALL'],
 		security_opt: ['no-new-privileges:true'],
@@ -103,9 +94,6 @@ function assistantService(homeDir = '/tmp/home') {
 			{ type: 'bind', source: `${homeDir}/data/akm/data`, target: '/opt/akm/data' },
 			{ type: 'bind', source: `${homeDir}/workspace`, target: '/work' }
 		],
-		healthcheck: {
-			test: ['CMD', 'fhold-healthcheck']
-		},
 		logging: {
 			driver: 'json-file',
 			options: { 'max-size': '10m', 'max-file': '3' }
@@ -154,6 +142,19 @@ describe('Compose security audit', () => {
 		if (!managed) throw new Error('Missing managed plugin fixture');
 		managed.read_only = false;
 		expect(auditCompose(config, home).join('\n')).toContain('/etc/opencode must be read-only');
+	});
+	it('leaves the Assistant image healthcheck in place unless Compose overrides it', () => {
+		const home = auditHome();
+		const config = baseConfig(home);
+		const assistant: Record<string, unknown> = config.services.assistant;
+		assistant.healthcheck = { test: ['CMD', 'fhold-healthcheck'], interval: '1m' };
+		expect(auditCompose(config, home)).toEqual([]);
+		for (const healthcheck of [{ disable: true }, { test: ['CMD', 'true'] }]) {
+			assistant.healthcheck = healthcheck;
+			expect(auditCompose(config, home)).toContain(
+				'service assistant must retain its managed healthcheck'
+			);
+		}
 	});
 	it('allows only the exact read-only optional Claude managed MCP mount', () => {
 		const home = auditHome();

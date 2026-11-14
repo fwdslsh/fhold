@@ -8,8 +8,9 @@ import { stripVTControlCharacters } from 'node:util';
 import { setTimeout as pause } from 'node:timers/promises';
 
 export const remoteDirectory = join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'remote');
+export const codexSandboxes = ['workspace-write', 'read-only', 'danger-full-access'];
 export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'workspace-write') {
-	if (!['workspace-write', 'read-only', 'danger-full-access'].includes(sandbox))
+	if (!codexSandboxes.includes(sandbox))
 		throw new Error('Invalid Codex sandbox');
 	if (tool === 'codex')
 		return [
@@ -32,6 +33,15 @@ export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'w
 			'--no-chrome'
 		];
 	throw new Error('Remote agent must be codex or claude.');
+}
+
+// TERM a native process group; KILL it if it is still running after the grace period.
+export function stopGroup(pid, onKill, graceMs = 3_000) {
+	try { process.kill(-pid, 'SIGTERM'); } catch { return; }
+	return setTimeout(() => {
+		onKill?.();
+		try { process.kill(-pid, 'SIGKILL'); } catch { /* already stopped */ }
+	}, graceMs);
 }
 
 export function remoteEnvironment(source) {
@@ -232,13 +242,7 @@ export async function superviseRemote(
 		bootstrapAbort?.abort();
 		clearTimeout(timer);
 		wake?.();
-		if (child?.pid) {
-			const pid = child.pid;
-			try { process.kill(-pid, 'SIGTERM'); } catch { /* already stopped */ }
-			timer = setTimeout(() => {
-				try { process.kill(-pid, 'SIGKILL'); } catch { /* already stopped */ }
-			}, 3_000);
-		}
+		if (child?.pid) timer = stopGroup(child.pid);
 	};
 	const answer = () => {
 		try {
@@ -259,23 +263,8 @@ export async function superviseRemote(
 		bootstrapAbort?.abort();
 		clearTimeout(timer);
 		wake?.();
-		if (child?.pid) {
-			const pid = child.pid;
-			try {
-				process.kill(-child.pid, 'SIGTERM');
-			} catch {
-				/* already stopped */
-			}
-			// A wedged vendor process must not delay Assistant shutdown indefinitely.
-			timer = setTimeout(() => {
-				groupForced = true;
-				try {
-					process.kill(-pid, 'SIGKILL');
-				} catch {
-					/* already stopped */
-				}
-			}, 3_000);
-		}
+		// A wedged vendor process must not delay Assistant shutdown indefinitely.
+		if (child?.pid) timer = stopGroup(child.pid, () => { groupForced = true; });
 	};
 	process.on('SIGTERM', stop);
 	process.on('SIGINT', stop);
@@ -328,22 +317,9 @@ export async function superviseRemote(
 				child.on('error', () => resolve(127));
 				child.on('exit', () => {
 					bootstrapAbort?.abort();
-					const pid = child.pid;
-					try {
-						process.kill(-pid, 'SIGTERM');
-					} catch {
-						return;
-					}
 					// Descendants may keep stdout open after their leader exits;
 					// waiting for close alone would hang instead of retrying.
-					childDeadline = setTimeout(() => {
-						groupForced = true;
-						try {
-							process.kill(-pid, 'SIGKILL');
-						} catch {
-							/* reaped */
-						}
-					}, 3_000);
+					childDeadline = stopGroup(child.pid, () => { groupForced = true; });
 				});
 				child.on('close', (exitCode) => resolve(exitCode ?? 1));
 			});

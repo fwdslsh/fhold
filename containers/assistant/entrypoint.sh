@@ -213,10 +213,6 @@ prepare_identity() {
   for candidate in /usr/lib/*/libnss_wrapper.so /lib/*/libnss_wrapper.so; do
     if [ -e "$candidate" ]; then wrapper="$candidate"; break; fi
   done
-  if [ -z "$wrapper" ]; then
-    echo "assistant: uid $(id -u) has no passwd entry and libnss-wrapper is unavailable" >&2
-    exit 1
-  fi
   printf 'fhold:x:%s:%s:fhold Assistant:/home/fhold:/bin/bash\n' "$(id -u)" "$(id -g)" >/tmp/fhold-passwd
   printf 'fhold:x:%s:\n' "$(id -g)" >/tmp/fhold-group
   export NSS_WRAPPER_PASSWD=/tmp/fhold-passwd
@@ -352,7 +348,7 @@ write_cron_environment() {
 }
 
 sync_tasks() {
-  if fhold-task sync >&2; then
+  if fhold-task sync "$@" >&2; then
     date +%s >"$RUNTIME_DIR/tasks-synced"
   else
     rm -f "$RUNTIME_DIR/tasks-synced"
@@ -371,21 +367,14 @@ start_scheduler() {
   writer_pids+=("$scheduler_pid")
   printf '%s\n' "$scheduler_pid" >"$RUNTIME_DIR/scheduler.pid"
   if [ "$SCHEDULER_ENABLED" = 1 ]; then
-    setsid env "${writer_env[@]}" bash -c 'sync_tasks || true; while sleep 60; do sync_tasks || true; done' &
+    # Capture the image's AKM runtime once per boot; periodic reconciliation
+    # preserves that binding, as AKM documents for ordinary sync.
+    setsid env "${writer_env[@]}" bash -c 'sync_tasks --rebind || true; while sleep 60; do sync_tasks || true; done' &
     reconciliation_pid=$!
     writer_pids+=("$reconciliation_pid")
     printf '%s\n' "$reconciliation_pid" >"$RUNTIME_DIR/reconciliation.pid"
   fi
 }
-
-required_binaries=(opencode setsid env)
-if [ -n "${FH_RECOVERY_URL:-}" ]; then required_binaries+=(fhold-recovery); fi
-for binary in "${required_binaries[@]}"; do
-  if ! command -v "$binary" >/dev/null 2>&1; then
-    echo "assistant: required binary not found: $binary" >&2
-    exit 1
-  fi
-done
 
 prepare_identity
 umask 077
@@ -396,10 +385,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
-rm -f "$RUNTIME_DIR/recovery.pid" "$RUNTIME_DIR/reconciliation.pid" "$RUNTIME_DIR/tasks-synced" || true
-for feature in configuration environment scheduler keepalive codex claude native-defaults native-plugins akm-migration akm-assets akm-index akm-index-cache; do
-  rm -f "$RUNTIME_DIR/degraded-$feature" "$RUNTIME_DIR/$feature.pid" || true
-done
+rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,reconciliation,scheduler,codex,claude}.pid "$RUNTIME_DIR/tasks-synced" || true
 if [ "$configuration_degraded" = 1 ]; then
   mark_degraded configuration 'Some runtime settings are invalid; conservative defaults are in use. Correct the logged setting names and restart.'
 fi
@@ -469,10 +455,6 @@ if fhold-keepalive init >/dev/null; then
 else
   mark_degraded keepalive 'Keep-alive could not initialize. Correct its URL or authorization-file settings and restart; the agent remains available.'
 fi
-if [ "$SCHEDULER_ENABLED" = 1 ] && { ! command -v akm >/dev/null || ! command -v fhold-task >/dev/null; }; then
-  SCHEDULER_ENABLED=0
-  mark_degraded scheduler 'Scheduling is unavailable: AKM or the task helper is missing. Use a complete Assistant image and restart.'
-fi
 
 # AKM reads never build the index. Build or refresh it once per boot, after
 # restore and migration, beside the agent; reads serve what is indexed so far.
@@ -500,7 +482,7 @@ essential_pids+=("$assistant_pid")
 printf '%s\n' "$assistant_pid" >"$RUNTIME_DIR/assistant.pid"
 
 if [ "$SCHEDULER_ENABLED" = 1 ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
-  if ! command -v supercronic >/dev/null || ! start_scheduler; then
+  if ! start_scheduler; then
     mark_degraded scheduler 'Scheduling and keep-alive could not start. Check scheduler files, permissions and recent logs, then restart; the agent remains available.'
   fi
 fi

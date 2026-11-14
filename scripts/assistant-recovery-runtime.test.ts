@@ -131,7 +131,7 @@ exit "\${FIXTURE_MIGRATE_EXIT:-0}"`
 	writeFileSync(join(root, 'akm.json'), extra.FIXTURE_AKM_CONFIG ?? JSON.stringify({ plugins: { redact: { pii: true, highEntropy: true } } }));
 	stub(
 		'fhold-task',
-		'printf "sync\\n" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
+		'printf "sync\\nsync-args %s\\n" "$*" >>"$EVENTS"; sleep "${FIXTURE_SYNC_SECONDS:-0}"; exit "${FIXTURE_SYNC_EXIT:-0}"'
 	);
 	stub('fhold-keepalive', 'exit "${FIXTURE_KEEPALIVE_EXIT:-0}"');
 	stub(
@@ -194,7 +194,7 @@ while sleep 0.1; do :; done`
 	if (extra.FIXTURE_STALE_RUNTIME === '1') {
 		const runtime = join(root, 'runtime');
 		mkdirSync(runtime);
-		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json']) {
+		for (const name of ['recovery-restored', 'recovery-writers-started', 'recovery-status.json', 'degraded-activity']) {
 			writeFileSync(join(runtime, name), 'stale fixture');
 		}
 	}
@@ -797,6 +797,7 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => run.events().includes('native'));
 			expect(run.events().indexOf('restored')).toBeLessThan(run.events().indexOf('seed'));
+			expect(existsSync(join(run.root, 'runtime/degraded-activity'))).toBe(false);
 		} finally {
 			run.child.kill('SIGTERM');
 			await finished(run.child);
@@ -857,6 +858,8 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 		try {
 			await until(() => ['native', 'sync'].every((event) => run.events().includes(event)));
 			expect(run.events()).toContain('sync');
+			// Only the boot sync captures the image runtime; periodic syncs preserve it.
+			expect(run.events()).toContain('sync-args sync --rebind');
 			expect(existsSync(join(run.root, 'runtime', 'scheduler.pid'))).toBe(true);
 			expect(existsSync(join(run.root, 'runtime', 'reconciliation.pid'))).toBe(true);
 		} finally {
