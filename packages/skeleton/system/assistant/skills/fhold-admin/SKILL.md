@@ -76,15 +76,7 @@ the native corrective action, preserving a working core.
 
 Read-only external assets must be corrected in their source bundle and synced;
 do not make their caches writable or delete entries to hide warnings. Migration
-does not replace an operator-selected executable. If a harness still names the
-removed `fhold-opencode-run`, inspect `akm config list` and the affected task's
-`harness` selection. For an authorized repair, use native `akm config` commands
-to select the intended installed harness and update the writable task source;
-do not recreate the retired wrapper or guess a replacement for custom harnesses.
-AKM 0.10.261020-beta fixes the stale-cache Claude plugin advisory by reading
-native installation, scope and enabled metadata. An uncertain selection remains
-unknown; compare `claude plugin list --json` before diagnosing that state
-([upstream fix](https://github.com/itlackey/akm/pull/1287)).
+does not replace an operator-selected executable.
 
 Use AKM's existing search/show/remember commands for nonsecret knowledge.
 Use `fhold-task` for requested recurring work. If the report says scheduling
