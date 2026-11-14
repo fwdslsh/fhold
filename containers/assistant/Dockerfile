@@ -60,18 +60,18 @@ RUN mkdir -p /fhold-bundle/skills \
 
 # Both native harnesses install the same immutable upstream marketplace.
 # Retain the release's bundled CLI: local marketplaces do not install dependencies.
-ADD --checksum=sha256:b4aefb733017fd3b4bd14ae3a289d20afafc02b7f747131b6901b6e96b5b76af \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:7198a99002d1f0f9f5d5bdd97cc94381bec01873a8cd28d04b4a1cc12debe816 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/86ac347fa73b85faadec8abe9831fad2025bfc32 /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e/claude \
+    && plugin_root=akm-plugins-86ac347fa73b85faadec8abe9831fad2025bfc32/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
       "$plugin_root/bun.lock" "$plugin_root/node_modules" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e/.agents/plugins/marketplace.json \
-      akm-plugins-25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e/.claude-plugin/marketplace.json \
-      akm-plugins-25ccbfc22a04e25f87a977af1b8e4b9c9ccbcb7e/LICENSE
+      akm-plugins-86ac347fa73b85faadec8abe9831fad2025bfc32/.agents/plugins/marketplace.json \
+      akm-plugins-86ac347fa73b85faadec8abe9831fad2025bfc32/.claude-plugin/marketplace.json \
+      akm-plugins-86ac347fa73b85faadec8abe9831fad2025bfc32/LICENSE
 # The published Codex catalog selects a Git source. This image distributes the
 # same verified files locally, using Codex's native local marketplace source.
 RUN bun -e 'const file = "/akm-marketplace/.agents/plugins/marketplace.json"; const catalog = await Bun.file(file).json(); const plugin = catalog.plugins.find(p => p.name === "akm"); if (!plugin) throw new Error("AKM marketplace entry missing"); plugin.source = {source: "local", path: "./claude"}; await Bun.write(file, JSON.stringify(catalog, null, 2) + "\n");'
