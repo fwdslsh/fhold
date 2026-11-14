@@ -156,8 +156,12 @@ export function withCodexRecall(
 					for await (const chunk of child.stdout) {
 						buffer += decoder.decode(chunk, { stream: true });
 						if (buffer.length > 1_048_576) throw new Error('Invalid native output');
-						for (let end; (end = buffer.indexOf('\n')) >= 0; buffer = buffer.slice(end + 1))
-							receive(buffer.slice(0, end));
+						while (buffer.includes('\n')) {
+							const end = buffer.indexOf('\n');
+							const line = buffer.slice(0, end);
+							buffer = buffer.slice(end + 1);
+							receive(line);
+						}
 					}
 				} catch { /* reported below */ }
 				fail();
