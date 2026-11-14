@@ -26,7 +26,12 @@ try {
 	const hello = JSON.parse(
 		run(['hosting', 'rpc'], JSON.stringify({ version: 1, action: 'hello' }))
 	);
-	if (!hello.ok || !hello.value.management.includes('snapshot'))
+	// The helper is this build's content-addressed executable; hello names its release.
+	if (
+		!hello.ok ||
+		hello.value?.release !== version ||
+		typeof hello.value.instancesDirectory !== 'string'
+	)
 		throw new Error('Native helper protocol unavailable.');
 	const home = join(root, 'instance');
 	run(['--name', home, 'install', '--no-start']);
