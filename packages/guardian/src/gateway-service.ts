@@ -938,47 +938,4 @@ export class GatewayService {
 		);
 		return { accepted: true, kind: 'permission' };
 	}
-
-	async sessionMessages(handle: string, signal: AbortSignal): Promise<PublicMessage[]> {
-		const session = await this.ownedSession(handle, signal);
-		const messages = await this.assistant.listMessages(session.id, MAX_MESSAGES, signal);
-		return this.publicMessages(session.id, messages);
-	}
-
-	async sessionDiff(handle: string, signal: AbortSignal) {
-		const session = await this.ownedSession(handle, signal);
-		return this.publicDiff(await this.assistant.sessionDiff(session.id, signal));
-	}
-
-	catalog() {
-		const commonTools = [
-			'fhold.agent.run',
-			'fhold.job.get',
-			'fhold.job.cancel',
-			'fhold.session.list',
-			'fhold.session.get',
-			'fhold.interaction.respond',
-			'fhold.catalog.get'
-		];
-		return {
-			service: 'fhold-guardian',
-			policy: this.policy,
-			principal: this.username,
-			tools: [
-				...commonTools,
-				...(this.policy === 'read' || this.policy === 'full'
-					? ['fhold.workspace.search', 'fhold.workspace.read']
-					: []),
-				...(this.policy === 'full' ? ['fhold.session.fork', 'fhold.session.delete'] : [])
-			],
-			resources: [
-				'fhold://sessions/{session}/messages',
-				'fhold://sessions/{session}/diff',
-				'fhold://jobs/{job}',
-				...(this.policy === 'read' || this.policy === 'full' ? ['fhold://workspace/{path}'] : [])
-			],
-			prompts: ['fhold.implement', 'fhold.debug', 'fhold.review', 'fhold.explain'],
-			nativeAssistantAccess: 'configured separately; not proxied by Guardian'
-		};
-	}
 }
