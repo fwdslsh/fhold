@@ -4,15 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-	beginProviderOAuth,
-	completeProviderOAuth,
 	configureGuardianModeratorModel,
 	listProviders,
+	localNativeAgent,
 	removeProviderAuth,
 	setProviderApiKey,
-	testAssistantReadiness,
-	updateAssistantGlobalConfig
+	testAssistantReadiness
 } from './opencode.js';
+import { localProviderSettings } from './provider-settings.js';
 import { defaultStackConfig, writeStackConfig } from './stack-config.js';
 
 const homes: string[] = [];
@@ -250,15 +249,14 @@ describe('Native OpenCode v2 setup', () => {
 	it('binds OAuth completion to its native attempt, not a method index', async () => {
 		const root = home();
 		const native = nativeFixture();
-		expect(await beginProviderOAuth(root, 'anthropic', 1, { account: 'personal' }, native)).toEqual(
-			{
-				attemptID: 'attempt-1',
-				url: 'https://provider.example/sign-in',
-				method: 'code',
-				instructions: 'Paste the code after signing in.'
-			}
-		);
-		await completeProviderOAuth(root, 'anthropic', 'attempt-1', 'oauth-code', native);
+		const agent = localNativeAgent(root, native);
+		expect(await agent.beginProviderOAuth('anthropic', 1, { account: 'personal' })).toEqual({
+			attemptID: 'attempt-1',
+			url: 'https://provider.example/sign-in',
+			method: 'code',
+			instructions: 'Paste the code after signing in.'
+		});
+		await agent.completeProviderOAuth('anthropic', 'attempt-1', 'oauth-code');
 		expect(
 			native.calls
 				.filter(({ request }) => request.method === 'POST')
@@ -316,7 +314,7 @@ describe('Native OpenCode v2 setup', () => {
 			path,
 			'// Keep this comment\n{"shell":"/bin/bash","providers":{"team":{"settings":{"baseURL":"http://example/v1","headers":{"X-Team":"preserve"}}}}}\n'
 		);
-		await updateAssistantGlobalConfig(root, {
+		await localProviderSettings(root, localNativeAgent(root)).writePreferences({
 			providers: { team: { settings: { baseURL: 'http://edited/v1' } } },
 			model: 'team/exact/model'
 		});

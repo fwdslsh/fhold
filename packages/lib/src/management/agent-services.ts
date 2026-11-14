@@ -1,96 +1,92 @@
 import {
-	beginProviderOAuth,
-	completeProviderOAuth,
-	setProviderApiKey,
-	testAssistantReadiness,
-	type AssistantReadiness
-} from '../control-plane/opencode.js';
-import {
 	discoverProviderModels,
 	listProviderSettings,
 	removeProviderSetup,
 	saveProviderEndpoint,
-	useProviderModel
+	useProviderModel,
+	type NativeProviderSettingsPort
 } from '../control-plane/provider-settings.js';
-import { connectionDetails } from '../control-plane/connection.js';
-import type { FholdState } from '../control-plane/foundation.js';
-import type { AgentOperations } from './contracts.js';
+import type { AssistantReadiness } from '../control-plane/native-agent.js';
+import type { AgentOperations, RequestContext } from './contracts.js';
 
 type AgentInput<Name extends keyof AgentOperations> = Parameters<
 	Extract<AgentOperations[Name], { support: 'supported' }>['invoke']
 >[0];
 
 /**
- * Local provider/account use cases. It owns only temporary browser-auth and
- * verification state; deployment intent remains in the caller's explicit
- * Docker operation and native settings retain their own persistence semantics.
+ * Provider/account use cases over an explicitly selected native agent route,
+ * shared by local Docker homes and session-bound HTTPS agents. It owns only the
+ * temporary browser-auth attempt and model-verification state; native settings
+ * retain their own persistence semantics.
  */
-export class LocalAgentServices {
+export class AgentServices {
 	private closed = false;
 	private readonly lifetime = new AbortController();
-	private pendingOAuth:
-		| { homeDir: string; provider: string; method: number; attemptID: string }
-		| undefined;
-	private verifiedModel:
-		| { homeDir: string; readiness: Extract<AssistantReadiness, { ok: true }> }
-		| undefined;
+	private pendingOAuth: { provider: string; method: number; attemptID: string } | undefined;
+	private verifiedModel: Extract<AssistantReadiness, { ok: true }> | undefined;
 
 	constructor(
-		private readonly current: () => FholdState,
-		private readonly openUrl?: (url: string) => void,
-		private readonly completeSetup?: (
-			readiness: Extract<AssistantReadiness, { ok: true }>
-		) => Promise<void>
+		private readonly options: {
+			/** Resolve the current route; `writing` asks for a target safe to change. */
+			bind(context: RequestContext, writing: boolean): Promise<NativeProviderSettingsPort>;
+			openUrl?(url: string): void;
+			completeSetup?(readiness: Extract<AssistantReadiness, { ok: true }>): Promise<void>;
+		}
 	) {}
 
-	private state(): FholdState {
-		this.requireOpen();
-		return this.current();
-	}
 	private requireOpen() {
 		if (this.closed) throw new Error('This agent session is closed. Open the instance again.');
+	}
+	private signal(context: RequestContext): AbortSignal {
+		return context.signal
+			? AbortSignal.any([context.signal, this.lifetime.signal])
+			: this.lifetime.signal;
+	}
+	private async bind(context: RequestContext, writing = true) {
+		this.requireOpen();
+		const target = await this.options.bind(context, writing);
+		this.requireOpen();
+		return target;
 	}
 	private async completeReadiness(
 		readiness: Extract<AssistantReadiness, { ok: true }>
 	): Promise<string | undefined> {
 		this.requireOpen();
 		try {
-			await this.completeSetup?.(readiness);
+			await this.options.completeSetup?.(readiness);
 		} catch {
 			return 'The native model test passed, but installation completion could not be saved. Review the instance status; the model test does not need to be repeated.';
 		}
 	}
-	providers() {
-		return listProviderSettings(this.state().homeDir, { signal: this.lifetime.signal });
+	async providers(context: RequestContext = {}) {
+		return listProviderSettings(await this.bind(context, false), { signal: this.signal(context) });
 	}
-	async setKey(input: AgentInput<'setKey'>): Promise<void> {
+	async setKey(input: AgentInput<'setKey'>, context: RequestContext = {}): Promise<void> {
 		this.verifiedModel = undefined;
-		await setProviderApiKey(this.state().homeDir, input.provider, input.key, {
-			signal: this.lifetime.signal
+		const target = await this.bind(context);
+		await target.agent.setProviderApiKey(input.provider, input.key, {
+			signal: this.signal(context)
 		});
 	}
-	endpoint(input: AgentInput<'saveEndpoint'>) {
+	async endpoint(input: AgentInput<'saveEndpoint'>, context: RequestContext = {}) {
 		this.verifiedModel = undefined;
-		return saveProviderEndpoint(this.state().homeDir, input, { signal: this.lifetime.signal });
+		return saveProviderEndpoint(await this.bind(context), input, {
+			signal: this.signal(context)
+		});
 	}
-	models(input: AgentInput<'discoverModels'>) {
-		return discoverProviderModels(this.state().homeDir, input);
+	async models(input: AgentInput<'discoverModels'>, context: RequestContext = {}) {
+		return discoverProviderModels(await this.bind(context), input);
 	}
-	async use(input: AgentInput<'selectModel'>) {
-		const current = this.state();
-		if (
-			!this.verifiedModel ||
-			this.verifiedModel.homeDir !== current.homeDir ||
-			this.verifiedModel.readiness.provider !== input.provider ||
-			this.verifiedModel.readiness.model !== input.model
-		)
+	async use(input: AgentInput<'selectModel'>, context: RequestContext = {}) {
+		if (this.verifiedModel?.provider !== input.provider || this.verifiedModel.model !== input.model)
 			throw new Error('Test this model before using it for your agent.');
-		const settings = await useProviderModel(current.homeDir, input.provider, input.model, {
-			signal: this.lifetime.signal
+		const verified = this.verifiedModel;
+		const settings = await useProviderModel(await this.bind(context), input.provider, input.model, {
+			signal: this.signal(context)
 		});
 		this.requireOpen();
-		if (settings.write?.effective === 'verified' && this.verifiedModel) {
-			const warning = await this.completeReadiness(this.verifiedModel.readiness);
+		if (settings.write?.effective === 'verified') {
+			const warning = await this.completeReadiness(verified);
 			if (warning)
 				settings.configurationIssue = [settings.configurationIssue, warning]
 					.filter(Boolean)
@@ -98,90 +94,78 @@ export class LocalAgentServices {
 		}
 		return settings;
 	}
-	remove(input: AgentInput<'removeProvider'>) {
+	async remove(input: AgentInput<'removeProvider'>, context: RequestContext = {}) {
 		this.verifiedModel = undefined;
-		return removeProviderSetup(this.state().homeDir, input.provider, {
+		return removeProviderSetup(await this.bind(context), input.provider, {
 			endpoint: input.endpoint === true,
-			signal: this.lifetime.signal
+			signal: this.signal(context)
 		});
 	}
-	async oauthStart(input: AgentInput<'oauthStart'>) {
-		const current = this.state();
-		const authorization = await beginProviderOAuth(
-			current.homeDir,
+	async oauthStart(input: AgentInput<'oauthStart'>, context: RequestContext = {}) {
+		this.verifiedModel = undefined;
+		const target = await this.bind(context);
+		const authorization = await target.agent.beginProviderOAuth(
 			input.provider,
 			input.method,
 			input.inputs,
-			{ signal: this.lifetime.signal }
+			{ signal: this.signal(context) }
 		);
 		this.requireOpen();
 		this.pendingOAuth = {
-			homeDir: current.homeDir,
 			provider: input.provider,
 			method: input.method,
 			attemptID: authorization.attemptID
 		};
-		this.openUrl?.(authorization.url);
+		this.options.openUrl?.(authorization.url);
 		return authorization;
 	}
-	async oauthFinish(input: AgentInput<'oauthFinish'>): Promise<void> {
-		const current = this.state();
-		if (
-			!this.pendingOAuth ||
-			this.pendingOAuth.homeDir !== current.homeDir ||
-			this.pendingOAuth.provider !== input.provider ||
-			this.pendingOAuth.method !== input.method
-		)
-			throw new Error('Start provider sign-in for this instance first.');
-		const attemptID = this.pendingOAuth.attemptID;
+	async oauthFinish(input: AgentInput<'oauthFinish'>, context: RequestContext = {}) {
+		const target = await this.bind(context);
+		const pending = this.pendingOAuth;
+		if (!pending || pending.provider !== input.provider || pending.method !== input.method)
+			throw new Error('Start sign-in for this account in the current agent connection first.');
 		// An exchange is single-use, including an uncertain network response.
 		this.pendingOAuth = undefined;
 		this.verifiedModel = undefined;
-		await completeProviderOAuth(current.homeDir, input.provider, attemptID, input.code, {
-			signal: this.lifetime.signal
+		await target.agent.completeProviderOAuth(pending.provider, pending.attemptID, input.code, {
+			signal: this.signal(context)
 		});
 		this.requireOpen();
 	}
-	readiness(input: AgentInput<'readiness'> = {}) {
-		const current = this.state();
-		return testAssistantReadiness(current.homeDir, {
-			signal: this.lifetime.signal,
+	async readiness(input: AgentInput<'readiness'> = {}, context: RequestContext = {}) {
+		const target = await this.bind(context);
+		const readiness = await target.agent.testReadiness({
+			signal: this.signal(context),
 			provider: input.provider,
 			model: input.model
-		}).then(async (readiness) => {
-			this.requireOpen();
-			this.verifiedModel = readiness.ok ? { homeDir: current.homeDir, readiness } : undefined;
-			const settings =
-				readiness.ok && input.provider
-					? await listProviderSettings(current.homeDir, { signal: this.lifetime.signal }).catch(
-							() => undefined
-						)
-					: undefined;
-			this.requireOpen();
-			if (
-				readiness.ok &&
-				(!input.provider ||
-					(settings?.currentModel?.provider === readiness.provider &&
-						settings?.currentModel?.model === readiness.model))
-			) {
-				const warning = await this.completeReadiness(readiness);
-				if (warning) return { ...readiness, warning };
-			}
-			return readiness;
 		});
+		this.requireOpen();
+		this.verifiedModel = readiness.ok ? readiness : undefined;
+		if (!readiness.ok || !this.options.completeSetup) return readiness;
+		const settings = input.provider
+			? await listProviderSettings(target, { signal: this.signal(context) }).catch(() => undefined)
+			: undefined;
+		this.requireOpen();
+		if (
+			!input.provider ||
+			(settings?.currentModel?.provider === readiness.provider &&
+				settings?.currentModel?.model === readiness.model)
+		) {
+			const warning = await this.completeReadiness(readiness);
+			if (warning) return { ...readiness, warning };
+		}
+		return readiness;
 	}
-	password() {
-		const current = this.state();
-		const details = connectionDetails(current.homeDir, 'opencode', { showAssistantPassword: true });
-		if (!details.password) throw new Error('OpenCode password is unavailable.');
-		return { password: details.password };
+	/** Forget a sign-in attempt and model test that belonged to a replaced route. */
+	reset(): void {
+		this.pendingOAuth = undefined;
+		this.verifiedModel = undefined;
 	}
 	close(): void {
 		// OpenCode has no native OAuth cancellation API. Discard only this local
 		// attempt reference; its provider-side attempt expires independently.
 		this.closed = true;
 		this.lifetime.abort();
-		this.pendingOAuth = undefined;
-		this.verifiedModel = undefined;
+		this.reset();
 	}
 }

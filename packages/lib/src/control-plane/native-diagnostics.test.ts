@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { diagnoseNativeRuntime } from './native-diagnostics.js';
-import { withAssistantEndpoint } from './opencode.js';
+import { defaultStackConfig, writeStackConfig } from './stack-config.js';
 
 const roots: string[] = [];
 const servers: ReturnType<typeof Bun.serve>[] = [];
@@ -58,11 +58,14 @@ console.log(typeof value === 'string' ? value : JSON.stringify(value));
 		return new Response('Unexpected request', { status: 500 });
 	} });
 	servers.push(server);
+	const config = defaultStackConfig();
+	config.assistant.port = server.port as number;
+	writeStackConfig(root, config);
 	return { root, state, http, async diagnose(readiness = false) {
 		writeFileSync(statePath, JSON.stringify(state));
-		return withAssistantEndpoint(root, server.url.toString(), () => diagnoseNativeRuntime(root, {
+		return diagnoseNativeRuntime(root, {
 			projectDirectory: root, files: [], envFiles: [], profiles: []
-		}, { readiness }));
+		}, { readiness });
 	}, commands: () => readFileSync(log, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]) };
 }
 

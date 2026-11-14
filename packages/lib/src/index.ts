@@ -163,8 +163,6 @@ export {
 } from './control-plane/operations.js';
 export {
 	assistantEndpoint,
-	beginProviderOAuth,
-	completeProviderOAuth,
 	configureGuardianModeratorModel,
 	listProviders,
 	removeProviderAuth,

@@ -56,9 +56,11 @@ import { updateHome } from '../control-plane/update.js';
 import { FH_RUNTIME_LABEL } from '../control-plane/release.js';
 import { packTransfer, unpackTransfer } from './transfer.js';
 import { publishedConnections } from './connections.js';
-import { withAssistantEndpoint } from '../control-plane/opencode.js';
+import { localAuthorization } from '../control-plane/opencode.js';
+import { createNativeAgentService } from '../control-plane/native-agent.js';
+import { localProviderSettings } from '../control-plane/provider-settings.js';
 import type { LocalManagementHostPort, RequestContext } from './contracts.js';
-import { LocalAgentServices } from './agent-services.js';
+import { AgentServices } from './agent-services.js';
 import { readCredentialKey } from '../control-plane/credential-store.js';
 import { assertInstallInstanceName } from '../control-plane/install.js';
 import { KnowledgeUi } from './knowledge-ui.js';
@@ -79,11 +81,23 @@ export function localInstanceManagement(
 		) => ManagementOperationMap[N]['result'] | Promise<ManagementOperationMap[N]['result']>;
 	};
 	const managedState = () => createFholdState(homeDir);
-	const agent = new LocalAgentServices(
-		() => state(),
-		options.openUrl,
-		(readiness) => completeInstanceSetup(homeDir, readiness)
-	);
+	const agent = new AgentServices({
+		async bind() {
+			const current = state();
+			const endpoint = (await publishedConnections(current.homeDir, await options.host.inspect()))
+				.assistant;
+			if (!endpoint) throw Error('Start this instance before managing its AI services.');
+			return localProviderSettings(
+				current.homeDir,
+				createNativeAgentService({
+					endpoint,
+					authorization: () => localAuthorization(current.homeDir)
+				})
+			);
+		},
+		openUrl: options.openUrl,
+		completeSetup: (readiness) => completeInstanceSetup(homeDir, readiness)
+	});
 	const transfers = new Set<string>();
 	const knowledgeUi = new KnowledgeUi(homeDir);
 	function state() {
@@ -174,16 +188,22 @@ export function localInstanceManagement(
 
 	const handlers: HandlerTable = {
 		snapshot: () => adminSnapshot(),
-		'agent.providers': () => agent.providers(),
-		'agent.setKey': (input) => agent.setKey(input),
-		'agent.saveEndpoint': (input) => agent.endpoint(input),
-		'agent.discoverModels': (input) => agent.models(input),
-		'agent.selectModel': (input) => agent.use(input),
-		'agent.removeProvider': (input) => agent.remove(input),
-		'agent.oauthStart': (input) => agent.oauthStart(input),
-		'agent.oauthFinish': (input) => agent.oauthFinish(input),
-		'agent.readiness': (input) => agent.readiness(input),
-		'agent.assistantPassword': () => agent.password(),
+		'agent.providers': (_input, context) => agent.providers(context),
+		'agent.setKey': (input, context) => agent.setKey(input, context),
+		'agent.saveEndpoint': (input, context) => agent.endpoint(input, context),
+		'agent.discoverModels': (input, context) => agent.models(input, context),
+		'agent.selectModel': (input, context) => agent.use(input, context),
+		'agent.removeProvider': (input, context) => agent.remove(input, context),
+		'agent.oauthStart': (input, context) => agent.oauthStart(input, context),
+		'agent.oauthFinish': (input, context) => agent.oauthFinish(input, context),
+		'agent.readiness': (input, context) => agent.readiness(input, context),
+		'agent.assistantPassword': () => {
+			const details = connectionDetails(state().homeDir, 'opencode', {
+				showAssistantPassword: true
+			});
+			if (!details.password) throw new Error('OpenCode password is unavailable.');
+			return { password: details.password };
+		},
 		'agent.codexRecall': async (input, context) => {
 			const current = state();
 			if (input.action === 'review') return reviewCodexRecall(current);
@@ -376,20 +396,7 @@ export function localInstanceManagement(
 		): Promise<ManagementOperationMap[N]['result']> {
 			if (closed) throw new Error('This instance session is closed. Open it again.');
 			const handler = handlers[operation] as HandlerTable[N];
-			const run = async () => await handler(input as ManagementOperationMap[N]['input'], context);
-			if (
-				operation.startsWith('agent.') &&
-				operation !== 'agent.remote' &&
-				operation !== 'agent.codexRecall' &&
-				operation !== 'agent.assistantPassword'
-			) {
-				const current = state();
-				const endpoint = (await publishedConnections(current.homeDir, await options.host.inspect()))
-					.assistant;
-				if (!endpoint) throw Error('Start this instance before managing its AI services.');
-				return await withAssistantEndpoint(current.homeDir, endpoint, run);
-			}
-			return await run();
+			return await handler(input as ManagementOperationMap[N]['input'], context);
 		},
 		busy: () => remoteStarting || !!activeRemote?.session.snapshot().running,
 		async close() {
