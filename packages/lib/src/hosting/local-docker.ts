@@ -100,7 +100,7 @@ export const localDockerProvider: HostingProvider = {
 					...options,
 					host: localDockerManagementHost(ref.homeDir)
 				});
-				return rpcManagementBindings(management, { credentialPolicy: () => true });
+				return rpcManagementBindings(management);
 			},
 			async operate(action, confirmed, options) {
 				if (options?.revision !== undefined)

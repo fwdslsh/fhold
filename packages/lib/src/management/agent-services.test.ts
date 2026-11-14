@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalAgentServices } from './agent-services.js';
-import { createFholdState } from '../control-plane/foundation.js';
+import { AgentServices } from './agent-services.js';
 import { defaultStackConfig, writeStackConfig } from '../control-plane/stack-config.js';
+import { localNativeAgent } from '../control-plane/opencode.js';
+import { localProviderSettings } from '../control-plane/provider-settings.js';
 
 function fixture() {
 	const home = mkdtempSync(join(tmpdir(), 'fhold-agent-service-'));
@@ -61,10 +62,10 @@ test('closing a native auth session suppresses a late browser callback and abort
 		return f.request(new URL(request.url).pathname);
 	}) as typeof fetch;
 	const urls: string[] = [];
-	const service = new LocalAgentServices(
-		() => createFholdState(f.home),
-		(url) => urls.push(url)
-	);
+	const service = new AgentServices({
+		bind: async () => localProviderSettings(f.home, localNativeAgent(f.home)),
+		openUrl: (url) => urls.push(url)
+	});
 	try {
 		const login = service.oauthStart({ provider: 'example', method: 0 });
 		await pending;
@@ -95,17 +96,38 @@ test('a failed host setup-completion write does not invalidate a successful nati
 	const original = globalThis.fetch;
 	globalThis.fetch = (async (input, init) =>
 		f.request(new URL(new Request(input, init).url).pathname)) as typeof fetch;
-	const service = new LocalAgentServices(
-		() => createFholdState(f.home),
-		undefined,
-		async () => {
+	const service = new AgentServices({
+		bind: async () => localProviderSettings(f.home, localNativeAgent(f.home)),
+		completeSetup: async () => {
 			throw new Error('synthetic host write failure');
 		}
-	);
+	});
 	try {
 		const result = await service.readiness(undefined);
 		expect(result).toMatchObject({ ok: true, response: 'FH_READY' });
 		expect(result.ok && result.warning).toContain('installation completion could not be saved');
+	} finally {
+		service.close();
+		globalThis.fetch = original;
+	}
+});
+test('only the exact model a native test verified may become the agent default', async () => {
+	const f = fixture();
+	const original = globalThis.fetch;
+	globalThis.fetch = (async (input, init) =>
+		f.request(new URL(new Request(input, init).url).pathname)) as typeof fetch;
+	const service = new AgentServices({
+		bind: async () => localProviderSettings(f.home, localNativeAgent(f.home))
+	});
+	try {
+		const gate = 'Test this model before using it for your agent.';
+		await expect(service.use({ provider: 'example', model: 'tool-model' })).rejects.toThrow(gate);
+		expect(await service.readiness({ provider: 'example', model: 'tool-model' })).toMatchObject({
+			ok: true
+		});
+		await expect(service.use({ provider: 'example', model: 'other-model' })).rejects.toThrow(gate);
+		service.reset();
+		await expect(service.use({ provider: 'example', model: 'tool-model' })).rejects.toThrow(gate);
 	} finally {
 		service.close();
 		globalThis.fetch = original;

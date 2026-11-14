@@ -1,27 +1,13 @@
-import type {
-	AssistantReadiness,
-	BackupManifest,
-	InstanceBackupManifest,
-	InstanceRestorePlan,
-	RestorePlan,
-	ProviderOAuthAuthorization,
-	ProviderSettings,
-	ProviderEndpointInput,
-	StackConfig
-} from '@fhold/lib';
+import type { InstanceOperations, RequestContext, StackConfig } from '@fhold/lib';
 import type { HostingConnection, InstanceRef, InstanceSummary, ConnectionCheck } from '@fhold/lib';
-import type { HostingChoice, HostingLogOptions } from '@fhold/lib';
-import type { RemoteProgress, RemoteTool, CodexSandbox } from '@fhold/lib';
-import type { CodexRecallReview } from '@fhold/lib';
+import type { HostingChoice } from '@fhold/lib';
 import type { InstanceSnapshot } from '@fhold/lib';
 import type {
 	ProvisioningOptions,
 	ProvisioningRequest,
 	ProvisioningPreview,
 	ProvisioningResult,
-	DeploymentOutcome,
-	DeploymentSettings,
-	DeploymentPatch
+	DeploymentOutcome
 } from '@fhold/lib';
 import type { AdminSettings } from './admin-settings.js';
 import type { AdminAppSnapshot } from './admin-updates.js';
@@ -52,7 +38,69 @@ export type AdminWelcome = {
 	preferenceError?: string;
 };
 
+/**
+ * The IPC allowlist of named instance operations the renderer may invoke on the
+ * selected session. Composite actions keep their own channels below.
+ */
+export const ADMIN_OPERATIONS = [
+	'host.logs',
+	'host.deployment.inspect',
+	'host.deployment.prepare',
+	'host.deployment.discard',
+	'agent.connect',
+	'agent.providers',
+	'agent.setKey',
+	'agent.saveEndpoint',
+	'agent.discoverModels',
+	'agent.selectModel',
+	'agent.removeProvider',
+	'agent.oauthStart',
+	'agent.oauthFinish',
+	'agent.readiness',
+	'agent.assistantPassword',
+	'agent.remote',
+	'agent.codexRecall',
+	'apps.credentials.create',
+	'apps.credentials.updatePolicy',
+	'apps.credentials.rotate',
+	'apps.credentials.remove',
+	'apps.credentials.revealKey',
+	'apps.portal.mapUser',
+	'apps.portal.saveToken',
+	'data.backup',
+	'data.restoreData',
+	'data.restoreInstance',
+	'data.recovery.status',
+	'data.recovery.inspect',
+	'data.recovery.initialize',
+	'data.recovery.restore',
+	'data.recovery.save',
+	'data.recovery.setCredential',
+	'data.recovery.package'
+] as const;
+export type AdminOperation = (typeof ADMIN_OPERATIONS)[number];
+type Slot<T, Path extends string> = Path extends `${infer Head}.${infer Rest}`
+	? Head extends keyof T
+		? Slot<T[Head], Rest>
+		: never
+	: Path extends keyof T
+		? T[Path]
+		: never;
+type Callable<N extends AdminOperation> = Extract<
+	Slot<InstanceOperations, N>,
+	{ support: 'supported' }
+>;
+export type AdminOperationInput<N extends AdminOperation> = Parameters<Callable<N>['invoke']>[0];
+export type AdminOperationResult<N extends AdminOperation> = Awaited<
+	ReturnType<Callable<N>['invoke']>
+>;
+
 export type AdminApi = {
+	operation<N extends AdminOperation>(
+		name: N,
+		input?: AdminOperationInput<N>,
+		context?: Pick<RequestContext, 'confirmed'>
+	): Promise<AdminOperationResult<N>>;
 	desktopStatus(): Promise<DesktopStatus>;
 	installDesktop(): Promise<DesktopStatus>;
 	appSettings(): Promise<AdminAppSnapshot>;
@@ -80,19 +128,15 @@ export type AdminApi = {
 		retryFailedStep?: boolean;
 		confirmed: boolean;
 	}): Promise<ProvisioningResult>;
-	deploymentSettings(): Promise<DeploymentSettings>;
-	prepareDeployment(value: DeploymentPatch): Promise<DeploymentSettings>;
 	applyDeployment(value: {
 		confirmed: boolean;
 	}): Promise<{ snapshot: AdminSnapshot; outcome: DeploymentOutcome }>;
-	discardDeployment(): Promise<void>;
 	hostingSetup(value: {
 		provider: HostingConnection['kind'];
 		action: 'sign-in' | 'choices';
 		field?: string;
 		values?: Record<string, string>;
 	}): Promise<HostingChoice[] | undefined>;
-	directory(value?: string): Promise<import('@fhold/lib').DirectoryListing>;
 	hostingInfo(id: string): Promise<{ instancesDirectory: string; defaultHome: string }>;
 	hostingDirectory(value: {
 		connectionId: string;
@@ -115,19 +159,6 @@ export type AdminApi = {
 	prepareNewInstance(target: AdminTarget & { name?: string }): Promise<void>;
 	closeInstance(): Promise<void>;
 	installationReadiness(connectionId?: string): Promise<{ ok: boolean; message?: string }>;
-	codexRecall(value: {
-		action: 'review' | 'approve' | 'disable';
-		digest?: string;
-		confirmed?: boolean;
-	}): Promise<CodexRecallReview>;
-	remote(value: {
-		action: 'enable' | 'progress' | 'input' | 'cancel' | 'disable' | 'connection';
-		tool: RemoteTool;
-		trusted?: boolean;
-		sandbox?: CodexSandbox;
-		input?: string;
-		confirmed?: boolean;
-	}): Promise<RemoteProgress>;
 	snapshot(): Promise<AdminSnapshot>;
 	selectedHome(): Promise<string>;
 	install(config: StackConfig, automaticPorts?: boolean): Promise<AdminSnapshot>;
@@ -137,86 +168,18 @@ export type AdminApi = {
 		action: StackAction,
 		confirmed?: boolean
 	): Promise<{ snapshot: AdminSnapshot; outcome: DeploymentOutcome }>;
-	logs(options?: HostingLogOptions): Promise<string>;
-	providers(): Promise<ProviderSettings>;
-	providerKey(value: { provider: string; key: string }): Promise<void>;
-	providerEndpoint(value: ProviderEndpointInput): Promise<ProviderSettings>;
-	providerModels(value: { url: string; key?: string }): Promise<string[]>;
-	providerUse(value: { provider: string; model: string }): Promise<ProviderSettings>;
-	providerRemove(value: { provider: string; endpoint?: boolean }): Promise<ProviderSettings>;
-	providerOAuthStart(value: {
-		provider: string;
-		method: number;
-		inputs?: Record<string, string>;
-	}): Promise<ProviderOAuthAuthorization>;
-	providerOAuthFinish(value: { provider: string; method: number; code?: string }): Promise<void>;
-	readiness(value?: { provider?: string; model?: string }): Promise<AssistantReadiness>;
-	connectAgent(value?: { password?: string }): Promise<{ endpoint: string; username?: string }>;
 	openOpenCode(): Promise<void>;
 	openKnowledge(): Promise<void>;
 	syncKnowledge(): Promise<void>;
-	assistantPassword(): Promise<{ password: string }>;
 	copyText(value: string): Promise<void>;
 	openExternal(value: string): Promise<void>;
 	chooseDirectory(value: {
 		purpose: 'backup' | 'restore' | 'instance' | 'new-instance' | 'recovery';
 	}): Promise<string | undefined>;
-	credential(value: {
-		action: 'create' | 'rotate' | 'remove' | 'policy';
-		username: string;
-		policy?: string;
-		previousPolicy?: string;
-	}): Promise<AdminSnapshot>;
-	credentialKey(username: string): Promise<{ username: string; key: string }>;
-	mapPortalUser(value: {
-		portal: 'discord' | 'slack';
-		userId: string;
-		username?: string;
-	}): Promise<AdminSnapshot>;
-	portalToken(value: {
-		portal: 'discord' | 'slack';
-		botToken?: string;
-		appToken?: string;
-	}): Promise<AdminSnapshot>;
-	backup(value: {
-		destination: string;
-		full?: boolean;
-		confirmed?: boolean;
-		includeProviderAuth?: boolean;
-		includeUserEnv?: boolean;
-		includePortalMaps?: boolean;
-		includeOAuth?: boolean;
-	}): Promise<BackupManifest | InstanceBackupManifest>;
-	restoreInstance(value: {
-		sourceHome: string;
-		apply?: boolean;
-		previewDigest?: string;
-		confirmed?: boolean;
-	}): Promise<InstanceRestorePlan>;
-	recovery(
-		value:
-			| {
-					action: 'package';
-					request: import('@fhold/lib').CheckpointPackageOperation;
-					confirmed?: boolean;
-			  }
-			| { action: 'save'; settings: unknown; selection: unknown; baselineDigest: string }
-			| { action: 'credential'; connectionString: string }
-			| { action: 'status' | 'inspect' | 'init' | 'restore'; confirmed?: boolean }
-	): Promise<AdminSnapshot | Record<string, unknown> | string>;
-	restoreData(value: {
-		sourceHome: string;
-		apply?: boolean;
-		previewDigest?: string;
-		acknowledgeUnrestored?: boolean;
-		includeProviderAuth?: boolean;
-		includeUserEnv?: boolean;
-		includePortalMaps?: boolean;
-		includeOAuth?: boolean;
-	}): Promise<RestorePlan>;
 };
 
 export const ADMIN_CHANNELS = {
+	operation: 'admin:operation',
 	appSettings: 'admin:app-settings',
 	desktopStatus: 'admin:desktop-status',
 	installDesktop: 'admin:install-desktop',
@@ -230,12 +193,8 @@ export const ADMIN_CHANNELS = {
 	provisioningPreview: 'admin:provisioning-preview',
 	provisioningInstall: 'admin:provisioning-install',
 	provisioningResume: 'admin:provisioning-resume',
-	deploymentSettings: 'admin:deployment-settings',
-	prepareDeployment: 'admin:prepare-deployment',
 	applyDeployment: 'admin:apply-deployment',
-	discardDeployment: 'admin:discard-deployment',
 	hostingSetup: 'admin:hosting-setup',
-	directory: 'admin:directory',
 	hostingInfo: 'admin:hosting-info',
 	hostingDirectory: 'admin:hosting-directory',
 	update: 'admin:update',
@@ -250,38 +209,16 @@ export const ADMIN_CHANNELS = {
 	prepareNewInstance: 'admin:prepare-new-instance',
 	closeInstance: 'admin:close-instance',
 	installationReadiness: 'admin:installation-readiness',
-	codexRecall: 'admin:codex-recall',
-	remote: 'admin:remote',
 	snapshot: 'admin:snapshot',
 	selectedHome: 'admin:selected-home',
 	install: 'admin:install',
 	saveConfig: 'admin:save-config',
 	action: 'admin:action',
 	confirmRestart: 'admin:confirm-restart',
-	logs: 'admin:logs',
-	providers: 'admin:providers',
-	providerKey: 'admin:provider-key',
-	providerEndpoint: 'admin:provider-endpoint',
-	providerModels: 'admin:provider-models',
-	providerUse: 'admin:provider-use',
-	providerRemove: 'admin:provider-remove',
-	providerOAuthStart: 'admin:provider-oauth-start',
-	providerOAuthFinish: 'admin:provider-oauth-finish',
-	readiness: 'admin:readiness',
-	connectAgent: 'admin:connect-agent',
 	openOpenCode: 'admin:open-opencode',
 	openKnowledge: 'admin:open-knowledge',
 	syncKnowledge: 'admin:sync-knowledge',
-	assistantPassword: 'admin:assistant-password',
 	copyText: 'admin:copy-text',
 	openExternal: 'admin:open-external',
-	chooseDirectory: 'admin:choose-directory',
-	credential: 'admin:credential',
-	credentialKey: 'admin:credential-key',
-	mapPortalUser: 'admin:map-portal-user',
-	portalToken: 'admin:portal-token',
-	backup: 'admin:backup',
-	restoreInstance: 'admin:restore-instance',
-	recovery: 'admin:recovery',
-	restoreData: 'admin:restore'
+	chooseDirectory: 'admin:choose-directory'
 } as const;

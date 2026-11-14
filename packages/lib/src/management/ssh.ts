@@ -15,20 +15,20 @@ import { packTransfer, unpackTransfer, preserveTransferMetadata } from './transf
 import type { HostingConnection } from '../hosting/types.js';
 import type {
 	InstanceManagement,
-	ManagementMethod,
 	ManagedSnapshot,
-	ManagementRequestArgs,
-	ManagementRequestMap
+	ManagementOperation,
+	ManagementOperationMap
 } from './types.js';
+import type { RequestContext } from './contracts.js';
 import { availablePort, SshTunnel } from './tunnel.js';
 
 export type ManagementRequest = {
 	id: number;
 	homeDir: string;
 	setupName?: string;
-	method: ManagementMethod;
-	value?: unknown;
-	extra?: unknown[];
+	operation: ManagementOperation;
+	input?: unknown;
+	context?: { confirmed?: boolean };
 };
 export type ManagementResponse =
 	| { id: number; ok: true; value: unknown }
@@ -139,27 +139,33 @@ export class SshInstanceManagement implements InstanceManagement {
 		this.pending.clear();
 	}
 	private async request(
-		method: ManagementMethod,
-		value?: unknown,
-		...extra: unknown[]
+		operation: ManagementOperation,
+		input?: unknown,
+		context: RequestContext = {}
 	): Promise<unknown> {
 		await this.connect();
 		const id = ++this.serial;
+		const request: ManagementRequest = {
+			id,
+			homeDir: this.homeDir,
+			setupName: this.options.setupName,
+			operation,
+			input,
+			...(context.confirmed === undefined ? {} : { context: { confirmed: context.confirmed } })
+		};
 		const result = await new Promise<unknown>((resolve, reject) => {
 			this.pending.set(id, { resolve, reject });
-			this.child!.stdin.write(
-				`${JSON.stringify({ id, homeDir: this.homeDir, setupName: this.options.setupName, method, value, extra } satisfies ManagementRequest)}\n`
-			);
+			this.child!.stdin.write(`${JSON.stringify(request)}\n`);
 		});
-		if (method === 'remote' && result && typeof result === 'object' && 'running' in result)
+		if (operation === 'agent.remote' && result && typeof result === 'object' && 'running' in result)
 			this.nativeSetup = result.running === true;
 		return result;
 	}
-	async rpc<M extends ManagementMethod>(
-		method: M,
-		...args: ManagementRequestArgs<M>
-	): Promise<ManagementRequestMap[M]['result']> {
-		return (await this.request(method, ...args)) as ManagementRequestMap[M]['result'];
+	async rpc<N extends ManagementOperation>(
+		operation: N,
+		input?: ManagementOperationMap[N]['input']
+	): Promise<ManagementOperationMap[N]['result']> {
+		return (await this.request(operation, input)) as ManagementOperationMap[N]['result'];
 	}
 	private location(path: string): string {
 		const at = this.connection.host.lastIndexOf('@');
@@ -186,36 +192,54 @@ export class SshInstanceManagement implements InstanceManagement {
 	}
 	async uploadFile(local: string): Promise<string> {
 		if (!lstatSync(local).isFile()) throw Error('Choose a regular input file on this computer.');
-		const root = await this.rpc('transferCreate');
+		const root = await this.rpc('transfer.create');
 		const target = join(root, 'input');
 		await this.copyFile(local, target, true);
 		return target;
 	}
-	async call<M extends ManagementMethod>(
-		method: M,
-		...args: ManagementRequestArgs<M>
-	): Promise<ManagementRequestMap[M]['result']>;
-	async call(method: ManagementMethod, value?: unknown, ...extra: unknown[]): Promise<unknown> {
-		if (method === 'knowledgeUi') {
+	async call<N extends ManagementOperation>(
+		operation: N,
+		input?: ManagementOperationMap[N]['input'],
+		context?: RequestContext
+	): Promise<ManagementOperationMap[N]['result']>;
+	async call(
+		operation: ManagementOperation,
+		value?: unknown,
+		context?: RequestContext
+	): Promise<unknown> {
+		if (operation === 'data.knowledgeUi') {
 			this.knowledgePort ??= availablePort().catch((error) => {
 				this.knowledgePort = undefined;
 				throw error;
 			});
 			const port = await this.knowledgePort;
-			const result = await this.rpc('knowledgeUi', { loopbackPort: port });
+			const result = await this.rpc('data.knowledgeUi', { loopbackPort: port });
 			if (this.closing) throw new Error('This instance connection is closed.');
 			const url = new URL(result.url);
-			if (url.protocol !== 'http:' || isIP(url.hostname) !== 4 || Number(url.port) !== port || url.pathname !== '/' || !url.searchParams.get('desktop_session') || url.username || url.password)
+			if (
+				url.protocol !== 'http:' ||
+				isIP(url.hostname) !== 4 ||
+				Number(url.port) !== port ||
+				url.pathname !== '/' ||
+				!url.searchParams.get('desktop_session') ||
+				url.username ||
+				url.password
+			)
 				throw new Error('The selected Assistant returned an invalid AKM UI address.');
 			this.knowledgeTunnel ??= new SshTunnel(this.connection);
 			// The server was started with this exact loopback browser origin.
 			// Preserve native Host, Origin and session-cookie validation end to end.
-			await this.knowledgeTunnel.ensure([{ bind: url.hostname, port: Number(url.port), localPort: Number(url.port) }]);
-			if (this.closing) { await this.knowledgeTunnel.close(); throw new Error('This instance connection is closed.'); }
+			await this.knowledgeTunnel.ensure([
+				{ bind: url.hostname, port: Number(url.port), localPort: Number(url.port) }
+			]);
+			if (this.closing) {
+				await this.knowledgeTunnel.close();
+				throw new Error('This instance connection is closed.');
+			}
 			url.hostname = '127.0.0.1';
 			return { url: url.href };
 		}
-		if (method === 'backup') {
+		if (operation === 'data.backup') {
 			if (
 				!value ||
 				typeof value !== 'object' ||
@@ -227,15 +251,15 @@ export class SshInstanceManagement implements InstanceManagement {
 			const exists = lstatSync(destination, { throwIfNoEntry: false });
 			if (exists && (!exists.isDirectory() || readdirSync(destination).length))
 				throw Error('Choose an empty export directory.');
-			const root = await this.rpc('transferCreate');
+			const root = await this.rpc('transfer.create');
 			const local = mkdtempSync(join(tmpdir(), 'fhold-transfer-download-'));
 			try {
 				const result = await this.request(
-					method,
+					operation,
 					{ ...value, destination: join(root, 'export') },
-					...extra
+					context
 				);
-				const archive = await this.rpc('transferPack', root);
+				const archive = await this.rpc('transfer.pack', root);
 				await this.copyFile(join(local, 'transfer.tgz'), archive, false);
 				await unpackTransfer(join(local, 'transfer.tgz'), join(local, 'unpacked'));
 				mkdirSync(destination, { recursive: true, mode: 0o700 });
@@ -255,14 +279,14 @@ export class SshInstanceManagement implements InstanceManagement {
 				return result;
 			} finally {
 				rmSync(local, { recursive: true, force: true });
-				await this.rpc('transferRelease', root).catch(() =>
+				await this.rpc('transfer.release', root).catch(() =>
 					console.warn(
 						'Temporary export cleanup could not be confirmed; the original instance and selected export are unchanged.'
 					)
 				);
 			}
 		}
-		if (method === 'restoreData' || method === 'restoreInstance') {
+		if (operation === 'data.restoreData' || operation === 'data.restoreInstance') {
 			if (
 				!value ||
 				typeof value !== 'object' ||
@@ -275,29 +299,33 @@ export class SshInstanceManagement implements InstanceManagement {
 			let staged = this.imports.get(source);
 			if (!apply) {
 				if (staged) {
-					await this.rpc('transferRelease', staged.root);
+					await this.rpc('transfer.release', staged.root);
 					this.imports.delete(source);
 				}
-				const root = await this.rpc('transferCreate');
+				const root = await this.rpc('transfer.create');
 				const local = mkdtempSync(join(tmpdir(), 'fhold-transfer-upload-'));
 				try {
 					await packTransfer(source, join(local, 'transfer.tgz'));
 					await this.copyFile(join(local, 'transfer.tgz'), join(root, 'transfer.tgz'), true);
-					staged = { root, source: await this.rpc('transferUnpack', root) };
+					staged = { root, source: await this.rpc('transfer.unpack', root) };
 					this.imports.set(source, staged);
 				} finally {
 					rmSync(local, { recursive: true, force: true });
 				}
 			}
 			if (!staged) throw Error('Preview this import before applying it.');
-			const result = await this.request(method, { ...value, sourceHome: staged.source }, ...extra);
+			const result = await this.request(
+				operation,
+				{ ...value, sourceHome: staged.source },
+				context
+			);
 			if (!result || typeof result !== 'object' || Array.isArray(result))
 				throw new Error(
 					'Remote import returned an invalid plan. Inspect the selected instance before retrying.'
 				);
 			return { ...result, sourceHome: source };
 		}
-		return this.request(method, value, ...extra);
+		return this.request(operation, value, context);
 	}
 	/**
 	 * Acquire a browser route deliberately. Status reads remain transport-only:

@@ -89,6 +89,15 @@ import {
 const admin = join(import.meta.dir, '..', 'admin');
 const html = readFileSync(join(admin, 'index.html'), 'utf8');
 
+/** Synthetic IPC: route `operation(name, input, context)` to per-operation handlers. */
+function operations(handlers: Record<string, (input?: never, context?: never) => unknown>) {
+	return async (name: string, input?: unknown, context?: unknown) => {
+		const handler = handlers[name];
+		if (!handler) throw new Error(`Unexpected operation ${name}`);
+		return handler(input as never, context as never);
+	};
+}
+
 describe('Admin visual contract', () => {
 	const css = readFileSync(join(admin, 'admin.css'), 'utf8');
 	const tokens = readFileSync(join(admin, 'design-tokens.css'), 'utf8');
@@ -420,14 +429,16 @@ describe('Admin static security boundary', () => {
 		state.awaitingSetupFinish = true;
 		const inputs: unknown[] = [];
 		state.api = {
-			connectAgent: async (input) => {
-				inputs.push(input);
-				expect(control('native-agent-password').value).toBe('');
-				if (!input.password)
-					throw new Error('Azure cannot read this native secret. Enter the OpenCode password.');
-				return { endpoint: 'https://private.example.test', username: 'custom-user' };
-			},
-			snapshot: async () => snapshot
+			snapshot: async () => snapshot,
+			operation: operations({
+				'agent.connect': async (input) => {
+					inputs.push(input);
+					expect(control('native-agent-password').value).toBe('');
+					if (!input.password)
+						throw new Error('Azure cannot read this native secret. Enter the OpenCode password.');
+					return { endpoint: 'https://private.example.test', username: 'custom-user' };
+				}
+			})
 		};
 		renderConnectionDetails(snapshot);
 		bindConnectionsEvents();
@@ -594,10 +605,12 @@ describe('Admin static security boundary', () => {
 	it('renders remote targets without a fake local configuration or provider discovery', () => {
 		let providers = 0;
 		state.api = {
-			providers: async () => {
-				providers++;
-				return { providers: [] };
-			}
+			operation: operations({
+				'agent.providers': async () => {
+					providers++;
+					return { providers: [] };
+				}
+			})
 		};
 		const snapshot = normalizedSnapshot({
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/resource' },
@@ -888,9 +901,11 @@ describe('Admin static security boundary', () => {
 		let exported = false;
 		state.api = {
 			confirmRestart: async () => false,
-			backup: async () => {
-				exported = true;
-			}
+			operation: operations({
+				'data.backup': async () => {
+					exported = true;
+				}
+			})
 		};
 		bindBackupEvents();
 		await control('backup-form').listeners.get('submit')?.({ preventDefault() {} });
@@ -901,21 +916,23 @@ describe('Admin static security boundary', () => {
 		let confirmations = 0;
 		state.api = {
 			prepareNewInstance: async () => {},
-			restoreInstance: async ({ apply }) => {
-				if (apply) imported = true;
-				return {
-					projectName: 'restored',
-					sourceHome: '/export',
-					destinationHome: '/restored',
-					digest: 'a'.repeat(64),
-					copyCount: 2,
-					warnings: []
-				};
-			},
 			confirmRestart: async () => {
 				confirmations++;
 				return false;
-			}
+			},
+			operation: operations({
+				'data.restoreInstance': async ({ apply }) => {
+					if (apply) imported = true;
+					return {
+						projectName: 'restored',
+						sourceHome: '/export',
+						destinationHome: '/restored',
+						digest: 'a'.repeat(64),
+						copyCount: 2,
+						warnings: []
+					};
+				}
+			})
 		};
 		bindInstanceRestoreEvents();
 		control('begin-instance-import').listeners.get('click')?.({});
@@ -1539,9 +1556,11 @@ describe('Admin static security boundary', () => {
 
 	it('reports provider transport failures as actionable guidance without raw JSON', async () => {
 		state.api = {
-			providers: async () => {
-				throw new Error('Error invoking remote method admin:providers: fetch failed');
-			}
+			operation: operations({
+				'agent.providers': async () => {
+					throw new Error('Error invoking remote method admin:operation: fetch failed');
+				}
+			})
 		};
 		await loadProviders(false);
 		expect(control('provider-default-status').children[0].textContent).toBe(
@@ -1606,13 +1625,15 @@ describe('Admin static security boundary', () => {
 		state.currentSnapshot = snapshot;
 		const calls: unknown[] = [];
 		state.api = {
-			credential: async (input: unknown) => {
-				calls.push(input);
-				return saved;
-			},
 			saveConfig: async () => {
 				throw new Error('Policy changes must not write Docker configuration.');
-			}
+			},
+			snapshot: async () => saved,
+			operation: operations({
+				'apps.credentials.updatePolicy': async (input: unknown) => {
+					calls.push(input);
+				}
+			})
 		};
 		window.confirm = () => true;
 		control('claude-credential').value = 'client';
@@ -1624,9 +1645,7 @@ describe('Admin static security boundary', () => {
 		control('claude-permissions-form').listeners.get('submit')?.({ preventDefault() {} });
 		const deadline = Date.now() + 1_000;
 		while (calls.length === 0 && Date.now() < deadline) await Bun.sleep(1);
-		expect(calls).toEqual([
-			{ action: 'policy', username: 'client', policy: 'full', previousPolicy: 'read' }
-		]);
+		expect(calls).toEqual([{ username: 'client', policy: 'full', previousPolicy: 'read' }]);
 		while (state.currentSnapshot !== saved && Date.now() < deadline) await Bun.sleep(1);
 		expect(state.currentSnapshot.apps.config.value.credentials.client.policy).toBe('full');
 	});
@@ -1694,15 +1713,17 @@ describe('Admin static security boundary', () => {
 		let confirmed = false;
 		state.api = {
 			confirmRestart: async () => confirmed,
-			remote: async (request: { action: string; input?: string }) => {
-				calls++;
-				if (request.action === 'input') {
-					answer = request.input;
-					expect(control('remote-answer').value).toBe('');
-					return {};
+			operation: operations({
+				'agent.remote': async (request: { action: string; input?: string }) => {
+					calls++;
+					if (request.action === 'input') {
+						answer = request.input;
+						expect(control('remote-answer').value).toBe('');
+						return {};
+					}
+					throw new Error('Native setup prerequisite failed.');
 				}
-				throw new Error('Native setup prerequisite failed.');
-			}
+			})
 		};
 		bindRemoteEvents();
 		button.listeners.get('click')?.({});
@@ -1741,18 +1762,20 @@ describe('Admin static security boundary', () => {
 		let interrupt!: (error: Error) => void;
 		state.api = {
 			confirmRestart: async () => true,
-			remote: (request: { action: string }) => {
-				actions.push(request.action);
-				if (request.action === 'enable')
-					return new Promise((_, reject) => {
-						interrupt = reject;
-					});
-				if (request.action === 'cancel') {
-					interrupt(new Error('Native setup was interrupted. Input was not replayed.'));
-					return Promise.resolve({ running: false });
+			operation: operations({
+				'agent.remote': (request: { action: string }) => {
+					actions.push(request.action);
+					if (request.action === 'enable')
+						return new Promise((_, reject) => {
+							interrupt = reject;
+						});
+					if (request.action === 'cancel') {
+						interrupt(new Error('Native setup was interrupted. Input was not replayed.'));
+						return Promise.resolve({ running: false });
+					}
+					throw new Error(`Unexpected remote action ${request.action}`);
 				}
-				throw new Error(`Unexpected remote action ${request.action}`);
-			}
+			})
 		};
 		bindRemoteEvents();
 		button.listeners.get('click')?.({});
@@ -1786,11 +1809,16 @@ describe('Admin static security boundary', () => {
 		};
 		const calls: unknown[] = [];
 		state.api = {
-			codexRecall: async (request: { action: string; digest?: string }) => {
-				calls.push(request);
-				if (request.action === 'review') return review;
-				throw new Error('AKM hooks changed since review.');
-			}
+			operation: operations({
+				'agent.codexRecall': async (
+					request: { action: string; digest?: string },
+					context?: { confirmed?: boolean }
+				) => {
+					calls.push(context ? { ...request, ...context } : request);
+					if (request.action === 'review') return review;
+					throw new Error('AKM hooks changed since review.');
+				}
+			})
 		};
 		bindRemoteEvents();
 		button.listeners.get('click')?.({});
@@ -1822,22 +1850,24 @@ describe('Admin static security boundary', () => {
 		selector('[data-remote-enable], [data-remote-connect], [data-codex-recall-review]', button);
 		const calls: string[] = [];
 		state.api = {
-			codexRecall: async (request: { action: string }) => {
-				calls.push(request.action);
-				return {
-					status: 'ready',
-					digest: 'a'.repeat(64),
-					hooks: [
-						{
-							event: 'sessionStart',
-							command: 'native plugin handler',
-							sourcePath: '/installed/plugin.json',
-							trust: 'trusted',
-							enabled: true
-						}
-					]
-				};
-			}
+			operation: operations({
+				'agent.codexRecall': async (request: { action: string }) => {
+					calls.push(request.action);
+					return {
+						status: 'ready',
+						digest: 'a'.repeat(64),
+						hooks: [
+							{
+								event: 'sessionStart',
+								command: 'native plugin handler',
+								sourcePath: '/installed/plugin.json',
+								trust: 'trusted',
+								enabled: true
+							}
+						]
+					};
+				}
+			})
 		};
 		bindRemoteEvents();
 		button.listeners.get('click')?.({});
@@ -2440,7 +2470,9 @@ describe('Admin instance picker and automatic status', () => {
 			snapshot: async () => {
 				throw new Error('Connection unavailable');
 			},
-			providers: async () => ({ providers: [] })
+			operation: operations({
+				'agent.providers': async () => ({ providers: [] })
+			})
 		};
 		await refreshVisibleStatus();
 		expect(control('assistant-summary').textContent).toBe('Status unavailable');
@@ -2563,10 +2595,12 @@ describe('Admin instance picker and automatic status', () => {
 				},
 				services: known([{ name: 'assistant', state: 'running', health: 'healthy' }])
 			}),
-			providers: async () => {
-				discoveries++;
-				return { providers: [] };
-			}
+			operation: operations({
+				'agent.providers': async () => {
+					discoveries++;
+					return { providers: [] };
+				}
+			})
 		};
 		await refreshVisibleStatus();
 		await state.providerLoadPromise;
@@ -2654,23 +2688,25 @@ describe('Admin runtime recovery controls', () => {
 			confirmations: string[] = [];
 		let approved = false;
 		state.api = {
-			recovery: async (input) => {
-				calls.push(input);
-				return {
-					product: 'fhold',
-					scope: 'assistant-checkpoint',
-					previewDigest: 'a'.repeat(64),
-					instanceId: 'my-agent',
-					warnings: ['Private sign-ins and task intent'],
-					...(input.request.operation === 'import'
-						? { restored: true, homeDir: input.request.destinationHome }
-						: {})
-				};
-			},
 			confirmRestart: async (action) => {
 				confirmations.push(action);
 				return approved;
-			}
+			},
+			operation: operations({
+				'data.recovery.package': async (input, context) => {
+					calls.push({ input, context });
+					return {
+						product: 'fhold',
+						scope: 'assistant-checkpoint',
+						previewDigest: 'a'.repeat(64),
+						instanceId: 'my-agent',
+						warnings: ['Private sign-ins and task intent'],
+						...(input.operation === 'import'
+							? { restored: true, homeDir: input.destinationHome }
+							: {})
+					};
+				}
+			})
 		};
 		bindRecoveryEvents();
 		control('checkpoint-source').value = '/private/package';
@@ -2688,15 +2724,14 @@ describe('Admin runtime recovery controls', () => {
 		approved = true;
 		await control('checkpoint-import-form').listeners.get('submit')?.({ preventDefault() {} });
 		expect(calls.at(-1)).toEqual({
-			action: 'package',
-			confirmed: true,
-			request: {
+			input: {
 				operation: 'import',
 				directory: '/private/package',
 				destinationHome: '/private/changed-home',
 				backupDirectory: '/private/new-backups',
 				previewDigest: 'a'.repeat(64)
-			}
+			},
+			context: { confirmed: true }
 		});
 		expect(control('import-checkpoint').disabled).toBe(true);
 		expect(control('checkpoint-package-result').value).toContain('restored');
@@ -2809,11 +2844,13 @@ describe('Admin runtime recovery controls', () => {
 		expect(control('save-recovery-settings').disabled).toBe(true);
 		const actions: string[] = [];
 		state.api = {
-			recovery: async (input: { action: string }) => {
-				actions.push(input.action);
-				return '{"selection":{"paths":[]}}';
-			},
-			snapshot: async () => ready
+			snapshot: async () => ready,
+			operation: operations({
+				'data.recovery.inspect': async () => {
+					actions.push('inspect');
+					return '{"selection":{"paths":[]}}';
+				}
+			})
 		};
 		bindRecoveryEvents();
 		await control('inspect-recovery').listeners.get('click')?.({});
@@ -2913,7 +2950,7 @@ describe('Admin runtime recovery controls', () => {
 				calls.push(action);
 				return false;
 			},
-			recovery: async () => {
+			operation: async () => {
 				throw new Error('must not run after cancellation');
 			}
 		};
@@ -2930,10 +2967,15 @@ describe('Admin runtime recovery controls', () => {
 		saved.data.recovery.value.credentialConfigured = true;
 		const actions: string[] = [];
 		state.api = {
-			recovery: async (input: { action?: string }) => {
-				actions.push(input.action || 'save');
-				return saved;
-			}
+			snapshot: async () => saved,
+			operation: operations({
+				'data.recovery.save': async () => {
+					actions.push('save');
+				},
+				'data.recovery.setCredential': async () => {
+					actions.push('credential');
+				}
+			})
 		};
 		bindRecoveryEvents();
 		control('runtime-recovery-enabled').checked = true;
@@ -2994,12 +3036,14 @@ describe('Admin renderer behavior', () => {
 		};
 		const calls: unknown[] = [];
 		state.api = {
-			deploymentSettings: async () => settings,
-			prepareDeployment: async (patch) => {
-				calls.push(parseDeploymentPatch(patch));
-				return { ...settings, pending: patch };
-			},
-			snapshot: async () => snapshot
+			snapshot: async () => snapshot,
+			operation: operations({
+				'host.deployment.inspect': async () => settings,
+				'host.deployment.prepare': async (patch) => {
+					calls.push(parseDeploymentPatch(patch));
+					return { ...settings, pending: patch };
+				}
+			})
 		};
 		await loadDeploymentSettings();
 		for (const field of ['timezone', 'schedule', 'claude', 'codex'])
@@ -3038,16 +3082,18 @@ describe('Admin renderer behavior', () => {
 			};
 			const calls: unknown[] = [];
 			state.api = {
-				deploymentSettings: async () => settings,
-				prepareDeployment: async (patch) => {
-					calls.push(parseDeploymentPatch(patch));
-					return { ...settings, pending: patch };
-				},
 				confirmRestart: async (action) => {
 					calls.push(action);
 					return false;
 				},
-				snapshot: async () => snapshot
+				snapshot: async () => snapshot,
+				operation: operations({
+					'host.deployment.inspect': async () => settings,
+					'host.deployment.prepare': async (patch) => {
+						calls.push(parseDeploymentPatch(patch));
+						return { ...settings, pending: patch };
+					}
+				})
 			};
 			await loadDeploymentSettings();
 			expect(control('deployment-edit-form').hidden).toBe(false);
@@ -3082,10 +3128,6 @@ describe('Admin renderer behavior', () => {
 		};
 		const calls: unknown[] = [];
 		state.api = {
-			prepareDeployment: async (patch) => {
-				calls.push(['prepare', patch]);
-				return { ...state.deploymentSettings, pending: patch };
-			},
 			confirmRestart: async (action) => {
 				calls.push(['confirm', action]);
 				return false;
@@ -3096,7 +3138,13 @@ describe('Admin renderer behavior', () => {
 			action: async () => {
 				throw new Error('Later must not start');
 			},
-			snapshot: async () => snapshot
+			snapshot: async () => snapshot,
+			operation: operations({
+				'host.deployment.prepare': async (patch) => {
+					calls.push(['prepare', patch]);
+					return { ...state.deploymentSettings, pending: patch };
+				}
+			})
 		};
 		control('deployment-availability').value = 'on-demand';
 		bindConfigurationEvents();
@@ -3472,13 +3520,15 @@ describe('Admin renderer behavior', () => {
 		let loads = 0;
 		let copied = '';
 		state.api = {
-			credentialKey: async () => {
-				loads++;
-				return { key: 'private-test-key' };
-			},
 			copyText: async (value: string) => {
 				copied = value;
-			}
+			},
+			operation: operations({
+				'apps.credentials.revealKey': async () => {
+					loads++;
+					return { key: 'private-test-key' };
+				}
+			})
 		};
 		await copyAccessKey('');
 		expect(loads).toBe(0);

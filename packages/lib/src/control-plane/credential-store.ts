@@ -2,7 +2,6 @@ import {
 	chmodSync,
 	existsSync,
 	lstatSync,
-	mkdirSync,
 	readdirSync,
 	readFileSync,
 	rmdirSync,
@@ -10,10 +9,9 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { writeFileAtomic } from './foundation.js';
+import { ensurePrivateDirectory, writeFileAtomic } from './foundation.js';
 import { isCredentialUsername, type StackConfig } from './stack-config.js';
 
-const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 export function credentialStoreDir(homeDir: string): string {
 	return join(homeDir, 'state', 'credentials');
@@ -46,17 +44,10 @@ export function generateCredentialKey(): string {
 	return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 }
 
-function ensurePrivateDirectory(path: string): void {
-	if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: PRIVATE_DIR_MODE });
-	if (!lstatSync(path).isDirectory())
-		throw new Error(`Refusing non-directory credential path: ${path}`);
-	chmodSync(path, PRIVATE_DIR_MODE);
-}
-
 export function writeCredentialKey(homeDir: string, username: string, key: string): string {
 	const normalized = normalizeCredentialKey(key);
 	const path = credentialKeyFile(homeDir, username);
-	ensurePrivateDirectory(dirname(path));
+	ensurePrivateDirectory(dirname(path), 'credential');
 	writeFileAtomic(path, `${normalized}\n`, PRIVATE_FILE_MODE);
 	return path;
 }
@@ -74,7 +65,7 @@ export function readCredentialKey(homeDir: string, username: string): string {
 }
 
 export function ensureCredentialKeys(homeDir: string, config: StackConfig): void {
-	ensurePrivateDirectory(credentialStoreDir(homeDir));
+	ensurePrivateDirectory(credentialStoreDir(homeDir), 'credential');
 	for (const username of Object.keys(config.credentials)) {
 		const path = credentialKeyFile(homeDir, username);
 		if (existsSync(path)) {

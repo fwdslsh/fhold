@@ -9,7 +9,7 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
@@ -111,6 +111,30 @@ const REQUIRED_DIRS = [
 	'system/stack',
 	'workspace'
 ] as const;
+
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return value !== null && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+export function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+	const allowed = new Set(keys);
+	return Object.keys(value).every((key) => allowed.has(key));
+}
+
+/** True when `path` is `root` or lexically below it. */
+export function contained(root: string, path: string): boolean {
+	const value = relative(root, path);
+	return value === '' || (!value.startsWith(`..${sep}`) && value !== '..' && !isAbsolute(value));
+}
+
+export function ensurePrivateDirectory(path: string, label: string): void {
+	if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: PRIVATE_DIR_MODE });
+	if (!lstatSync(path).isDirectory())
+		throw new Error(`Refusing non-directory ${label} path: ${path}`);
+	chmodSync(path, PRIVATE_DIR_MODE);
+}
 
 export function ensureHomeDirs(homeDir: string): void {
 	mkdirSync(homeDir, { recursive: true, mode: PRIVATE_DIR_MODE });

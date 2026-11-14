@@ -4,6 +4,8 @@ import { ADMIN_CHANNELS, type AdminApi, type StackAction } from './admin-types.j
 import type { StackConfig } from '@fhold/lib';
 
 const api: AdminApi = {
+	operation: (name, input, context) =>
+		ipcRenderer.invoke(ADMIN_CHANNELS.operation, name, input, context),
 	desktopStatus: () => ipcRenderer.invoke(ADMIN_CHANNELS.desktopStatus),
 	installDesktop: () => ipcRenderer.invoke(ADMIN_CHANNELS.installDesktop),
 	appSettings: () => ipcRenderer.invoke(ADMIN_CHANNELS.appSettings),
@@ -24,12 +26,8 @@ const api: AdminApi = {
 	provisioningPreview: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.provisioningPreview, value),
 	provisioningInstall: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.provisioningInstall, value),
 	provisioningResume: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.provisioningResume, value),
-	deploymentSettings: () => ipcRenderer.invoke(ADMIN_CHANNELS.deploymentSettings),
-	prepareDeployment: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.prepareDeployment, value),
 	applyDeployment: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.applyDeployment, value),
-	discardDeployment: () => ipcRenderer.invoke(ADMIN_CHANNELS.discardDeployment),
 	hostingSetup: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingSetup, value),
-	directory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.directory, value),
 	hostingInfo: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingInfo, id),
 	hostingDirectory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.hostingDirectory, value),
 	update: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.update, value),
@@ -45,8 +43,6 @@ const api: AdminApi = {
 	prepareNewInstance: (target) => ipcRenderer.invoke(ADMIN_CHANNELS.prepareNewInstance, target),
 	closeInstance: () => ipcRenderer.invoke(ADMIN_CHANNELS.closeInstance),
 	installationReadiness: (id) => ipcRenderer.invoke(ADMIN_CHANNELS.installationReadiness, id),
-	codexRecall: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.codexRecall, value),
-	remote: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.remote, value),
 	snapshot: () => ipcRenderer.invoke(ADMIN_CHANNELS.snapshot),
 	selectedHome: () => ipcRenderer.invoke(ADMIN_CHANNELS.selectedHome),
 	install: (config: StackConfig, automaticPorts = true) =>
@@ -55,32 +51,12 @@ const api: AdminApi = {
 	confirmRestart: (action) => ipcRenderer.invoke(ADMIN_CHANNELS.confirmRestart, action),
 	action: (action: StackAction, confirmed = false) =>
 		ipcRenderer.invoke(ADMIN_CHANNELS.action, { action, confirmed }),
-	logs: (options) => ipcRenderer.invoke(ADMIN_CHANNELS.logs, options),
-	providers: () => ipcRenderer.invoke(ADMIN_CHANNELS.providers),
-	providerKey: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerKey, value),
-	providerEndpoint: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerEndpoint, value),
-	providerModels: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerModels, value),
-	providerUse: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerUse, value),
-	providerRemove: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerRemove, value),
-	providerOAuthStart: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerOAuthStart, value),
-	providerOAuthFinish: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.providerOAuthFinish, value),
-	readiness: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.readiness, value),
-	connectAgent: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.connectAgent, value),
 	openOpenCode: () => ipcRenderer.invoke(ADMIN_CHANNELS.openOpenCode),
 	openKnowledge: () => ipcRenderer.invoke(ADMIN_CHANNELS.openKnowledge),
 	syncKnowledge: () => ipcRenderer.invoke(ADMIN_CHANNELS.syncKnowledge),
-	assistantPassword: () => ipcRenderer.invoke(ADMIN_CHANNELS.assistantPassword),
 	copyText: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.copyText, value),
 	openExternal: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.openExternal, value),
-	chooseDirectory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.chooseDirectory, value),
-	credential: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.credential, value),
-	credentialKey: (username) => ipcRenderer.invoke(ADMIN_CHANNELS.credentialKey, username),
-	mapPortalUser: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.mapPortalUser, value),
-	portalToken: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.portalToken, value),
-	backup: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.backup, value),
-	restoreInstance: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.restoreInstance, value),
-	recovery: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.recovery, value),
-	restoreData: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.restoreData, value)
+	chooseDirectory: (value) => ipcRenderer.invoke(ADMIN_CHANNELS.chooseDirectory, value)
 };
 
 contextBridge.exposeInMainWorld('fholdAdmin', api);

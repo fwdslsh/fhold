@@ -344,10 +344,8 @@ export class HostingPreferencesStore {
 					return [];
 				const previous = item.previousInitializationExecutions;
 				if (item.initialRejected !== undefined && item.initialRejected !== true) return [];
-				// Accepted submissions without an explicit backend selected Blob.
-				// A new-install default must not redirect work already submitted.
 				const request =
-					item.request === undefined ? undefined : parseProvisioningRequest(item.request, 'azblob');
+					item.request === undefined ? undefined : parseProvisioningRequest(item.request);
 				if (
 					request &&
 					(request.kind !== 'azure-container-apps' ||

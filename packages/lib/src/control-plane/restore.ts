@@ -17,7 +17,13 @@ import { parseOAuthConfig, parseOAuthIdentityMap } from './oauth-store.js';
 import { parsePortalCredentialMap } from './portal-credential-store.js';
 import { readStackConfig } from './stack-config.js';
 import { inspectUnrestoredData, type PreservationItem } from './preservation.js';
-import { managedComposeFile, stackConfigFile, writeFileAtomic } from './foundation.js';
+import {
+	asRecord,
+	contained,
+	managedComposeFile,
+	stackConfigFile,
+	writeFileAtomic
+} from './foundation.js';
 import { classifyInstall, ensureRuntime } from './state.js';
 import { createFholdState } from './foundation.js';
 import { readSeedFile } from './seed.js';
@@ -95,21 +101,10 @@ function realDirectory(path: string, label: string): string {
 	return realpathSync(resolved);
 }
 
-function contained(root: string, path: string): boolean {
-	const value = relative(root, path);
-	return value === '' || (!value.startsWith(`..${sep}`) && value !== '..' && !isAbsolute(value));
-}
-
 function assertDisjointHomes(sourceHome: string, destinationHome: string): void {
 	if (contained(sourceHome, destinationHome) || contained(destinationHome, sourceHome)) {
 		throw new Error('Restore source and destination must be separate, non-overlapping directories');
 	}
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
 }
 
 function readRegularSource(

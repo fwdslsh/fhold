@@ -57,8 +57,8 @@ moving state, identity or recovery ownership remains a separate explicit operati
 
 The findings below describe the pre-refactor baseline, not the current branch.
 The typed composition root, normalized observations and consumer migration replace
-these couplings; retained SSH wire names are compatibility details, not a second
-public management interface.
+these couplings; the SSH session carries the same named operations rather than a
+second management vocabulary.
 
 Preserve the shared library, the built-in composition root, native authentication,
 existing local domain functions and the persistent SSH management session. Preserve
@@ -197,21 +197,17 @@ runtime with unknown support remains unknown until inspection or an explicit too
 update establishes it. Explanations are short and actionable. Unknown optional
 features must not disable unrelated operations.
 
-Transport code uses one typed method-to-request/result map for the supported
-operation set and validates unknown wire data once at each trust boundary. Replace
-caller-chosen `T` and variadic `extra` with inference from that map. Retain and
-evolve the existing SSH envelope through advertised operations and a compatible
-wire version; do not demand identical desktop and image versions. SSH executable
-and managed Skeleton bytes are content-bound to the local distribution, not an
-operator-maintained remote CLI.
+Transport code uses one typed operation-to-input/result map (`ManagementOperationMap`)
+keyed by the same named operations as the UI and validates unknown wire data once
+at each trust boundary. The SSH session carries `{operation, input, context}` JSON
+lines; context holds only explicit confirmation. SSH executable and managed
+Skeleton bytes are content-bound to the local distribution, not an
+operator-maintained remote CLI, so client and helper always come from the same
+build and need no capability negotiation. The hosting-machine `hello` (wire
+version 1) reports only the helper release and instances directory.
 Domain methods must not know IPC channels, JSON-line framing or cloud commands.
-Today the hosting-machine `hello` uses version 1 and advertises management method
-names, while the persistent management-session request itself has no version field.
-Keep currently shipped method names/request shapes during the initial extraction.
-If new contracts change the wire shape, negotiate that explicitly and translate at
-the transport boundary; do not infer wire compatibility from TypeScript types or
-add a required handshake that breaks existing clients. Test both old-client/new-server
-and new-client/old-server behavior within the declared supported protocol window.
+Admin's renderer reaches the same named operations through one allowlisted
+`admin:operation` IPC channel; composite actions keep their own channels.
 
 ### One snapshot, independent observations
 

@@ -1,8 +1,6 @@
-export type { FholdState } from './control-plane/foundation.js';
 export {
 	configureSshHelperResources,
 	configureSshHelperDirectory,
-	resolveSshHelper,
 	sshHelperCommand
 } from './control-plane/ssh-helper.js';
 export * from './hosting/index.js';
@@ -10,104 +8,53 @@ export * from './management/index.js';
 export {
 	createFholdState,
 	defaultFholdHome,
-	customComposeFile,
-	ensureHomeDirs,
-	managedComposeFile,
 	readEnvFile,
 	resolveFholdHome,
 	stackConfigFile,
-	stackEnvFile,
-	stateSecretFile,
-	updateEnvFile,
-	writeFileAtomic
+	stateSecretFile
 } from './control-plane/foundation.js';
 export {
-	credentialDir,
 	credentialKeyFile,
-	credentialStoreDir,
 	ensureCredentialKeys,
 	generateCredentialKey,
-	isStrongCredentialKey,
 	normalizeCredentialKey,
-	readCredentialKey,
-	removeCredentialKey,
-	writeCredentialKey
+	readCredentialKey
 } from './control-plane/credential-store.js';
 export {
 	OAUTH_ALGORITHMS,
-	OAUTH_CONFIG_VERSION,
-	OAUTH_IDENTITY_MAP_VERSION,
-	defaultOAuthConfig,
-	defaultOAuthIdentityMap,
-	ensureOAuthFiles,
 	oauthConfigFile,
 	oauthCredentialUsages,
 	oauthIdentityMapFile,
-	parseOAuthConfig,
-	parseOAuthIdentityMap,
 	readOAuthConfig,
 	readOAuthIdentityMap,
 	writeOAuthConfig,
-	writeOAuthIdentityMap,
 	type OAuthAlgorithm,
-	type OAuthConfig,
-	type OAuthIdentity,
-	type OAuthIdentityMap
+	type OAuthConfig
 } from './control-plane/oauth-store.js';
 export {
-	PORTAL_CREDENTIAL_BUNDLE_VERSION,
-	PORTAL_CREDENTIAL_MAP_VERSION,
-	PORTAL_NAMES,
-	buildPortalCredentialBundle,
-	ensurePortalCredentialMaps,
 	isPortalName,
 	isPortalUserId,
-	parsePortalCredentialMap,
-	portalCredentialBundleDir,
 	portalCredentialBundleFile,
 	portalCredentialMapFile,
 	portalCredentialUsages,
 	readPortalCredentialMap,
-	syncPortalCredentialBundles,
-	writePortalCredentialMap,
-	type PortalCredentialBundle,
-	type PortalCredentialMap,
 	type PortalName
 } from './control-plane/portal-credential-store.js';
+export { portalSecretConfigured } from './control-plane/portal-settings.js';
 export {
-	normalizePortalSecret,
-	portalSecretConfigured,
-	portalSecretNames,
-	writePortalSecret,
-	type PortalSecretName
-} from './control-plane/portal-settings.js';
-export {
-	CREDENTIAL_REGISTRY_VERSION,
-	GUARDIAN_POLICIES,
-	CODEX_SANDBOX_MODES,
-	STACK_CONFIG_VERSION,
 	createCredentialId,
 	credentialRegistryFile,
 	defaultStackConfig,
-	ensureStackConfig,
-	hostTimezone,
-	validTimezone,
 	isCredentialId,
 	isInstanceName,
 	isCodexSandbox,
 	isCredentialUsername,
 	isGuardianPolicy,
-	enabledAddons,
 	parseStackConfig,
 	readStackConfig,
-	stackConfigEnv,
 	writeStackConfig,
-	type CredentialConfig,
-	type DiscordPortalAccess,
 	type GuardianPolicy,
-	type SlackPortalAccess,
-	type StackConfig,
-	type StackConfigReadResult
+	type StackConfig
 } from './control-plane/stack-config.js';
 export {
 	applyHomeSeed,
@@ -120,37 +67,27 @@ export {
 	classifyInstall,
 	ensureRuntime,
 	markInstalled,
-	readStackEnv,
-	requireInstall,
-	type InstallState
+	requireInstall
 } from './control-plane/state.js';
-export { assertInstallInstanceName, installHome } from './control-plane/install.js';
-export { updateHome } from './control-plane/update.js';
 export {
-	defaultRecoverySettings,
-	directoryRecoveryDestination,
-	type RecoverySettings
-} from './control-plane/recovery-config.js';
+	assertInstallInstanceName,
+	installHome
+} from './control-plane/install.js';
+export { updateHome } from './control-plane/update.js';
+export { directoryRecoveryDestination } from './control-plane/recovery-config.js';
 export {
 	recoverySnapshot,
 	recoveryStatus,
-	readRecoverySelection,
 	saveRecoverySettings,
 	saveRecoveryCredential,
-	runRecoveryOperation,
-	type RecoverySelection
+	runRecoveryOperation
 } from './control-plane/recovery.js';
 export {
 	exportCheckpointPackage,
 	previewCheckpointPackage,
 	importCheckpointPackage
 } from './control-plane/checkpoint-packages.js';
-export type {
-	CheckpointPackageOperation,
-	CheckpointPackagePlan,
-	CheckpointPackageImportResult,
-	CheckpointPackageImportRequest
-} from './dto/recovery.js';
+
 export {
 	mutateStack,
 	createCredential,
@@ -164,23 +101,15 @@ export {
 } from './control-plane/operations.js';
 export {
 	assistantEndpoint,
-	beginProviderOAuth,
-	completeProviderOAuth,
 	configureGuardianModeratorModel,
 	listProviders,
 	removeProviderAuth,
 	setProviderApiKey,
 	testAssistantReadiness,
-	waitForAssistant,
-	type AssistantReadiness,
-	type ProviderAuthMethod,
-	type ProviderAuthPrompt,
-	type ProviderOAuthAuthorization,
-	type ProviderSummary
+	waitForAssistant
 } from './control-plane/opencode.js';
 export {
 	connectionDetails,
-	type ConnectionDetailOptions,
 	type ConnectionDetails
 } from './control-plane/connection.js';
 export {
@@ -188,55 +117,35 @@ export {
 	saveProviderEndpoint,
 	useProviderModel,
 	removeProviderSetup,
-	discoverProviderModels,
-	type ProviderSettings,
-	type ProviderEndpointInput
+	discoverProviderModels
 } from './control-plane/provider-settings.js';
 export {
 	applyRestore,
 	planRestore,
-	type RestoreAction,
 	type RestoreEntry,
 	type RestoreOptions,
 	type RestorePlan
 } from './control-plane/restore.js';
-export {
-	createBackup,
-	type BackupManifest,
-	type BackupOptions
-} from './control-plane/backup.js';
+export { createBackup } from './control-plane/backup.js';
 export {
 	exportInstance,
 	planInstanceRestore,
 	restoreInstance,
-	INSTANCE_BACKUP_NOTICE,
-	INSTANCE_BACKUP_EXCLUSIONS,
-	type InstanceBackupManifest,
-	type InstanceBackupEntry,
-	type InstanceBackupOptions,
-	type InstanceRestoreOptions,
-	type InstanceRestorePlan
+	INSTANCE_BACKUP_NOTICE
 } from './control-plane/instance-backup.js';
 export {
 	exportHistory,
 	restoreHistory,
-	validateHistoryDirectories,
-	type HistoryExportOptions,
-	type HistoryRestoreOptions,
-	type HistoryReceipt
+	validateHistoryDirectories
 } from './control-plane/history.js';
-export type { PreservationItem } from './control-plane/preservation.js';
+
 export {
 	buildComposeCliArgs,
-	buildComposeOptions,
-	type ComposeOptions
+	buildComposeOptions
 } from './control-plane/compose.js';
 export {
-	composeLogs,
 	composeConfigJson,
-	composePreflight,
 	composePs,
-	containerWarnings,
 	ensureDockerReady,
 	assertProjectOwnership,
 	parseComposePsRows,
@@ -253,22 +162,18 @@ export {
 	beginRemoteEnable,
 	disableRemote,
 	remoteBrowserUrls,
-	remoteConnection,
 	remoteTool,
-	type RemoteTool,
-	type CodexSandbox,
-	type RemoteProgress,
-	type RemoteEnableSession
+	type CodexSandbox
 } from './control-plane/remote.js';
-export { acquireStackLock, releaseStackLock, type StackLock } from './control-plane/lock.js';
+export {
+	acquireStackLock,
+	releaseStackLock
+} from './control-plane/lock.js';
 export {
 	reviewCodexRecall,
 	changeCodexRecall,
 	type CodexRecallReview
 } from './control-plane/codex-recall.js';
-export { restartStatus, type RestartStatus } from './control-plane/runtime-revision.js';
+export { restartStatus } from './control-plane/runtime-revision.js';
 
-export {
-	activateComposeCommand,
-	deactivateComposeCommand
-} from './control-plane/activation.js';
+export { deactivateComposeCommand } from './control-plane/activation.js';

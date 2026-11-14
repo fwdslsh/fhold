@@ -1,19 +1,18 @@
 import { join } from 'node:path';
 import { buildComposeCliArgs, buildComposeOptions } from './compose.js';
 import { composeProcessEnvironment, runDocker } from './docker.js';
-import { createFholdState } from './foundation.js';
+import { asRecord as record, createFholdState, writeFileAtomic } from './foundation.js';
 import { acquireStackLock, releaseStackLock } from './lock.js';
 import {
-	listProviders as localListProviders,
-	readAssistantConfig as localReadConfig,
-	readAssistantGlobalConfig as localReadPreferences,
-	removeProviderAuth as localRemoveAuth,
-	setProviderApiKey as localSetKey,
-	updateAssistantGlobalConfig as localUpdatePreferences,
+	localNativeAgent,
 	type ProviderSummary,
 	type NativeAgentRequestOptions
 } from './opencode.js';
-import { readNativePreferences, type NativeSettingsWriteResult } from './provider-files.js';
+import {
+	readNativePreferences,
+	saveNativePreferences,
+	type NativeSettingsWriteResult
+} from './provider-files.js';
 import type { NativeAgentService } from './native-agent.js';
 
 /** Agent-owned settings, independent of a Docker home or a hosting provider. */
@@ -26,35 +25,46 @@ export type NativeProviderSettingsPort = {
 	discoverModels(input: { url: string; key?: string }): Promise<string[]>;
 };
 type SettingsTarget = string | NativeProviderSettingsPort;
-const listProviders = (target: SettingsTarget, options: Options) =>
-	typeof target === 'string'
-		? localListProviders(target, options)
-		: target.agent.listProviders(options);
-const readAssistantConfig = (target: SettingsTarget, options: Options) =>
-	typeof target === 'string' ? localReadConfig(target, options) : target.agent.readConfig(options);
-const readAssistantGlobalConfig = (target: SettingsTarget, options: Options) =>
-	typeof target === 'string' ? localReadPreferences(target, options) : target.readPreferences();
-const updateAssistantGlobalConfig = (
-	target: SettingsTarget,
-	patch: Record<string, unknown>,
-	options: Options
-) =>
-	typeof target === 'string'
-		? localUpdatePreferences(target, patch, options)
-		: target.writePreferences(patch);
-const setProviderApiKey = (
-	target: SettingsTarget,
-	provider: string,
-	key: string,
-	options: Options
-) =>
-	typeof target === 'string'
-		? localSetKey(target, provider, key, options)
-		: target.agent.setProviderApiKey(provider, key, options);
-const removeProviderAuth = (target: SettingsTarget, provider: string, options: Options) =>
-	typeof target === 'string'
-		? localRemoveAuth(target, provider, options)
-		: target.agent.removeProviderAuth(provider, options);
+
+/** A Docker home's native preferences, stack lock and container network, over the given route. */
+export function localProviderSettings(
+	home: string,
+	agent: NativeAgentService
+): NativeProviderSettingsPort {
+	return {
+		agent,
+		readPreferences: async () => readNativePreferences(home).value,
+		readPolicy: async () => readNativePreferences(home, POLICY_FILE).value,
+		async writePreferences(patch) {
+			// v2 watches native preferences; its shell-only PATCH is not a generic settings API.
+			const saved = readNativePreferences(home);
+			return saveNativePreferences(
+				{
+					read: async () => saved,
+					write: async (text) => writeFileAtomic(saved.path, text, 0o600)
+				},
+				patch
+			);
+		},
+		async withLock(run) {
+			const lock = acquireStackLock(join(home, 'data'));
+			if (!lock)
+				throw new Error('Another instance operation is running. Try again when it finishes.');
+			try {
+				return await run();
+			} finally {
+				releaseStackLock(lock);
+			}
+		},
+		discoverModels: (input) => discoverLocalModels(home, input)
+	};
+}
+/** A home path uses its configured loopback route. */
+function port(target: SettingsTarget): NativeProviderSettingsPort {
+	return typeof target === 'string'
+		? localProviderSettings(target, localNativeAgent(target))
+		: target;
+}
 
 export type ProviderSettings = {
 	providers: ProviderSummary[];
@@ -74,11 +84,6 @@ type Options = NativeAgentRequestOptions;
 type ConfigFile = { value: Record<string, unknown> };
 const POLICY_FILE = 'system/assistant/opencode.json';
 
-function record(value: unknown): Record<string, unknown> | undefined {
-	return value !== null && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
-}
 function id(value: string): string {
 	if (
 		!/^[A-Za-z0-9._-]{1,128}$/.test(value) ||
@@ -127,13 +132,8 @@ function endpointUrl(value: string): string {
 	return url.href.replace(/\/+$/, '');
 }
 async function configurations(
-	home: SettingsTarget
+	home: NativeProviderSettingsPort
 ): Promise<{ users: ConfigFile[]; policy: ConfigFile }> {
-	if (typeof home === 'string')
-		return {
-			users: [readNativePreferences(home)],
-			policy: readNativePreferences(home, POLICY_FILE)
-		};
 	const [value, policy] = await Promise.all([home.readPreferences(), home.readPolicy()]);
 	return { users: [{ value }], policy: { value: policy } };
 }
@@ -158,12 +158,13 @@ function editableEndpoint(value: Record<string, unknown> | undefined, managed: b
 
 /** Saved sign-ins, resolved native model and operator config; never a connection test. */
 export async function listProviderSettings(
-	home: SettingsTarget,
+	target: SettingsTarget,
 	options: Options = {}
 ): Promise<ProviderSettings> {
+	const home = port(target);
 	const [providers, resolved] = await Promise.all([
-		listProviders(home, options),
-		readAssistantConfig(home, options)
+		home.agent.listProviders(options),
+		home.agent.readConfig(options)
 	]);
 	const disabled = new Map(providerPolicies(resolved).map((rule) => [rule.resource, rule.effect]));
 	let configurationIssue: string | undefined;
@@ -286,30 +287,20 @@ function activation(
 	];
 	return legacy ? { experimental: { policies: next } } : { policies: next };
 }
-async function withSettingsLock<T>(home: SettingsTarget, run: () => Promise<T>): Promise<T> {
-	if (typeof home !== 'string') return home.withLock(run);
-	const lock = acquireStackLock(join(home, 'data'));
-	if (!lock) throw new Error('Another instance operation is running. Try again when it finishes.');
-	try {
-		return await run();
-	} finally {
-		releaseStackLock(lock);
-	}
-}
 async function applyConfigChange(
-	home: SettingsTarget,
+	home: NativeProviderSettingsPort,
 	patch: Record<string, unknown>,
 	options: Options,
 	matches: (value: Record<string, unknown>) => boolean
 ): Promise<NativeSettingsWriteResult> {
-	await updateAssistantGlobalConfig(home, patch, options);
+	await home.writePreferences(patch);
 	// Native watchers apply the file asynchronously. Read back normalization;
 	// no reload API or process restart is involved.
 	const deadline = Date.now() + Math.min(5_000, options.timeoutMs ?? 5_000);
 	let lastFailure: string | undefined;
 	do {
 		try {
-			const effective = await readAssistantConfig(home, options);
+			const effective = await home.agent.readConfig(options);
 			lastFailure = undefined;
 			if (matches(effective)) return { saved: true, effective: 'verified' };
 		} catch (error) {
@@ -328,7 +319,7 @@ async function applyConfigChange(
 }
 
 async function settingsAfterWrite(
-	home: SettingsTarget,
+	home: NativeProviderSettingsPort,
 	options: Options,
 	write: NonNullable<ProviderSettings['write']>
 ): Promise<ProviderSettings> {
@@ -347,10 +338,11 @@ async function settingsAfterWrite(
 
 /** Edit watched native user preferences, never managed policy. */
 export async function saveProviderEndpoint(
-	home: SettingsTarget,
+	target: SettingsTarget,
 	input: ProviderEndpointInput,
 	options: Options = {}
 ): Promise<ProviderSettings> {
+	const home = port(target);
 	const provider = id(input.provider);
 	const model = modelId(input.model);
 	const url = endpointUrl(input.url);
@@ -361,14 +353,14 @@ export async function saveProviderEndpoint(
 		(!input.key || input.key.length > 16_384 || /[\r\n]/.test(input.key))
 	)
 		throw new Error('Enter a valid one-line API key, or leave it blank.');
-	return withSettingsLock(home, async () => {
+	return home.withLock(async () => {
 		const { users, policy } = await configurations(home);
 		if (definition(policy, provider))
 			throw new Error(
 				'This service is controlled by release-managed system/assistant/opencode.json. For a deliberate policy override, supply an operator-owned native settings mount through config/stack/custom.compose.yml; maintain it separately from release updates.'
 			);
 		const existing = [...users].reverse().find((file) => definition(file, provider));
-		const native = (await listProviders(home, options)).find((item) => item.id === provider);
+		const native = (await home.agent.listProviders(options)).find((item) => item.id === provider);
 		if (
 			(native && !existing) ||
 			(existing && !editableEndpoint(definition(existing, provider), false))
@@ -376,8 +368,8 @@ export async function saveProviderEndpoint(
 			throw new Error(
 				'Choose a new service identifier. This existing native or advanced service cannot be replaced by an endpoint form.'
 			);
-		const global = await readAssistantGlobalConfig(home, options);
-		const effective = await readAssistantConfig(home, options);
+		const global = await home.readPreferences();
+		const effective = await home.agent.readConfig(options);
 		const previous = record(record(record(effective.providers)?.[provider])?.models)?.[model];
 		const patch = {
 			providers: {
@@ -415,7 +407,7 @@ export async function saveProviderEndpoint(
 			write.credential = 'unconfirmed';
 			if (write.effective === 'verified') {
 				try {
-					await setProviderApiKey(home, provider, input.key, options);
+					await home.agent.setProviderApiKey(provider, input.key, options);
 					write.credential = 'saved';
 				} catch (error) {
 					options.signal?.throwIfAborted();
@@ -431,15 +423,16 @@ export async function saveProviderEndpoint(
 }
 
 export async function useProviderModel(
-	home: SettingsTarget,
+	target: SettingsTarget,
 	providerId: string,
 	selectedModel: string,
 	options: Options = {}
 ): Promise<ProviderSettings> {
+	const home = port(target);
 	const provider = id(providerId);
 	const model = modelId(selectedModel);
-	return withSettingsLock(home, async () => {
-		const native = (await listProviders(home, options)).find((item) => item.id === provider);
+	return home.withLock(async () => {
+		const native = (await home.agent.listProviders(options)).find((item) => item.id === provider);
 		if (!native?.models?.some((item) => item.id === model))
 			throw new Error('Choose an available model that supports text and agent tools.');
 		const { policy } = await configurations(home);
@@ -466,12 +459,13 @@ export async function useProviderModel(
 }
 
 export async function removeProviderSetup(
-	home: SettingsTarget,
+	target: SettingsTarget,
 	providerId: string,
 	options: Options & { endpoint?: boolean } = {}
 ): Promise<ProviderSettings> {
+	const home = port(target);
 	const provider = id(providerId);
-	return withSettingsLock(home, async () => {
+	return home.withLock(async () => {
 		const settings = await listProviderSettings(home, options);
 		if (settings.currentModel?.provider === provider)
 			throw new Error('Choose another model for your agent before removing this setup.');
@@ -488,7 +482,7 @@ export async function removeProviderSetup(
 				files.some((file) => !editableEndpoint(definition(file, provider), false))
 			)
 				throw new Error('This advanced endpoint cannot be disabled by the simple service form.');
-			const global = await readAssistantGlobalConfig(home, options);
+			const global = await home.readPreferences();
 			write = await applyConfigChange(
 				home,
 				activation(global, provider, false),
@@ -500,7 +494,7 @@ export async function removeProviderSetup(
 						.find((rule) => rule.resource === provider)?.effect === 'deny'
 			);
 		}
-		if (!options.endpoint) await removeProviderAuth(home, provider, options);
+		if (!options.endpoint) await home.agent.removeProviderAuth(provider, options);
 		return write ? settingsAfterWrite(home, options, write) : listProviderSettings(home, options);
 	});
 }
@@ -527,10 +521,19 @@ export async function discoverProviderModels(
 	const url = endpointUrl(input.url);
 	if (input.key !== undefined && (input.key.length > 16_384 || /[\r\n]/.test(input.key)))
 		throw new Error('Invalid API key.');
-	if (typeof home !== 'string')
-		return home.discoverModels({ url, ...(input.key ? { key: input.key } : {}) });
+	const request = { url, ...(input.key ? { key: input.key } : {}) };
+	return typeof home === 'string'
+		? discoverLocalModels(home, request, options.run)
+		: home.discoverModels(request);
+}
+
+async function discoverLocalModels(
+	home: string,
+	request: { url: string; key?: string },
+	run: typeof runDocker = runDocker
+): Promise<string[]> {
 	const state = createFholdState(home);
-	const result = await (options.run ?? runDocker)(
+	const result = await run(
 		[
 			'compose',
 			...buildComposeCliArgs(state),
@@ -546,7 +549,7 @@ export async function discoverProviderModels(
 			timeoutMs: 12_000,
 			maxOutputBytes: 1024 * 1024,
 			env: composeProcessEnvironment(buildComposeOptions(state).envFiles),
-			input: JSON.stringify({ url, ...(input.key ? { key: input.key } : {}) })
+			input: JSON.stringify(request)
 		}
 	);
 	let value: Record<string, unknown> | undefined;

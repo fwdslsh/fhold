@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('shared connection details', () => {
-	it('links the matching published extension and preserves explicit local bundles', () => {
+	it('links the matching published extension', () => {
 		const root = home();
 		const details = connectionDetails(root, 'claude');
 		expect(details.extension).toBe(
@@ -36,9 +36,6 @@ describe('shared connection details', () => {
 		);
 		expect(details.note).toContain('matching GitHub release');
 		expect(details.credentialKey).toBeUndefined();
-		const local = connectionDetails(root, 'claude', { claudeExtension: '/tmp/local.mcpb' });
-		expect(local.extension).toBe('/tmp/local.mcpb');
-		expect(local.note).toContain('explicitly supplied MCPB');
 	});
 
 	it('keeps native and Guardian secrets hidden unless explicitly requested', () => {

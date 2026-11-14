@@ -13,6 +13,8 @@ import {
 } from '../admin/providers.js';
 import { createAdminState, state } from '../admin/state.js';
 
+let operations: Record<string, (input?: never) => unknown> = {};
+
 // Decision/action tests, not evidence of browser layout or live native inference.
 class Control {
 	id = '';
@@ -231,7 +233,15 @@ beforeEach(() => {
 	globalThis.HTMLInputElement = Control as unknown as typeof HTMLInputElement;
 	globalThis.window = { confirm: () => false } as unknown as Window & typeof globalThis;
 	state.currentSnapshot = snapshot();
-	state.api = { snapshot: async () => state.currentSnapshot, providers: async () => settings() };
+	operations = { 'agent.providers': async () => settings() };
+	state.api = {
+		snapshot: async () => state.currentSnapshot,
+		operation: (name: string, input?: unknown) => {
+			const handler = operations[name];
+			if (!handler) throw new Error(`Unexpected operation ${name}`);
+			return handler(input as never);
+		}
+	};
 	bindProvidersEvents();
 	renderProviders(settings());
 });
@@ -278,7 +288,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('lists and refreshes settings without sending an inference request', async () => {
 		let billed = 0;
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			billed++;
 		};
 		await loadProviders(false, true);
@@ -287,13 +297,13 @@ describe('Model-first provider manager', () => {
 	});
 	it('saves a key and shows model choices without testing or switching the default', async () => {
 		const calls: unknown[] = [];
-		state.api.providerKey = async (value: unknown) => {
+		operations['agent.setKey'] = async (value: unknown) => {
 			calls.push(value);
 		};
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			throw new Error('Save must not call readiness');
 		};
-		state.api.providerUse = async () => {
+		operations['agent.selectModel'] = async () => {
 			throw new Error('Save must not choose default');
 		};
 		openProviderEditor('edit', 'current-service');
@@ -309,11 +319,11 @@ describe('Model-first provider manager', () => {
 	it('verifies the exact selected model and allows only explicit matching Use', async () => {
 		const calls: unknown[] = [];
 		state.currentView = 'provider';
-		state.api.readiness = async (value: { provider: string; model: string }) => {
+		operations['agent.readiness'] = async (value: { provider: string; model: string }) => {
 			calls.push(value);
 			return { ok: true, ...value, response: 'FH_READY' };
 		};
-		state.api.providerUse = async (value: { provider: string; model: string }) => {
+		operations['agent.selectModel'] = async (value: { provider: string; model: string }) => {
 			calls.push({ use: value });
 			return { ...settings(), currentModel: value };
 		};
@@ -373,7 +383,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('requires confirmation and sends an exact auth-only removal request', async () => {
 		const calls: unknown[] = [];
-		state.api.providerRemove = async (value: unknown) => {
+		operations['agent.removeProvider'] = async (value: unknown) => {
 			calls.push(value);
 			return settings();
 		};
@@ -389,7 +399,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('does not publish a slow prior-instance inventory into the newly selected home', async () => {
 		let finish!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
@@ -404,7 +414,7 @@ describe('Model-first provider manager', () => {
 	it('retains the same-instance initial catalog when Add then Cancel happens before it resolves', async () => {
 		resetProviderState();
 		let finish!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
@@ -426,7 +436,7 @@ describe('Model-first provider manager', () => {
 			...settings(),
 			currentModel: { provider: 'current-service', model: 'first-model' }
 		};
-		state.api.providers = () => {
+		operations['agent.providers'] = () => {
 			reads++;
 			return reads === 1
 				? new Promise((resolve) => {
@@ -445,7 +455,7 @@ describe('Model-first provider manager', () => {
 	});
 	it('does not overwrite effective returned settings with a late pre-mutation catalog response', async () => {
 		let finishOld!: (value: unknown) => void;
-		state.api.providers = () =>
+		operations['agent.providers'] = () =>
 			new Promise((resolve) => {
 				finishOld = resolve;
 			});
@@ -473,7 +483,7 @@ describe('Model-first provider manager', () => {
 		control('provider-model-id').value = 'team/test-model';
 		fire('provider-model-id', 'input');
 		const provider = state.providerEditor.provider;
-		state.api.providerEndpoint = async () => ({
+		operations['agent.saveEndpoint'] = async () => ({
 			...settings(),
 			providers: [
 				...settings().providers,
@@ -481,7 +491,7 @@ describe('Model-first provider manager', () => {
 			]
 		});
 		let requests = 0;
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			requests++;
 			return { ok: true, provider, model: 'team/test-model' };
 		};
@@ -527,11 +537,11 @@ describe('Model-first provider manager', () => {
 		fire('provider-model-id', 'input');
 		let finish!: (value: unknown) => void;
 		let tests = 0;
-		state.api.providerEndpoint = () =>
+		operations['agent.saveEndpoint'] = () =>
 			new Promise((resolve) => {
 				finish = resolve;
 			});
-		state.api.readiness = async () => {
+		operations['agent.readiness'] = async () => {
 			tests++;
 			return { ok: true };
 		};

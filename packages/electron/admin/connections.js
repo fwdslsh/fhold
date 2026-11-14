@@ -269,7 +269,7 @@ async function connectNativeAgent() {
 	try {
 		const connected = await operation(
 			'Connecting to agent',
-			() => state.api.connectAgent({ ...(password ? { password } : {}) }),
+			() => state.api.operation('agent.connect', { ...(password ? { password } : {}) }),
 			'Agent connected for this Admin session.'
 		);
 		if (JSON.stringify(state.currentSnapshot?.identity?.ref) !== target) return undefined;
@@ -302,7 +302,7 @@ export async function loadDirectPassword(copyOnly) {
 	const result = await operation(
 		`${copyOnly ? 'Copying' : 'Loading'} OpenCode password`,
 		async () => {
-			const value = await state.api.assistantPassword();
+			const value = await state.api.operation('agent.assistantPassword');
 			if (copyOnly) await state.api.copyText(value.password);
 			return value;
 		},
@@ -537,7 +537,8 @@ export function bindConnectionsEvents() {
 			const result = await operation(
 				`Saving ${title} tokens`,
 				async () => {
-					const saved = await state.api.portalToken({ portal, botToken, appToken });
+					await state.api.operation('apps.portal.saveToken', { portal, botToken, appToken });
+					const saved = await state.api.snapshot();
 					byId(`${portal}-bot-token`).value = '';
 					if (portal === 'slack') byId('slack-app-token').value = '';
 					setFormClean(`${portal}-token-form`);

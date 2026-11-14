@@ -179,7 +179,7 @@ export function recoveryInput() {
 			'autoExcludeNetworkMounts'
 		])
 			delete selection[key];
-	return { action: 'save', settings, selection, baselineDigest: previous.digest };
+	return { settings, selection, baselineDigest: previous.digest };
 }
 
 export function renderRecoveryStatus(status) {
@@ -235,7 +235,8 @@ export function bindRecoveryEvents() {
 		const saved = await operation(
 			'Saving checkpoint settings',
 			async () => {
-				const result = await state.api.recovery(recoveryInput());
+				await state.api.operation('data.recovery.save', recoveryInput());
+				const result = await state.api.snapshot();
 				setFormClean(id('form'));
 				render(result);
 				return result;
@@ -271,7 +272,10 @@ export function bindRecoveryEvents() {
 		secret.value = '';
 		const saved = await operation(
 			'Saving private storage credential',
-			() => state.api.recovery({ action: 'credential', connectionString }),
+			() =>
+				state.api
+					.operation('data.recovery.setCredential', { connectionString })
+					.then(() => state.api.snapshot()),
 			'Private storage credential saved.'
 		);
 		if (saved) await offerRestart(saved);
@@ -306,7 +310,7 @@ export function bindRecoveryEvents() {
 						: action === 'init'
 							? 'Initializing new recovery destination'
 							: 'Validating offline recovery',
-				() => state.api.recovery({ action, confirmed }),
+				() => state.api.operation(operationKey, undefined, { confirmed }),
 				action === 'init'
 					? 'New destination initialized. Start the instance to publish its first checkpoint.'
 					: action === 'restore'
@@ -368,12 +372,9 @@ function bindCheckpointPackageEvents() {
 		const result = await operation(
 			'Exporting Assistant backup',
 			() =>
-				state.api.recovery({
-					action: 'package',
-					request: {
-						operation: 'export',
-						directory: byId('checkpoint-export-directory').value.trim()
-					}
+				state.api.operation('data.recovery.package', {
+					operation: 'export',
+					directory: byId('checkpoint-export-directory').value.trim()
 				}),
 			'Assistant checkpoint package exported. Keep this backup private.'
 		);
@@ -388,9 +389,9 @@ function bindCheckpointPackageEvents() {
 		const result = await operation(
 			'Validating Assistant backup',
 			() =>
-				state.api.recovery({
-					action: 'package',
-					request: { operation: 'preview', directory: input.directory }
+				state.api.operation('data.recovery.package', {
+					operation: 'preview',
+					directory: input.directory
 				}),
 			'Assistant backup validated. Review its identity, private state and coverage before importing.'
 		);
@@ -423,11 +424,11 @@ function bindCheckpointPackageEvents() {
 		const result = await operation(
 			'Importing Assistant backup',
 			() =>
-				state.api.recovery({
-					action: 'package',
-					confirmed: true,
-					request: { operation: 'import', ...input, previewDigest: preview.digest }
-				}),
+				state.api.operation(
+					'data.recovery.package',
+					{ operation: 'import', ...input, previewDigest: preview.digest },
+					{ confirmed: true }
+				),
 			'Assistant restored into the new home. Open that folder to review settings and start it; original writers must remain stopped.'
 		);
 		if (result) {

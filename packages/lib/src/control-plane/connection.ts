@@ -25,7 +25,6 @@ export type ConnectionDetailOptions = {
 	credential?: string;
 	showCredentialKey?: boolean;
 	showAssistantPassword?: boolean;
-	claudeExtension?: string;
 };
 
 function guardianEndpoint(bindAddress: string, port: number): string {
@@ -82,12 +81,8 @@ export function connectionDetails(
 		return {
 			type,
 			...common,
-			extension:
-				options.claudeExtension ??
-				`https://github.com/fwdslsh/fhold/releases/download/${FH_BRIDGE_VERSION}/fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb`,
-			note: options.claudeExtension
-				? 'Enable Guardian, install the explicitly supplied MCPB, then enter this loopback URL and credential key.'
-				: `Download fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb from the matching GitHub release and install it in Claude Desktop. Enable Guardian, then enter this loopback URL and credential key.`
+			extension: `https://github.com/fwdslsh/fhold/releases/download/${FH_BRIDGE_VERSION}/fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb`,
+			note: `Download fhold-claude-desktop-${FH_BRIDGE_VERSION}.mcpb from the matching GitHub release and install it in Claude Desktop. Enable Guardian, then enter this loopback URL and credential key.`
 		};
 	}
 	return {
