@@ -77,7 +77,6 @@ export {
 export {
 	normalizePortalSecret,
 	portalSecretConfigured,
-	portalSecretNames,
 	writePortalSecret,
 	type PortalSecretName
 } from './control-plane/portal-settings.js';
@@ -234,7 +233,6 @@ export {
 export {
 	composeLogs,
 	composeConfigJson,
-	composePreflight,
 	composePs,
 	containerWarnings,
 	ensureDockerReady,

@@ -432,10 +432,6 @@ export function unsupportedOperation<Input, Output>(reason: string): Operation<I
 	return { support: 'unsupported', reason };
 }
 
-export function unknownOperation<Input, Output>(reason: string): Operation<Input, Output> {
-	return { support: 'unknown', reason };
-}
-
 export function supportedOperation<Input, Output>(
 	invoke: (input: Input, context: RequestContext) => Promise<Output>,
 	availability: () => Availability = () => ({ state: 'ready' }),
