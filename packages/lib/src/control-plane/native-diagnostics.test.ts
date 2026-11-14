@@ -37,7 +37,7 @@ const state = JSON.parse(readFileSync(${JSON.stringify(statePath)}, 'utf8'));
 let value;
 if (args.includes('ps')) value = [{Service:'assistant',State:state.running ? 'running' : 'exited',ID:'fixture'}];
 else if (args.includes('doctor')) { value = state.health; process.exitCode=state.healthExit; process.stderr.write('synthetic-secret-native-stderr'); }
-else if (args.includes('akm-migrate')) { value = state.migration; if(value.status==='blocked') process.exitCode=1; }
+else if (args.includes('migrate')) { value = state.migration; if(value.status==='blocked') process.exitCode=1; }
 else throw Error('Unexpected Docker command');
 console.log(typeof value === 'string' ? value : JSON.stringify(value));
 `, { mode: 0o700 });
@@ -80,7 +80,14 @@ test.each([undefined, '{}', '{"not-a-provider":"not-a-credential"}', '{broken'])
 	expect(checks.find((check) => check.name === 'OpenCode providers')?.status).toBe('pass');
 	expect(checks.find((check) => check.name === 'AKM proposal-queue')?.status).toBe('not-checked');
 	expect(f.http.every((call) => call.startsWith('GET '))).toBe(true);
-	expect(f.commands().find((args) => args.includes('akm-migrate'))?.slice(-2)).toEqual(['akm-migrate', 'status']);
+	expect(f.commands().find((args) => args.includes('migrate'))?.slice(-6)).toEqual([
+		'migrate',
+		'status',
+		'--read-only',
+		'--format',
+		'json',
+		'--quiet'
+	]);
 	expect(f.commands().some((args) => args.includes('task'))).toBe(false);
 	expect(checks.find((check) => check.name === 'AKM tasks')?.status).toBe('pass');
 	const health = f.commands().find((args) => args.includes('doctor')) ?? [];

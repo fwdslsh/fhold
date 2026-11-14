@@ -588,11 +588,10 @@ switches do not repair, replace or erase them.
 Experimental limits are 64 MiB for each local index including its WAL/SHM and
 each artifact, and a separate five-second normal-operation budget per cache
 capture/admission attempt. Essential work keeps its configured operation allowance.
-The input bound conservatively skips large lexical indexes even when their
-vectors would be small: AKM currently materializes export rows before writing
-the artifact, so checking only the eventual output would not bound that work.
-Native bounded/streaming export is tracked upstream in
-[AKM #1608](https://github.com/itlackey/akm/issues/1608).
+The input bound skips large lexical indexes even when their vectors would be
+small. AKM streams the export since 0.10.261121
+([AKM #1608](https://github.com/itlackey/akm/issues/1608)), but restore still
+builds and copies a whole candidate index, which the same bound keeps in limits.
 Ownership renewal checks the actual owner and mount topology independently of
 that work budget. A checkpoint timeout fails the checkpoint; it cannot by itself
 turn valid ownership into an Assistant shutdown during optional cache work.

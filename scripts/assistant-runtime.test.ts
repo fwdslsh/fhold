@@ -347,13 +347,14 @@ describe('published AKM scheduler compatibility', () => {
 		const before = snapshot();
 		for (const command of [
 			['akm', 'doctor', '--read-only', '--no-probe', '--format', 'json', '--quiet'],
-			['akm-migrate', 'status']
+			['akm', 'migrate', 'status', '--read-only', '--format', 'json', '--quiet']
 		]) {
 			const inspected = Bun.spawnSync(command, { env, cwd: root, stdout: 'pipe', stderr: 'pipe', timeout: 30_000 });
 			expect([0, 1, 4]).toContain(inspected.exitCode);
 			const report = JSON.parse(inspected.stdout.toString());
-			expect(report.schemaVersion).toBe(command[0] === 'akm' ? 3 : 1);
-			if (command[0] === 'akm') {
+			const doctor = command[1] === 'doctor';
+			expect(report.schemaVersion).toBe(doctor ? 3 : 1);
+			if (doctor) {
 				expect(report.scheduler.bindings).toBeArray();
 				expect(report.scheduler.warnings).toBeArray();
 			}

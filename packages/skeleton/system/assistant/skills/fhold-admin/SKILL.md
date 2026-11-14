@@ -63,7 +63,7 @@ AKM's backed-up native migrations and refreshes enabled image-owned integrations
 it never approves changed hooks or replaces operator-selected marketplaces.
 An explicitly disabled Codex plugin refreshes on a later enabled boot.
 
-For a passive environment audit, use `akm-migrate status` and
+For a passive environment audit, use `akm migrate status --read-only` and
 `akm doctor --read-only --no-probe --format json --quiet`; its `scheduler`
 field reports task bindings. Native task history
 (`akm doctor log --task <id> --limit 10 --format json`) records local CLI usage;

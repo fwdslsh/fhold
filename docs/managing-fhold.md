@@ -469,8 +469,8 @@ OpenCode owns providers, credentials and models. Use native sign-in, then
 `fhold provider test`; `fhold doctor --readiness` makes a small real request.
 Plain `fhold doctor` reads OpenCode's native provider state and runs bounded,
 read-only AKM health and migration inspection inside the running Assistant.
-Health uses `akm doctor --read-only --no-probe`; migration inspection uses the
-native standalone `akm-migrate status`. Both use the container's existing
+Health uses `akm doctor --read-only --no-probe`; migration inspection uses
+`akm migrate status --read-only`. Both use the container's existing
 configuration and working directory.
 It does not write application rows or apply migrations; native SQLite may create
 its ordinary WAL/shared-memory coordination files when reading an existing database.

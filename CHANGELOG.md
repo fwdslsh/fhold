@@ -2,8 +2,16 @@
 
 ## Unreleased
 
-Prepare the Assistant for AKM 0.10.261122, where reads (`search`, `curate`)
-no longer build a missing index and return no hits with a warning instead.
+Update Assistant to AKM CLI/web **0.10.261123**, the OpenCode plugin
+`akm-opencode-v2` **0.10.261124** and the Claude Code/Codex AKM plugins
+**0.10.261124** (marketplace commit `25ccbfc`), which require that CLI exactly.
+The plugins no longer inject active workflows, which AKM deprecates for 0.11.
+`fhold doctor` and the administration skill inspect migrations with
+`akm migrate status --read-only` instead of the deprecated standalone
+`akm-migrate status`.
+
+Since AKM 0.10.261122, reads (`search`, `curate`) no longer build a missing
+index and return no hits with a warning instead.
 After restore and migration, startup runs one `akm index --skip-if-locked`
 beside the agent, so a fresh or restored instance becomes searchable without a
 manual `akm index`. A failed build is reported as degraded; the agent stays

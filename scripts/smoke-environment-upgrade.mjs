@@ -61,7 +61,7 @@ function verifyReadOnlyDiagnostics() {
 			assert.ok(['pass', 'warn', 'fail'].includes(health.status));
 			assert.ok(health.hardChecks.length > 0);
 		}
-		run(['akm-migrate', 'status'], [0, 1]);
+		run(['akm', 'migrate', 'status', '--read-only', '--format', 'json', '--quiet'], [0, 1]);
 		assert.deepEqual(snapshot(), before, 'Read-only diagnostics changed AKM config, catalog or state');
 		return info;
 	}
