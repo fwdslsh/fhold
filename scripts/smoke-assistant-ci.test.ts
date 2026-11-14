@@ -128,7 +128,9 @@ test('suite inventory partitions startup coverage across independent fixtures wi
 	expect(
 		suites.find((item) => item.name === 'upgrade-surviving')?.env.FH_RECOVERY_TEST_SURVIVING_HOME
 	).toBe('1');
-	const endurance = assistantLanes('fixture-image', 'native-image', 'endurance').flat();
+	const enduranceLanes = assistantLanes('fixture-image', 'native-image', 'endurance');
+	expect(enduranceLanes).toHaveLength(2);
+	const endurance = enduranceLanes.flat();
 	expect(endurance.map((item) => item.name)).toEqual([
 		'history-v1-source',
 		'history-v2-source',

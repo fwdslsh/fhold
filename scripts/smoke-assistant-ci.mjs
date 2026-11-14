@@ -112,27 +112,45 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 	const suite = (name, command, env) => ({ name, command, env });
 	const recovery = { FH_RECOVERY_TEST_IMAGE: image };
 	const source = 'fwdslsh/fhold-assistant:0.3.261006-beta';
-	const lanes = [
+	const keepalive = suite('keepalive', [
+		'node',
+		'scripts/smoke-keepalive.mjs',
+		image,
+		...(profile === 'endurance' ? ['--endurance'] : [])
+	]);
+	if (profile === 'endurance') {
+		const historySource = 'fwdslsh/fhold-assistant:0.1.2610081904-beta.2';
+		return [
+			[
+				suite('history-v1-source', ['docker', 'pull', historySource]),
+				suite('history-v2-source', ['docker', 'pull', source]),
+				suite('history', ['bun', 'test', 'scripts/native-transfer.test.ts'], {
+					FH_NATIVE_TEST_IMAGE: nativeImage,
+					FH_HISTORY_SOURCE_IMAGE: historySource,
+					FH_HISTORY_V2_SOURCE_IMAGE: source
+				})
+			],
+			[keepalive]
+		];
+	}
+	const smoke = (phase) =>
+		suite(`startup-${phase}`, ['bash', 'scripts/smoke-image.sh', image, 'assistant', phase]);
+	// Keep dependent upgrade cases after their source pull. Other suites own
+	// separate homes/containers; no mutable native harness state crosses lanes.
+	return [
 		[
-			suite('startup-security-native-harnesses', [
-				'bash',
-				'scripts/smoke-image.sh',
-				image,
-				'assistant'
-			]),
+			smoke('runtime'),
 			suite('workload', ['node', 'scripts/smoke-workload-environment.mjs', image]),
 			suite('native-policy', ['node', 'scripts/smoke-managed-policy.mjs', image]),
-			suite('history-v1-source', [
-				'docker',
-				'pull',
-				'fwdslsh/fhold-assistant:0.1.2610081904-beta.2'
-			]),
-			suite('history-v2-source', ['docker', 'pull', source]),
-			suite('history', ['bun', 'test', 'scripts/native-transfer.test.ts'], {
-				FH_NATIVE_TEST_IMAGE: nativeImage,
-				FH_HISTORY_SOURCE_IMAGE: 'fwdslsh/fhold-assistant:0.1.2610081904-beta.2',
-				FH_HISTORY_V2_SOURCE_IMAGE: source
-			}),
+			suite('directory-recovery', ['node', 'scripts/smoke-recovery.mjs'], recovery)
+		],
+		[
+			smoke('cache'),
+			smoke('activity'),
+			suite('blob-recovery', ['node', 'scripts/smoke-blob-recovery.mjs'], recovery)
+		],
+		[
+			smoke('lifecycle'),
 			suite(
 				'providers-guardian-scheduler',
 				['bun', 'test', 'scripts/provider-settings-native.test.ts'],
@@ -142,16 +160,6 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 					FH_NATIVE_PROVIDER_IMAGE: nativeImage
 				}
 			),
-			suite('blob-recovery', ['node', 'scripts/smoke-blob-recovery.mjs'], recovery)
-		],
-		[
-			suite('keepalive', [
-				'node',
-				'scripts/smoke-keepalive.mjs',
-				image,
-				...(profile === 'endurance' ? ['--endurance'] : [])
-			]),
-			suite('directory-recovery', ['node', 'scripts/smoke-recovery.mjs'], recovery),
 			suite('upgrade-source', ['docker', 'pull', source]),
 			suite('upgrade-empty', ['node', 'scripts/smoke-recovery.mjs'], {
 				...recovery,
@@ -161,36 +169,8 @@ export function assistantLanes(image, nativeImage, profile = 'release') {
 				...recovery,
 				FH_RECOVERY_UPGRADE_FROM_IMAGE: source,
 				FH_RECOVERY_TEST_SURVIVING_HOME: '1'
-			})
-		]
-	];
-	if (profile === 'endurance')
-		return lanes.map((lane) =>
-			lane.filter((suite) => suite.name.startsWith('history') || suite.name === 'keepalive')
-		);
-	const release = lanes
-		.flat()
-		.filter(
-			(suite) =>
-				!suite.name.startsWith('history') && suite.name !== 'startup-security-native-harnesses'
-		);
-	const select = (...names) => names.map((name) => release.find((suite) => suite.name === name));
-	const smoke = (phase) =>
-		suite(`startup-${phase}`, ['bash', 'scripts/smoke-image.sh', image, 'assistant', phase]);
-	// Keep dependent upgrade cases after their source pull. Other suites own
-	// separate homes/containers; no mutable native harness state crosses lanes.
-	return [
-		[smoke('runtime'), ...select('workload', 'native-policy', 'directory-recovery')],
-		[smoke('cache'), smoke('activity'), ...select('blob-recovery')],
-		[
-			smoke('lifecycle'),
-			...select(
-				'providers-guardian-scheduler',
-				'upgrade-source',
-				'upgrade-empty',
-				'upgrade-surviving',
-				'keepalive'
-			)
+			}),
+			keepalive
 		]
 	];
 }

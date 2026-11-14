@@ -71,15 +71,15 @@ Ollama, LM Studio or llama.cpp engines. It is disabled in the ordinary source su
 ## Assistant CI lanes
 
 `node scripts/smoke-assistant-ci.mjs fhold/assistant:<candidate>` runs the essential
-native release suites in two bounded lanes after preparing the CLI and local image alias.
+native release suites in three bounded lanes after preparing the CLI and local image alias.
 Each suite owns separate disposable fixtures; no native observation window is
 shortened. `FH_CI_LOG_DIR` selects the private log/timing directory. A lane failure
-stops that lane, waits for the other, and fails the run. Only a complete passing
+stops that lane, waits for the others, and fails the run. Only a complete passing
 inventory produces a passing timing report. GitHub uploads logs even on failure.
-Cancellation terminates both process groups; use a disposable Docker host because
+Cancellation terminates every lane's process group; use a disposable Docker host because
 forced cancellation can interrupt a suite's normal container cleanup.
 
-Add `--endurance` for extended idle/unload and historical import cases. The
+Add `--endurance` for extended idle/unload and historical import cases in two lanes. The
 weekly/manual `assistant-endurance.yml` runs this profile against published images
 on native x64/ARM64 without rebuilding them. Run affected endurance cases when
 changing that behavior; unrelated releases do not wait for the weekly workflow.
