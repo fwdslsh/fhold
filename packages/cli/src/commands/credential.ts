@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
 	generateCredentialKey,
 	createCredential,
+	credentialKeyFile,
 	rotateCredential,
 	removeCredential,
 	setCredentialPolicy,
@@ -11,61 +12,23 @@ import {
 	mapOAuthIdentity,
 	portalCredentialUsages,
 	oauthCredentialUsages,
-	isCredentialUsername,
-	isGuardianPolicy,
 	isPortalName,
-	isPortalUserId,
 	normalizeCredentialKey,
 	readCredentialKey,
 	readOAuthIdentityMap,
 	readPortalCredentialMap,
-	readStackConfig,
-	requireInstall,
 	resolveFholdHome,
-	type GuardianPolicy,
-	type PortalName,
-	type StackConfig
+	type PortalName
 } from '@fhold/lib';
 
-function current(): { homeDir: string; config: StackConfig } {
-	const homeDir = resolveFholdHome();
-	requireInstall(homeDir);
-	const result = readStackConfig(homeDir);
-	if (!result.ok) throw new Error(result.error);
-	return { homeDir, config: result.config };
-}
+import { current } from './config.js';
 
 function positional(args: { _?: unknown[] }, index: number): string {
 	return String(args._?.[index] ?? '');
 }
 
-function requireUsername(value: string): string {
-	if (!isCredentialUsername(value)) {
-		throw new Error(
-			'Credential usernames must start with a lowercase letter and contain only lowercase letters, numbers, dots, underscores, or hyphens (maximum 64 characters).'
-		);
-	}
-	return value;
-}
-
-function requirePolicy(value: string): GuardianPolicy {
-	if (!isGuardianPolicy(value)) throw new Error('Policy must be chat, read, or full.');
-	return value;
-}
-
 function requirePortal(value: string): PortalName {
 	if (!isPortalName(value)) throw new Error('Portal must be discord or slack.');
-	return value;
-}
-
-function requirePortalUserId(portal: PortalName, value: string): string {
-	if (!isPortalUserId(portal, value)) {
-		throw new Error(
-			portal === 'discord'
-				? 'Discord user ID must be a numeric snowflake.'
-				: 'Slack user ID must be an uppercase platform ID such as U012ABCDEF.'
-		);
-	}
 	return value;
 }
 
@@ -109,13 +72,14 @@ const add = defineCommand({
 		}
 	},
 	run({ args }) {
-		const username = requireUsername(positional(args, 0));
-		const policy = requirePolicy(positional(args, 1));
-		const homeDir = resolveFholdHome();
 		const key = suppliedKey(args.keyFile ? String(args.keyFile) : undefined);
-		createCredential(homeDir, { username, policy, key });
+		const { username, policy, keyFile } = createCredential(resolveFholdHome(), {
+			username: positional(args, 0),
+			policy: positional(args, 1),
+			key
+		});
 		console.log(`Created ${username} with ${policy} policy.`);
-		console.log(`Key file: ${homeDir}/state/credentials/${username}/key`);
+		console.log(`Key file: ${keyFile}`);
 		if (args.showKey) console.log(key);
 	}
 });
@@ -127,8 +91,8 @@ const setPolicy = defineCommand({
 		policy: { type: 'positional', required: true, description: 'chat, read, or full' }
 	},
 	run({ args }) {
-		const username = requireUsername(positional(args, 0));
-		const policy = requirePolicy(positional(args, 1));
+		const username = positional(args, 0);
+		const policy = positional(args, 1);
 		setCredentialPolicy(resolveFholdHome(), username, policy);
 		console.log(`${username}: ${policy}`);
 	}
@@ -149,12 +113,11 @@ const rotate = defineCommand({
 		}
 	},
 	run({ args }) {
-		const username = requireUsername(positional(args, 0));
-		const homeDir = resolveFholdHome();
+		const username = positional(args, 0);
 		const key = suppliedKey(args.keyFile ? String(args.keyFile) : undefined);
-		rotateCredential(homeDir, username, key);
+		const keyFile = rotateCredential(resolveFholdHome(), username, key);
 		console.log(`Rotated ${username}.`);
-		console.log(`Key file: ${homeDir}/state/credentials/${username}/key`);
+		console.log(`Key file: ${keyFile}`);
 		if (args.showKey) console.log(key);
 	}
 });
@@ -166,7 +129,7 @@ const show = defineCommand({
 		showKey: { type: 'boolean', description: 'include the secret key', default: false }
 	},
 	run({ args }) {
-		const username = requireUsername(positional(args, 0));
+		const username = positional(args, 0);
 		const { homeDir, config } = current();
 		const credential = Object.hasOwn(config.credentials, username)
 			? config.credentials[username]
@@ -177,7 +140,7 @@ const show = defineCommand({
 				{
 					username,
 					policy: credential.policy,
-					keyFile: `${homeDir}/state/credentials/${username}/key`,
+					keyFile: credentialKeyFile(homeDir, username),
 					...(args.showKey ? { key: readCredentialKey(homeDir, username) } : {})
 				},
 				null,
@@ -191,7 +154,7 @@ const remove = defineCommand({
 	meta: { name: 'remove', description: 'Revoke and remove a named credential' },
 	args: { username: { type: 'positional', required: true } },
 	run({ args }) {
-		const username = requireUsername(positional(args, 0));
+		const username = positional(args, 0);
 		removeCredential(resolveFholdHome(), username);
 		console.log(`Removed ${username}.`);
 	}
@@ -211,11 +174,8 @@ const map = defineCommand({
 	},
 	run({ args }) {
 		const target = positional(args, 0);
-		const username = requireUsername(positional(args, target === 'oauth' ? 3 : 2));
+		const username = positional(args, target === 'oauth' ? 3 : 2);
 		const { homeDir, config } = current();
-		if (!Object.hasOwn(config.credentials, username)) {
-			throw new Error(`Unknown credential: ${username}. Create it first.`);
-		}
 		if (target === 'oauth') {
 			const issuer = positional(args, 1);
 			const subject = positional(args, 2);
@@ -225,8 +185,8 @@ const map = defineCommand({
 			);
 			return;
 		}
-		const portal = requirePortal(target);
-		const userId = requirePortalUserId(portal, positional(args, 1));
+		const portal = target;
+		const userId = positional(args, 1);
 		mapPortalUser(homeDir, { portal, userId, username });
 		console.log(`${portal} user ${userId}: ${username} (${config.credentials[username]?.policy})`);
 	}
@@ -250,7 +210,7 @@ const unmap = defineCommand({
 			return;
 		}
 		const portal = requirePortal(target);
-		const userId = requirePortalUserId(portal, positional(args, 1));
+		const userId = positional(args, 1);
 		const { homeDir } = current();
 		const mapping = readPortalCredentialMap(homeDir, portal);
 		if (!Object.hasOwn(mapping.users, userId)) {
