@@ -1,12 +1,8 @@
 export type { StackAction } from './types.js';
 export * from './contracts.js';
 export {
-	parseLegacyCredentialOperation,
-	parseLegacyRecoveryOperation,
 	parseOperationInput,
 	parseRequestContext,
-	type LegacyRecoveryOperation,
-	type LegacyCredentialOperation,
 	type OperationInputMap,
 	type OperationInputName
 } from './operation-input.js';

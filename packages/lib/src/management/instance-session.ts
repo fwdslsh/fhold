@@ -1,6 +1,11 @@
 import type { HostingSnapshot } from '../hosting/types.js';
 import { createNativeAgentService } from '../control-plane/native-agent.js';
-import type { InstanceManagement, ManagedSnapshot, ManagementMethod } from './types.js';
+import type {
+	InstanceManagement,
+	ManagedSnapshot,
+	ManagementOperation,
+	ManagementOperationMap
+} from './types.js';
 import {
 	operationDescription,
 	invokeOperation,
@@ -20,9 +25,7 @@ import {
 	type InstanceSessionBindings,
 	type InstanceSnapshot,
 	type Observation,
-	type Operation,
-	type OperationInputMetadata,
-	type RequestContext
+	type Operation
 } from './contracts.js';
 export type { ApplicationObservations, InstanceSessionBindings } from './contracts.js';
 
@@ -217,12 +220,6 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 			let application: Partial<ApplicationObservations> = {};
 			let applicationFailure: unknown;
 			try {
-				await bindings.initialize?.();
-			} catch {
-				// Capability discovery is advisory; do not turn a readable target
-				// into an unavailable application snapshot for an old remote CLI.
-			}
-			try {
 				application = (await bindings.inspectApplication?.()) ?? {};
 			} catch (error) {
 				applicationFailure = error;
@@ -278,26 +275,19 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 }
 
 /**
- * Compatibility adapter for the installed local/SSH RPC command surface. It is
- * deliberately private to composition: UI and CLI consumers use named slots,
- * while the retained JSON-line protocol keeps its published method names.
+ * Binds named operation slots to the local or SSH management session. Both run
+ * the same handler table; SSH carries `{operation, input, context}` over stdin.
  */
 export function rpcManagementBindings(
 	manager: InstanceManagement,
 	options: {
-		initialize?: () => Promise<void>;
-		supports?: (method: ManagementMethod) => boolean | undefined;
 		passiveSnapshot?: () => Promise<ManagedSnapshot>;
 		acquireSnapshot?: () => Promise<ManagedSnapshot>;
-		credentialPolicy?: () => boolean | undefined;
 	} = {}
 ): Pick<
 	InstanceSessionBindings,
-	'agent' | 'apps' | 'data' | 'docker' | 'initialize' | 'inspectApplication' | 'busy' | 'close'
+	'agent' | 'apps' | 'data' | 'docker' | 'inspectApplication' | 'busy' | 'close'
 > {
-	const { supports } = options;
-	const credentialPolicyReason =
-		'This installed CLI cannot atomically update credential permissions. Update the host CLI before changing this policy.';
 	let acquired: AppConnections | undefined;
 	const lifetime = new AbortController();
 	// An acquired route belongs to the source addresses from which it was
@@ -329,55 +319,19 @@ export function rpcManagementBindings(
 		if (value.connectionError) result.error = value.connectionError;
 		return result;
 	}
-	async function initialize(): Promise<void> {
-		await options.initialize?.();
-	}
-	function requireMethod(method: ManagementMethod) {
-		if (supports?.(method) === false)
-			throw new Error(
-				`The management helper does not advertise ${method}. Other supported host operations remain available; check the local tooling distribution.`
-			);
-	}
-	function operation<I, O>(
-		method: ManagementMethod,
-		run: (input: I, context: RequestContext) => Promise<O>,
-		operationOptions: {
-			supported?: () => boolean | undefined;
-			reason?: string;
-			input?: OperationInputMetadata;
-		} = {}
-	): Operation<I, O> {
-		const { supported: extraSupported, reason: extraReason, input } = operationOptions;
-		return supportedOperation(
-			async (input, context) => {
-				await initialize();
-				requireMethod(method);
-				if (extraSupported?.() === false)
-					throw new Error(extraReason ?? 'This operation is not available on the selected host.');
-				context.signal?.throwIfAborted();
-				return run(input, context);
-			},
-			() =>
-				supports?.(method) !== false && extraSupported?.() !== false
-					? { state: 'ready' }
-					: {
-							state: 'unavailable',
-							reason:
-								supports?.(method) === false
-									? `The management helper does not advertise ${method}. Check the local tooling distribution.`
-									: (extraReason ?? 'This operation is not available on the selected host.')
-						},
-			input
-		);
+	function operation<N extends ManagementOperation>(
+		name: N
+	): Operation<ManagementOperationMap[N]['input'], ManagementOperationMap[N]['result']> {
+		return supportedOperation(async (input, context) => {
+			context.signal?.throwIfAborted();
+			return manager.call(name, input, context);
+		});
 	}
 	async function snapshot(): Promise<ManagedSnapshot> {
-		await initialize();
-		requireMethod('snapshot');
-		if (options.passiveSnapshot) return options.passiveSnapshot();
-		return manager.call('snapshot');
+		return options.passiveSnapshot ? options.passiveSnapshot() : manager.call('snapshot');
 	}
 	const agent: AgentOperations = {
-		browserLink: operation('assistantPassword', async (_input, context) => {
+		browserLink: supportedOperation(async (_input, context) => {
 			lifetime.signal.throwIfAborted();
 			// Reuse the route acquisition that owns SSH forwards. Never put the
 			// password in a browser URL or a public snapshot.
@@ -387,7 +341,7 @@ export function rpcManagementBindings(
 				{
 					endpoint: route.endpoint,
 					authorization: async () => {
-						const { password } = await manager.call('assistantPassword');
+						const { password } = await manager.call('agent.assistantPassword');
 						return `Basic ${Buffer.from(`${route.username || 'opencode'}:${password}`).toString('base64')}`;
 					}
 				},
@@ -395,8 +349,7 @@ export function rpcManagementBindings(
 			);
 			return service.browserLink({ signal: context.signal });
 		}),
-		connect: operation(
-			'snapshot',
+		connect: supportedOperation(
 			async () => {
 				// This is the explicit route-acquisition action. SSH may now create a
 				// loopback forward; passive inspection intentionally never does.
@@ -415,182 +368,65 @@ export function rpcManagementBindings(
 					...(options.acquireSnapshot ? { sessionBound: true as const } : {})
 				};
 			},
-			options.acquireSnapshot
-				? { input: { acquireClients: ['opencode', 'mcp', 'claude'] } }
-				: undefined
+			undefined,
+			options.acquireSnapshot ? { acquireClients: ['opencode', 'mcp', 'claude'] } : undefined
 		),
-		providers: operation('providers', async () => manager.call('providers')),
-		setKey: operation('providerKey', async (input) => manager.call('providerKey', input)),
-		saveEndpoint: operation('providerEndpoint', async (input) =>
-			manager.call('providerEndpoint', input)
-		),
-		discoverModels: operation('providerModels', async (input) =>
-			manager.call('providerModels', input)
-		),
-		selectModel: operation('providerUse', async (input) => manager.call('providerUse', input)),
-		removeProvider: operation('providerRemove', async (input) =>
-			manager.call('providerRemove', input)
-		),
-		oauthStart: operation('providerOAuthStart', async (input) =>
-			manager.call('providerOAuthStart', input)
-		),
-		oauthFinish: operation('providerOAuthFinish', async (input) =>
-			manager.call('providerOAuthFinish', input)
-		),
-		readiness: operation('readiness', async (input) => manager.call('readiness', input)),
-		assistantPassword: operation('assistantPassword', async () =>
-			manager.call('assistantPassword')
-		),
-		remote: operation('remote', async (input, context) => {
-			if (input.action === 'enable' && !context.confirmed)
-				throw new Error('Confirm the possible container restarts before remote setup.');
-			return manager.call('remote', {
-				...input,
-				...(input.action === 'enable' ? { restartConfirmed: true } : {})
-			});
-		}),
-		codexRecall: operation('codexRecall', async (input, context) =>
-			manager.call('codexRecall', {
-				...input,
-				...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
-			})
-		),
-		modelInventory: operation('providers', async () => {
-			const value = await manager.call('providers');
-			return value.providers;
-		})
+		providers: operation('agent.providers'),
+		setKey: operation('agent.setKey'),
+		saveEndpoint: operation('agent.saveEndpoint'),
+		discoverModels: operation('agent.discoverModels'),
+		selectModel: operation('agent.selectModel'),
+		removeProvider: operation('agent.removeProvider'),
+		oauthStart: operation('agent.oauthStart'),
+		oauthFinish: operation('agent.oauthFinish'),
+		readiness: operation('agent.readiness'),
+		assistantPassword: operation('agent.assistantPassword'),
+		remote: operation('agent.remote'),
+		codexRecall: operation('agent.codexRecall'),
+		modelInventory: supportedOperation(
+			async () => (await manager.call('agent.providers')).providers
+		)
 	};
 	return {
-		initialize,
 		agent,
 		apps: {
 			credentials: {
-				updatePolicy: options.credentialPolicy
-					? operation(
-							'credential',
-							async (input) => {
-								await manager.call('credential', { action: 'policy', ...input });
-							},
-							{
-								supported: options.credentialPolicy,
-								reason: credentialPolicyReason
-							}
-						)
-					: unsupportedOperation(credentialPolicyReason),
-				create: operation('credential', async (input) => {
-					await manager.call('credential', { action: 'create', ...input });
-				}),
-				rotate: operation('credential', async (input) => {
-					await manager.call('credential', { action: 'rotate', ...input });
-				}),
-				remove: operation('credential', async (input) => {
-					await manager.call('credential', { action: 'remove', ...input });
-				}),
-				revealKey: operation('credentialKey', async (input) =>
-					manager.call('credentialKey', input.username)
-				)
+				create: operation('apps.credentials.create'),
+				updatePolicy: operation('apps.credentials.updatePolicy'),
+				rotate: operation('apps.credentials.rotate'),
+				remove: operation('apps.credentials.remove'),
+				revealKey: operation('apps.credentials.revealKey')
 			},
 			portal: {
-				mapUser: operation('mapPortalUser', async (input) => {
-					await manager.call('mapPortalUser', input);
-				}),
-				saveToken: operation('portalToken', async (input) => {
-					await manager.call('portalToken', input);
-				})
+				mapUser: operation('apps.portal.mapUser'),
+				saveToken: operation('apps.portal.saveToken')
 			}
 		},
 		data: {
-			knowledgeUi: operation('knowledgeUi', async () => {
+			knowledgeUi: supportedOperation(async () => {
 				lifetime.signal.throwIfAborted();
-				const result = await manager.call('knowledgeUi', undefined);
+				const result = await manager.call('data.knowledgeUi');
 				lifetime.signal.throwIfAborted();
 				return result;
 			}),
-			backup: operation('backup', async (input, context) =>
-				manager.call('backup', {
-					...input,
-					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
-				})
-			),
-			restoreData: operation('restoreData', async (input, context) =>
-				manager.call('restoreData', {
-					...input,
-					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
-				})
-			),
-			restoreInstance: operation('restoreInstance', async (input, context) =>
-				manager.call('restoreInstance', {
-					...input,
-					...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
-				})
-			),
+			backup: operation('data.backup'),
+			restoreData: operation('data.restoreData'),
+			restoreInstance: operation('data.restoreInstance'),
 			recovery: {
-				package: operation('recovery', async (request, context) => {
-					const result = await manager.call('recovery', {
-						action: 'package',
-						request,
-						...(context.confirmed === undefined ? {} : { confirmed: context.confirmed })
-					});
-					if (
-						!result ||
-						typeof result !== 'object' ||
-						!('scope' in result) ||
-						result.scope !== 'assistant-checkpoint'
-					)
-						throw new Error('The checkpoint package operation returned an invalid result.');
-					return result as
-						| import('../dto/recovery.js').CheckpointPackagePlan
-						| import('../dto/recovery.js').CheckpointPackageImportResult;
-				}),
-				status: operation('recovery', async () => {
-					const result = await manager.call('recovery', { action: 'status' });
-					if (!result || typeof result !== 'object' || Array.isArray(result))
-						throw new Error(
-							'Remote recovery status was invalid. Refresh the instance before retrying.'
-						);
-					return result;
-				}),
-				inspect: operation('recovery', async () => {
-					const result = await manager.call('recovery', { action: 'inspect' });
-					if (typeof result !== 'string')
-						throw new Error('Remote recovery inspection returned an invalid result.');
-					return result;
-				}),
-				initialize: operation('recovery', async (_input, context) => {
-					if (!context.confirmed)
-						throw new Error('Confirm recovery initialization before continuing.');
-					const result = await manager.call('recovery', { action: 'init', confirmed: true });
-					if (typeof result !== 'string')
-						throw new Error('Remote recovery initialization returned an invalid result.');
-					return result;
-				}),
-				restore: operation('recovery', async (_input, context) => {
-					if (!context.confirmed) throw new Error('Confirm recovery restore before continuing.');
-					const result = await manager.call('recovery', { action: 'restore', confirmed: true });
-					if (typeof result !== 'string')
-						throw new Error('Remote recovery restore returned an invalid result.');
-					return result;
-				}),
-				save: operation('recovery', async (input) => {
-					await manager.call('recovery', { action: 'save', ...input });
-				}),
-				setCredential: operation('recovery', async (input) => {
-					await manager.call('recovery', { action: 'credential', ...input });
-				})
+				package: operation('data.recovery.package'),
+				status: operation('data.recovery.status'),
+				inspect: operation('data.recovery.inspect'),
+				initialize: operation('data.recovery.initialize'),
+				restore: operation('data.recovery.restore'),
+				save: operation('data.recovery.save'),
+				setCredential: operation('data.recovery.setCredential')
 			}
 		},
 		docker: {
-			install: operation('install', async ({ config, automaticPorts }) => {
-				await manager.call('install', config, automaticPorts);
-			}),
-			saveConfig: operation('saveConfig', async (input) => {
-				await manager.call('saveConfig', input);
-			}),
-			update: operation('update', async ({ pull }, context) => {
-				if (!context.confirmed) throw new Error('Confirm the instance update before continuing.');
-				await manager.call('update', { confirmed: true, ...(pull === undefined ? {} : { pull }) });
-			}),
-			directory: operation('directory', async ({ path }) => manager.call('directory', path))
+			install: operation('docker.install'),
+			saveConfig: operation('docker.saveConfig'),
+			update: operation('docker.update'),
+			directory: operation('docker.directory')
 		},
 		inspectApplication: async () => {
 			const value = await snapshot();

@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
 import { defaultRecoverySettings } from '../control-plane/recovery-config.js';
-import {
-	parseLegacyCredentialOperation,
-	parseLegacyRecoveryOperation,
-	parseOperationInput,
-	parseRequestContext
-} from './operation-input.js';
+import { parseOperationInput, parseRequestContext } from './operation-input.js';
 
 test('operation ingress returns typed recovery documents and separates confirmation', () => {
 	const input = parseOperationInput('data.recovery.save', {
@@ -23,16 +18,12 @@ test('operation ingress returns typed recovery documents and separates confirmat
 });
 test('checkpoint package ingress drops unknown fields and requires complete import intent', () => {
 	expect(
-		parseLegacyRecoveryOperation({
-			action: 'package',
-			confirmed: true,
-			request: { operation: 'export', directory: '/private/package', ignored: 'drop' }
+		parseOperationInput('data.recovery.package', {
+			operation: 'export',
+			directory: '/private/package',
+			ignored: 'drop'
 		})
-	).toEqual({
-		name: 'data.recovery.package',
-		context: { confirmed: true },
-		input: { operation: 'export', directory: '/private/package' }
-	});
+	).toEqual({ operation: 'export', directory: '/private/package' });
 	expect(() =>
 		parseOperationInput('data.recovery.package', {
 			operation: 'import',
@@ -103,38 +94,28 @@ test('restart input excludes console-only selectors', () => {
 	).toEqual({ revision: 'revision-1' });
 });
 
-test('shared legacy envelopes validate once before Admin or SSH dispatch', () => {
+test('credential and recovery inputs validate once before Admin or SSH dispatch', () => {
 	expect(
-		parseLegacyCredentialOperation({
-			action: 'policy',
+		parseOperationInput('apps.credentials.updatePolicy', {
 			username: 'owner',
 			policy: 'read',
 			previousPolicy: 'chat'
 		})
-	).toEqual({
-		name: 'apps.credentials.updatePolicy',
-		input: { username: 'owner', policy: 'read', previousPolicy: 'chat' }
-	});
+	).toEqual({ username: 'owner', policy: 'read', previousPolicy: 'chat' });
 	expect(() =>
-		parseLegacyCredentialOperation({
-			action: 'policy',
+		parseOperationInput('apps.credentials.updatePolicy', {
 			username: 'owner',
 			policy: 'typo',
 			previousPolicy: 'chat'
 		})
 	).toThrow('Policy');
 	expect(
-		parseLegacyRecoveryOperation({
-			action: 'credential',
+		parseOperationInput('data.recovery.setCredential', {
 			connectionString: 'UseDevelopmentStorage=true'
 		})
-	).toMatchObject({
-		name: 'data.recovery.setCredential',
-		input: { connectionString: 'UseDevelopmentStorage=true' }
-	});
+	).toEqual({ connectionString: 'UseDevelopmentStorage=true' });
 	expect(() =>
-		parseLegacyRecoveryOperation({
-			action: 'save',
+		parseOperationInput('data.recovery.save', {
 			baselineDigest: 'bad',
 			settings: { enabled: 'yes' },
 			selection: {}

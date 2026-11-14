@@ -45,11 +45,9 @@ import {
 } from './domain.js';
 import type {
 	ManagedSnapshot,
-	ManagementMethod,
 	InstanceManagement,
-	StackAction,
-	ManagementRequestArgs,
-	ManagementRequestMap
+	ManagementOperation,
+	ManagementOperationMap
 } from './types.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -59,7 +57,7 @@ import { FH_RUNTIME_LABEL } from '../control-plane/release.js';
 import { packTransfer, unpackTransfer } from './transfer.js';
 import { publishedConnections } from './connections.js';
 import { withAssistantEndpoint } from '../control-plane/opencode.js';
-import type { LocalManagementHostPort } from './contracts.js';
+import type { LocalManagementHostPort, RequestContext } from './contracts.js';
 import { LocalAgentServices } from './agent-services.js';
 import { readCredentialKey } from '../control-plane/credential-store.js';
 import { assertInstallInstanceName } from '../control-plane/install.js';
@@ -74,10 +72,11 @@ export function localInstanceManagement(
 	const lifetime = new AbortController();
 	let activeRemote: { homeDir: string; session: RemoteEnableSession } | undefined;
 	let remoteStarting = false;
-	type LegacyHandlerTable = {
-		[M in ManagementMethod]: (
-			...args: ManagementRequestArgs<M>
-		) => ManagementRequestMap[M]['result'] | Promise<ManagementRequestMap[M]['result']>;
+	type HandlerTable = {
+		[N in ManagementOperation]: (
+			input: ManagementOperationMap[N]['input'],
+			context: RequestContext
+		) => ManagementOperationMap[N]['result'] | Promise<ManagementOperationMap[N]['result']>;
 	};
 	const managedState = () => createFholdState(homeDir);
 	const agent = new LocalAgentServices(
@@ -173,20 +172,26 @@ export function localInstanceManagement(
 		};
 	}
 
-	async function runAdminAction(action: StackAction): Promise<ManagedSnapshot> {
-		await options.host.operate(action);
-		return adminSnapshot();
-	}
-
-	const handlers: LegacyHandlerTable = {
-		codexRecall: async (value) => {
+	const handlers: HandlerTable = {
+		snapshot: () => adminSnapshot(),
+		'agent.providers': () => agent.providers(),
+		'agent.setKey': (input) => agent.setKey(input),
+		'agent.saveEndpoint': (input) => agent.endpoint(input),
+		'agent.discoverModels': (input) => agent.models(input),
+		'agent.selectModel': (input) => agent.use(input),
+		'agent.removeProvider': (input) => agent.remove(input),
+		'agent.oauthStart': (input) => agent.oauthStart(input),
+		'agent.oauthFinish': (input) => agent.oauthFinish(input),
+		'agent.readiness': (input) => agent.readiness(input),
+		'agent.assistantPassword': () => agent.password(),
+		'agent.codexRecall': async (input, context) => {
 			const current = state();
-			if (value.action === 'review') return reviewCodexRecall(current);
+			if (input.action === 'review') return reviewCodexRecall(current);
 			if (remoteStarting || activeRemote?.session.snapshot().running)
 				throw new Error('Finish or cancel remote setup first.');
-			return changeCodexRecall(current, value.action, value.digest, value.confirmed === true);
+			return changeCodexRecall(current, input.action, input.digest, context.confirmed === true);
 		},
-		remote: async (value) => {
+		'agent.remote': async (value, context) => {
 			const tool = value.tool;
 			const current = state();
 			if (value.action === 'connection') {
@@ -196,7 +201,7 @@ export function localInstanceManagement(
 				return { tool, stage: 'connection', output, running: false, enabled: true };
 			}
 			if (value.action === 'enable') {
-				if (value.restartConfirmed !== true)
+				if (context.confirmed !== true)
 					throw new Error('Confirm the possible container restarts before remote setup.');
 				if (remoteStarting || activeRemote?.session.snapshot().running)
 					throw new Error('Finish or cancel the current remote setup first.');
@@ -250,129 +255,77 @@ export function localInstanceManagement(
 			} else if (value.action !== 'progress') throw new Error('Unknown remote setup action.');
 			return activeRemote.session.snapshot();
 		},
-		snapshot: () => {
-			return adminSnapshot();
+		'apps.credentials.create': (input) => {
+			createAdminCredential(state().homeDir, input);
 		},
-		install: async (value, automaticPorts = true) => {
-			assertInstallInstanceName(value.deployment.projectName);
-			const docker = await ensureDockerReady();
-			if (!docker.ok) throw new Error(docker.message);
-			await assertProjectOwnership(value.deployment.projectName);
-			await installFromAdmin(value, homeDir, automaticPorts);
-			return runAdminAction('start');
+		'apps.credentials.updatePolicy': (input) => {
+			updateAdminCredentialPolicy(state().homeDir, input);
 		},
-		saveConfig: async (value) => {
-			const current = state();
-			saveAdminConfig(current.homeDir, value.config, value.baseConfig);
-			return adminSnapshot();
+		'apps.credentials.rotate': (input) => {
+			rotateAdminCredential(state().homeDir, input.username);
 		},
-		action: (input) => {
-			if (!input.confirmed) throw Error('Confirm the instance lifecycle change before continuing.');
-			return runAdminAction(input.action);
+		'apps.credentials.remove': (input) => {
+			removeAdminCredential(state().homeDir, input.username);
 		},
-		logs: async () => {
-			return (await options.host.logs({ tail: 250 })).slice(-200_000);
-		},
-		providers: () => agent.providers(),
-		providerKey: (value) => agent.setKey(value),
-		providerEndpoint: (value) => agent.endpoint(value),
-		providerModels: (value) => agent.models(value),
-		providerUse: (value) => agent.use(value),
-		providerRemove: (value) => agent.remove(value),
-		providerOAuthStart: (value) => agent.oauthStart(value),
-		providerOAuthFinish: (value) => agent.oauthFinish(value),
-		readiness: (value) => agent.readiness(value),
-		assistantPassword: () => agent.password(),
-		knowledgeUi: (input) => knowledgeUi.open(input),
-		credential: async (value) => {
-			const current = state();
-			if (value.action === 'create')
-				createAdminCredential(current.homeDir, {
-					username: value.username,
-					policy: value.policy
-				});
-			else if (value.action === 'policy')
-				updateAdminCredentialPolicy(current.homeDir, {
-					username: value.username,
-					policy: value.policy,
-					previousPolicy: value.previousPolicy
-				});
-			else if (value.action === 'rotate') rotateAdminCredential(current.homeDir, value.username);
-			else removeAdminCredential(current.homeDir, value.username);
-			return adminSnapshot();
-		},
-		credentialKey: (value) => {
-			if (!isCredentialUsername(value)) throw new Error('Invalid credential username.');
+		'apps.credentials.revealKey': ({ username }) => {
+			if (!isCredentialUsername(username)) throw new Error('Invalid credential username.');
 			const current = state();
 			const config = readStackConfig(current.homeDir);
 			if (!config.ok) throw new Error(config.error);
-			if (!Object.hasOwn(config.config.credentials, value))
-				throw new Error(`Unknown credential: ${value}`);
-			return { username: value, key: readCredentialKey(current.homeDir, value) };
+			if (!Object.hasOwn(config.config.credentials, username))
+				throw new Error(`Unknown credential: ${username}`);
+			return { username, key: readCredentialKey(current.homeDir, username) };
 		},
-		mapPortalUser: async (value) => {
+		'apps.portal.mapUser': (input) => {
+			mapAdminPortalUser(state().homeDir, input);
+		},
+		'apps.portal.saveToken': (input) => {
 			const current = state();
-			mapAdminPortalUser(current.homeDir, value);
-			return adminSnapshot();
+			const configured = portalSecretConfigured(current.homeDir, input.portal);
+			const { botToken, appToken } = adminPortalTokens(input, configured);
+			savePortalTokens(current.homeDir, { portal: input.portal, botToken, appToken });
 		},
-		portalToken: async (value) => {
-			const current = state();
-			const configured = portalSecretConfigured(current.homeDir, value.portal);
-			const { botToken, appToken } = adminPortalTokens(value, configured);
-			savePortalTokens(current.homeDir, { portal: value.portal, botToken, appToken });
-			return adminSnapshot();
+		'data.knowledgeUi': (input) => knowledgeUi.open(input || undefined),
+		'data.backup': (input, context) => backupFromAdmin(state().homeDir, { ...input, ...context }),
+		'data.restoreData': (input, context) =>
+			restoreFromAdmin(state().homeDir, { ...input, ...context }),
+		'data.restoreInstance': (input, context) =>
+			instanceRestoreFromAdmin(managedState().homeDir, { ...input, ...context }),
+		'data.recovery.status': () => recoveryStatus(state().homeDir),
+		'data.recovery.inspect': () => runRecoveryOperation(state().homeDir, 'inspect'),
+		'data.recovery.initialize': (_input, context) =>
+			runRecoveryOperation(state().homeDir, 'init', context.confirmed === true),
+		'data.recovery.restore': (_input, context) =>
+			runRecoveryOperation(state().homeDir, 'restore', context.confirmed === true),
+		'data.recovery.save': (input) => {
+			saveRecoverySettings(state().homeDir, input);
 		},
-		backup: (value) => {
-			const current = state();
-			return backupFromAdmin(current.homeDir, value);
+		'data.recovery.setCredential': (input) => {
+			saveRecoveryCredential(state().homeDir, input.connectionString);
 		},
-		recovery: async (value) => {
+		'data.recovery.package': (input, context) => {
 			const home = state().homeDir;
-			if (value.action === 'package') {
-				const request = value.request;
-				if (request.operation === 'export') return exportCheckpointPackage(home, request.directory);
-				if (request.operation === 'preview')
-					return previewCheckpointPackage(home, request.directory);
-				return importCheckpointPackage(home, request, value.confirmed === true);
-			}
-			if (value.action === 'save') {
-				saveRecoverySettings(home, {
-					baselineDigest: value.baselineDigest,
-					settings: value.settings,
-					selection: value.selection
-				});
-				return adminSnapshot();
-			}
-			if (value.action === 'credential') {
-				saveRecoveryCredential(home, value.connectionString);
-				return adminSnapshot();
-			}
-			if (value.action === 'status') return recoveryStatus(home);
-			return runRecoveryOperation(home, value.action, value.confirmed === true);
+			if (input.operation === 'export') return exportCheckpointPackage(home, input.directory);
+			if (input.operation === 'preview') return previewCheckpointPackage(home, input.directory);
+			return importCheckpointPackage(home, input, context.confirmed === true);
 		},
-		restoreData: (value) => {
-			const current = state();
-			return restoreFromAdmin(current.homeDir, value);
+		'docker.install': async ({ config, automaticPorts }) => {
+			assertInstallInstanceName(config.deployment.projectName);
+			const docker = await ensureDockerReady();
+			if (!docker.ok) throw new Error(docker.message);
+			await assertProjectOwnership(config.deployment.projectName);
+			await installFromAdmin(config, homeDir, automaticPorts ?? true);
+			await options.host.operate('start');
 		},
-		restoreInstance: (value) => {
-			return instanceRestoreFromAdmin(managedState().homeDir, value);
+		'docker.saveConfig': (input) => {
+			saveAdminConfig(state().homeDir, input.config, input.baseConfig);
 		},
-		update: async (value) => {
-			if (!value.confirmed) throw Error('Confirm the instance update before continuing.');
-			await updateHome({
-				homeDir,
-				start: true,
-				pull: value.pull
-			});
-			return adminSnapshot();
+		'docker.update': async ({ pull }, context) => {
+			if (!context.confirmed) throw Error('Confirm the instance update before continuing.');
+			await updateHome({ homeDir, start: true, pull });
 		},
-		transferCreate: () => {
-			const directory = mkdtempSync(join(tmpdir(), 'fhold-transfer-'));
-			transfers.add(directory);
-			return directory;
-		},
-		directory: (value) => {
-			let path = value ?? dirname(homeDir);
+		'docker.directory': ({ path: requested }) => {
+			let path = requested ?? dirname(homeDir);
 			if (!isAbsolute(path) || path.includes('\0'))
 				throw Error('Choose an absolute directory on this computer.');
 			while (!existsSync(path) && dirname(path) !== path) path = dirname(path);
@@ -392,18 +345,23 @@ export function localInstanceManagement(
 				.sort((a, b) => a.name.localeCompare(b.name));
 			return { path, parent: dirname(path), directories };
 		},
-		transferRelease: (value) => {
+		'transfer.create': () => {
+			const directory = mkdtempSync(join(tmpdir(), 'fhold-transfer-'));
+			transfers.add(directory);
+			return directory;
+		},
+		'transfer.release': (value) => {
 			if (!transfers.has(value)) throw Error('Unknown transfer workspace.');
 			rmSync(value, { recursive: true, force: true });
 			transfers.delete(value);
 		},
-		transferPack: async (value) => {
+		'transfer.pack': async (value) => {
 			if (!transfers.has(value)) throw Error('Unknown transfer workspace.');
 			const archive = join(value, 'transfer.tgz');
 			await packTransfer(join(value, 'export'), archive);
 			return archive;
 		},
-		transferUnpack: async (value) => {
+		'transfer.unpack': async (value) => {
 			if (!transfers.has(value)) throw Error('Unknown transfer workspace.');
 			const archive = join(value, 'transfer.tgz');
 			await unpackTransfer(archive, join(value, 'unpacked'));
@@ -411,25 +369,27 @@ export function localInstanceManagement(
 		}
 	};
 	return {
-		async call<M extends ManagementMethod>(
-			method: M,
-			...args: ManagementRequestArgs<M>
-		): Promise<ManagementRequestMap[M]['result']> {
+		async call<N extends ManagementOperation>(
+			operation: N,
+			input?: ManagementOperationMap[N]['input'],
+			context: RequestContext = {}
+		): Promise<ManagementOperationMap[N]['result']> {
 			if (closed) throw new Error('This instance session is closed. Open it again.');
-			const handler = handlers[method] as LegacyHandlerTable[M] | undefined;
-			if (!handler) throw Error('Unsupported instance operation.');
-			if (method.startsWith('provider') || method === 'readiness') {
+			const handler = handlers[operation] as HandlerTable[N];
+			const run = async () => await handler(input as ManagementOperationMap[N]['input'], context);
+			if (
+				operation.startsWith('agent.') &&
+				operation !== 'agent.remote' &&
+				operation !== 'agent.codexRecall' &&
+				operation !== 'agent.assistantPassword'
+			) {
 				const current = state();
 				const endpoint = (await publishedConnections(current.homeDir, await options.host.inspect()))
 					.assistant;
 				if (!endpoint) throw Error('Start this instance before managing its AI services.');
-				return await withAssistantEndpoint(
-					current.homeDir,
-					endpoint,
-					async () => await handler(...args)
-				);
+				return await withAssistantEndpoint(current.homeDir, endpoint, run);
 			}
-			return await handler(...args);
+			return await run();
 		},
 		busy: () => remoteStarting || !!activeRemote?.session.snapshot().running,
 		async close() {

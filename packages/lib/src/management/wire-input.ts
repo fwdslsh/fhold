@@ -1,38 +1,50 @@
-import { parseStackConfig } from '../control-plane/stack-config.js';
-import {
-	parseLegacyCredentialOperation,
-	parseLegacyRecoveryOperation,
-	parseOperationInput,
-	parseRequestContext
-} from './operation-input.js';
-import type { ManagementMethod, ManagementRequestArgs } from './types.js';
+import { parseOperationInput, type OperationInputName } from './operation-input.js';
+import type { ManagementOperation, ManagementOperationMap } from './types.js';
 
-type WireParser<M extends ManagementMethod> = (
-	value: unknown,
-	extra: unknown[]
-) => ManagementRequestArgs<M>;
-type WireParsers = { [M in ManagementMethod]: WireParser<M> };
+type WireParsers = {
+	[N in ManagementOperation]: (value: unknown) => ManagementOperationMap[N]['input'];
+};
 
-function object(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value))
-		throw new Error('Invalid instance operation input.');
-	return value as Record<string, unknown>;
+function none(value: unknown): void {
+	if (value !== undefined) throw new Error('This operation takes no input.');
 }
-function string(value: unknown): string {
+function text(value: unknown): string {
 	if (typeof value !== 'string' || !value || value.includes('\0'))
 		throw new Error('A text operation input is required.');
 	return value;
 }
+function named<N extends OperationInputName>(name: N) {
+	return (value: unknown) => parseOperationInput(name, value);
+}
 
-/** Published wire compatibility is parsed here, not inside native account use cases. */
+/** Every operation the SSH/stdin envelope accepts, with its untrusted-input parser. */
 const parsers: WireParsers = {
-	snapshot: () => [],
-	providers: () => [],
-	logs: () => [],
-	assistantPassword: () => [],
-	knowledgeUi: (value) => {
-		if (value === undefined) return [undefined];
-		const { loopbackPort } = object(value);
+	snapshot: none,
+	'agent.providers': none,
+	'agent.setKey': named('agent.setKey'),
+	'agent.saveEndpoint': named('agent.saveEndpoint'),
+	'agent.discoverModels': named('agent.discoverModels'),
+	'agent.selectModel': named('agent.selectModel'),
+	'agent.removeProvider': named('agent.removeProvider'),
+	'agent.oauthStart': named('agent.oauthStart'),
+	'agent.oauthFinish': named('agent.oauthFinish'),
+	'agent.readiness': named('agent.readiness'),
+	'agent.assistantPassword': none,
+	'agent.remote': named('agent.remote'),
+	'agent.codexRecall': named('agent.codexRecall'),
+	'apps.credentials.create': named('apps.credentials.create'),
+	'apps.credentials.updatePolicy': named('apps.credentials.updatePolicy'),
+	'apps.credentials.rotate': named('apps.credentials.rotate'),
+	'apps.credentials.remove': named('apps.credentials.remove'),
+	'apps.credentials.revealKey': named('apps.credentials.revealKey'),
+	'apps.portal.mapUser': named('apps.portal.mapUser'),
+	'apps.portal.saveToken': named('apps.portal.saveToken'),
+	'data.knowledgeUi': (value) => {
+		if (value === undefined) return undefined;
+		const loopbackPort =
+			value && typeof value === 'object' && !Array.isArray(value)
+				? (value as Record<string, unknown>).loopbackPort
+				: undefined;
 		if (
 			typeof loopbackPort !== 'number' ||
 			!Number.isInteger(loopbackPort) ||
@@ -40,107 +52,35 @@ const parsers: WireParsers = {
 			loopbackPort > 65535
 		)
 			throw new Error('A valid AKM UI loopback port is required.');
-		return [{ loopbackPort }];
+		return { loopbackPort };
 	},
-	transferCreate: () => [],
-	directory: (value) => [value === undefined ? undefined : string(value)],
-	transferRelease: (value) => [string(value)],
-	transferPack: (value) => [string(value)],
-	transferUnpack: (value) => [string(value)],
-	install: (value, extra) => {
-		const config = parseStackConfig(value);
-		if (!config.ok) throw new Error(config.error);
-		if (extra[0] !== undefined && typeof extra[0] !== 'boolean')
-			throw new Error('Automatic port selection must be true or false.');
-		return [config.config, extra[0]];
-	},
-	saveConfig: (value) => [parseOperationInput('docker.saveConfig', value)],
-	action: (value) => {
-		const input = object(value);
-		if (input.action !== 'start' && input.action !== 'stop' && input.action !== 'restart')
-			throw new Error('Choose a lifecycle action.');
-		return [{ action: input.action, confirmed: parseRequestContext(input).confirmed === true }];
-	},
-	update: (value) => [
-		{
-			...parseOperationInput('docker.update', value),
-			confirmed: parseRequestContext(value).confirmed === true
-		}
-	],
-	providerKey: (value) => [parseOperationInput('agent.setKey', value)],
-	providerEndpoint: (value) => [parseOperationInput('agent.saveEndpoint', value)],
-	providerModels: (value) => [parseOperationInput('agent.discoverModels', value)],
-	providerUse: (value) => [parseOperationInput('agent.selectModel', value)],
-	providerRemove: (value) => [parseOperationInput('agent.removeProvider', value)],
-	providerOAuthStart: (value) => [parseOperationInput('agent.oauthStart', value)],
-	providerOAuthFinish: (value) => [parseOperationInput('agent.oauthFinish', value)],
-	readiness: (value) => [parseOperationInput('agent.readiness', value)],
-	credentialKey: (value) => [
-		parseOperationInput('apps.credentials.revealKey', { username: value }).username
-	],
-	credential: (value) => {
-		const parsed = parseLegacyCredentialOperation(value);
-		switch (parsed.name) {
-			case 'apps.credentials.create':
-				return [{ action: 'create', ...parsed.input }];
-			case 'apps.credentials.updatePolicy':
-				return [{ action: 'policy', ...parsed.input }];
-			case 'apps.credentials.rotate':
-				return [{ action: 'rotate', ...parsed.input }];
-			case 'apps.credentials.remove':
-				return [{ action: 'remove', ...parsed.input }];
-		}
-	},
-	mapPortalUser: (value) => [parseOperationInput('apps.portal.mapUser', value)],
-	portalToken: (value) => [parseOperationInput('apps.portal.saveToken', value)],
-	backup: (value) => [
-		{ ...parseOperationInput('data.backup', value), ...parseRequestContext(value) }
-	],
-	restoreData: (value) => [
-		{ ...parseOperationInput('data.restoreData', value), ...parseRequestContext(value) }
-	],
-	restoreInstance: (value) => [
-		{ ...parseOperationInput('data.restoreInstance', value), ...parseRequestContext(value) }
-	],
-	codexRecall: (value) => [
-		{ ...parseOperationInput('agent.codexRecall', value), ...parseRequestContext(value) }
-	],
-	remote: (value) => {
-		const input = object(value);
-		const context = parseRequestContext({ confirmed: input.restartConfirmed });
-		return [
-			{
-				...parseOperationInput('agent.remote', input),
-				...(context.confirmed === undefined ? {} : { restartConfirmed: context.confirmed })
-			}
-		];
-	},
-	recovery: (value) => {
-		const parsed = parseLegacyRecoveryOperation(value);
-		switch (parsed.name) {
-			case 'data.recovery.package':
-				return [{ action: 'package', request: parsed.input, ...parsed.context }];
-			case 'data.recovery.status':
-				return [{ action: 'status' }];
-			case 'data.recovery.inspect':
-				return [{ action: 'inspect', ...parsed.context }];
-			case 'data.recovery.initialize':
-				return [{ action: 'init', ...parsed.context }];
-			case 'data.recovery.restore':
-				return [{ action: 'restore', ...parsed.context }];
-			case 'data.recovery.save':
-				return [{ action: 'save', ...parsed.input }];
-			case 'data.recovery.setCredential':
-				return [{ action: 'credential', ...parsed.input }];
-		}
-	}
+	'data.backup': named('data.backup'),
+	'data.restoreData': named('data.restoreData'),
+	'data.restoreInstance': named('data.restoreInstance'),
+	'data.recovery.status': named('data.recovery.status'),
+	'data.recovery.inspect': named('data.recovery.inspect'),
+	'data.recovery.initialize': named('data.recovery.initialize'),
+	'data.recovery.restore': named('data.recovery.restore'),
+	'data.recovery.save': named('data.recovery.save'),
+	'data.recovery.setCredential': named('data.recovery.setCredential'),
+	'data.recovery.package': named('data.recovery.package'),
+	'docker.install': named('docker.install'),
+	'docker.saveConfig': named('docker.saveConfig'),
+	'docker.update': named('docker.update'),
+	'docker.directory': named('docker.directory'),
+	'transfer.create': none,
+	'transfer.release': text,
+	'transfer.pack': text,
+	'transfer.unpack': text
 };
 
-export function parseManagementArgs<M extends ManagementMethod>(
-	method: M,
-	value: unknown,
-	extra: unknown[] = []
-): ManagementRequestArgs<M> {
-	if (extra.length > (method === 'install' ? 1 : 0)) throw new Error('Invalid operation options.');
-	return parsers[method](value, extra);
+export function isManagementOperation(value: unknown): value is ManagementOperation {
+	return typeof value === 'string' && Object.hasOwn(parsers, value);
+}
+
+export function parseManagementInput<N extends ManagementOperation>(
+	operation: N,
+	value: unknown
+): ManagementOperationMap[N]['input'] {
+	return parsers[operation](value);
 }

@@ -9,7 +9,7 @@ import { localDockerManagementHost } from '../control-plane/local-instance-host.
 import { FH_RUNTIME_LABEL } from '../control-plane/release.js';
 import { installHome } from '../control-plane/install.js';
 import { defaultStackConfig, readStackConfig } from '../control-plane/stack-config.js';
-import { parseManagementArgs } from './wire-input.js';
+import { parseManagementInput } from './wire-input.js';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -35,8 +35,10 @@ test.each(['my_agent', 'agent-', 'a'.repeat(64)])(
 			const config = defaultStackConfig(home);
 			config.deployment.projectName = name;
 			// Exercise the same parsed install entry point as the SSH session and Admin.
-			const args = parseManagementArgs('install', config, [false]);
-			await expect(management.call('install', ...args)).rejects.toThrow('Instance name must be');
+			const input = parseManagementInput('docker.install', { config, automaticPorts: false });
+			await expect(management.call('docker.install', input)).rejects.toThrow(
+				'Instance name must be'
+			);
 			expect(existsSync(home)).toBe(false);
 			expect(existsSync(calls)).toBe(false);
 		} finally {
@@ -83,7 +85,7 @@ test('snapshot reports the managing CLI runtime cohort locally and over the SSH 
 		expect(snapshot.updateImageTag).toBe(FH_RUNTIME_LABEL);
 		let output = '';
 		await serveManagementSession(
-			Readable.from([`${JSON.stringify({ id: 1, homeDir: home, method: 'snapshot' })}\n`]),
+			Readable.from([`${JSON.stringify({ id: 1, homeDir: home, operation: 'snapshot' })}\n`]),
 			new Writable({
 				write(chunk, _encoding, done) {
 					output += String(chunk);
@@ -109,8 +111,8 @@ test('native session routes paths only through JSON and continues after a failed
 	const home = join(root, "owner's agent; not a shell");
 	mkdirSync(home);
 	const requests = [
-		{ id: 1, homeDir: home, method: 'directory', value: 'relative' },
-		{ id: 2, homeDir: home, method: 'directory', value: root }
+		{ id: 1, homeDir: home, operation: 'docker.directory', input: { path: 'relative' } },
+		{ id: 2, homeDir: home, operation: 'docker.directory', input: { path: root } }
 	];
 	let output = '';
 	const sink = new Writable({
@@ -140,14 +142,14 @@ test('transfer workspaces belong to their session and are removed on disconnect,
 	const api = localInstanceManagement(join(root, 'home'), {
 		host: localDockerManagementHost(join(root, 'home'))
 	});
-	const owned = await api.call('transferCreate');
+	const owned = await api.call('transfer.create');
 	expect(existsSync(owned)).toBe(true);
-	await expect(api.call('transferRelease', root)).rejects.toThrow('Unknown');
+	await expect(api.call('transfer.release', root)).rejects.toThrow('Unknown');
 	await api.close();
 	expect(existsSync(owned)).toBe(false);
 	expect(existsSync(root)).toBe(true);
 });
-test('the local legacy backup route carries only parsed confirmation into a full export', async () => {
+test('local full export requires confirmation from the request context', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-session-confirmation-'));
 	roots.push(root);
 	const home = join(root, 'home');
@@ -159,17 +161,17 @@ test('the local legacy backup route carries only parsed confirmation into a full
 	const management = localInstanceManagement(home, { host: localDockerManagementHost(home) });
 	try {
 		await expect(
-			management.call('backup', {
+			management.call('data.backup', {
 				destination: join(root, 'without-confirmation'),
 				full: true
 			})
 		).rejects.toThrow('Full-instance export requires --confirm-stopped');
 		await expect(
-			management.call('backup', {
-				destination: join(root, 'with-confirmation'),
-				full: true,
-				confirmed: true
-			})
+			management.call(
+				'data.backup',
+				{ destination: join(root, 'with-confirmation'), full: true },
+				{ confirmed: true }
+			)
 		).resolves.toMatchObject({ version: 1 });
 	} finally {
 		await management.close();
@@ -190,10 +192,10 @@ test('one live session accepts repeated requests without creating any management
 	});
 	const session = serveManagementSession(input, sink);
 	input.write(
-		`${JSON.stringify({ id: 1, homeDir: join(root, 'home'), method: 'directory', value: root })}\n`
+		`${JSON.stringify({ id: 1, homeDir: join(root, 'home'), operation: 'docker.directory', input: { path: root } })}\n`
 	);
 	input.end(
-		`${JSON.stringify({ id: 2, homeDir: join(root, 'home'), method: 'directory', value: root })}\n`
+		`${JSON.stringify({ id: 2, homeDir: join(root, 'home'), operation: 'docker.directory', input: { path: root } })}\n`
 	);
 	await session;
 	expect(
@@ -211,8 +213,8 @@ test('malformed native input is rejected at wire ingress before a use case can i
 	let output = '';
 	await serveManagementSession(
 		Readable.from([
-			`${JSON.stringify({ id: 1, homeDir: home, method: 'providerKey', value: { provider: 'example', key: 123 } })}\n`,
-			`${JSON.stringify({ id: 2, homeDir: home, method: 'credential', value: { action: 'policy', username: 'owner', policy: 'typo', previousPolicy: 'chat' } })}\n`
+			`${JSON.stringify({ id: 1, homeDir: home, operation: 'agent.setKey', input: { provider: 'example', key: 123 } })}\n`,
+			`${JSON.stringify({ id: 2, homeDir: home, operation: 'apps.credentials.updatePolicy', input: { username: 'owner', policy: 'typo', previousPolicy: 'chat' } })}\n`
 		]),
 		new Writable({
 			write(chunk, _encoding, done) {

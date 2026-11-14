@@ -386,8 +386,6 @@ export type InstanceSessionBindings = {
 	agent?: Partial<AgentOperations>;
 	apps?: AppOperations;
 	data?: DataOperations;
-	/** Adapter-owned optional capability discovery; never a consumer warm-up requirement. */
-	initialize?: () => Promise<void>;
 	inspectApplication?: () => Promise<Partial<ApplicationObservations>>;
 	docker?: DockerOperations;
 	busy?: () => boolean;

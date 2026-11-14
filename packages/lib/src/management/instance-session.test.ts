@@ -35,7 +35,7 @@ test('knowledge opens only through the selected manager and stays out of snapsho
 	const manager: InstanceManagement = {
 		call: (async (method: string) => {
 			calls.push(method);
-			if (method === 'knowledgeUi') return { url: 'http://127.0.0.1:43210/?token=synthetic-private' };
+			if (method === 'data.knowledgeUi') return { url: 'http://127.0.0.1:43210/?token=synthetic-private' };
 			throw new Error('Unexpected operation');
 		}) as InstanceManagement['call'],
 		busy: () => false,
@@ -46,10 +46,10 @@ test('knowledge opens only through the selected manager and stays out of snapsho
 	const operation = bindings.data!.knowledgeUi;
 	if (operation.support !== 'supported') throw new Error('Missing Knowledge operation');
 	expect(await operation.invoke(undefined, {})).toEqual({ url: 'http://127.0.0.1:43210/?token=synthetic-private' });
-	expect(calls).toEqual(['knowledgeUi']);
+	expect(calls).toEqual(['data.knowledgeUi']);
 	await bindings.close!();
 	await expect(operation.invoke(undefined, {})).rejects.toThrow();
-	expect(calls).toEqual(['knowledgeUi', 'close']);
+	expect(calls).toEqual(['data.knowledgeUi', 'close']);
 });
 
 test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
@@ -86,7 +86,7 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 				const manager: InstanceManagement = {
 					call: (async (method: string) => {
 						calls.push(method);
-						if (method === 'assistantPassword') return { password: 'fixture-password' };
+						if (method === 'agent.assistantPassword') return { password: 'fixture-password' };
 						if (method === 'snapshot') return snapshot(endpoint);
 						throw new Error(`Unexpected call ${method}`);
 					}) as InstanceManagement['call'],
@@ -107,7 +107,7 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 				);
 				const before = calls.length;
 				await bindings.inspectApplication!();
-				expect(calls.slice(before)).not.toContain('assistantPassword');
+				expect(calls.slice(before)).not.toContain('agent.assistantPassword');
 				expect(calls.slice(before)).not.toContain('forward');
 				const link = bindings.agent!.browserLink!;
 				if (link.support !== 'supported') throw new Error('Expected browser pairing');
@@ -143,7 +143,7 @@ test('checkpoint inspection stays an engine operation rather than a saved-settin
 	await expect(inspect.invoke(undefined, {})).resolves.toBe(
 		'Accepted checkpoint: synthetic-generation'
 	);
-	expect(calls).toEqual([['recovery', { action: 'inspect' }]]);
+	expect(calls).toEqual([['data.recovery.inspect', undefined]]);
 });
 
 test.each([true, false])('a new local folder reaches the shared install view with Docker available=%s', async (dockerReady) => {
@@ -364,66 +364,11 @@ test('a failed passive management snapshot is not retried by individual panes', 
 	expect(snapshot.lifecycle).toMatchObject({ state: 'unavailable' });
 });
 
-test('an app-policy operation preserves unrelated host intent behind the retained SSH wire adapter', async () => {
-	const config = defaultStackConfig();
-	const writes: unknown[] = [];
+test('named operations reach the management session with input and confirmation separated', async () => {
+	const calls: Array<[string, unknown, unknown]> = [];
 	const manager: InstanceManagement = {
-		call: async (method, value) => {
-			if (method !== 'credential') throw new Error('Unexpected fixture operation.');
-			writes.push(value);
-			return undefined as never;
-		},
-		busy: () => false,
-		close: async () => {}
-	};
-	const operation = rpcManagementBindings(manager, { credentialPolicy: () => true }).apps!
-		.credentials.updatePolicy;
-	if (operation.support !== 'supported') throw new Error('fixture');
-	await operation.invoke(
-		{ username: 'owner', policy: 'read', previousPolicy: config.credentials.owner.policy },
-		{}
-	);
-	expect(writes).toHaveLength(1);
-	expect(writes[0]).toEqual({
-		action: 'policy',
-		username: 'owner',
-		policy: 'read',
-		previousPolicy: config.credentials.owner.policy
-	});
-});
-
-test('a deferred SSH feature discovery enables credential policy invocation without inspect warm-up', async () => {
-	const writes: unknown[] = [];
-	let discovered = false;
-	const manager: InstanceManagement = {
-		call: async (method, value) => {
-			if (method !== 'credential') throw new Error('Unexpected fixture operation.');
-			writes.push(value);
-			return undefined as never;
-		},
-		busy: () => false,
-		close: async () => {}
-	};
-	const policy = rpcManagementBindings(manager, {
-		initialize: async () => {
-			discovered = true;
-		},
-		supports: (method) => (discovered ? method === 'credential' : undefined),
-		credentialPolicy: () => (discovered ? true : undefined)
-	}).apps!.credentials.updatePolicy;
-	if (policy.support !== 'supported') throw new Error('fixture');
-	expect(policy.availability()).toEqual({ state: 'ready' });
-	await policy.invoke({ username: 'owner', policy: 'read', previousPolicy: 'chat' }, {});
-	expect(writes).toEqual([
-		{ action: 'policy', username: 'owner', policy: 'read', previousPolicy: 'chat' }
-	]);
-});
-
-test('the retained RPC boundary translates canonical confirmation only for legacy wire calls', async () => {
-	const calls: Array<[string, unknown]> = [];
-	const manager: InstanceManagement = {
-		call: async (method, value) => {
-			calls.push([method, value]);
+		call: async (operation, input, context) => {
+			calls.push([operation, input, context]);
 			return {} as never;
 		},
 		busy: () => false,
@@ -431,8 +376,9 @@ test('the retained RPC boundary translates canonical confirmation only for legac
 	};
 	const bindings = rpcManagementBindings(manager);
 	const { backup, restoreInstance } = bindings.data!;
-	const { remote, codexRecall } = bindings.agent!;
-	for (const operation of [backup, restoreInstance, remote, codexRecall])
+	const { remote } = bindings.agent!;
+	const { updatePolicy } = bindings.apps!.credentials;
+	for (const operation of [backup, restoreInstance, remote, updatePolicy])
 		if (operation.support !== 'supported') throw new Error('fixture');
 	await backup.invoke({ destination: '/operator/export', full: true }, { confirmed: true });
 	await restoreInstance.invoke(
@@ -440,19 +386,19 @@ test('the retained RPC boundary translates canonical confirmation only for legac
 		{ confirmed: true }
 	);
 	await remote.invoke({ action: 'enable', tool: 'codex', trusted: true }, { confirmed: true });
-	await codexRecall.invoke({ action: 'approve', digest: 'reviewed-hooks' }, { confirmed: true });
+	await updatePolicy.invoke({ username: 'owner', policy: 'read', previousPolicy: 'chat' }, {});
 	expect(calls).toEqual([
-		['backup', { destination: '/operator/export', full: true, confirmed: true }],
+		['data.backup', { destination: '/operator/export', full: true }, { confirmed: true }],
 		[
-			'restoreInstance',
-			{
-				sourceHome: '/operator/export',
-				apply: true,
-				previewDigest: 'reviewed-preview',
-				confirmed: true
-			}
+			'data.restoreInstance',
+			{ sourceHome: '/operator/export', apply: true, previewDigest: 'reviewed-preview' },
+			{ confirmed: true }
 		],
-		['remote', { action: 'enable', tool: 'codex', trusted: true, restartConfirmed: true }],
-		['codexRecall', { action: 'approve', digest: 'reviewed-hooks', confirmed: true }]
+		['agent.remote', { action: 'enable', tool: 'codex', trusted: true }, { confirmed: true }],
+		[
+			'apps.credentials.updatePolicy',
+			{ username: 'owner', policy: 'read', previousPolicy: 'chat' },
+			{}
+		]
 	]);
 });
