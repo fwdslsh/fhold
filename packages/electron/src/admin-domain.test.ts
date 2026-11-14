@@ -15,7 +15,17 @@ import {
 	createBackup,
 	writeStackConfig,
 	MANAGED_FILES,
-	SEEDED_FILES
+	SEEDED_FILES,
+	adminPortalMappings,
+	adminPortalTokens,
+	backupFromAdmin,
+	instanceRestoreFromAdmin,
+	createAdminCredential,
+	restoreFromAdmin,
+	mapAdminPortalUser,
+	removeAdminCredential,
+	rotateAdminCredential,
+	saveAdminConfig
 } from '@fhold/lib';
 import { stageAdminAssets, DISTRIBUTION_ASSETS } from '../scripts/stage-assets.js';
 import { retainAdminE2eHome } from '../scripts/admin-e2e-retention.mjs';
@@ -23,19 +33,9 @@ import { retainAdminE2eHome } from '../scripts/admin-e2e-retention.mjs';
 import {
 	confirmedAdminAction,
 	interruptionPrompt,
-	adminPortalMappings,
-	adminPortalTokens,
-	backupFromAdmin,
-	instanceRestoreFromAdmin,
-	createAdminCredential,
 	externalAdminUrl,
-	restoreFromAdmin,
 	installFromAdmin,
-	isAdminPageUrl,
-	mapAdminPortalUser,
-	removeAdminCredential,
-	rotateAdminCredential,
-	saveAdminConfig
+	isAdminPageUrl
 } from './admin-domain.js';
 
 const roots: string[] = [];
