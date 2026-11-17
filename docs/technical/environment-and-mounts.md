@@ -208,6 +208,19 @@ is opt-in with `FH_KEEPALIVE_AUTH=opencode` or a mounted
 See [harness plugins and keep-alive](../harness-plugins.md) for behavior, native
 approval, custom deployment configuration and the best-effort boundary.
 
+`FH_OPENCODE_CORS` optionally lists extra browser origins that OpenCode accepts,
+comma-separated, for a web UI on another origin, such as one attaching native
+client-MCP tools. Each entry is passed to `opencode serve` as `--cors` and must be
+an exact `http` or `https` origin as browsers send it: lowercase host, no path,
+trailing slash, wildcard, credentials or default port (for example
+`https://ui.example.com`). One invalid entry discards the list and is reported as
+an invalid runtime setting; OpenCode then allows only its default origins
+(`localhost`, `127.0.0.1`, its desktop app and `*.opencode.ai`). A listed origin
+can call the whole authenticated OpenCode API from a browser, not only
+client-MCP, so list only origins you trust as much as OpenCode itself. OpenCode's
+own authentication and single-use connection tickets still apply. Set it in the
+deployment's container environment or a custom Compose overlay.
+
 Invalid optional settings log their names and degrade only the affected feature.
 Malformed scheduler intent disables scheduling; numeric recovery/shutdown tuning
 falls back to its documented defaults. Core health remains successful when the

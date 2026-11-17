@@ -35,6 +35,26 @@ runtime_seconds() {
   fi
   printf -v "$variable" '%s' "$value"
 }
+# Extra browser origins for OpenCode's own origin check (`serve --cors`). Each
+# must be an exact origin as browsers send it; one invalid entry discards the
+# list and OpenCode keeps its default origins.
+cors_args=()
+if [ -n "${FH_OPENCODE_CORS:-}" ]; then
+  IFS=',' read -r -a cors_origins <<<"$FH_OPENCODE_CORS"
+  for origin in "${cors_origins[@]}"; do
+    origin="${origin#"${origin%%[![:space:]]*}"}"
+    origin="${origin%"${origin##*[![:space:]]}"}"
+    if [[ "$origin" =~ ^(https?)://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:([1-9][0-9]{0,4}))?$ ]] &&
+       { [ -z "${BASH_REMATCH[6]}" ] || { [ "${BASH_REMATCH[6]}" -le 65535 ] &&
+         [ "${BASH_REMATCH[1]}:${BASH_REMATCH[6]}" != http:80 ] && [ "${BASH_REMATCH[1]}:${BASH_REMATCH[6]}" != https:443 ]; }; }; then
+      cors_args+=(--cors "$origin")
+    else
+      echo 'assistant: FH_OPENCODE_CORS must be comma-separated exact http(s) origins without paths, such as https://ui.example.com; no additional origins are allowed' >&2
+      cors_args=(); configuration_degraded=1
+      break
+    fi
+  done
+fi
 runtime_seconds SHUTDOWN_SECONDS FH_SHUTDOWN_SECONDS 25
 runtime_seconds RESTORE_SECONDS FH_RESTORE_TIMEOUT_SECONDS 300
 runtime_seconds RECOVERY_OPERATION_SECONDS FH_RECOVERY_OPERATION_TIMEOUT_SECONDS 120
@@ -388,7 +408,8 @@ cd /work
     --hostname 0.0.0.0 \
     --port "$OPENCODE_PORT" \
     --print-logs \
-    --log-level "${OPENCODE_LOG_LEVEL:-info}"
+    --log-level "${OPENCODE_LOG_LEVEL:-info}" \
+    "${cors_args[@]}"
 ) &
 assistant_pid=$!
 writer_pids+=("$assistant_pid")

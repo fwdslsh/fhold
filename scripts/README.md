@@ -12,6 +12,7 @@ Only a small script surface remains active.
 | `smoke-environment-upgrade.mjs` | Image-internal populated-home migration, native plugin refresh and scheduled-command regression; invoked by `smoke-image.sh` |
 | `smoke-akm-harnesses.mjs` | Image-internal real-harness AKM hook and recall checks, without vendor credentials |
 | `smoke-model-picker.mjs` | Real OpenCode browser checks for configured unknown-date models, explicit hide/show persistence and fresh-profile defaults; invoked by `smoke-image.sh` |
+| `smoke-client-mcp-origin.mjs` | Real OpenCode client-MCP connections from a browser origin set with `FH_OPENCODE_CORS`: the configured origin completes the MCP tools exchange; an unlisted origin and invalid or reused tickets are refused; invoked by `smoke-image.sh` |
 | `smoke-native-akm-policy.mjs` | Native custom/default/subagent context, Guardian confidentiality and native proposal extraction against a controlled model |
 | `smoke-managed-policy.mjs` | Fresh image with supplied task policies; native Codex/Claude/OpenCode configuration and precedence checks |
 | `smoke-recovery.mjs` | Real-image directory checkpoints, required/excluded mounts, cold replacement and offline restore |
