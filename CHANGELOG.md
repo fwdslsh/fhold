@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1113-beta — Extra browser origins for OpenCode
+
 `FH_OPENCODE_CORS` lets a web UI on another origin use the Assistant's OpenCode
 API, such as attaching native client-MCP tools. It takes a comma-separated list
 of exact `http(s)` origins, each passed to `opencode serve` as `--cors`. Without
