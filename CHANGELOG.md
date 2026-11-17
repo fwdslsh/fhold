@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.4.1113-beta — Extra browser origins for OpenCode
+
+`FH_OPENCODE_CORS` lets a web UI on another origin use the Assistant's OpenCode
+API, such as attaching native client-MCP tools. It takes a comma-separated list
+of exact `http(s)` origins, each passed to `opencode serve` as `--cors`. Without
+it, OpenCode refuses browser connections from other origins with 403. An invalid
+list is ignored and reported as an invalid runtime setting. A listed origin can
+call the whole authenticated OpenCode API from a browser, so list only trusted
+origins.
+
 ## 0.4.1112-beta — Keep-alive restored
 
 Restore conditional HTTP keep-alive, removed in 0.4.1110-beta. With

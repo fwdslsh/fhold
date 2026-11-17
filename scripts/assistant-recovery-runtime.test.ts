@@ -125,6 +125,7 @@ if [ "\${FIXTURE_PROC_EXIT_RACE:-0}" = 1 ]; then
   printf 'native\\n' >>"$EVENTS"
   wait "$race_pid" 2>/dev/null || true
 else
+  printf '%s\\n' "$@" >"$FIXTURE_ROOT/opencode-args"
   printf 'native\\n' >>"$EVENTS"
 fi
 while sleep 0.1; do :; done`
@@ -498,6 +499,39 @@ describe('Assistant recovery lifecycle command fixtures', () => {
 			await finished(run.child);
 		}
 	});
+	it('passes each configured browser origin to OpenCode as --cors', async () => {
+		const run = fixture({ FH_OPENCODE_CORS: 'https://ui.example.com, http://localhost:5173' });
+		try {
+			await until(() => run.events().includes('native'));
+			const args = readFileSync(join(run.root, 'opencode-args'), 'utf8').trim().split('\n');
+			expect(args.slice(-4)).toEqual([
+				'--cors',
+				'https://ui.example.com',
+				'--cors',
+				'http://localhost:5173'
+			]);
+			expect(existsSync(join(run.root, 'runtime/degraded-configuration'))).toBe(false);
+		} finally {
+			run.child.kill('SIGTERM');
+			await finished(run.child);
+		}
+	});
+	for (const value of ['*', 'https://ui.example.com/', 'https://ui.example.com,https://*.example.com'])
+		it(`ignores an invalid browser origin list (${value}) and still starts OpenCode`, async () => {
+			const run = fixture({ FH_OPENCODE_CORS: value });
+			try {
+				await until(() => run.events().includes('native'));
+				expect(readFileSync(join(run.root, 'opencode-args'), 'utf8')).not.toContain('--cors');
+				expect(readFileSync(join(run.root, 'runtime/degraded-configuration'), 'utf8')).toContain(
+					'runtime settings are invalid'
+				);
+				expect(run.stderr()).toContain('FH_OPENCODE_CORS');
+				expect(run.child.exitCode).toBeNull();
+			} finally {
+				run.child.kill('SIGTERM');
+				await finished(run.child);
+			}
+		});
 	for (const name of ['FH_CODEX_REMOTE', 'FH_CLAUDE_REMOTE', 'FH_CODEX_SANDBOX'])
 		it(`invalid optional ${name} does not prevent native assistant startup`, async () => {
 			const run = fixture({ [name]: 'false' });

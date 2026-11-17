@@ -350,6 +350,7 @@ assistant)
 		--init --cap-drop=ALL --security-opt no-new-privileges:true \
 		"${remote_env[@]}" \
 		-e FH_CODEX_SANDBOX="$sandbox" \
+		-e FH_OPENCODE_CORS=https://ui.example.invalid \
 		-e OPENCODE_SERVER_PASSWORD_FILE=/run/fhold/password \
 		-v "$root/data:/home/fhold" \
 		-v "$root/system:/etc/opencode:ro" \
@@ -372,6 +373,8 @@ assistant)
 	docker exec "$container" sh -ec 'test -z "${AKM_REDACT_PII+x}${AKM_REDACT_HIGH_ENTROPY+x}"; jq -e ".plugins.redact == {pii: true, highEntropy: true}" /etc/akm/config.json >/dev/null'
 	docker exec -i "$container" node --input-type=module < scripts/smoke-browser.mjs
 	docker exec -i "$container" node --input-type=module < scripts/smoke-model-picker.mjs
+	docker cp scripts/smoke-client-mcp-origin.mjs "$container:/tmp/smoke-client-mcp-origin.mjs"
+	docker exec "$container" node /tmp/smoke-client-mcp-origin.mjs https://ui.example.invalid https://other.example.invalid
 	docker exec --workdir /work "$container" bash --login -c 'test "$(command -v akm-web)" = /usr/local/bin/akm-web'
 	docker exec -i "$container" node --input-type=module < scripts/smoke-akm-web.mjs
 	verify_workspace_runtime_boundary
