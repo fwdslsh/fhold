@@ -41,8 +41,7 @@ running processes, mocked tests and source scans are not live readiness.
 
 - Assistant is the only default container: OpenCode, AKM and supercronic.
 - Guardian is optional authenticated MCP; Portal is one private Discord/Slack
-  image whose adapters call Guardian. Keep exactly gateway, discord and slack
-  Compose profiles.
+  image whose adapters call Guardian.
 - CLI owns local installation/lifecycle. Optional Admin uses the same library;
   it has no hosted server, chat, standalone background service or automatic window
   resizing. Admin's platform-native updater runs only while Admin is open; Stable is
@@ -75,8 +74,11 @@ running processes, mocked tests and source scans are not live readiness.
   Preserve ordinary user, project and plugin hooks and their native consent;
   do not suppress them to compensate for duplicate built-in registration.
   See `docs/managed-harness-configuration.md`.
-- No new ingress protocol, service, AI provider registry, scheduler or compatibility layer.
+- No new ingress protocol, AI provider registry, scheduler or compatibility layer.
   The bounded CLI JSON machine envelope exists only over native SSH/stdin.
+  An additional optional service or Compose profile needs the product owner's
+  approval under the primary rule. It should move authority, such as credentials
+  or isolated work, out of Assistant, and never add fhold policy inside it.
 - Compose host, agent, app and data ports in `hosting/provider.ts`. CLI/Admin use
   normalized observations and named typed operations; feature views must not
   branch on host names, fake a cloud StackConfig, acquire access on passive
