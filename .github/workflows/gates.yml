@@ -239,6 +239,8 @@ jobs:
           VCS_REF: ${{ github.sha }}
         with:
           source: .
+          # Candidate OCI output is outside the checkout; grant only that directory.
+          allow: fs.write=${{ runner.temp }}/candidate
           files: |
             docker-bake.json
             ${{ runner.temp }}/edition-build.json
