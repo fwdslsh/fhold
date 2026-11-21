@@ -50,7 +50,8 @@ function runtime(
 		{ name: 'FH_RECOVERY_INTERVAL_SECONDS', value: '60' },
 		{ name: 'FH_RECOVERY_OPERATION_TIMEOUT_SECONDS', value: '120' },
 		{ name: 'FH_RECOVERY_INCLUDE_FILE', value: '/run/fhold-recovery-policy/include.json' },
-		{ name: 'OPENCODE_SERVER_PASSWORD_FILE', value: '/run/secrets/opencode-password' }
+		{ name: 'OPENCODE_SERVER_PASSWORD_FILE', value: '/run/secrets/opencode-password' },
+		{ name: 'FH_KEYRING_PASSWORD_FILE', value: '/run/secrets/keyring-password' }
 	];
 	const volumes: Array<Record<string, unknown>> = [
 		...(!blob
@@ -71,7 +72,10 @@ function runtime(
 		{
 			name: 'native-auth',
 			storageType: 'Secret',
-			secrets: [{ secretRef: 'opencode-password', path: 'opencode-password' }]
+			secrets: [
+				{ secretRef: 'opencode-password', path: 'opencode-password' },
+				{ secretRef: 'keyring-password', path: 'keyring-password' }
+			]
 		},
 		...mounts.map((mount, index) => ({
 			name: `files-${index}`,
@@ -95,7 +99,8 @@ function runtime(
 				externalMounts: mounts.map((item) => item.mountPath)
 			})
 		},
-		{ name: 'opencode-password', value: "[parameters('password')]" }
+		{ name: 'opencode-password', value: "[parameters('password')]" },
+		{ name: 'keyring-password', value: "[parameters('keyringPassword')]" }
 	];
 	const identity = blob
 		? { type: 'UserAssigned', userAssignedIdentities: { [names.identity]: {} } }
@@ -223,7 +228,7 @@ export function azureInfrastructureTemplate(
 				containers: [
 					{
 						...container,
-						env: container.env.filter((item) => item.name !== 'OPENCODE_SERVER_PASSWORD_FILE'),
+						env: container.env.filter((item) => !['OPENCODE_SERVER_PASSWORD_FILE', 'FH_KEYRING_PASSWORD_FILE'].includes(item.name)),
 						volumeMounts: container.volumeMounts.filter(
 							(mount) => mount.volumeName !== 'native-auth'
 						),
@@ -251,7 +256,7 @@ export function azureApplicationTemplate(
 	return {
 		$schema: schema,
 		contentVersion: '1.0.0.0',
-		parameters: { password: { type: 'secureString' } },
+		parameters: { password: { type: 'secureString' }, keyringPassword: { type: 'secureString' } },
 		resources: [
 			{
 				type: 'Microsoft.App/containerApps',

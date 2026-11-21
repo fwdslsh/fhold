@@ -89,6 +89,8 @@ describe('native transient process state recovery boundary', () => {
 		['akmConfig', `config.json.lck.tmp-123-${uuid}`]
 	];
 	const durable = [
+		['home', '.local/share/keyrings/login.keyring'],
+		['home', '.local/share/keyrings/default'],
 		['home', '.claude.json'],
 		['home', '.claude/projects/fixture/session.jsonl'],
 		['home', '.claude/.credentials.json'],

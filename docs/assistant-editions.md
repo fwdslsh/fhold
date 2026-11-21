@@ -4,6 +4,9 @@ Every edition includes OpenCode, AKM and AKM web, the scheduler, backup/recovery
 Chromium/Playwright, fonts and the common command-line utilities. Slim removes
 the additional native clients, not the shared assistant features.
 
+Slim also includes the OpenSSH client tools (`ssh`, `scp`, `sftp`, `ssh-keygen`
+and `ssh-agent`). This installs the client only, with no SSH server or listener.
+
 | Edition | Native harnesses | Image repository | Automatic publication |
 |---|---|---|---|
 | AIO (default) | OpenCode, Claude Code, Codex | fwdslsh/fhold-assistant | Yes |

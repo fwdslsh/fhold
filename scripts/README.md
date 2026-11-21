@@ -70,6 +70,11 @@ Ollama, LM Studio or llama.cpp engines. It is disabled in the ordinary source su
 
 ## Assistant CI lanes
 
+`node scripts/smoke-keyring.mjs IMAGE` verifies the native encrypted OS keyring
+through non-root clients and an OpenCode tool, restart/replacement, wrong/missing
+unlock secrets and an arbitrary runtime UID. It uses disposable volumes and
+synthetic credentials, cleans them up, and also runs in the image lifecycle lane.
+
 `node scripts/smoke-assistant-ci.mjs fhold/assistant:<candidate>` runs the essential
 native release suites in three bounded lanes after preparing the CLI and local image alias.
 Each suite owns separate disposable fixtures; no native observation window is

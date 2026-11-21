@@ -24,6 +24,7 @@ services:
     environment:
       OPENCODE_CONFIG: /home/fhold/.config/opencode/${FH_OPENCODE_PREFERENCES_FILE:-opencode.json}
       OPENCODE_SERVER_PASSWORD_FILE: /run/secrets/opencode_server_password
+      FH_KEYRING_PASSWORD_FILE: /run/secrets/assistant_keyring_password
       TZ: ${FH_TIMEZONE:-UTC}
       FH_CODEX_REMOTE: ${FH_CODEX_REMOTE:-1}
       FH_CODEX_SANDBOX: ${FH_CODEX_SANDBOX:-workspace-write}
@@ -74,6 +75,7 @@ services:
       - ${FH_RECOVERY_DIRECTORY:-${FH_HOME}/state/recovery-storage}:/recovery
     secrets:
       - opencode_server_password
+      - assistant_keyring_password
       - recovery_connection_string
     networks: [agent_net]
 
@@ -214,6 +216,8 @@ networks:
   ingress_net: {}
 
 secrets:
+  assistant_keyring_password:
+    file: ${FH_HOME:?}/state/secrets/fhold_keyring_password
   recovery_connection_string:
     file: ${FH_HOME:?}/state/secrets/fhold_recovery_connection_string
   opencode_server_password:

@@ -43,7 +43,7 @@ export function runtimeRevision(homeDir: string): string {
 			path !== 'config/guardian/opencode.json' &&
 			path !== 'config/guardian/oauth-identities.json'
 	);
-	files.push('state/secrets/fhold_opencode_password', 'state/secrets/fhold_guardian_handle_key');
+	files.push('state/secrets/fhold_opencode_password', 'state/secrets/fhold_guardian_handle_key', 'state/secrets/fhold_keyring_password');
 	if (
 		read.config.recovery.enabled &&
 		read.config.recovery.destination.startsWith('azblob:') &&

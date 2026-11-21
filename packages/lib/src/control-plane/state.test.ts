@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import {
 	existsSync,
 	mkdtempSync,
+	statSync,
 	mkdirSync,
 	readFileSync,
 	rmSync,
@@ -39,6 +40,18 @@ afterEach(() => {
 });
 
 describe('fhold clean install boundary', () => {
+	it('creates an independent private keyring unlock secret and preserves it on update', async () => {
+		const home = mkdtempSync(join(tmpdir(), 'fhold-keyring-secret-'));
+		roots.push(home);
+		await installHome({ homeDir: home, automaticPorts: false });
+		const file = join(home, 'state/secrets/fhold_keyring_password');
+		const password = readFileSync(file, 'utf8');
+		expect(password).toMatch(/^[a-f0-9]{64}$/);
+		expect(password).not.toBe(readFileSync(join(home, 'state/secrets/fhold_opencode_password'), 'utf8').trim());
+		if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
+		ensureRuntime(createFholdState(home));
+		expect(readFileSync(file, 'utf8')).toBe(password);
+	});
 	it('derives the native preferences mount filename with OpenCode precedence', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'fhold-native-preferences-'));
 		roots.push(root);
