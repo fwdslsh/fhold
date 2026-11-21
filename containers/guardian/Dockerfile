@@ -10,6 +10,8 @@ COPY packages/portal/package.json ./packages/portal/package.json
 COPY packages/electron/package.json ./packages/electron/package.json
 COPY packages/claude-desktop/package.json ./packages/claude-desktop/package.json
 COPY containers/assistant/tools/package.json ./containers/assistant/tools/package.json
+COPY containers/assistant/claude-tools/package.json ./containers/assistant/claude-tools/package.json
+COPY containers/assistant/codex-tools/package.json ./containers/assistant/codex-tools/package.json
 COPY plugins/fhold/package.json ./plugins/fhold/package.json
 RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/guardian
 

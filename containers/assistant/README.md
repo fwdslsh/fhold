@@ -1,14 +1,15 @@
 # Assistant image
 
-The active image is built from `Dockerfile`, using Ubuntu 24.04 LTS at runtime
+The shared image definition is `Dockerfile`; separate edition Dockerfiles are
+linked through `docker-bake.json` (see [Assistant editions](../../docs/assistant-editions.md)), using Ubuntu 24.04 LTS at runtime
 and the pinned Bun/Node toolchains from their upstream build stages.
 
 It contains:
 
 - OpenCode;
 - AKM CLI;
-- image-baked standard AKM plugins for OpenCode, Codex and Claude Code;
-- pinned native Codex and Claude Code workers, experimental with default-on supervisors;
+- image-baked standard AKM plugins for the edition's included harnesses;
+- in AIO, pinned native Codex and Claude Code workers, experimental with default-on supervisors (Slim omits both);
 - supercronic;
 - Playwright 1.65.0, its matching Chromium and fonts/system libraries; and
 - ripgrep, jq, Python with pip/venv, SQLite, zip/unzip, Poppler PDF tools,

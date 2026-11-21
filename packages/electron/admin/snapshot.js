@@ -103,6 +103,7 @@ export function render(snapshot, options = {}) {
 	byId('slack').checked = config.portals.slack.enabled;
 	byId('assistant-bind').value = config.assistant.bindAddress;
 	byId('assistant-port').value = String(config.assistant.port);
+	byId('assistant-edition').value = config.assistant.edition ?? 'aio';
 	byId('gateway-bind').value = config.gateway.bindAddress;
 	byId('gateway-port').value = String(config.gateway.port);
 	const discordAccess = config.portals.discord.access;

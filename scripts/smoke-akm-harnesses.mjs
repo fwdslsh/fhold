@@ -16,6 +16,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withCodexControl, withCodexRecall, reviewRecall, changeRecall } from '/usr/local/bin/fhold-codex-recall.mjs';
+import { includedRemotes } from '/fhold-plugins/fhold/scripts/activity.mjs';
+const remotes = includedRemotes();
 import { bootstrapCodexActivity } from '/usr/local/bin/fhold-remote.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'fhold-akm-harnesses-'));
@@ -30,7 +32,7 @@ assert.equal(
 	tools['akm-cli'],
 	'OpenCode plugin dependency must match the CLI used by Claude and Codex'
 );
-assert.equal(
+if (remotes.length) assert.equal(
 	JSON.parse(readFileSync('/akm-marketplace/claude/node_modules/akm-cli/package.json', 'utf8')).version,
 	tools['akm-cli'],
 	'Native plugins must carry the same published CLI as the image and OpenCode plugin'
@@ -310,7 +312,7 @@ function recalled(file, harness) {
 }
 
 // Use the build-installed native Claude registry; no --plugin-dir/inline loader.
-{
+if (remotes.includes('claude')) {
 	const f = fixture('claude');
 	f.env.CLAUDE_CONFIG_DIR = join(f.dir, 'claude');
 	mkdirSync(f.env.CLAUDE_CONFIG_DIR, { recursive: true });
@@ -357,7 +359,7 @@ function recalled(file, harness) {
 	}
 }
 
-{
+if (remotes.includes('codex')) {
 	const f = fixture('codex');
 	f.env.CODEX_HOME = join(f.dir, 'codex');
 	mkdirSync(f.env.CODEX_HOME, { recursive: true });
@@ -488,5 +490,5 @@ assert.ok(
 	'A native harness or AKM hook executed workspace Bun preload'
 );
 console.log(
-	`All three harnesses use AKM ${tools['akm-cli']} / plugin ${tools['akm-opencode-v2']}. Fixtures: ${root}`
+	`Included harnesses (${['opencode', ...remotes].join(', ')}) use AKM ${tools['akm-cli']} / plugin ${tools['akm-opencode-v2']}. Fixtures: ${root}`
 );

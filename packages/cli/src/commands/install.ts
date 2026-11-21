@@ -8,7 +8,9 @@ import {
 	ensureDockerReady,
 	assertInstallInstanceName,
 	installHome,
-	parseStackConfig
+	parseStackConfig,
+	isAssistantEdition,
+	type AssistantEdition
 } from '@fhold/lib';
 
 import { useEmbeddedSkeleton } from '../lib/embedded-assets.js';
@@ -17,6 +19,7 @@ import { completeSetup } from './setup.js';
 export type InstallOptions = {
 	start: boolean;
 	configFile?: string;
+	edition?: AssistantEdition;
 };
 
 async function readConfigFile(path: string): Promise<unknown> {
@@ -56,6 +59,7 @@ export async function bootstrapInstall(options: InstallOptions): Promise<void> {
 	await useEmbeddedSkeleton();
 	await installHome({
 		homeDir: state.homeDir,
+		edition: options.edition,
 		...(supplied?.ok ? { config: supplied.config } : {})
 	});
 
@@ -81,6 +85,7 @@ export default defineCommand({
 			description: 'Start the stack after writing configuration (use --no-start to skip)',
 			default: true
 		},
+		edition: { type: 'string', description: 'Assistant edition: aio (default), slim; claude/codex require manually built images' },
 		config: {
 			type: 'string',
 			alias: 'f',
@@ -88,8 +93,10 @@ export default defineCommand({
 		}
 	},
 	async run({ args }) {
+		if (args.edition !== undefined && !isAssistantEdition(args.edition)) throw new Error('Unknown Assistant edition. Use aio, slim, claude or codex.');
 		await bootstrapInstall({
 			start: args.start !== false,
+			edition: args.edition as AssistantEdition | undefined,
 			configFile: args.config ? String(args.config) : undefined
 		});
 	}

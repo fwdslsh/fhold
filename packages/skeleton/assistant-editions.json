@@ -1,0 +1,6 @@
+{
+	"aio": { "image": "assistant", "harnesses": ["opencode", "claude", "codex"], "publish": true },
+	"slim": { "image": "assistant-slim", "harnesses": ["opencode"], "publish": true },
+	"claude": { "image": "assistant-claude", "harnesses": ["opencode", "claude"], "publish": false },
+	"codex": { "image": "assistant-codex", "harnesses": ["opencode", "codex"], "publish": false }
+}

@@ -16,6 +16,15 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const harnesses = ['opencode', 'claude', 'codex'];
+// The image's installed-package manifest is authoritative. Missing metadata
+// remains conservative (all expected), never evidence that work is absent.
+export function includedRemotes(manifest = '/opt/fhold/tools/package.json') {
+	try {
+		const { harnesses: included } = JSON.parse(readFileSync(manifest, 'utf8'));
+		if (!Array.isArray(included) || !included.includes('opencode') || included.some((tool) => !harnesses.includes(tool))) return ['claude', 'codex'];
+		return ['claude', 'codex'].filter((tool) => included.includes(tool));
+	} catch { return ['claude', 'codex']; }
+}
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const runtime = () => process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime';
 
@@ -171,7 +180,7 @@ export function nativeEvent(tool, input, root = runtime()) {
 	}
 }
 
-export function activityStatus(root = runtime(), remotes = ['claude', 'codex']) {
+export function activityStatus(root = runtime(), remotes = includedRemotes()) {
 	try {
 		const files = readdirSync(directory(root));
 		if (files.length > 10000 || files.includes('unknown')) return 'unknown';
@@ -189,7 +198,7 @@ export function activityStatus(root = runtime(), remotes = ['claude', 'codex']) 
 	}
 }
 
-export function keepaliveConfig(env) {
+export function keepaliveConfig(env, installed = includedRemotes()) {
 	if (!env.FH_KEEPALIVE_URL) return { enabled: false };
 	let url;
 	try {
@@ -230,7 +239,7 @@ export function keepaliveConfig(env) {
 		authorization,
 		opencodeAuthorization,
 		opencodePort,
-		remotes: ['claude', 'codex'].filter((tool) => env[`FH_${tool.toUpperCase()}_REMOTE`] !== '0')
+		remotes: installed.filter((tool) => env[`FH_${tool.toUpperCase()}_REMOTE`] !== '0')
 	};
 }
 

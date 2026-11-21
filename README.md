@@ -3,6 +3,11 @@
 A home for your personal AI. **fhold** combines one persistent OpenCode agent,
 AKM knowledge and recurring work in a single default Assistant container.
 
+Assistant editions: **AIO** retains OpenCode, Claude Code and Codex; **Slim**
+retains OpenCode and the shared AKM/web, browser, scheduling and recovery tools.
+Only AIO and Slim publish automatically; Claude-only and Codex-only builds are
+available manually. See [Assistant editions](docs/assistant-editions.md).
+
 Canonical source: [fwdslsh/fhold on GitHub](https://github.com/fwdslsh/fhold).
 Download the stable Linux release from [GitHub releases](https://github.com/fwdslsh/fhold/releases/latest).
 Release notes identify the matching container image versions.

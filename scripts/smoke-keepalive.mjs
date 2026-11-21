@@ -38,7 +38,7 @@ const endurance = ${endurance};
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { activityStatus, observedActivity } from '/fhold-plugins/fhold/scripts/activity.mjs';
+import { activityStatus, observedActivity, includedRemotes } from '/fhold-plugins/fhold/scripts/activity.mjs';
 import { OpenCode } from '/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js';
 const authorization = 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
 const events = new AbortController();
@@ -89,7 +89,7 @@ try {
   await until(() => streamReady, 10);
   // No location-scoped request before this assertion: startup must establish
   // coverage without a test client supplying missing initialization behavior.
-  await until(() => ['claude', 'codex'].every(tool => {
+  await until(() => includedRemotes().every(tool => {
     try { return JSON.parse(readFileSync('/tmp/fhold-runtime/remote/' + tool + '.json', 'utf8')).state === 'sign-in-needed'; }
     catch { return false; }
   }), 30);

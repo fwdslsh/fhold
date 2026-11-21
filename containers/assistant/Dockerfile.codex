@@ -1,0 +1,3 @@
+# Built through docker-bake.json; fhold-assistant is a named target context.
+FROM fhold-assistant
+RUN test "$(jq -r .fholdEdition /opt/fhold/tools/package.json)" = "codex"

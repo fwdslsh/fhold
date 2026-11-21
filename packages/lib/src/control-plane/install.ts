@@ -1,3 +1,4 @@
+import { isAssistantEdition, type AssistantEdition } from './assistant-editions.js';
 import { classifyInstall, ensureRuntime } from './state.js';
 import {
 	createFholdState,
@@ -33,11 +34,12 @@ export function assertInstallInstanceName(name: string): void {
 
 /** Shared initialization; frontends own Docker/provider prompts and asset resolution. */
 export async function installHome(
-	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean } = {},
+	options: { homeDir?: string; config?: unknown; name?: string; automaticPorts?: boolean; edition?: AssistantEdition } = {},
 	/** Internal same-instance checkpoint import: native state must precede default seeding. */
 	restoreNativeState?: (state: FholdState, config: StackConfig) => Promise<void>
 ): Promise<string> {
 	if (options.name !== undefined) assertInstallInstanceName(options.name);
+	if (options.edition !== undefined && !isAssistantEdition(options.edition)) throw new Error('Unknown Assistant edition');
 	const supplied = options.config === undefined ? undefined : parseStackConfig(options.config);
 	if (supplied && !supplied.ok) throw new Error(supplied.error);
 	const name =
@@ -63,6 +65,7 @@ export async function installHome(
 				parsed.config.deployment.images[component];
 		}
 	}
+	if (options.edition !== undefined) parsed.config.assistant.edition = options.edition;
 	if (options.name !== undefined) parsed.config.deployment.projectName = options.name;
 	if (options.config === undefined)
 		parsed.config.recovery = defaultRecoverySettings(parsed.config.deployment.projectName);

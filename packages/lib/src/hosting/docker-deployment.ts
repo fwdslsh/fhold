@@ -1,3 +1,4 @@
+import { assistantImage, ASSISTANT_EDITIONS } from '../control-plane/assistant-editions.js';
 import { parseStackConfig, type StackConfig } from '../control-plane/stack-config.js';
 import { parseDeploymentPatch } from '../control-plane/provisioning-input.js';
 import {
@@ -29,7 +30,12 @@ function changedConfig(base: StackConfig, input: DeploymentPatch): StackConfig {
 		const name = patch.container || 'assistant';
 		if (name !== 'assistant' && name !== 'guardian' && name !== 'portal')
 			throw new Error('Choose Assistant, Guardian or Portal.');
-		const prefix = `${config.deployment.imageNamespace}/fhold-${name}:`;
+		if (name === 'assistant') {
+			const edition = ASSISTANT_EDITIONS.find((edition) => patch.image!.startsWith(`${config.deployment.imageNamespace}/${assistantImage(edition)}:`));
+			if (edition === undefined) throw new Error('Choose a supported Assistant edition image in this instance namespace.');
+			config.assistant.edition = edition;
+		}
+		const prefix = `${config.deployment.imageNamespace}/${name === 'assistant' ? assistantImage(config.assistant.edition) : `fhold-${name}`}:`;
 		if (!patch.image.startsWith(prefix))
 			throw new Error(
 				`Use an image reference beginning with ${prefix}. Custom repositories belong in custom Compose.`
@@ -72,7 +78,7 @@ export function dockerDeploymentOperations(
 		return {
 			containers: Object.entries(config.deployment.images).map(([name, tag]) => ({
 				name,
-				image: `${config.deployment.imageNamespace}/fhold-${name}:${tag}`
+				image: `${config.deployment.imageNamespace}/${name === 'assistant' ? assistantImage(config.assistant.edition) : `fhold-${name}`}:${tag}`
 			})),
 			environment: {
 				FH_TIMEZONE: config.assistant.timezone,

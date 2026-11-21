@@ -1,0 +1,6 @@
+{
+	"name": "@fhold/codex-tools",
+	"private": true,
+	"license": "MIT",
+	"dependencies": { "@openai/codex": "0.167.0" }
+}

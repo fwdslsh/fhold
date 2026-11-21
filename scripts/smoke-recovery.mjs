@@ -670,11 +670,12 @@ async function qualifyRuntimeRecovery() {
 		return JSON.parse(
 			await execBun(
 				container.id,
-				`import{readFile}from'node:fs/promises';import{withCodexRecall,reviewRecall}from'/usr/local/bin/fhold-codex-recall.mjs';const review=await withCodexRecall(reviewRecall);const userConfig=await readFile('/home/fhold/.codex/config.toml','utf8').catch(()=>null);console.log(JSON.stringify({status:review.status,digest:review.digest,hooks:review.hooks,userConfig}));`
+				`import{readFile}from'node:fs/promises';const manifest=JSON.parse(await readFile('/opt/fhold/tools/package.json','utf8'));if(!manifest.dependencies)throw Error('Image dependency inventory missing');const userConfig=await readFile('/home/fhold/.codex/config.toml','utf8').catch(()=>null);if(!Object.hasOwn(manifest.dependencies,'@openai/codex'))console.log(JSON.stringify({status:'not-included',userConfig}));else{const{withCodexRecall,reviewRecall}=await import('/usr/local/bin/fhold-codex-recall.mjs');const review=await withCodexRecall(reviewRecall);console.log(JSON.stringify({status:review.status,digest:review.digest,hooks:review.hooks,userConfig}));}`
 			)
 		);
 	}
 	const codexInventory = await nativeCodexInventory(first);
+	if (codexInventory.status !== 'not-included') {
 	assert.ok(codexInventory.hooks.length > 0, 'real native hooks must be discoverable');
 	assert.ok(codexInventory.hooks.every((hook) => hook.enabled));
 	if (sourceImage === image) {
@@ -688,15 +689,16 @@ async function qualifyRuntimeRecovery() {
 		// current image must still honor its own native consent after upgrade.
 		assert.ok(['ready', 'approval-needed'].includes(codexInventory.status));
 	}
-	report.codexHookStatusBeforeRecovery = codexInventory.status;
 	report.checks.nativeCodexInventoryInitializedWithoutAccount = true;
+	}
+	report.codexHookStatusBeforeRecovery = codexInventory.status;
 	const codexPresence = JSON.parse(
 		await execBun(
 			first.id,
 			`import{access}from'node:fs/promises';const presence={};for(const name of ['state_5.sqlite','logs_2.sqlite','goals_1.sqlite','thread_history_1.sqlite','memories_1.sqlite','queue_1.sqlite']){presence[name]=await access('/home/fhold/.codex/'+name).then(()=>true).catch(()=>false);}console.log(JSON.stringify(presence));`
 		)
 	);
-	assert.ok(
+	if (codexInventory.status !== 'not-included') assert.ok(
 		Object.values(codexPresence).some(Boolean),
 		'native app-server initialized SQLite state'
 	);
@@ -849,8 +851,9 @@ async function qualifyRuntimeRecovery() {
 		second.id,
 		`import assert from'node:assert/strict';import{Database}from'bun:sqlite';const presence=${JSON.stringify(codexPresence)};for(const[name,initialized]of Object.entries(presence)){if(!initialized)continue;const db=new Database('/home/fhold/.codex/'+name,{readonly:true});assert.equal(Object.values(db.query('PRAGMA integrity_check').get())[0],'ok');db.close();}console.log('initialized pinned native Codex database catalog restored');`
 	);
-	report.checks.nativeCodexInitializedDatabasesRecovered = true;
+	if (Object.values(codexPresence).some(Boolean)) report.checks.nativeCodexInitializedDatabasesRecovered = true;
 	const restoredCodexInventory = await nativeCodexInventory(second);
+	if (restoredCodexInventory.status !== 'not-included') {
 	assert.equal(
 		restoredCodexInventory.status,
 		'approval-needed',
@@ -858,6 +861,7 @@ async function qualifyRuntimeRecovery() {
 	);
 	assert.ok(restoredCodexInventory.hooks.length > 0);
 	assert.ok(restoredCodexInventory.hooks.every((hook) => hook.enabled));
+	}
 	if (codexInventory.userConfig !== null) {
 		assert.equal(
 			restoredCodexInventory.userConfig,
@@ -865,12 +869,12 @@ async function qualifyRuntimeRecovery() {
 			'recovery preserves existing native user settings/consent bytes'
 		);
 	}
-	if (sourceImage === image) {
+	if (sourceImage === image && restoredCodexInventory.status !== 'not-included') {
 		assert.equal(restoredCodexInventory.digest, codexInventory.digest);
 		assert.deepEqual(restoredCodexInventory.hooks, codexInventory.hooks);
 	}
 	report.codexHookStatusAfterRecovery = restoredCodexInventory.status;
-	report.checks.nativeCodexInventoryAndConsentRecovered = true;
+	if (restoredCodexInventory.status !== 'not-included') report.checks.nativeCodexInventoryAndConsentRecovered = true;
 	report.checks.syntheticKnowledgeWorkspaceAccountTrustRestored = true;
 	report.checks.schedulerDisabled = true;
 	await stop(second);

@@ -16,6 +16,7 @@ import {
 	coverage,
 	initialize,
 	keepaliveConfig,
+	includedRemotes,
 	nativeEvent,
 	tick as keepaliveTick
 } from '../plugins/fhold/scripts/activity.mjs';
@@ -47,6 +48,38 @@ afterEach(() => {
 });
 const event = (root: string, name: string, extra = {}, tool = 'codex', session = 'session-a') =>
 	nativeEvent(tool, { session_id: session, turn_id: 'turn-a', hook_event_name: name, ...extra }, root);
+
+test('each edition observes included harnesses; omitted tools do not prevent proven idle', () => {
+	for (const remotes of [[], ['claude'], ['codex'], ['claude', 'codex']]) {
+		const root = fixture();
+		const manifest = join(root, 'image.json');
+		writeFileSync(manifest, JSON.stringify({ harnesses: ['opencode', ...remotes] }));
+		expect(includedRemotes(manifest)).toEqual(remotes);
+		const config = keepaliveConfig({ FH_KEEPALIVE_URL: 'https://instance.example/api/info' }, includedRemotes(manifest));
+		expect(config.remotes).toEqual(remotes);
+		// An included harness with no trustworthy observation stays unknown.
+		expect(activityStatus(root, config.remotes)).toBe(remotes.length ? 'unknown' : 'idle');
+		mkdirSync(join(root, 'remote'), { recursive: true });
+		for (const tool of remotes) writeFileSync(join(root, 'remote', tool + '.json'), JSON.stringify({ state: 'sign-in-needed' }));
+		expect(activityStatus(root, config.remotes)).toBe('idle');
+		// Local/native work still counts independently of supervisor selection.
+		for (const tool of ['claude', 'codex']) {
+			activity(tool, 'local-session', 'background', true, root);
+			expect(activityStatus(root, config.remotes)).toBe('busy');
+			activity(tool, 'local-session', 'background', false, root);
+		}
+	}
+});
+
+test('unreadable image inventory never proves absent observers or an idle runtime', () => {
+	const root = fixture(), manifest = join(root, 'image.json');
+	for (const value of ['', '{}', '{"harnesses":[]}', '{"harnesses":["opencode","future"]}']) {
+		writeFileSync(manifest, value);
+		const expected = includedRemotes(manifest);
+		expect(expected).toEqual(['claude', 'codex']);
+		expect(activityStatus(root, expected)).toBe('unknown');
+	}
+});
 
 test('a quiet, observed runtime sends no request; a turn has no time-based expiry', async () => {
 	const root = fixture();

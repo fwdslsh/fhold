@@ -1,7 +1,9 @@
 # Architecture
 
 fhold is a personal OpenCode agent with persistent knowledge and recurring
-work. It uses three runtime images, not a hosted control-plane platform.
+work. Its three runtime roles are Assistant, Guardian and Portal, rather than a
+hosted control-plane platform. Assistant publishes AIO and Slim editions alongside
+Guardian and Portal: four automatically published image variants in total.
 
 ```text
 trusted OpenCode client ───────────────────────────────> Assistant
@@ -16,8 +18,9 @@ AKM + supercronic ──> restricted scheduled work ───────┘
 Assistant is the only default container: OpenCode owns providers/auth/models,
 AKM owns knowledge/task definitions and supercronic executes recurring work.
 Optional image-baked Codex/Claude native workers share the trusted workspace,
-bypass Guardian and remain experimental. Both supervisors default on; explicit
-off choices remain off. Native sign-in and consent are still required. Their failure
+bypass Guardian and remain experimental. Included supervisors default on; Slim
+omits both native clients. Explicit off choices remain off. Native sign-in and
+consent are still required. Their failure
 must not disrupt OpenCode or scheduling.
 
 Guardian authenticates named credentials or verified OAuth identities, selects

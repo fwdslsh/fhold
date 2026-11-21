@@ -252,10 +252,14 @@ prepare_akm_assets() {
 prepare_native_defaults() {
   # These optional caches/settings must never hold the primary server hostage.
   # Native user files, authentication and trust decisions still take precedence.
-  mkdir -p /home/fhold/.codex/plugins/cache /home/fhold/.claude/plugins || return
-  cp -R -n /native-defaults/codex/plugins/cache/. /home/fhold/.codex/plugins/cache/ || return
-  cp -R -n /native-defaults/claude/plugins/cache/. /home/fhold/.claude/plugins/cache/ || return
+  local tool
+  for tool in codex claude; do
+    native_included "$tool" || continue
+    mkdir -p "/home/fhold/.$tool/plugins/cache" || return
+    cp -R -n "/native-defaults/$tool/plugins/cache/." "/home/fhold/.$tool/plugins/cache/" || return
+  done
   for file in claude/settings.json claude/plugins/installed_plugins.json claude/plugins/known_marketplaces.json codex/config.toml; do
+    native_included "${file%%/*}" || continue
     local source="/native-defaults/$file" target="/home/fhold/.$file"
     # Seed missing native metadata only. Native plugin commands own refresh;
     # never replace a whole registry/settings file to update one plugin.
@@ -265,15 +269,29 @@ prepare_native_defaults() {
   done
 }
 
+native_included() {
+  jq -e --arg tool "$1" '.harnesses | index($tool) != null' /opt/fhold/tools/package.json >/dev/null
+}
+
 refresh_native_plugins() {
   local claude_plugins claude_marketplaces codex_plugins name marketplace root version failed=0
-  claude_plugins=$(env "${writer_env[@]}" timeout 30 claude plugin list --json) || return
-  claude_marketplaces=$(env "${writer_env[@]}" timeout 30 claude plugin marketplace list --json) || return
-  codex_plugins=$(env "${writer_env[@]}" timeout 30 codex plugin list --json) || return
+  if ! native_included claude && ! native_included codex; then return 0; fi
+  claude_plugins='[]'; claude_marketplaces='[]'; codex_plugins='{"installed":[]}'
+  if native_included claude; then
+    claude_plugins=$(env "${writer_env[@]}" timeout 30 claude plugin list --json) || return
+    claude_marketplaces=$(env "${writer_env[@]}" timeout 30 claude plugin marketplace list --json) || return
+  fi
+  if native_included codex; then
+    codex_plugins=$(env "${writer_env[@]}" timeout 30 codex plugin list --json) || return
+  fi
   for name in akm fhold; do
     marketplace="$name-plugins"
     if [ "$name" = akm ]; then root=/akm-marketplace; else root=/fhold-plugins; fi
-    version=$(jq -er --arg id "$name@$marketplace" '.plugins[$id][0].version' /native-defaults/claude/plugins/installed_plugins.json) || return
+    if [ "$name" = fhold ]; then
+      version=$(jq -er '.version' "$root/fhold/.claude-plugin/plugin.json") || return
+    else
+      version=$(jq -er '.version' "$root/claude/.claude-plugin/plugin.json") || return
+    fi
     # Operator-selected marketplaces are not ours to update. Local image
     # sources never need a Git refresh, download or an updater channel.
     if jq -e --arg market "$marketplace" --arg root "$root" 'any(.[]; .name == $market and .source == "directory" and .path == $root)' <<<"$claude_marketplaces" >/dev/null &&
@@ -423,6 +441,7 @@ if [ "$SCHEDULER_ENABLED" = 1 ] || [ "$KEEPALIVE_ENABLED" = 1 ]; then
 fi
 
 for tool in codex claude; do
+  native_included "$tool" || continue
   variable="FH_${tool^^}_REMOTE"
   case "${!variable-1}" in
     0) ;;

@@ -20,11 +20,16 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-recovery-runtime-'));
 	const bin = join(root, 'bin');
 	mkdirSync(bin);
+	const imageManifest = join(root, 'image.json');
+	const edition = extra.FIXTURE_EDITION ?? 'aio';
+	const editions = JSON.parse(readFileSync(new URL('../packages/skeleton/assistant-editions.json', import.meta.url), 'utf8'));
+	writeFileSync(imageManifest, JSON.stringify({ harnesses: editions[edition].harnesses }));
 	const log = join(root, 'events');
 	const script = join(root, 'entrypoint.sh');
 	// Substitute only physical image filesystem preparation in this host fixture.
 	// Real command stubs and the production restore/supervision code still run.
 	let isolated = source
+		.replaceAll('/opt/fhold/tools/package.json', imageManifest)
 		.replace('prepare_identity\numask', 'printf "identity\\n" >>"$EVENTS"\numask')
 		.replace(
 			'prepare_filesystem\nload_opencode_password',
@@ -209,6 +214,17 @@ async function until(check: () => boolean) {
 }
 
 describe('Assistant recovery lifecycle command fixtures', () => {
+	for (const edition of ['slim', 'claude', 'codex', 'aio'])
+		it(`${edition} starts only its included native supervisors with default-on remote flags`, async () => {
+			const run = fixture({ FIXTURE_EDITION: edition, FH_CODEX_REMOTE: undefined, FH_CLAUDE_REMOTE: undefined });
+			try {
+				const included = ['claude', 'codex'].filter((tool) => edition === 'aio' || edition === tool);
+				await until(() => ['native', ...included.map((tool) => `remote-${tool}`)].every((name) => run.events().includes(name)));
+				for (const tool of ['claude', 'codex']) expect(run.events().includes(`remote-${tool}`)).toBe(included.includes(tool));
+				expect(run.events()).not.toContain('sync');
+			} finally { run.child.kill('SIGTERM'); await finished(run.child); }
+		});
+
 	it('bounds a stuck optional native migration before starting the core', async () => {
 		const run = fixture({ FIXTURE_MIGRATE_HANG: '1' });
 		try {

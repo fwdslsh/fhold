@@ -52,7 +52,7 @@ const quality = {
 	conclusion: 'success',
 	steps: [{ name: 'Test active packages', conclusion: 'success' }]
 };
-const images = ['assistant', 'guardian', 'portal'].flatMap((image) =>
+const images = ['assistant', 'assistant-slim', 'guardian', 'portal'].flatMap((image) =>
 	['amd64', 'arm64'].map((arch) => ({
 		name: `gates / Build ${image} (linux/${arch})`,
 		conclusion: 'success'

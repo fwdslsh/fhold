@@ -62,7 +62,12 @@ running processes, mocked tests and source scans are not live readiness.
   prompts or manager tags as permission gates. Keep native authorization, exact
   target selection and actual recovery ownership checks.
 - Native Codex and Claude Code workers are experimental and image-baked.
-  Both supervisors default on, waiting for native sign-in and consent.
+  Included supervisors default on, waiting for native sign-in and consent.
+  Assistant editions are defined in packages/skeleton/assistant-editions.json.
+  Publish only AIO and Slim; Claude/Codex are explicit manual build targets.
+  Preserve native account data and explicit off choices across edition changes.
+  Omitted harnesses require no activity observer; an included but unobserved
+  harness remains unknown. Actual native activity markers always count.
   Explicit off choices remain off. Enabled workers start
   on every boot, even with scheduling off.
   Preserve native sign-in, consent, chosen isolation mode and user state;
@@ -231,7 +236,7 @@ the extension change. Retain unchanged components' published package versions;
 publication must prove their inputs and resolved dependencies match their release
 tags. Never retag old bytes with a new release number to simulate a component release.
 Publication scope never narrows shared-pipeline validation: changes to the native
-CI pipeline require all six image jobs even for an Assistant-only or tools stamp.
+CI pipeline require all eight image jobs even for an Assistant-only or tools stamp.
 Keep native architecture, security, browser, scheduler/provider and recovery/upgrade
 checks in the release gates. Release Assistant verification uses three bounded
 lanes with independent cache/runtime/activity/lifecycle fixtures. Extended idle/unload and
@@ -254,6 +259,6 @@ by downgrading engines against live databases.
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
 host. Linux is supported; ARM64 cross-build evidence is not native execution.
 GitHub builds the standalone CLI/AppImages and publishes signed multi-architecture
-images to `fwdslsh/fhold-{assistant,guardian,portal}` on Docker Hub. Fresh installs
+images to `fwdslsh/fhold-{assistant,assistant-slim,guardian,portal}` on Docker Hub. Fresh installs
 use those pinned public images; the explicitly selected `fhold` namespace remains
 local-build-only. Do not add an npm bootstrap or cross-host publishing bridge.

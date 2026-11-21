@@ -3,7 +3,7 @@
 // plugin installation, blanket trust, or independent approval store.
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { remoteEnvironment } from './fhold-remote.mjs';
+import { remoteEnvironment, remoteIncluded } from './fhold-remote.mjs';
 
 export function recallReview(value, plugin = 'akm@akm-plugins') {
 	if (!['akm@akm-plugins', 'fhold@fhold-plugins'].includes(plugin))
@@ -232,6 +232,7 @@ export async function withCodexControl(callback, { env = process.env, signal, ti
 
 if (import.meta.main) {
 	try {
+		if (!remoteIncluded('codex')) throw new Error('Codex is not included in this Assistant edition. Select AIO or a manually built Codex edition.');
 		const args = process.argv.slice(2);
 		const selector = args.find((arg) => arg.startsWith('--plugin='));
 		const plugin = selector?.slice('--plugin='.length) ?? 'akm@akm-plugins';

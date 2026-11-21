@@ -2,7 +2,7 @@
 // Read-only, redacted container diagnostics. No host/cloud authority.
 import { hostname } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
-import { remoteAccount, remoteEnvironment } from '/usr/local/bin/fhold-remote.mjs';
+import { remoteAccount, remoteEnvironment, remoteIncluded } from '/usr/local/bin/fhold-remote.mjs';
 
 function run(args, env = remoteEnvironment(process.env)) {
 	const result = Bun.spawnSync(args, {
@@ -94,6 +94,7 @@ console.log(
 	JSON.stringify(
 		{
 			version: process.env.PLATFORM_VERSION,
+				edition: JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8')).fholdEdition ?? 'unknown',
 			hostname: hostname(),
 			uid: process.getuid(),
 			workspace: '/work',
@@ -110,13 +111,13 @@ console.log(
 			schedulerEnabled: (process.env.FH_SCHEDULER_ENABLED ?? '1') === '1',
 			akmMigration: migration(),
 			recovery: recovery(),
-			codex: {
+				codex: remoteIncluded('codex') ? {
 				...worker('codex'),
 				plugins: plugins('codex'),
 				sandbox: process.env.FH_CODEX_SANDBOX || 'workspace-write',
 				signedIn: remoteAccount('codex') === 'signed-in'
-			},
-			claude: { ...worker('claude'), ...claudeAccount(), plugins: plugins('claude') },
+				} : { state: 'not-included', installed: false },
+				claude: remoteIncluded('claude') ? { ...worker('claude'), ...claudeAccount(), plugins: plugins('claude') } : { state: 'not-included', installed: false },
 			note: 'Account, local worker and pairing are prerequisites; verify a real native-client tool request separately.'
 		},
 		null,

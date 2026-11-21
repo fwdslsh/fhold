@@ -56,6 +56,13 @@ release. The current pins use the matching prerelease pair selected under the
 owner's approval to use AKM betas; see the
 [November 8 review](dependency-refresh-2026-11-08.md). Select channels explicitly.
 Resolve the plugins' and `akm-web`'s required CLI version before choosing pins.
+Assistant's shared tools live in containers/assistant/tools/package.json. Claude
+Code and Codex pins live in containers/assistant/claude-tools/package.json and
+containers/assistant/codex-tools/package.json. Update those exact pins and the root
+lockfile together; never put optional clients back into shared core dependencies.
+The image's generated tools manifest reports only its included dependencies.
+See [Assistant editions](../assistant-editions.md) for builds and qualification.
+
 Include `akm-web` in every Assistant release; keep its exact CLI dependency
 aligned with the image's CLI. Verify native web startup, browser authentication
 and local/SSH forwarding when updating its launch contract.
@@ -216,7 +223,7 @@ when changing the Claude Desktop extension). The tooling version always advances
 unchanged image/extension versions remain at their last published releases.
 Publication compares retained components with their individual release tags and
 refuses omitted changes, including shared transitive dependency changes.
-Shared native-pipeline changes still require all six image jobs, regardless of
+Shared native-pipeline changes still require all eight image jobs, regardless of
 the stamped publication scope; unchanged images are validated without publishing
 new versions for them.
 

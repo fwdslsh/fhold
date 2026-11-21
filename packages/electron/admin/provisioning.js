@@ -48,6 +48,7 @@ export function renderInstallPlacement() {
 	byId('install-directory-placement').hidden = cloud;
 	for (const input of byId('install-directory-placement').querySelectorAll('input,button'))
 		input.disabled = cloud;
+	byId('install-edition').disabled = cloud;
 	byId('install-assistant-port').disabled = cloud || byId('install-automatic-ports').checked;
 	byId('install-gateway-port').disabled = cloud || byId('install-automatic-ports').checked;
 	byId('install-review').hidden = true;

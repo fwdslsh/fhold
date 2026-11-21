@@ -9,6 +9,13 @@ import { setTimeout as pause } from 'node:timers/promises';
 
 export const remoteDirectory = join(process.env.FH_RUNTIME_DIR || '/tmp/fhold-runtime', 'remote');
 export const codexSandboxes = ['workspace-write', 'read-only', 'danger-full-access'];
+export function remoteIncluded(tool, manifest = '/opt/fhold/tools/package.json') {
+	try {
+		const { harnesses } = JSON.parse(readFileSync(manifest, 'utf8'));
+		if (!Array.isArray(harnesses) || !harnesses.includes('opencode')) return true;
+		return harnesses.includes(tool);
+	} catch { return true; }
+}
 export function remoteCommand(tool, sandbox = process.env.FH_CODEX_SANDBOX ?? 'workspace-write') {
 	if (!codexSandboxes.includes(sandbox))
 		throw new Error('Invalid Codex sandbox');
@@ -369,6 +376,10 @@ export async function superviseRemote(
 if (import.meta.main) {
 	const [tool, action] = process.argv.slice(2);
 	remoteCommand(tool);
+	if (!remoteIncluded(tool)) {
+		console.log(JSON.stringify({ tool, state: 'not-included', message: `${tool} is not included in this Assistant edition. Select an edition containing it.` }));
+		process.exit(action === 'status' ? 0 : 1);
+	}
 	if (action === 'status' || action === 'logs') {
 		try {
 			process.stdout.write(

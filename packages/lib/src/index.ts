@@ -1,3 +1,4 @@
+export * from './control-plane/assistant-editions.js';
 export {
 	configureSshHelperResources,
 	configureSshHelperDirectory,

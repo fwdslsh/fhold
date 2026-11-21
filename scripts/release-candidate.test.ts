@@ -55,9 +55,9 @@ test('immutable image retry reuses identical bytes and rejects changed or unknow
 });
 
 test('candidate selection is exact, complete, immutable and attempt-specific', () => {
-	expect(selectArtifacts(artifacts(), 'full', 2)).toHaveLength(10);
+	expect(selectArtifacts(artifacts(), 'full', 2)).toHaveLength(12);
 	expect(selectArtifacts(artifacts(), 'tools', 2)).toHaveLength(3);
-	expect(selectArtifacts(artifacts('assistant'), 'assistant', 2)).toHaveLength(5);
+	expect(selectArtifacts(artifacts('assistant'), 'assistant', 2)).toHaveLength(7);
 	expect(() => selectArtifacts(artifacts('assistant'), 'full', 2)).toThrow();
 	expect(() =>
 		selectArtifacts(
@@ -259,7 +259,7 @@ test('full native success alone cannot qualify missing, failed or preview final 
 		'Build CLI fhold-cli-linux-x64',
 		'Build CLI fhold-cli-linux-arm64',
 		'Build optional admin for linux',
-		...['assistant', 'guardian', 'portal'].flatMap((image) =>
+		...['assistant', 'assistant-slim', 'guardian', 'portal'].flatMap((image) =>
 			['amd64', 'arm64'].map((arch) => `Build ${image} (linux/${arch})`)
 		)
 	];

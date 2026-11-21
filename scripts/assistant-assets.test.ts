@@ -1,13 +1,16 @@
-import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MANAGED_FILES, SEEDED_FILES } from '../packages/lib/src/control-plane/seed-manifest.js';
 import { assistantAssets, bakeAssistantAssets } from './bake-assistant-assets.mjs';
 
+const outputs: string[] = [];
+afterEach(() => { for (const path of outputs.splice(0)) rmSync(path, { recursive: true, force: true }); });
 test('standalone Assistant uses the same allowlisted bytes without host or ingress assets', () => {
 	const skeleton = join(import.meta.dir, '../packages/skeleton');
 	const output = mkdtempSync(join(tmpdir(), 'fhold-assistant-assets-'));
+	outputs.push(output);
 	const assets = bakeAssistantAssets(skeleton, output);
 	const prefixes = [
 		'system/assistant/',

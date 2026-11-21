@@ -14,7 +14,7 @@ function docker(args, input) {
 }
 const probe = `
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 const authorization = 'Basic ' + Buffer.from('opencode:synthetic-workload-test-only').toString('base64');
 async function api(path, body) {
   const response = await fetch('http://127.0.0.1:4096/api' + path, {
@@ -39,7 +39,9 @@ function environment(tool) {
       const offset = pair.indexOf('='); return [pair.slice(0, offset), pair.slice(offset + 1)];
     }));
 }
-for (const tool of ['assistant', 'scheduler', 'claude', 'codex'])
+const included = JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8')).harnesses;
+for (const tool of ['claude', 'codex']) if (!included.includes(tool)) assert.equal(existsSync('/tmp/fhold-runtime/' + tool + '.pid'), false);
+for (const tool of ['assistant', 'scheduler', ...included.filter(tool => tool !== 'opencode')])
   assert.equal(environment(tool).IDENTITY_HEADER, undefined, tool + ': identity selector must be omitted');
 const session = await api('/session', { title: 'Disposable workload environment test', location: { directory: '/work' } });
 await api('/session/' + session.id + '/shell', {

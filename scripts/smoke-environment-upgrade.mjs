@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { includedRemotes } from '/fhold-plugins/fhold/scripts/activity.mjs';
+const remotes = includedRemotes();
 const fixture = '/tmp/environment-upgrade';
 const home = '/home/fhold';
 const read = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -155,6 +157,7 @@ const oldVersion = '0.10.26101002-alpha';
 
 if (process.argv[2] === 'prepare') {
 	mkdirSync(fixture, { recursive: true });
+	if (remotes.length) {
 	const market = `${fixture}/old-market`;
 	cpSync('/akm-marketplace', market, { recursive: true });
 	for (const file of [
@@ -168,11 +171,14 @@ if (process.argv[2] === 'prepare') {
 		json(path, { ...value, version: oldVersion });
 	}
 	// Native tools create the old installation metadata and cache selection.
+	if (remotes.includes('claude')) {
 	run(['claude', 'plugin', 'marketplace', 'add', market]);
 	run(['claude', 'plugin', 'update', 'akm@akm-plugins', '--scope', 'user', '--json']);
 	run(['claude', 'plugin', 'marketplace', 'add', '/akm-marketplace']);
+	}
 	// The source path in this synthetic old home represents the same immutable
 	// image marketplace before and after a replacement; it is not a test repair.
+	if (remotes.includes('codex')) {
 	writeFileSync(
 		codexConfig,
 		readFileSync(codexConfig, 'utf8').replace('source = "/akm-marketplace"', `source = "${market}"`)
@@ -183,7 +189,8 @@ if (process.argv[2] === 'prepare') {
 		readFileSync(codexConfig, 'utf8').replace(`source = "${market}"`, 'source = "/akm-marketplace"')
 	);
 	assert.equal(selected('codex', 'akm@akm-plugins').version, oldVersion);
-	assert.equal(selected('claude', 'akm@akm-plugins').version, oldVersion);
+	}
+	if (remotes.includes('claude')) assert.equal(selected('claude', 'akm@akm-plugins').version, oldVersion);
 
 	const custom = `${fixture}/custom-market`;
 	json(`${custom}/.claude-plugin/marketplace.json`, {
@@ -208,14 +215,17 @@ if (process.argv[2] === 'prepare') {
 			version: '1.0.0',
 			description: 'Synthetic user plugin'
 		});
-	for (const tool of ['claude', 'codex']) {
+	for (const tool of remotes) {
 		run([tool, 'plugin', 'marketplace', 'add', custom]);
 		run([tool, 'plugin', tool === 'claude' ? 'install' : 'add', 'personal@upgrade-fixture']);
 	}
+	if (remotes.includes('claude')) {
 	run(['claude', 'plugin', 'disable', 'fhold@fhold-plugins']);
 	const settings = read(claudeSettings);
 	settings.language = 'English';
 	json(claudeSettings, settings);
+	}
+	if (remotes.includes('codex')) {
 	writeFileSync(
 		codexConfig,
 		readFileSync(codexConfig, 'utf8').replace(
@@ -224,6 +234,11 @@ if (process.argv[2] === 'prepare') {
 		) + '\n# operator preference retained across upgrade\n'
 	);
 	assert.equal(selected('codex', 'fhold@fhold-plugins').enabled, false);
+	}
+	}
+	// Omitted harness account files are operator state and must survive startup too.
+	if (!remotes.includes('claude')) json(claudeSettings, { language: 'English', operator: true });
+	if (!remotes.includes('codex')) { mkdirSync(`${home}/.codex`, { recursive: true }); writeFileSync(codexConfig, '# operator native settings\n'); }
 	json(`${fixture}/preferences.json`, {
 		claude: readFileSync(claudeSettings, 'utf8'),
 		codex: readFileSync(codexConfig, 'utf8')
@@ -259,7 +274,7 @@ if (process.argv[2] === 'prepare') {
 	);
 } else if (process.argv[2] === 'verify') {
 	const expected = read('/opt/fhold/tools/package.json').dependencies['akm-opencode-v2'];
-	for (const tool of ['claude', 'codex']) {
+	for (const tool of remotes) {
 		assert.equal(selected(tool, 'akm@akm-plugins').version, expected);
 		assert.equal(selected(tool, 'fhold@fhold-plugins').enabled, false);
 		assert.equal(selected(tool, 'personal@upgrade-fixture').version, '1.0.0');

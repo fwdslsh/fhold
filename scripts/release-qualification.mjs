@@ -1,7 +1,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { selectArtifacts } from './release-candidate.mjs';
-import { inferReleaseScope, releaseImages } from './release-scope.mjs';
+import { inferReleaseScope, releaseImages, imageVariants } from './release-scope.mjs';
 
 const repository = 'fwdslsh/fhold';
 export function pullRequestCandidate(event, isAncestor) {
@@ -42,7 +42,7 @@ export function qualifies(run, jobs, sha, scope, now = Date.now()) {
 	if (scope === 'tools') return tested === true;
 	let images;
 	try {
-		images = releaseImages(scope);
+		images = imageVariants(releaseImages(scope));
 	} catch {
 		return false;
 	}
@@ -143,8 +143,8 @@ if (import.meta.main) {
 			Number(process.env.CANDIDATE_ATTEMPT)
 		);
 		const groups = { assets: selected.filter((item) => !item.kind.startsWith('image-')) };
-		for (const image of ['assistant', 'guardian', 'portal'])
-			groups[image] = selected.filter((item) => item.kind.startsWith(`image-${image}-`));
+		for (const image of imageVariants(['assistant', 'guardian', 'portal']))
+			groups[image] = selected.filter((item) => ['amd64', 'arm64'].some((arch) => item.kind === `image-${image}-${arch}`));
 		for (const [name, items] of Object.entries(groups))
 			appendFileSync(
 				process.env.GITHUB_OUTPUT,

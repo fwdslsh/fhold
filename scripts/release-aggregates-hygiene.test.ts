@@ -255,6 +255,7 @@ describe('release workflows', () => {
 			'actions/upload-artifact@v7.0.2',
 			'actions/upload-pages-artifact@v5.0.0',
 			'aquasecurity/trivy-action@v0.36.0',
+			'docker/bake-action@v7.5.0',
 			'docker/build-push-action@v7.4.0',
 			'docker/login-action@v4.7.0',
 			'docker/setup-buildx-action@v4.4.1',
@@ -291,6 +292,7 @@ describe('release workflows', () => {
 		expect(images.strategy.matrix.image).toBe('${{ fromJSON(inputs.images) }}');
 		expect(JSON.parse(workflow.on.workflow_call.inputs.images.default)).toEqual([
 			'assistant',
+			'assistant-slim',
 			'guardian',
 			'portal'
 		]);
