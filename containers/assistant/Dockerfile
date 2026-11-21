@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
 
-FROM oven/bun:1.4.4 AS tools
+FROM oven/bun:1.4.4 AS manifests
 ARG TARGETARCH
 WORKDIR /repo
 COPY package.json bun.lock ./
@@ -25,7 +25,22 @@ COPY packages/portal/package.json ./packages/portal/package.json
 COPY packages/electron/package.json ./packages/electron/package.json
 COPY packages/claude-desktop/package.json ./packages/claude-desktop/package.json
 COPY containers/assistant/tools/package.json ./containers/assistant/tools/package.json
+COPY containers/assistant/claude-tools/package.json ./containers/assistant/claude-tools/package.json
+COPY containers/assistant/codex-tools/package.json ./containers/assistant/codex-tools/package.json
 COPY plugins/fhold/package.json ./plugins/fhold/package.json
+FROM manifests AS native-tools
+ARG ASSISTANT_EDITION=aio
+# Separate dependency graph: Slim never copies native clients or their dependencies.
+RUN mkdir -p node_modules \
+    && case "$ASSISTANT_EDITION" in \
+      aio) bun install --frozen-lockfile --production --linker hoisted --filter @fhold/claude-tools --filter @fhold/codex-tools ;; \
+      claude|codex) bun install --frozen-lockfile --production --linker hoisted --filter "@fhold/${ASSISTANT_EDITION}-tools" ;; \
+      slim) ;; \
+      *) echo "Unknown Assistant edition: $ASSISTANT_EDITION" >&2; exit 1 ;; \
+    esac
+
+FROM manifests AS tools-core
+ARG TARGETARCH
 RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/assistant-tools \
     && rm -rf node_modules/@opencode/cli-linux-x64-musl \
               node_modules/@opencode/cli-linux-x64-baseline \
@@ -48,15 +63,13 @@ RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/
     esac
 
 COPY packages/skeleton /repo/packages/skeleton
-COPY packages/lib/src/control-plane/seed-manifest.ts /repo/packages/lib/src/control-plane/seed-manifest.ts
+COPY packages/lib/src/control-plane/seed-manifest.ts packages/lib/src/control-plane/assistant-editions.ts /repo/packages/lib/src/control-plane/
 COPY scripts/bake-assistant-assets.mjs /repo/scripts/bake-assistant-assets.mjs
-RUN bun /repo/scripts/bake-assistant-assets.mjs /repo/packages/skeleton /assistant-defaults
+
 
 # One source of built-in skills, exposed through AKM and each native plugin.
 COPY plugins /fhold-plugins
-RUN mkdir -p /fhold-bundle/skills \
-    && cp -R /assistant-defaults/system/assistant/skills/. /fhold-bundle/skills/ \
-    && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills
+
 
 # Both native harnesses install the same immutable upstream marketplace.
 # Retain the release's bundled CLI: local marketplaces do not install dependencies.
@@ -91,20 +104,34 @@ RUN export AKM_CACHE_DIR=/akm-cache AKM_CONFIG_DIR=/tmp/akm-build/config \
       akm setup --yes --embedding local --dir /tmp/akm-build/bundle --format json -q > /tmp/akm-setup.json \
       && bun -e "import assert from 'node:assert/strict'; const result = await Bun.file('/tmp/akm-setup.json').json(); assert.equal(result.semanticAssets, 'ready', JSON.stringify(result));"; \
     fi
-RUN mkdir -p /native-defaults/codex \
-    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /akm-marketplace \
-    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install akm@akm-plugins \
-    && CODEX_HOME=/native-defaults/codex codex plugin marketplace add /akm-marketplace \
-    && CODEX_HOME=/native-defaults/codex codex plugin add akm@akm-plugins \
-    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /fhold-plugins \
-    && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install fhold@fhold-plugins \
-    && CODEX_HOME=/native-defaults/codex codex plugin marketplace add /fhold-plugins \
-    && CODEX_HOME=/native-defaults/codex codex plugin add fhold@fhold-plugins \
-    && chmod a+r /native-defaults/codex/config.toml
+FROM tools-core AS tools
+ARG ASSISTANT_EDITION=aio
+COPY --from=native-tools /repo/node_modules /native-tools/node_modules
+ENV PATH="/native-tools/node_modules/.bin:${PATH}"
+COPY containers/assistant/build-edition.mjs /repo/containers/assistant/build-edition.mjs
+RUN bun /repo/containers/assistant/build-edition.mjs "$ASSISTANT_EDITION" \
+    && bun /repo/scripts/bake-assistant-assets.mjs /repo/packages/skeleton /assistant-defaults "$ASSISTANT_EDITION" \
+    && mkdir -p /fhold-bundle/skills /native-defaults/claude /native-defaults/codex \
+    && cp -R /assistant-defaults/system/assistant/skills/. /fhold-bundle/skills/ \
+    && cp -R /fhold-bundle/skills /fhold-plugins/fhold/skills \
+    && if [ "$ASSISTANT_EDITION" = aio ] || [ "$ASSISTANT_EDITION" = claude ]; then \
+      CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /akm-marketplace \
+      && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install akm@akm-plugins \
+      && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin marketplace add /fhold-plugins \
+      && CLAUDE_CONFIG_DIR=/native-defaults/claude claude plugin install fhold@fhold-plugins; \
+    fi \
+    && if [ "$ASSISTANT_EDITION" = aio ] || [ "$ASSISTANT_EDITION" = codex ]; then \
+      CODEX_HOME=/native-defaults/codex codex plugin marketplace add /akm-marketplace \
+      && CODEX_HOME=/native-defaults/codex codex plugin add akm@akm-plugins \
+      && CODEX_HOME=/native-defaults/codex codex plugin marketplace add /fhold-plugins \
+      && CODEX_HOME=/native-defaults/codex codex plugin add fhold@fhold-plugins \
+      && chmod a+r /native-defaults/codex/config.toml; \
+    fi \
+    && if [ "$ASSISTANT_EDITION" = slim ]; then rm -rf /akm-marketplace/* /akm-marketplace/.[!.]*; fi
 
 # Playwright supports Noble on both architectures. Its security repositories
 # supply patched graphics/XML libraries absent from the Debian 13 browser stack.
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS runtime-base
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -119,8 +146,8 @@ COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 # Copy only the locked browser packages before installing Chromium. BuildKit
 # reuses this layer when AKM/agent dependencies change but Playwright does not.
-COPY --from=tools /repo/node_modules/playwright /opt/fhold/tools/node_modules/playwright
-COPY --from=tools /repo/node_modules/playwright-core /opt/fhold/tools/node_modules/playwright-core
+COPY --from=tools-core /repo/node_modules/playwright /opt/fhold/tools/node_modules/playwright
+COPY --from=tools-core /repo/node_modules/playwright-core /opt/fhold/tools/node_modules/playwright-core
 # Install the locked upstream browser and its system libraries before USER fhold.
 # A shared immutable cache survives home mounts and works on both native arches.
 RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chromium \
@@ -128,13 +155,17 @@ RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chr
     && chmod -R a+rX /opt/ms-playwright \
     && chmod -R a-w /opt/ms-playwright \
     && rm -rf /var/lib/apt/lists/*
+FROM runtime-base
+ARG ASSISTANT_EDITION=aio
+LABEL dev.fwdslsh.fhold.edition="${ASSISTANT_EDITION}"
 COPY --from=tools /repo/node_modules /opt/fhold/tools/node_modules
+COPY --from=native-tools /repo/node_modules /opt/fhold/native/node_modules
 COPY --from=tools /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s bun /usr/local/bin/bunx
 # Keep the compatible, pinned upstream npm/npx installed in the Node stage,
 # not Debian's npm or a second package manager installation at startup.
 COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-COPY containers/assistant/tools/package.json /opt/fhold/tools/package.json
+COPY --from=tools /selected-tools.json /opt/fhold/tools/package.json
 COPY containers/assistant/entrypoint.sh /usr/local/bin/fhold-assistant
 COPY containers/assistant/healthcheck.sh /usr/local/bin/fhold-healthcheck
 COPY containers/assistant/fhold-task.mjs /usr/local/bin/fhold-task
@@ -177,9 +208,15 @@ RUN test -n "$PLATFORM_VERSION" \
     && chmod -R a+rX /assistant-defaults /fhold-bundle /fhold-plugins /akm-marketplace /etc/opencode /etc/codex /etc/claude-code \
     && ln -s /fhold-plugins/fhold/scripts/activity.mjs /usr/local/bin/fhold-keepalive \
     && chmod 0555 /fhold-plugins/fhold/scripts/activity.mjs \
-    && for command in opencode akm akm-migrate akm-web codex claude playwright; do \
+    && for command in opencode akm akm-migrate akm-web playwright; do \
       test -x "/opt/fhold/tools/node_modules/.bin/$command" || exit 1; \
       ln -s "/opt/fhold/tools/node_modules/.bin/$command" "/usr/local/bin/$command" || exit 1; \
+    done \
+    && for command in codex claude; do \
+      if jq -e --arg tool "$command" '.harnesses | index($tool) != null' /opt/fhold/tools/package.json >/dev/null; then \
+        test -x "/opt/fhold/native/node_modules/.bin/$command" || exit 1; \
+        ln -s "/opt/fhold/native/node_modules/.bin/$command" "/usr/local/bin/$command" || exit 1; \
+      fi; \
     done \
     && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \

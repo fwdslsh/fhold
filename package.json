@@ -20,6 +20,8 @@
     "packages/electron",
     "packages/claude-desktop",
     "containers/assistant/tools",
+    "containers/assistant/claude-tools",
+    "containers/assistant/codex-tools",
     "plugins/fhold",
     "website"
   ],

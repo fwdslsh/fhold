@@ -11,7 +11,7 @@ on:
         default: full
       images:
         type: string
-        default: '["assistant","guardian","portal"]'
+        default: '["assistant","assistant-slim","guardian","portal"]'
       draft:
         type: boolean
         default: false
@@ -170,6 +170,7 @@ jobs:
           daemon-config: '{"features":{"containerd-snapshotter":true}}'
       - uses: docker/setup-buildx-action@v4.4.1
       - uses: docker/build-push-action@v7.4.0
+        if: matrix.image != 'assistant' && matrix.image != 'assistant-slim'
         with:
           context: .
           file: containers/${{ matrix.image }}/Dockerfile
@@ -186,6 +187,62 @@ jobs:
             type=registry,ref=fwdslsh/fhold-${{ matrix.image }}:buildcache-${{ runner.arch }}
             type=gha,scope=fhold-${{ matrix.image }}-${{ matrix.platform }}
           cache-to: ${{ steps.registry.outputs.trusted == 'true' && format('type=registry,ref=fwdslsh/fhold-{0}:buildcache-{1},mode=max', matrix.image, runner.arch) || format('type=gha,scope=fhold-{0}-{1},mode=max', matrix.image, matrix.platform) }}
+      - name: Prepare the selected Assistant edition build
+        if: matrix.image == 'assistant' || matrix.image == 'assistant-slim'
+        env:
+          IMAGE: ${{ matrix.image }}
+          PLATFORM: ${{ matrix.platform }}
+          PLATFORM_VERSION: ${{ inputs.candidate && steps.version.outputs.version || 'ci' }}
+          VCS_REF: ${{ github.sha }}
+          CANDIDATE: ${{ inputs.candidate }}
+          TRUSTED: ${{ steps.registry.outputs.trusted }}
+        run: |
+          cache="type=gha,scope=fhold-${IMAGE}-${PLATFORM}"
+          if [ "$TRUSTED" = true ]; then
+            cache="type=registry,ref=fwdslsh/fhold-${IMAGE}:buildcache-${RUNNER_ARCH}"
+          fi
+          # Bake links the thin edition Dockerfile to one shared build definition.
+          # The exact loaded image and attested OCI graph follow the existing gates.
+          export IMAGE PLATFORM CANDIDATE CACHE_TO="$cache"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const image = process.env.IMAGE;
+          const targets = [image, image + '-base'];
+          const shared = {
+            platforms: [process.env.PLATFORM],
+            'cache-from': [
+              `type=registry,ref=fwdslsh/fhold-assistant:buildcache-${process.env.RUNNER_ARCH}`,
+              `type=registry,ref=fwdslsh/fhold-assistant-slim:buildcache-${process.env.RUNNER_ARCH}`,
+              `type=gha,scope=fhold-${image}-${process.env.PLATFORM}`
+            ],
+            'cache-to': [process.env.CACHE_TO + ',mode=max']
+          };
+          const candidate = process.env.CANDIDATE === 'true';
+          const output = ['type=docker'];
+          if (candidate) output.push(`type=oci,dest=${process.env.RUNNER_TEMP}/candidate/image.tar`);
+          writeFileSync(process.env.RUNNER_TEMP + '/edition-build.json', JSON.stringify({
+            target: Object.fromEntries(targets.map(name => [name, {
+              ...shared,
+              ...(name === image ? {
+                tags: [`fhold/${image}:ci`], output,
+                attest: candidate ? ['type=provenance,mode=max', 'type=sbom'] : ['type=provenance,disabled=true'],
+                labels: { 'org.opencontainers.image.revision': process.env.GITHUB_SHA }
+              } : {})
+            }]))
+          }));
+          NODE
+      - name: Build the selected Assistant edition with shared layers
+        if: matrix.image == 'assistant' || matrix.image == 'assistant-slim'
+        uses: docker/bake-action@v7.5.0
+        env:
+          PLATFORM_VERSION: ${{ inputs.candidate && steps.version.outputs.version || 'ci' }}
+          VCS_REF: ${{ github.sha }}
+        with:
+          source: .
+          files: |
+            docker-bake.json
+            ${{ runner.temp }}/edition-build.json
+          targets: ${{ matrix.image }}
       - name: Bind the OCI candidate to the tested image
         if: inputs.candidate
         env:
@@ -232,27 +289,27 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Run image startup and security smoke
-        if: matrix.image != 'assistant'
+        if: matrix.image != 'assistant' && matrix.image != 'assistant-slim'
         env:
           IMAGE: ${{ matrix.image }}
         run: bash scripts/smoke-image.sh "fhold/${IMAGE}:ci" "${IMAGE}"
       - uses: oven-sh/setup-bun@v2.2.0
-        if: matrix.image == 'assistant'
+        if: matrix.image == 'assistant' || matrix.image == 'assistant-slim'
         with:
           bun-version: 1.4.4
       - name: Install locked workspace for native history verification
-        if: matrix.image == 'assistant'
+        if: matrix.image == 'assistant' || matrix.image == 'assistant-slim'
         run: bun install --frozen-lockfile
       - name: Verify all native Assistant suites in three isolated lanes
-        if: matrix.image == 'assistant'
+        if: matrix.image == 'assistant' || matrix.image == 'assistant-slim'
         env:
           FH_CI_LOG_DIR: ${{ runner.temp }}/assistant-smokes
-        run: node scripts/smoke-assistant-ci.mjs fhold/assistant:ci
+        run: node scripts/smoke-assistant-ci.mjs fhold/${{ matrix.image }}:ci
       - name: Retain Assistant suite logs and timings
-        if: always() && matrix.image == 'assistant'
+        if: always() && (matrix.image == 'assistant' || matrix.image == 'assistant-slim')
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: assistant-smokes-${{ runner.arch }}
+          name: ${{ matrix.image }}-smokes-${{ runner.arch }}
           path: ${{ runner.temp }}/assistant-smokes
           if-no-files-found: warn
           retention-days: 7

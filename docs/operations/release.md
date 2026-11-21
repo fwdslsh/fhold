@@ -6,7 +6,7 @@ For the contributor walkthrough, see
 GitHub at https://github.com/fwdslsh/fhold is the canonical source and contribution
 host. `.github/workflows/release.yml` builds Linux downloads and signed amd64/arm64
 images on GitHub, verifies uploaded checksums and publishes the release. Public
-Docker Hub repositories are `fwdslsh/fhold-assistant`, `fwdslsh/fhold-guardian`
+Docker Hub repositories are `fwdslsh/fhold-assistant` (AIO), `fwdslsh/fhold-assistant-slim`, `fwdslsh/fhold-guardian`
 and `fwdslsh/fhold-portal`. Fresh CLI/Admin installs select the latest published
 runtime cohort pinned by their release, even when tooling has a newer version.
 No Docker Hub account is needed to pull them.
@@ -68,11 +68,12 @@ Runtime resolution changes, unexplained changed lock records and unknown lock
 formats still select full qualification.
 As required by repository policy, docs/site and lockfile-only changes skip product
 CI. This does not waive publication's runtime diff or final release qualification.
-Component source/Dockerfile changes run full source tests and that image's two native
-jobs. Lockfile changes follow each consumer's resolved graph; shared inputs and
-uncertain changes retain the affected images or all six jobs. CI orchestration
+Component source/Dockerfile changes run full source tests and that component's native
+jobs. Assistant qualifies AIO and Slim on both architectures (four jobs); Guardian
+and Portal each qualify two. Claude-only and Codex-only targets are manual-only. Lockfile changes follow each consumer's resolved graph; shared inputs and
+uncertain changes retain the affected images or all eight jobs. CI orchestration
 changes exercise native gates even when published runtime bytes are unchanged.
-Shared native-pipeline changes retain all six image jobs on a stamped release
+Shared native-pipeline changes retain all eight image jobs on a stamped release
 branch, including when publication selects only Assistant or tools. Publication
 scope cannot override that validation requirement.
 See the [check selection table](../technical/testing-workflow.md).
@@ -391,7 +392,7 @@ not imply a clean source audit or qualify previously published images.
 The GitHub CI/release workflows reuse `gates.yml` and only build Linux
 targets. Release validation reuses a successful canonical `release/*` push CI run for the
 exact SHA and scope only while it is less than 24 hours old. It verifies
-the successful quality job, all six native image jobs and final native CLI/Admin
+the successful quality job, all eight native image jobs and final native CLI/Admin
 artifact jobs for a full release, plus the complete immutable candidate artifact set.
 Scoped releases require both native architectures for each selected image, plus
 the complete CLI/Admin artifacts. A partial matrix cannot qualify a full release.

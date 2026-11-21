@@ -218,7 +218,7 @@ export function renderConnectionDetails(snapshot) {
 		snapshot.agent?.access?.state === 'known' || !ready('agent.connect');
 	for (const id of ['load-direct-password', 'copy-direct-password', 'show-direct-password'])
 		byId(id).disabled = state.operationInFlight || !ready('agent.assistantPassword');
-	for (const control of byId('opencode-network-form').querySelectorAll('input, button'))
+	for (const control of byId('opencode-network-form').querySelectorAll('input, select, button'))
 		control.disabled = state.operationInFlight || !ready('docker.saveConfig');
 	updateGuardianGuide();
 }

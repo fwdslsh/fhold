@@ -1,5 +1,13 @@
 import { readFileSync } from 'node:fs';
 
+const editions = JSON.parse(readFileSync(new URL('../packages/skeleton/assistant-editions.json', import.meta.url), 'utf8'));
+/** Physical publication targets; logical Assistant always qualifies both released editions. */
+export function imageVariants(components) {
+	return components.flatMap((component) => component === 'assistant'
+		? Object.values(editions).filter((edition) => edition.publish).map((edition) => edition.image)
+		: [component]);
+}
+
 export const imageComponents = ['assistant', 'guardian', 'portal'];
 export const componentManifests = {
 	assistant: ['packages/skeleton/package.json', 'plugins/fhold/.claude-plugin/plugin.json', 'plugins/fhold/.codex-plugin/plugin.json'],

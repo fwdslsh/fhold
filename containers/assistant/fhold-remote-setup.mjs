@@ -2,7 +2,7 @@
 // Private stdio bridge to native prompts, not a network service or auth format.
 import { createInterface } from 'node:readline';
 import { stripVTControlCharacters } from 'node:util';
-import { codexSandboxes, remoteAccount, remoteCommand, remoteEnvironment, stopGroup } from './fhold-remote.mjs';
+import { codexSandboxes, remoteAccount, remoteCommand, remoteEnvironment, remoteIncluded, stopGroup } from './fhold-remote.mjs';
 
 export function setupCommands(tool, sandbox) {
 	if (!codexSandboxes.includes(sandbox)) throw new Error('Invalid sandbox mode');
@@ -34,6 +34,7 @@ export async function guidedSetup(
 	} = {}
 ) {
 	const commands = setupCommands(tool, sandbox);
+	if (!remoteIncluded(tool)) throw new Error(`${tool} is not included in this Assistant edition. Select an edition containing it.`);
 	if (tool === 'codex' && sandbox === 'danger-full-access')
 		emit({
 			stage: 'container-isolation',

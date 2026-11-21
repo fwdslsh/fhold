@@ -5,6 +5,16 @@ Native platforms own agents, tools, permissions, memory, hooks, skills and MCP.
 fhold adds no local agent-name allowlist, recall prompt filter, restricted
 scheduled agent or duplicate memory extractor.
 
+## Assistant editions
+
+[Assistant editions](assistant-editions.md) share OpenCode, AKM/web, scheduling,
+keep-alive and recovery. Slim omits Claude Code and Codex. AIO keeps both;
+Claude-only and Codex-only images are available as manual build targets.
+Only included native harnesses seed plugins or start optional supervisors.
+The image manifest reports inclusion independently of the saved remote switches.
+Omitted tools report `not-included`; account files and native approvals remain
+untouched so switching back can reuse them.
+
 ## Deployment inputs
 
 Release-owned defaults are image-baked and selected by the managed asset

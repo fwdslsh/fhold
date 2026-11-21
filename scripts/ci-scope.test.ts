@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { changeScope, validationPlan, releaseValidationPlan, runtimeImpact } from './ci-scope.mjs';
 
-const all = ['assistant', 'guardian', 'portal'];
+const all = ['assistant', 'assistant-slim', 'guardian', 'portal'];
+const logical = ['assistant', 'guardian', 'portal'];
 test('Compose service changes retain unrelated published components', () => {
 	const file = 'packages/skeleton/system/stack/stack.compose.yml';
 	const source = readFileSync(file, 'utf8');
@@ -22,15 +23,15 @@ test('Compose service changes retain unrelated published components', () => {
 	expect(runtimeImpact([file], () => source, () => JSON.stringify(removed))).toEqual(['guardian']);
 	const shared = structuredClone(before);
 	shared.networks.fixture = {};
-	expect(runtimeImpact([file], () => source, () => JSON.stringify(shared))).toEqual([...all, 'bridge']);
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(shared))).toEqual([...logical, 'bridge']);
 	const unknown = structuredClone(before);
 	unknown.services.fixture = { environment: {} };
-	expect(runtimeImpact([file], () => source, () => JSON.stringify(unknown))).toEqual([...all, 'bridge']);
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(unknown))).toEqual([...logical, 'bridge']);
 	for (const invalid of ['', 'null', '[]', 'services: broken', 'services: [broken', '{}'])
-		expect(runtimeImpact([file], () => source, () => invalid)).toEqual([...all, 'bridge']);
+		expect(runtimeImpact([file], () => source, () => invalid)).toEqual([...logical, 'bridge']);
 	const invalidService = structuredClone(before);
 	(invalidService.services as Record<string, unknown>).assistant = 'broken';
-	expect(runtimeImpact([file], () => source, () => JSON.stringify(invalidService))).toEqual([...all, 'bridge']);
+	expect(runtimeImpact([file], () => source, () => JSON.stringify(invalidService))).toEqual([...logical, 'bridge']);
 	expect(runtimeImpact([file], () => source, () => source.replaceAll('0.4.1109-beta', '0.4.1110-beta'))).toEqual([]);
 });
 test('container README changes do not change shipped runtime inputs', () => {
@@ -45,7 +46,7 @@ test('release stamps never reduce validation of changes to shared native gates',
 		});
 	expect(releaseValidationPlan('assistant', ['containers/assistant/tools/package.json'])).toEqual({
 		scope: 'assistant',
-		images: ['assistant'],
+		images: ['assistant', 'assistant-slim'],
 		admin: true
 	});
 	expect(releaseValidationPlan('tools', ['packages/cli/src/main.ts'])).toEqual({
@@ -94,7 +95,7 @@ test('docs and lock-only policy cannot suppress runtime Markdown or unknown inpu
 		'packages/skeleton/system/assistant/skills/example.md',
 		'plugins/fhold/prompts/example.md'
 	])
-		expect(plan([file]).images).toEqual(['assistant']);
+		expect(plan([file]).images).toEqual(['assistant', 'assistant-slim']);
 });
 test('Admin qualification includes shared code, embedded Skeleton, helpers and install inputs', () => {
 	for (const file of [
@@ -341,12 +342,12 @@ test('filtered image matrix does not reintroduce omitted images through include 
 	expect(workflow('release').jobs.gates.with?.images).toBe('${{ needs.validate.outputs.images }}');
 	const steps = yaml.jobs.images.steps ?? [];
 	expect(steps.find((step) => step.run?.includes('smoke-assistant-ci.mjs'))?.if).toBe(
-		"matrix.image == 'assistant'"
+		"matrix.image == 'assistant' || matrix.image == 'assistant-slim'"
 	);
 	expect(steps.find((step) => step.name === 'Run image startup and security smoke')?.if).toBe(
-		"matrix.image != 'assistant'"
+		"matrix.image != 'assistant' && matrix.image != 'assistant-slim'"
 	);
 	expect(steps.find((step) => step.name === 'Retain Assistant suite logs and timings')?.if).toBe(
-		"always() && matrix.image == 'assistant'"
+		"always() && (matrix.image == 'assistant' || matrix.image == 'assistant-slim')"
 	);
 });

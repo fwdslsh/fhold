@@ -4,11 +4,13 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { componentVersions, imageComponents, inferReleaseScope, releaseImages } from './release-scope.mjs';
+import { componentVersions, imageComponents, inferReleaseScope, releaseImages, imageVariants } from './release-scope.mjs';
 
 const TOOLING_WORKSPACES = new Set(['packages/lib', 'packages/cli', 'packages/electron']);
 const NATIVE_CI_INPUTS = new Set([
 	'.github/workflows/ci.yml',
+	'docker-bake.json',
+	'packages/skeleton/assistant-editions.json',
 	'.github/workflows/gates.yml',
 	'.github/workflows/release.yml',
 	'scripts/ci-scope.mjs',
@@ -228,7 +230,7 @@ export function validationPlan(files, readBefore, readAfter) {
 	// Portal source and Dockerfile belong only to Portal. No other image imports them.
 	// Manifests, lock changes, shared inputs and unknown files retain all images.
 	const images = !files.length || nativeCiChanged ? ALL_IMAGES : runtimeImpact(files, readBefore, readAfter).filter((name) => imageComponents.includes(name));
-	return { scope, images: scope === 'tools' ? [] : images, admin };
+	return { scope, images: scope === 'tools' ? [] : imageVariants(images), admin };
 }
 
 export function gitInputs(base, head, mergeBase = false) {
@@ -249,7 +251,7 @@ export function gitInputs(base, head, mergeBase = false) {
 }
 
 const consumers = {
-	assistant: ['containers/assistant/tools', 'plugins/fhold'],
+	assistant: ['containers/assistant/tools', 'containers/assistant/claude-tools', 'containers/assistant/codex-tools', 'plugins/fhold'],
 	guardian: ['packages/guardian'],
 	portal: ['packages/portal'],
 	bridge: ['packages/claude-desktop']
@@ -331,7 +333,7 @@ export function gitValidationPlan(base, head = 'HEAD', mergeBase = false) {
 		return validationPlan(...gitInputs(base, head, mergeBase));
 	} catch (error) {
 		console.error(`Cannot prove a reduced CI scope: ${error.message}; running all checks`);
-		return { scope: 'full', images: ALL_IMAGES, admin: true };
+		return { scope: 'full', images: imageVariants(ALL_IMAGES), admin: true };
 	}
 }
 
@@ -339,8 +341,8 @@ export function releaseValidationPlan(scope, files) {
 	// A release stamp selects publication scope, but cannot waive validation
 	// of changes to the shared image pipeline itself.
 	return files.some((path) => NATIVE_CI_INPUTS.has(path))
-		? { scope: 'full', images: ALL_IMAGES, admin: true }
-		: { scope, images: releaseImages(scope), admin: true };
+		? { scope: 'full', images: imageVariants(ALL_IMAGES), admin: true }
+		: { scope, images: imageVariants(releaseImages(scope)), admin: true };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

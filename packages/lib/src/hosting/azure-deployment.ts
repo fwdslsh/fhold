@@ -32,7 +32,7 @@ export function selectedAzureContainer(
 		: containers.filter(
 				(item) =>
 					item.name === 'assistant' ||
-					(typeof item.image === 'string' && /(?:^|\/)fhold-assistant(?::|@)/.test(item.image))
+					(typeof item.image === 'string' && /(?:^|\/)fhold-assistant(?:-(?:slim|claude|codex))?(?::|@)/.test(item.image))
 			);
 	const selected =
 		matching.length === 1
@@ -464,7 +464,7 @@ export function azureDeploymentOperations(
 			const existing = String(selected.image);
 			if (
 				!input.image &&
-				!/^(?:docker\.io\/)?fwdslsh\/fhold-assistant:\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/.test(
+				!/^(?:docker\.io\/)?fwdslsh\/fhold-assistant(?:-slim)?:\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/.test(
 					existing
 				)
 			)
@@ -472,7 +472,7 @@ export function azureDeploymentOperations(
 			store.saveDeployment(ref, {
 				draft: parseDeploymentPatch({
 					container: String(selected.name),
-					image: input.image ?? `fwdslsh/fhold-assistant:${FH_RUNTIME_VERSION}`
+					image: input.image ?? existing.slice(0, existing.lastIndexOf(':') + 1) + FH_RUNTIME_VERSION
 				})
 			});
 			return apply();

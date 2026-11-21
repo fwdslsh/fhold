@@ -40,6 +40,7 @@ if [ -n "${FH_KEEPALIVE_URL:-}" ] && [ ! -s "$runtime/degraded-keepalive" ]; the
   fi
 fi
 for tool in codex claude; do
+  if [ -r /opt/fhold/tools/package.json ] && ! jq -e --arg tool "$tool" '.harnesses | index($tool) != null' /opt/fhold/tools/package.json >/dev/null; then continue; fi
   variable="FH_${tool^^}_REMOTE"
   if [ "${!variable-1}" = 1 ] && [ ! -s "$runtime/degraded-$tool" ]; then
     alive "$tool" || warning "$tool remote connection is unavailable. Check its status and recent logs, then restart; OpenCode remains available."

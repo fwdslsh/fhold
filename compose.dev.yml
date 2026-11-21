@@ -40,7 +40,8 @@ services:
       dockerfile: containers/assistant/Dockerfile
       args:
         PLATFORM_VERSION: ${PLATFORM_VERSION:-dev}
-    image: ${FH_IMAGE_NAMESPACE:-fhold}/fhold-assistant:dev
+        ASSISTANT_EDITION: ${FH_ASSISTANT_EDITION:-aio}
+    image: ${FH_IMAGE_NAMESPACE:-fhold}/${FH_ASSISTANT_IMAGE:-fhold-assistant}:dev
 
   discord:
     <<: *portal-dev

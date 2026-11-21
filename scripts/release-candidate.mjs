@@ -14,9 +14,9 @@ import {
 	existsSync
 } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { releaseImages } from './release-scope.mjs';
+import { releaseImages, imageVariants } from './release-scope.mjs';
 
-export const components = ['assistant', 'guardian', 'portal'];
+export const components = imageVariants(['assistant', 'guardian', 'portal']);
 export const architectures = ['amd64', 'arm64'];
 export const copyImage =
 	// Upstream stable container: Skopeo 1.22.3, including CVE-2025-11395 fix.
@@ -27,7 +27,7 @@ const run = (command, args) =>
 	execFileSync(command, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 
 export function candidateKinds(scope) {
-	const images = releaseImages(scope);
+	const images = imageVariants(releaseImages(scope));
 	return [
 		'cli-x64',
 		'cli-arm64',

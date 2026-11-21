@@ -1,5 +1,8 @@
 # fhold documentation
 
+[Assistant editions](assistant-editions.md) explains Slim/AIO selection, manual
+Claude/Codex builds and harness-specific keep-alive coverage.
+
 - [Install and first agent](installation.md): Linux source/artifacts and provider readiness.
 - [Manage fhold](managing-fhold.md): instance selection, lifecycle, schedules, backup and recovery.
 - [Ephemeral Assistant recovery](assistant-recovery.md): directory/Blob destinations, initialization, scheduling, ownership and verification.

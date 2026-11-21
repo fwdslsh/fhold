@@ -395,6 +395,8 @@ beforeEach(() => {
 	);
 	state.installationReadiness = { ok: true };
 	control('install-automatic-ports').checked = true;
+	control('install-edition').value = 'aio';
+	control('assistant-edition').value = 'aio';
 	control('install-instance-name').value = 'personal-agent';
 	control('install-assistant-port').disabled = true;
 	control('install-gateway-port').disabled = true;

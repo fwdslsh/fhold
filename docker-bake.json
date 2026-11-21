@@ -1,0 +1,103 @@
+{
+  "variable": {
+    "PLATFORM_VERSION": {
+      "default": "dev"
+    },
+    "VCS_REF": {
+      "default": ""
+    },
+    "BUILD_DATE": {
+      "default": ""
+    }
+  },
+  "group": {
+    "default": {
+      "targets": [
+        "assistant",
+        "assistant-slim"
+      ]
+    }
+  },
+  "target": {
+    "assistant-base": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile",
+      "args": {
+        "ASSISTANT_EDITION": "aio",
+        "PLATFORM_VERSION": "${PLATFORM_VERSION}",
+        "VCS_REF": "${VCS_REF}",
+        "BUILD_DATE": "${BUILD_DATE}"
+      }
+    },
+    "assistant": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile.aio",
+      "contexts": {
+        "fhold-assistant": "target:assistant-base"
+      },
+      "tags": [
+        "fhold/fhold-assistant:dev"
+      ]
+    },
+    "assistant-slim-base": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile",
+      "args": {
+        "ASSISTANT_EDITION": "slim",
+        "PLATFORM_VERSION": "${PLATFORM_VERSION}",
+        "VCS_REF": "${VCS_REF}",
+        "BUILD_DATE": "${BUILD_DATE}"
+      }
+    },
+    "assistant-slim": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile.slim",
+      "contexts": {
+        "fhold-assistant": "target:assistant-slim-base"
+      },
+      "tags": [
+        "fhold/fhold-assistant-slim:dev"
+      ]
+    },
+    "assistant-claude-base": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile",
+      "args": {
+        "ASSISTANT_EDITION": "claude",
+        "PLATFORM_VERSION": "${PLATFORM_VERSION}",
+        "VCS_REF": "${VCS_REF}",
+        "BUILD_DATE": "${BUILD_DATE}"
+      }
+    },
+    "assistant-claude": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile.claude",
+      "contexts": {
+        "fhold-assistant": "target:assistant-claude-base"
+      },
+      "tags": [
+        "fhold/fhold-assistant-claude:dev"
+      ]
+    },
+    "assistant-codex-base": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile",
+      "args": {
+        "ASSISTANT_EDITION": "codex",
+        "PLATFORM_VERSION": "${PLATFORM_VERSION}",
+        "VCS_REF": "${VCS_REF}",
+        "BUILD_DATE": "${BUILD_DATE}"
+      }
+    },
+    "assistant-codex": {
+      "context": ".",
+      "dockerfile": "containers/assistant/Dockerfile.codex",
+      "contexts": {
+        "fhold-assistant": "target:assistant-codex-base"
+      },
+      "tags": [
+        "fhold/fhold-assistant-codex:dev"
+      ]
+    }
+  }
+}

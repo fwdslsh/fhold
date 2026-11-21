@@ -15,6 +15,7 @@ import {
 	writeFileAtomic
 } from './foundation.js';
 import { FH_IMAGE_VERSIONS } from './release.js';
+import { assistantImage, isAssistantEdition, type AssistantEdition } from './assistant-editions.js';
 import { nativePreferencesFile } from './provider-files.js';
 import { defaultRecoverySettings, parseRecoverySettings, recoveryDirectory, recoveryEnvironment, recoveryStopGrace, type RecoverySettings } from './recovery-config.js';
 
@@ -59,6 +60,7 @@ export type StackConfig = {
 		images: { assistant: string; guardian: string; portal: string };
 	};
 	assistant: {
+		edition?: AssistantEdition;
 		bindAddress: string;
 		port: number;
 		timezone: string;
@@ -355,6 +357,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			'portals'
 		]) ||
 		!hasOnlyKeys(assistant, [
+			'edition',
 			'bindAddress',
 			'port',
 			'timezone',
@@ -373,6 +376,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 	}
 
 	const assistantPort = parsePort(assistant.port);
+	if (assistant.edition !== undefined && !isAssistantEdition(assistant.edition)) return { ok: false, error: 'assistant.edition must be aio, slim, claude or codex' };
 	const gatewayPort = parsePort(gateway.port);
 	if (typeof assistant.bindAddress !== 'string' || !validBindAddress(assistant.bindAddress)) {
 		return { ok: false, error: 'assistant.bindAddress must be an IPv4 or IPv6 address' };
@@ -438,6 +442,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			}
 		},
 		assistant: {
+			...(assistant.edition === undefined ? {} : { edition: assistant.edition as AssistantEdition }),
 			bindAddress: assistant.bindAddress,
 			port: assistantPort,
 			timezone,
@@ -520,6 +525,8 @@ export function stackConfigEnv(config: StackConfig): Record<string, string> {
 			.replace(/-+$/, ''),
 		FH_IMAGE_NAMESPACE: config.deployment.imageNamespace,
 		FH_ASSISTANT_VERSION: config.deployment.images.assistant,
+		FH_ASSISTANT_IMAGE: assistantImage(config.assistant.edition),
+		FH_ASSISTANT_EDITION: config.assistant.edition ?? 'aio',
 		FH_GUARDIAN_VERSION: config.deployment.images.guardian,
 		FH_PORTAL_VERSION: config.deployment.images.portal,
 		FH_STACK_CONFIG_VERSION: String(config.version),

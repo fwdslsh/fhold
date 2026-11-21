@@ -91,7 +91,7 @@ export async function updateHome(options: { homeDir?: string; start: boolean; pu
 		}
 		phase = 'applying-assets'; record();
 		rememberRuntimeBeforeChange(state.homeDir);
-		const seeded = await applyHomeSeed(state.homeDir);
+		const seeded = await applyHomeSeed(state.homeDir, candidateConfig.assistant.edition);
 		evidence = { ...evidence, managedAssetWarnings: seeded.warnings };
 		writeStackConfig(state.homeDir, candidateConfig);
 		phase = 'reconciling'; record();

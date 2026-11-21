@@ -270,6 +270,8 @@ export function bindRuntimeEvents() {
 				const config = snapshot.docker?.config;
 				if (!config)
 					throw new Error('The selected instance does not expose local installation settings.');
+				const edition = byId('install-edition').value;
+				if (edition !== (config.assistant.edition ?? 'aio')) config.assistant.edition = edition;
 				if (!automaticPorts) {
 					config.assistant.port = assistantPort;
 					config.gateway.port = gatewayPort;

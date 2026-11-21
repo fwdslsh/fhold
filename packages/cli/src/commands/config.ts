@@ -2,6 +2,7 @@ import { defineCommand } from 'citty';
 
 import {
 	parseStackConfig,
+	isAssistantEdition,
 	mutateStack,
 	saveStackIntent,
 	OAUTH_ALGORITHMS,
@@ -94,6 +95,7 @@ const assistant = defineCommand({
 			type: 'string',
 			description: 'IANA schedule timezone, for example America/Chicago'
 		},
+		edition: { type: 'string', description: 'Assistant image: aio or slim (claude/codex are manual-build editions)' },
 		apply: {
 			type: 'boolean',
 			description: 'Apply the stack immediately (use --no-apply to defer)',
@@ -101,12 +103,17 @@ const assistant = defineCommand({
 		}
 	},
 	async run({ args }) {
-		if (!args.bind && !args.port && !args.timezone)
-			throw new Error('Pass --bind, --port, or --timezone.');
+		if (!args.bind && !args.port && !args.timezone && !args.edition)
+			throw new Error('Pass --bind, --port, --timezone, or --edition.');
 		const { homeDir, config, baseline } = current();
 		if (args.bind) config.assistant.bindAddress = String(args.bind);
 		if (args.port) config.assistant.port = Number(args.port);
 		if (args.timezone) config.assistant.timezone = String(args.timezone);
+		if (args.edition) {
+			const edition = String(args.edition);
+			if (!isAssistantEdition(edition)) throw new Error('Choose aio, slim, claude or codex');
+			config.assistant.edition = edition;
+		}
 		warnExposure('the native OpenCode API', config.assistant.bindAddress);
 		const written = await save(homeDir, config, args.apply !== false, baseline);
 		console.log(JSON.stringify(written.assistant, null, 2));

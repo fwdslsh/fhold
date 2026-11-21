@@ -8,13 +8,23 @@
         "@biomejs/biome": "^2.6.6",
       },
     },
+    "containers/assistant/claude-tools": {
+      "name": "@fhold/claude-tools",
+      "dependencies": {
+        "@anthropic-ai/claude-code": "2.1.319",
+      },
+    },
+    "containers/assistant/codex-tools": {
+      "name": "@fhold/codex-tools",
+      "dependencies": {
+        "@openai/codex": "0.167.0",
+      },
+    },
     "containers/assistant/tools": {
       "name": "@fhold/assistant-tools",
       "dependencies": {
-        "@anthropic-ai/claude-code": "2.1.319",
         "@azure/identity": "4.14.1",
         "@azure/storage-blob": "12.34.0",
-        "@openai/codex": "0.167.0",
         "@opencode/cli": "2.2.6",
         "@opencode/client": "2.2.6",
         "@opencode/plugin": "2.2.6",
@@ -318,6 +328,10 @@
     "@fhold/assistant-tools": ["@fhold/assistant-tools@workspace:containers/assistant/tools"],
 
     "@fhold/claude-desktop": ["@fhold/claude-desktop@workspace:packages/claude-desktop"],
+
+    "@fhold/claude-tools": ["@fhold/claude-tools@workspace:containers/assistant/claude-tools"],
+
+    "@fhold/codex-tools": ["@fhold/codex-tools@workspace:containers/assistant/codex-tools"],
 
     "@fhold/electron": ["@fhold/electron@workspace:packages/electron"],
 

@@ -225,6 +225,7 @@
             </div>
             <label class="check-row"><input id="install-automatic-ports" type="checkbox" checked /><span>Choose available ports automatically</span></label>
             <div class="field-grid two-column disclosure-body">
+              <label class="field" for="install-edition"><span>Assistant edition</span><select id="install-edition"><option value="aio">All-in-one — OpenCode, Claude Code and Codex</option><option value="slim">Slim — OpenCode</option></select></label>
               <label class="field" for="install-assistant-port">
                 <span>Assistant port</span>
                 <input id="install-assistant-port" type="number" value="3810" min="1" max="65535" required disabled />
@@ -641,6 +642,7 @@
                   <form id="opencode-network-form" class="form-stack" data-managed-form>
                     <div class="field-grid two-column">
                       <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
+                      <label class="field" for="assistant-edition"><span>Assistant edition</span><select id="assistant-edition"><option value="aio">All-in-one — OpenCode, Claude Code and Codex</option><option value="slim">Slim — OpenCode</option><option value="claude">Claude (manual image)</option><option value="codex">Codex (manual image)</option></select><small>Restart to apply. Accounts and settings are preserved. Claude/Codex images require a manual build.</small></label>
                       <label class="field" for="assistant-port"><span>Port</span><input id="assistant-port" type="number" min="1" max="65535" required /></label>
                     </div>
                     <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>

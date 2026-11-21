@@ -36,15 +36,15 @@ their before/after commits). Missing or unreadable diffs select all checks.
 | Admin, CLI or shared management library | Tooling checks | None, except runtime seed-manifest changes | Linux preview and Windows/macOS desktop checks |
 | Component source/Dockerfile only, optionally docs | Full source checks | Affected image on amd64 and arm64 | When shared/embedded inputs change |
 | Runtime/shared dependency or Skeleton | Full source checks | Each affected consumer on both native architectures | When Admin inputs change |
-| Root build/install manifest, security/harness/orchestration or unknown inputs | Full source checks | All three images on both native architectures | When Admin or shared/unknown build inputs change |
+| Root build/install manifest, security/harness/orchestration or unknown inputs | Full source checks | AIO, Slim, Guardian and Portal on both native architectures | When Admin or shared/unknown build inputs change |
 
 Mixed lock changes use the dependency graph, including workspace, peer, optional
 and integrity edges; runtime changes select affected consumers. CI validation scope is
 separate from publication scope: editing orchestration exercises the native gates
 without requiring publication of unchanged container bytes. Shared native-pipeline
-changes require all six image jobs, even when the stamped publication scope is
+changes require all eight image jobs, even when the stamped publication scope is
 Assistant-only or tools. A full release still
-requires all six native image jobs on its exact final SHA. Partial or skipped CI
+requires all eight native image jobs on its exact final SHA. Partial or skipped CI
 cannot qualify it; the release workflow runs missing full qualification itself.
 Scoped releases require the two native jobs for each selected image and prove
 unselected source/dependency inputs match their published release tags. Draft PRs

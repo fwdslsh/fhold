@@ -35,6 +35,14 @@ or ownership failure remains a reason to stop writers and investigate safely.
 
 ## Native remote access
 
+Read the status report’s edition and harness availability first. A tool reported
+as `not-included` is intentionally absent, not a degraded worker. Slim includes
+OpenCode; AIO also includes Claude Code and Codex. Load only the setup skills
+shipped for the included tools. Switching images is an external operator action and is the durable way to add
+an omitted harness; a container-local install does not survive replacement.
+Native accounts,
+consent and explicit off choices survive edition changes.
+
 - Load [claude-code-login](../claude-code-login/SKILL.md) for Claude subscription
   sign-in, the exact `code#state` exchange, native workspace trust, one-time
   Remote Control consent and the current worker's connection link.
@@ -42,7 +50,7 @@ or ownership failure remains a reason to stop writers and investigate safely.
   sandbox prerequisites, native managed AKM hook verification and pairing.
 
 Their runnable scripts are shipped alongside each skill; use them rather than
-retyping login/FIFO recipes. Both workers normally start on every boot without
+retyping login/FIFO recipes. Included workers normally start on every boot without
 extra configuration, independently of scheduling. `fhold-remote` is internal
 lifecycle glue, **not** an upstream command or the host `fhold remote` CLI.
 Never start a second worker to fix pairing. Only use the skill's scoped restart

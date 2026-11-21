@@ -170,6 +170,7 @@ export function bindConfigurationEvents() {
 				return;
 			const config = structuredClone(state.currentConfig);
 			config[section] = { ...config[section], bindAddress, port };
+			if (section === 'assistant' && byId('assistant-edition').value !== (config.assistant.edition ?? 'aio')) config.assistant.edition = byId('assistant-edition').value;
 			const title = app === 'opencode' ? 'OpenCode' : 'MCP';
 			await saveConfigAndOfferRestart(
 				config,

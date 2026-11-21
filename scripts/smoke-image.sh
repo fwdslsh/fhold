@@ -51,11 +51,17 @@ wait_for_health() {
 	return 1
 }
 
+image_includes() {
+	docker exec "$container" jq -e --arg tool "$1" '.harnesses | index($tool) != null' /opt/fhold/tools/package.json >/dev/null
+}
+
 verify_remote_state() {
-	local expected=$1 tool deadline
+	local expected=$1 tool deadline target
 	for tool in codex claude; do
+		target=$expected
+		if ! image_includes "$tool"; then target=not-included; fi
 		deadline=$((SECONDS + 45))
-		while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *"$expected"* ]]; do
+		while [[ "$(docker exec "$container" fhold-remote "$tool" status)" != *"$target"* ]]; do
 			if ((SECONDS >= deadline)); then echo "$tool did not reach $expected" >&2; exit 1; fi
 			sleep 1
 		done
@@ -114,6 +120,8 @@ verify_environment_upgrade() {
 verify_runtime_versions() {
 	test "$(docker exec "$container" bun --version)" = "$expected_bun"
 	if [ "$kind" = assistant ]; then
+		edition=$(docker image inspect "$image" --format '{{index .Config.Labels "dev.fwdslsh.fhold.edition"}}')
+		docker exec -e EXPECTED_EDITION="$edition" -i "$container" node --input-type=module < scripts/smoke-assistant-edition.mjs
 		local expected_node expected_npm expected_tools
 		expected_node=$(sed -nE 's/^FROM node:([0-9.]+).*$/\1/p' containers/assistant/Dockerfile)
 		test "$(docker exec "$container" node --version)" = "v$expected_node"
@@ -124,7 +132,7 @@ verify_runtime_versions() {
 		# OpenCode runs login shells whose /etc/profile replaces the image PATH.
 		# Native CLIs must remain ordinary commands without an agent exporting PATH.
 		docker exec --workdir /work "$container" bash --login -c \
-			'for tool in opencode akm codex claude playwright chromium; do test "$(command -v "$tool")" = "/usr/local/bin/$tool" || exit 1; "$tool" --version || exit 1; done'
+			'for tool in opencode akm playwright chromium; do test "$(command -v "$tool")" = "/usr/local/bin/$tool" || exit 1; "$tool" --version || exit 1; done'
 		docker exec --workdir /work "$container" bash --login -c \
 			'test "$(id -un)" = fhold && tree --version && tree -L 1 /fhold-bundle/skills/fhold-admin'
 		docker exec "$container" node --input-type=module -e '
@@ -163,7 +171,7 @@ verify_workspace_runtime_boundary() {
 	test "$status" = 1
 	[[ "$output" == *'Choose codex or claude'* ]]
 	# Read-only native hook inventory; never approve trust or use vendor accounts.
-	docker exec --workdir /work "$container" fhold-codex-recall.mjs review >/dev/null
+	if image_includes codex; then docker exec --workdir /work "$container" fhold-codex-recall.mjs review >/dev/null; fi
 	docker exec --workdir /work "$container" bun -e \
 		'if (await Bun.file("/tmp/fhold-bun-preload-executed").exists()) throw Error("A helper executed workspace bunfig preload");'
 	printf '%s\n' 'Workspace Bun dotenv/preload boundary passed for helpers and AKM'
@@ -185,13 +193,15 @@ verify_builtin_skills() {
 	# including when the installed stack mounts its managed configuration.
 	docker exec "$container" bun -e '
 		const headers = {authorization: "Basic " + Buffer.from("opencode:assistant-smoke-password-0000000000000000").toString("base64")};
+		const manifest = await Bun.file("/opt/fhold/tools/package.json").json();
+		const expected = ["fhold-admin", ...(manifest.harnesses.includes("claude") ? ["claude-code-login"] : []), ...(manifest.harnesses.includes("codex") ? ["codex-remote-setup"] : [])];
 		let skills = [];
 		for (let attempt = 0; attempt < 50; attempt++) {
 			({data: skills} = await (await fetch("http://127.0.0.1:4096/api/skill?location[directory]=/work", {headers})).json());
-			if (["claude-code-login", "codex-remote-setup", "fhold-admin"].every(name => skills.some(skill => skill.name === name))) break;
+			if (expected.every(name => skills.some(skill => skill.name === name))) break;
 			await Bun.sleep(100);
 		}
-		for (const name of ["claude-code-login", "codex-remote-setup", "fhold-admin"]) {
+		for (const name of expected) {
 			const skill = skills.find(item => item.name === name);
 			const target = `/etc/opencode/skills/${name}/SKILL.md`;
 			if (skill?.path !== target) throw Error(`Native ${name} skill is not discoverable: ${JSON.stringify(skills.map(({name,path}) => ({name,path})))}`);
@@ -251,9 +261,11 @@ verify_optional_failure_isolation() {
 	wait_for_health
 	docker exec "$container" bun /etc/opencode/skills/fhold-admin/scripts/status.mjs | docker exec -i "$container" bun -e '
 		const result = await Bun.stdin.json();
+		const codexIncluded = (await Bun.file("/opt/fhold/tools/package.json").json()).harnesses.includes("codex");
 		if (!result.agentReady || result.schedulerEnabled || !result.warnings.some(warning => warning.includes("runtime settings")) ||
 			!result.warnings.some(warning => warning.includes("Keep-alive")) ||
-			!result.warnings.some(warning => warning.includes("FH_CODEX_REMOTE")))
+			(codexIncluded && !result.warnings.some(warning => warning.includes("FH_CODEX_REMOTE"))) ||
+			(!codexIncluded && result.codex.state !== "not-included"))
 			throw Error("Malformed optional settings blocked startup or hid degradation");'
 	printf '%s\n' 'Malformed optional settings: authenticated agent is healthy with actionable warnings'
 }
@@ -327,7 +339,9 @@ assistant)
 		"$root/knowledge/secrets" \
 		"$root/workspace" \
 		"$root/config"
-	cp -R packages/skeleton/system/assistant "$root/system"
+	edition=$(docker image inspect "$image" --format '{{index .Config.Labels "dev.fwdslsh.fhold.edition"}}')
+	bun scripts/bake-assistant-assets.mjs packages/skeleton "$root/baked" "$edition"
+	cp -R "$root/baked/system/assistant" "$root/system"
 	cp -R packages/skeleton/config/assistant/. "$root/config/"
 	cp packages/skeleton/config/akm/config.json "$root/akm.json"
 	printf '%s\n' 'assistant-smoke-password-0000000000000000' >"$root/password"
@@ -364,8 +378,10 @@ assistant)
 		"$image" >/dev/null
 	wait_for_health
 	if [ "$phase" = activity ]; then
-		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
-		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
+		if image_includes codex; then
+			docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
+			docker exec "$container" bun /tmp/smoke-codex-activity.mjs
+		fi
 		exit 0
 	fi
 	if [ "$phase" = all ] || [ "$phase" = runtime ]; then
@@ -381,21 +397,25 @@ assistant)
 	verify_builtin_skills
 	docker exec "$container" curl -sf -u 'opencode:assistant-smoke-password-0000000000000000' http://127.0.0.1:4096/api/config >/dev/null
 	docker exec "$container" sh -c \
-		'command -v akm >/dev/null && command -v opencode >/dev/null && command -v supercronic >/dev/null && codex --version && claude --version && test -x /usr/local/bin/fhold-remote && test -x /usr/local/bin/fhold-remote-setup && test -x /usr/local/bin/fhold-task && test -r /opt/fhold/tools/node_modules/akm-opencode-v2/dist/index.js'
+		'command -v akm >/dev/null && command -v opencode >/dev/null && command -v supercronic >/dev/null  && test -x /usr/local/bin/fhold-remote && test -x /usr/local/bin/fhold-remote-setup && test -x /usr/local/bin/fhold-task && test -r /opt/fhold/tools/node_modules/akm-opencode-v2/dist/index.js'
 	docker exec "$container" bun -e \
 		'const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); if (typeof Bun.Terminal !== "function" || setupCommands("codex", "read-only")[0][0] !== "sandbox") throw Error("Guided native setup is unavailable");'
 	docker exec "$container" bun -e \
 		'const { remoteCommand } = await import("/usr/local/bin/fhold-remote.mjs"); const { setupCommands } = await import("/usr/local/bin/fhold-remote-setup"); const args = remoteCommand("codex", "danger-full-access"); if (args.some(a => a.includes("approval_policy")) || !args.includes("sandbox_mode=\"danger-full-access\"") || args.some(a => a.includes("bypass")) || setupCommands("codex", "danger-full-access").some(([stage]) => stage === "sandbox")) throw Error("Explicit container isolation contract failed");'
+	if image_includes claude; then
 	docker exec "$container" claude plugin validate /akm-marketplace/claude --strict
 	docker exec "$container" claude plugin validate /fhold-plugins/fhold --strict
 	docker exec "$container" claude plugin list --json | docker exec -i "$container" bun -e \
 		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.claude-plugin/plugin.json").json()).version; if (!plugins.some(p => p.id === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.some(p => p.id === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Claude built-in plugin versions not loaded");'
 	docker exec "$container" claude plugin details akm
+	fi
+	if image_includes codex; then
 	docker exec "$container" codex plugin list --json | docker exec -i "$container" bun -e \
 		'const plugins = await Bun.stdin.json(); const version = (await Bun.file("/opt/fhold/tools/package.json").json()).dependencies["akm-opencode-v2"]; const fhold = (await Bun.file("/fhold-plugins/fhold/.codex-plugin/plugin.json").json()).version; if (!plugins.installed.some(p => p.pluginId === "akm@akm-plugins" && p.enabled && p.version === version) || !plugins.installed.some(p => p.pluginId === "fhold@fhold-plugins" && p.enabled && p.version === fhold)) throw Error("Codex built-in plugin versions not installed/enabled");'
+	fi
 	docker cp scripts/smoke-akm-harnesses.mjs "$container:/tmp/smoke-akm-harnesses.mjs"
 	docker exec "$container" bun /tmp/smoke-akm-harnesses.mjs
-	if [ "$phase" = all ]; then
+	if [ "$phase" = all ] && image_includes codex; then
 		docker cp scripts/smoke-codex-activity.mjs "$container:/tmp/smoke-codex-activity.mjs"
 		docker exec "$container" bun /tmp/smoke-codex-activity.mjs
 	fi

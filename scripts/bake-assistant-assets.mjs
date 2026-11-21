@@ -4,6 +4,7 @@ import { copyFileSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { MANAGED_FILES, SEEDED_FILES } from '../packages/lib/src/control-plane/seed-manifest.ts';
+import { editionOwnsAsset, isAssistantEdition } from '../packages/lib/src/control-plane/assistant-editions.ts';
 
 const locations = [
 	['system/assistant/', '/etc/opencode/'],
@@ -14,15 +15,16 @@ const locations = [
 	['knowledge/', '/stash/']
 ];
 
-export function assistantAssets() {
-	return [...MANAGED_FILES, ...SEEDED_FILES].flatMap((source) => {
+export function assistantAssets(edition = 'aio') {
+	if (!isAssistantEdition(edition)) throw new Error('Unknown Assistant edition');
+	return [...MANAGED_FILES, ...SEEDED_FILES].filter((source) => editionOwnsAsset(source, edition)).flatMap((source) => {
 		const location = locations.find(([prefix]) => source.startsWith(prefix));
 		return location ? [{ source, target: location[1] + source.slice(location[0].length) }] : [];
 	});
 }
 
-export function bakeAssistantAssets(skeleton, output) {
-	const assets = assistantAssets();
+export function bakeAssistantAssets(skeleton, output, edition = 'aio') {
+	const assets = assistantAssets(edition);
 	// Validate everything before publishing the image build's selection.
 	for (const { source } of assets) {
 		let current = resolve(skeleton);
@@ -48,7 +50,7 @@ export function bakeAssistantAssets(skeleton, output) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-	if (process.argv.length !== 4)
-		throw new Error('Usage: bake-assistant-assets.mjs <skeleton> <output>');
-	bakeAssistantAssets(resolve(process.argv[2]), resolve(process.argv[3]));
+	if (process.argv.length < 4 || process.argv.length > 5)
+		throw new Error('Usage: bake-assistant-assets.mjs <skeleton> <output> [aio|slim|claude|codex]');
+	bakeAssistantAssets(resolve(process.argv[2]), resolve(process.argv[3]), process.argv[4] ?? 'aio');
 }

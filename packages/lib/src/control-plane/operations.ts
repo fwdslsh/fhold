@@ -29,6 +29,7 @@ import {
 	writePortalCredentialMap
 } from './portal-credential-store.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { applyHomeSeedSync, preflightHomeSeed } from './seed.js';
 import { rememberRuntimeBeforeChange } from './runtime-revision.js';
 
 /** All mutations read latest intent only after exclusion is acquired. */
@@ -166,7 +167,10 @@ export function saveStackIntent(
 	return mutateStack(homeDir, (current) => {
 		if (!baseline || JSON.stringify(current) !== JSON.stringify(baseline))
 			throw new Error('Settings changed since refresh. Refresh and review before saving.');
+		const editionChanged = (current.assistant.edition ?? 'aio') !== (config.assistant.edition ?? 'aio');
+		if (editionChanged) preflightHomeSeed(homeDir);
 		const saved = writeStackConfig(homeDir, config);
+		if (editionChanged) applyHomeSeedSync(homeDir, saved.assistant.edition, true);
 		ensureRuntime(createFholdState(homeDir));
 		return saved;
 	});

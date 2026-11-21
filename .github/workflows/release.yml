@@ -74,7 +74,7 @@ jobs:
           import { appendFileSync, readFileSync } from 'node:fs';
           import { parseSemver } from './scripts/set-version.mjs';
           import { assertRetainedComponents } from './scripts/ci-scope.mjs';
-          import { inferReleaseScope, releaseImages, releaseManifests } from './scripts/release-scope.mjs';
+          import { inferReleaseScope, releaseImages, releaseManifests, imageVariants } from './scripts/release-scope.mjs';
           const version = process.env.VERSION ?? '';
           if (process.env.ACTIONS_ORIGIN !== 'https://github.com' ||
               process.env.ACTIONS_REPOSITORY !== 'fwdslsh/fhold') {
@@ -92,7 +92,7 @@ jobs:
           }
           const release = JSON.parse(readFileSync('.github/release-manifest.json', 'utf8'));
           const scope = (process.env.SCOPE || 'auto') === 'auto' ? inferReleaseScope(version) : process.env.SCOPE;
-          const images = releaseImages(scope);
+          const images = imageVariants(releaseImages(scope));
           const manifests = releaseManifests(release, scope);
           assertRetainedComponents(scope, version);
           for (const manifest of manifests) {
@@ -138,6 +138,7 @@ jobs:
       run_id: ${{ needs.validate.outputs.candidate_run || github.run_id }}
       attempt: ${{ needs.validate.outputs.candidate_attempt || github.run_attempt }}
       assistant_ids: ${{ steps.select.outputs.assistant_ids }}
+      assistant-slim_ids: ${{ steps.select.outputs.assistant-slim_ids }}
       guardian_ids: ${{ steps.select.outputs.guardian_ids }}
       portal_ids: ${{ steps.select.outputs.portal_ids }}
       assets_ids: ${{ steps.select.outputs.assets_ids }}

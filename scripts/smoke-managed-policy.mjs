@@ -24,6 +24,9 @@ if (process.argv[2] === '--inside') {
 	])
 		assert.throws(() => accessSync(file, constants.W_OK), `Agent must not write ${file}`);
 
+	const { includedRemotes } = await import('/fhold-plugins/fhold/scripts/activity.mjs');
+	const remotes = includedRemotes();
+	if (remotes.includes('codex')) {
 	const { withCodexRecall } = await import('/usr/local/bin/fhold-codex-recall.mjs');
 	const config = await withCodexRecall((rpc) =>
 		rpc('config/read', { includeLayers: true, cwd: '/work' })
@@ -60,6 +63,7 @@ if (process.argv[2] === '--inside') {
 	});
 	assert.ok(readFileSync('/tmp/operator-codex-hook', 'utf8').includes('operator-hook'));
 	console.log('Codex: supplied approval policy and managed hooks loaded');
+	}
 
 	const { OpenCode } = await import(
 		'/opt/fhold/tools/node_modules/@opencode/client/dist/promise/index.js'
@@ -119,6 +123,7 @@ if (process.argv[2] === '--inside') {
 	console.log(
 		'OpenCode: native permission evaluation enforces managed policy and restricted agents'
 	);
+	if (remotes.includes('claude')) {
 	const settingsFile = '/home/fhold/.claude/settings.json';
 	const settings = JSON.parse(readFileSync(settingsFile, 'utf8'));
 	settings.permissions = { defaultMode: 'bypassPermissions', allow: ['Bash'] };
@@ -147,6 +152,7 @@ if (process.argv[2] === '--inside') {
 		'Additional operator hooks must execute once alongside the built-in hooks'
 	);
 	console.log('Claude: managed task mode and deny rules override conflicting user settings');
+	}
 } else {
 	const image = process.argv[2];
 	assert.ok(image, 'Usage: node scripts/smoke-managed-policy.mjs IMAGE');

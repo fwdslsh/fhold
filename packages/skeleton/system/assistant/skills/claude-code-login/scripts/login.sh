@@ -4,6 +4,7 @@ shared="${BASH_SOURCE[0]%/*}/../../fhold-admin/scripts/session.sh"
 action=${1:?Use start, link, submit, verify, cancel or clean}
 case "$action" in
   start)
+    command -v claude >/dev/null || { echo "Claude Code is not included in this Assistant edition. Select AIO or Claude on the host." >&2; exit 1; }
     if env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN timeout 10s claude auth status | node --input-type=module -e 'let text=""; for await (const chunk of process.stdin) text+=chunk; try {const s=JSON.parse(text);process.exit(s.loggedIn===true&&s.authMethod==="claude.ai"?0:1);}catch{process.exit(1);}' 2>/dev/null; then
       echo '{"signedIn":true,"note":"Existing Claude subscription sign-in preserved."}'
     else exec bash "$shared" start claude-login "${2:-900}"; fi

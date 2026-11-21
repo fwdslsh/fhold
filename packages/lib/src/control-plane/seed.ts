@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { ensureHomeDirs, writeFileAtomic } from './foundation.js';
 import { MANAGED_FILES, RETIRED_MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 import { assertSafePortablePath } from './provider-files.js';
+import { readStackConfig } from './stack-config.js';
+import { editionOwnsAsset, assetHarness, type AssistantEdition } from './assistant-editions.js';
 export { MANAGED_FILES, SEEDED_FILES } from './seed-manifest.js';
 
 let distributionSkeleton: string | undefined;
@@ -62,6 +64,13 @@ export function preflightHomeSeed(homeDir: string): void {
 			const stat = lstatSync(current, { throwIfNoEntry: false });
 			if (stat && (stat.isSymbolicLink() || (current === join(homeDir, path) ? !stat.isFile() : !stat.isDirectory()))) {
 				throw new Error(`Refusing non-file or linked seed path: ${current}`);
+			}
+		}
+		if (assetHarness(path) && lstatSync(current, { throwIfNoEntry: false })?.isFile()) {
+			const bytes = readFileSync(current);
+			if (bytes.equals(readFileSync(sourcePath))) {
+				const hash = createHash('sha256').update(bytes).digest('hex');
+				assertSafePortablePath(homeDir, `state/retired-managed/${hash}/${path}`, true);
 			}
 		}
 	}
@@ -123,18 +132,25 @@ function copy(
  * whole files; user-owned seed files are never overwritten. Removed product
  * assets retire only when their bytes match a published product asset exactly.
  */
-export async function applyHomeSeed(homeDir: string): Promise<{ updated: string[]; warnings: string[] }> {
+export async function applyHomeSeed(homeDir: string, edition?: AssistantEdition): Promise<{ updated: string[]; warnings: string[] }> {
+	return applyHomeSeedSync(homeDir, edition);
+}
+
+/** Synchronous owner used by configuration saves under the lifecycle lock. */
+export function applyHomeSeedSync(homeDir: string, selectedEdition?: AssistantEdition, editionSkillsOnly = false): { updated: string[]; warnings: string[] } {
 	preflightHomeSeed(homeDir);
 	ensureHomeDirs(homeDir);
 	const source = skeletonRoot();
 	const updated: string[] = [];
 	const warnings: string[] = [];
+	const config = readStackConfig(homeDir);
+	const edition = selectedEdition ?? (config.ok ? config.config.assistant.edition ?? 'aio' : 'aio');
 	const warn = (path: string, reason: string) => {
 		const message = `Preserved retired asset ${path}: ${reason}. Review it: files under system/assistant may still be discovered by OpenCode.`;
 		warnings.push(message);
 		console.warn(`fhold: ${message}`);
 	};
-	for (const [path, hashes] of Object.entries(RETIRED_MANAGED_FILES)) {
+	for (const [path, hashes] of Object.entries(editionSkillsOnly ? {} : RETIRED_MANAGED_FILES)) {
 		assertSafePortablePath(homeDir, path, true);
 		const target = join(homeDir, path);
 		const stat = lstatSync(target, { throwIfNoEntry: false });
@@ -152,9 +168,28 @@ export async function applyHomeSeed(homeDir: string): Promise<{ updated: string[
 		updated.push(path);
 	}
 	for (const path of MANAGED_FILES) {
+		if (editionSkillsOnly && !assetHarness(path)) continue;
+		if (!editionOwnsAsset(path, edition)) {
+			// Retire only our exact current bytes, preserving unknown/modified
+			// files and all native account state when switching editions.
+			const target = join(homeDir, path);
+			if (existsSync(target)) {
+				const bytes = readFileSync(target);
+				if (bytes.equals(readFileSync(join(source, path)))) {
+					const hash = createHash('sha256').update(bytes).digest('hex');
+					const archive = join(homeDir, 'state', 'retired-managed', hash, path);
+					assertSafePortablePath(homeDir, relative(homeDir, archive), true);
+					if (existsSync(archive) && !readFileSync(archive).equals(bytes)) { warn(path, 'an existing archive differs'); continue; }
+					writeFileAtomic(archive, bytes, 0o600);
+					unlinkSync(target);
+					updated.push(path);
+				} else warn(path, 'it differs from this edition’s release-owned output');
+			}
+			continue;
+		}
 		if (copy(source, homeDir, path, true)) updated.push(path);
 	}
-	for (const path of SEEDED_FILES) {
+	for (const path of editionSkillsOnly ? [] : SEEDED_FILES) {
 		if (copy(source, homeDir, path, false)) updated.push(path);
 	}
 	return { updated, warnings };
