@@ -55,7 +55,7 @@ export function renderRemoteStatus(snapshot) {
 	for (const name of ['claude', 'codex']) {
 		setBadge(
 			byId(`${name}-remote-status`),
-			available ? 'Available after explicit setup' : 'Unavailable for this instance',
+			available ? 'Verify availability during setup' : 'Unavailable for this instance',
 			'neutral'
 		);
 		for (const button of all(`[data-remote-connect="${name}"]`))
