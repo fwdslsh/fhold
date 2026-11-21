@@ -64,7 +64,7 @@ baselines for update; it is not a second installation discriminator or fallback.
 
 The sole managed Compose file is
 `packages/skeleton/system/stack/stack.compose.yml`; the sole user overlay is
-`config/stack/custom.compose.yml`. Profiles are exactly `gateway`, `discord`
+`config/stack/custom.compose.yml`. The current profiles are `gateway`, `discord`
 and `slack`. The source-only development build override is not an installed layer.
 
 See [core principles](core-principles.md) for security/lifecycle invariants,

@@ -437,6 +437,12 @@ Guardian's own authentication and request protections remain unchanged.
 
 - No service runs as root or receives additional Linux capabilities.
 - Assistant never receives Docker, host-admin, Guardian or portal authority.
+- Sharing Assistant's user identity alone does not isolate code from that user's
+  readable files or credentials. Preserve and reuse native sandbox controls;
+  the default workspace-write/read-only modes do not imply credential secrecy.
+  Where additional independent isolation is required, an owner-approved optional
+  service may hold credentials or run isolated work outside Assistant, without
+  adding fhold agent policy inside it.
 - Native Assistant API is authenticated and loopback-published unless explicit
   intent selects another exact bind. Native access intentionally bypasses Guardian.
 - External guarded requests enter authenticated Guardian MCP. Protection cannot
