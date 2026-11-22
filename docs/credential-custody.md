@@ -30,26 +30,36 @@ hardening for separation of credential ownership. It mounts two private named
 volumes: the credential home and root-owned sudo policy. It does not grant
 general sudo, mount the Docker socket or run the Assistant as root.
 
-For the commands below, select the intended instance explicitly:
+For the commands below, use Bash and host-side `jq` to select the persisted
+instance project explicitly. Check its actual identity before provisioning:
 
 ```sh
 export FH_HOME=/absolute/path/to/disposable-instance
 dc() {
-  docker compose --project-directory "$FH_HOME/system/stack" \
+  local project
+  project="$(jq -er '.deployment.projectName | strings | select(length > 0)' "$FH_HOME/state/stack.json")" || return
+  docker compose --project-name "$project" --project-directory "$FH_HOME/system/stack" \
     --env-file "$FH_HOME/state/stack.env" \
     -f "$FH_HOME/system/stack/stack.compose.yml" \
     -f "$FH_HOME/config/stack/custom.compose.yml" "$@"
 }
 cred() {
-  dc exec -T --user 1101:1101 assistant env -i \
+  dc exec -T --user 1101:1101 --workdir /var/lib/fhold-credentials assistant /usr/bin/env -i \
     HOME=/var/lib/fhold-credentials PATH=/usr/local/bin:/usr/bin:/bin "$@"
+}
+test "$(dc exec -T assistant /usr/bin/id -u):$(dc exec -T assistant /usr/bin/id -g)" = '1000:1000' || {
+  printf 'Unsupported Assistant identity; stop before provisioning credentials.\n' >&2
+  exit 1
 }
 cred akm setup --yes --no-probe --embedding off --dir /var/lib/fhold-credentials/akm
 ```
 
 `cred` is an operator-side convenience for Docker administration. It is not an
 Assistant tool or a new credential execution wrapper. Its clean environment
-keeps the Assistant's AKM locations out of the private user's setup.
+keeps the Assistant's AKM locations out of the private user's setup. Keep the
+absolute `/usr/bin/env` and private working directory: the Assistant can replace
+commands in its own PATH or put runtime preloads in `/work`. Operator commands
+must not execute either of those as the private user or root.
 
 ## Provision a synthetic proof task
 
@@ -84,10 +94,14 @@ encoding or sending a token elsewhere. A task grant permits repeated use.
 Install an exact native sudo rule as the operator:
 
 ```sh
-dc exec -T --user 0 assistant sh -eu -c '
+dc exec -T --user 0 --workdir / assistant /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/bin /bin/sh -eu -c '
   umask 077
-  cat > /etc/sudoers.d/fhold-credentials
-  chmod 0440 /etc/sudoers.d/fhold-credentials
+  candidate=$(mktemp /etc/sudoers.d/.fhold-credentials.XXXXXX)
+  trap '\''rm -f "$candidate"'\'' EXIT
+  cat > "$candidate"
+  chmod 0440 "$candidate"
+  /usr/sbin/visudo -cf "$candidate"
+  mv -f "$candidate" /etc/sudoers.d/fhold-credentials
   /usr/sbin/visudo -cf /etc/sudoers
 ' <<'POLICY'
 Defaults:fhold env_reset
@@ -95,7 +109,8 @@ fhold ALL=(fhold-credentials) CWD=/var/lib/fhold-credentials NOPASSWD: NOSETENV:
 POLICY
 ```
 
-The root-owned policy volume is outside Assistant's writable home. **Keep the
+The candidate is validated before replacing the active rule. The root-owned
+policy volume is outside Assistant's writable home. **Keep the
 fixed `CWD=`:** a caller-controlled working directory can load runtime startup
 configuration before AKM applies task bindings or redaction. Do not allow
 `sudo -D`, `SETENV`, wildcard command arguments, a general shell or arbitrary
@@ -153,6 +168,7 @@ node scripts/smoke-credential-custody.mjs IMAGE
 
 The smoke uses the actual Compose overlay and published AKM package in the image,
 disposable named volumes and synthetic credentials. It checks default-off behavior,
-direct-read/tamper/argument/environment/cwd attacks, native OpenCode and scheduled
-execution, and persistence across replacement. It makes no model requests or
+the documented operator commands against hostile PATH/preload files, persisted
+project selection, direct-read/tamper/argument/environment/cwd attacks, native
+OpenCode and scheduled execution, and persistence across replacement. It makes no model requests or
 changes to existing instances. Run it on both Slim and AIO.

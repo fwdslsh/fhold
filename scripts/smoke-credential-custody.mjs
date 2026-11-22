@@ -3,7 +3,7 @@
 // grants and credentials are synthetic, in disposable project-scoped volumes.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -11,8 +11,19 @@ const image = process.argv[2];
 assert.ok(image, 'Usage: node scripts/smoke-credential-custody.mjs IMAGE');
 const root = mkdtempSync(join(tmpdir(), 'fhold-custody-'));
 const project = `fhold-custody-${process.pid}`;
-const base = join(root, 'compose.json');
+const base = join(root, 'system/stack/stack.compose.yml');
 const overlay = resolve('docs/examples/credential-custody.compose.yml');
+const instructions = readFileSync('docs/credential-custody.md', 'utf8');
+const blocks = [...instructions.matchAll(/```sh\n([\s\S]*?)```/g)].map((match) => match[1]);
+const setup = blocks.find((block) => block.includes('dc() {'));
+assert.ok(setup);
+const helpers = setup.slice(setup.indexOf('dc() {'), setup.indexOf('test "$(dc exec'));
+const policy = blocks.find((block) => block.startsWith('dc exec -T --user 0'));
+assert.ok(policy);
+for (const dir of ['system/stack', 'state', 'config/stack']) mkdirSync(join(root, dir), { recursive: true });
+writeFileSync(join(root, 'state/stack.json'), JSON.stringify({ deployment: { projectName: project } }));
+writeFileSync(join(root, 'state/stack.env'), `FH_PROJECT_NAME=${project}\n`);
+writeFileSync(join(root, 'config/stack/custom.compose.yml'), readFileSync(overlay));
 const privateHome = '/var/lib/fhold-credentials';
 const token = 'synthetic-custody-canary';
 const auth = 'synthetic-custody-http';
@@ -44,7 +55,15 @@ function exec(args, input, uid, cwd) {
 	return r.stdout;
 }
 function credential(args, input) {
-	return exec(['env', '-i', `HOME=${privateHome}`, 'PATH=/usr/local/bin:/usr/bin:/bin', ...args], input, '1101:1101', privateHome);
+	return operator('cred "$@"', args, input);
+}
+function operator(command, args = [], input) {
+	const r = spawnSync('bash', ['-eu', '-c', `${helpers}\n${command}`, 'custody-operator', ...args], {
+		input, encoding: 'utf8', timeout: 100_000, env: { ...process.env, FH_HOME: root }
+	});
+	assert.equal(r.status, 0, r.stderr || r.stdout);
+	assert.doesNotMatch(r.stdout + r.stderr, /ATTACKER_/, 'Operator executed agent-controlled startup code');
+	return r.stdout;
 }
 const approved = ['sudo', '-n', '-H', '-u', 'fhold-credentials', '/usr/local/bin/akm', 'run', 'tasks/probe'];
 function denied(args) { assert.notEqual(execResult(args).status, 0, 'Unexpectedly allowed: ' + args.join(' ')); }
@@ -69,6 +88,21 @@ try {
 	await start();
 	assert.equal(exec(['stat', '-c', '%u:%g:%a', privateHome]).trim(), '1101:1101:700');
 	denied(approved); // Enabling the overlay alone authorizes no operation.
+	assert.equal(JSON.parse(operator('dc config --format json')).name, project);
+	operator(setup.slice(setup.indexOf('test "$(dc exec'), setup.indexOf('cred akm setup')));
+	// An agent may make its own directories readable and plant PATH/runtime
+	// startup code. Execute the documentation's actual privileged commands.
+	exec(['/bin/sh', '-eu', '-c', `
+mkdir -p /home/fhold/.local/bin
+for command in env sh cat chmod; do
+  printf '#!/bin/sh\\necho ATTACKER_PATH_UID=$(/usr/bin/id -u) >&2\\nexec /usr/bin/%s "$@"\\n' "$command" > /home/fhold/.local/bin/"$command"
+  /usr/bin/chmod 755 /home/fhold/.local/bin/"$command"
+done
+printf 'preload = ["./attack.ts"]\\n' > /work/bunfig.toml
+printf 'console.error("ATTACKER_PRELOAD_UID="+process.getuid());' > /work/attack.ts
+/usr/bin/chmod 755 /home/fhold /home/fhold/.local /home/fhold/.local/bin /work
+/usr/bin/chmod 644 /work/bunfig.toml /work/attack.ts
+`]);
 	credential(['akm', 'setup', '--yes', '--no-probe', '--embedding', 'off', '--dir', `${privateHome}/akm`]);
 	credential(['akm', 'secret', 'set', 'secrets/probe'], token);
 	credential(['sh', '-eu', '-c', 'mkdir -p "$HOME/akm/scripts" "$HOME/akm/tasks"']);
@@ -76,8 +110,8 @@ try {
 		'#!/bin/sh\nset -eu\ntest -n "$TOKEN"\nprintf "credential-used %s\\n" "$TOKEN"\n');
 	credential(['sh', '-eu', '-c', 'cat > "$HOME/akm/tasks/probe.yml"'],
 		'version: 5-beta.1\nsteps:\n  - name: probe\n    run: scripts/probe.sh\n    secret: [secrets/probe:TOKEN]\n');
-	exec(['sh', '-eu', '-c', 'umask 077; cat > /etc/sudoers.d/fhold-credentials; chmod 0440 /etc/sudoers.d/fhold-credentials; /usr/sbin/visudo -cf /etc/sudoers'],
-		`Defaults:fhold env_reset\nfhold ALL=(fhold-credentials) CWD=${privateHome} NOPASSWD: NOSETENV: /usr/local/bin/akm run tasks/probe\n`, '0');
+	operator(policy);
+	console.log('Documented helpers target the persisted project and exclude agent PATH/cwd during privileged setup.');
 	checkResult(exec(approved));
 	for (const args of [
 		['cat', `${privateHome}/akm/secrets/probe`],
