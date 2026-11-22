@@ -1,4 +1,5 @@
 import { renderCredentials, renderMappings } from './access.js';
+import { resetCustody } from './custody.js';
 import { renderConnectionKeys } from './keys.js';
 import {
 	renderConnectionDetails,
@@ -41,6 +42,7 @@ export function render(snapshot, options = {}) {
 	state.currentSnapshot = snapshot;
 	state.currentConfig = snapshot.docker?.config || null;
 	if (!sameInstance) {
+		resetCustody();
 		state.dirtyForms.clear();
 		resetProviderState();
 		state.deploymentSettings = null;

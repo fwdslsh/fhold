@@ -261,6 +261,7 @@ export type AgentOperations = {
 	assistantPassword: Operation<void, { password: string }>;
 	remote: Operation<RemoteSetupRequest, RemoteSetupResult>;
 	codexRecall: Operation<CodexRecallRequest, CodexRecallResult>;
+	custody: Operation<import('../control-plane/credential-custody.js').CustodyRequest, import('../control-plane/credential-custody.js').CustodyResult>;
 	modelInventory: Operation<void, ProviderSummary[]>;
 };
 

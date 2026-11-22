@@ -32,6 +32,7 @@ const parsers: WireParsers = {
 	'agent.assistantPassword': none,
 	'agent.remote': named('agent.remote'),
 	'agent.codexRecall': named('agent.codexRecall'),
+	'agent.custody': named('agent.custody'),
 	'apps.credentials.create': named('apps.credentials.create'),
 	'apps.credentials.updatePolicy': named('apps.credentials.updatePolicy'),
 	'apps.credentials.rotate': named('apps.credentials.rotate'),

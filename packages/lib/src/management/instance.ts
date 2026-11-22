@@ -28,6 +28,7 @@ import {
 	saveRecoveryCredential
 } from '../control-plane/recovery.js';
 import { reviewCodexRecall, changeCodexRecall } from '../control-plane/codex-recall.js';
+import { manageCustody } from '../control-plane/credential-custody.js';
 import {
 	adminPortalMappings,
 	adminPortalTokens,
@@ -204,6 +205,7 @@ export function localInstanceManagement(
 			if (!details.password) throw new Error('OpenCode password is unavailable.');
 			return { password: details.password };
 		},
+		'agent.custody': (input, context) => manageCustody(state(), input, context.confirmed === true),
 		'agent.codexRecall': async (input, context) => {
 			const current = state();
 			if (input.action === 'review') return reviewCodexRecall(current);

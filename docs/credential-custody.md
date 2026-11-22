@@ -3,7 +3,8 @@
 This Docker-only MVP lets an Assistant invoke an operator-approved AKM task
 without reading its credential files. It uses the image's ordinary AKM CLI,
 native sudo rules, and a separate Linux user. There is no new service, proxy,
-secret format, task runner or approval API. The interfaces may change or be
+secret format or task runner. Admin manages the existing native files through
+its host administration connection. The interfaces may change or be
 removed. It is not enabled by default and is not qualified on ACA.
 
 The default Assistant identity is `fhold` (UID/GID 1000). The private identity is
@@ -62,6 +63,39 @@ commands in its own PATH or put runtime preloads in `/work`. Operator commands
 must not execute either of those as the private user or root.
 
 ## Provision a synthetic proof task
+
+### Admin
+
+With the overlay enabled and Assistant running, open **System → Private task
+access → Load private task access**. This experimental panel works with local
+Docker and SSH-managed Docker; it is unavailable for ACA.
+
+1. Enter a credential name and value. **Save credential** sends it over the
+   existing host transport and Docker stdin to native `akm secret set`. It
+   initializes the private AKM home if needed. The password field clears on
+   submission, including failure, and values are never returned in snapshots,
+   logs or a reveal action. Saving the same name rotates its value for all
+   tasks using that name.
+2. Create a new task draft with a credential name and a shell script beginning
+   with `#!/bin/sh`. The native AKM V5 task binds that credential to `CREDENTIAL`
+   for its single script step. Never paste the credential value into the script.
+3. Review the exact saved task and script, check the review acknowledgement,
+   and choose **Approve task**. A changed definition requires another review.
+   Copy the displayed command to the Assistant. Approval permits repeated use.
+4. **Revoke task access** removes the native sudo grant for future invocations;
+   it does not terminate already-running tasks or delete credentials.
+   The task list also offers revocation when a definition or script is missing
+   or unreadable, so damaged task files do not prevent removing a grant.
+
+Admin-created native task/script names have an `admin-` prefix. Existing manual
+tasks and grants are preserved and managed separately. Draft names are immutable:
+use a new name for revised code and revoke the prior grant. This first panel does
+not enable the overlay, restart containers, migrate ordinary credentials, or add
+encryption or backup coverage. The restrictions and recovery exclusions below
+still apply. Trusted Admin/host processes necessarily handle credential entry;
+the boundary protects it from the Assistant, not from a compromised host.
+
+### Operator terminal
 
 Start with a fake credential. Do not put a real value in command arguments,
 prompts, shell history, a task definition or this example script.

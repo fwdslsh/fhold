@@ -73,6 +73,7 @@ export type ManagementOperationMap = {
 	'agent.assistantPassword': Io<AgentOperations['assistantPassword']>;
 	'agent.remote': Io<AgentOperations['remote']>;
 	'agent.codexRecall': Io<AgentOperations['codexRecall']>;
+	'agent.custody': Io<AgentOperations['custody']>;
 	'apps.credentials.create': Io<AppOperations['credentials']['create']>;
 	'apps.credentials.updatePolicy': Io<AppOperations['credentials']['updatePolicy']>;
 	'apps.credentials.rotate': Io<AppOperations['credentials']['rotate']>;

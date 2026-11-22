@@ -60,6 +60,7 @@ export const ADMIN_OPERATIONS = [
 	'agent.assistantPassword',
 	'agent.remote',
 	'agent.codexRecall',
+	'agent.custody',
 	'apps.credentials.create',
 	'apps.credentials.updatePolicy',
 	'apps.credentials.rotate',

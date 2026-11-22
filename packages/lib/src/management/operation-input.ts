@@ -1,4 +1,5 @@
 import { parseStackConfig, type GuardianPolicy } from '../control-plane/stack-config.js';
+import { parseCustodyRequest } from '../control-plane/credential-custody.js';
 import { parseRecoverySettings } from '../control-plane/recovery-config.js';
 import { normalizeSelection } from '../../../../containers/assistant/recovery/selection.mjs';
 import { parseDeploymentPatch } from '../control-plane/provisioning-input.js';
@@ -39,6 +40,7 @@ export type OperationInputMap = {
 	'agent.readiness': OperationInputOf<AgentOperations['readiness']>;
 	'agent.remote': OperationInputOf<AgentOperations['remote']>;
 	'agent.codexRecall': OperationInputOf<AgentOperations['codexRecall']>;
+	'agent.custody': OperationInputOf<AgentOperations['custody']>;
 	'apps.credentials.create': OperationInputOf<AppOperations['credentials']['create']>;
 	'apps.credentials.updatePolicy': OperationInputOf<AppOperations['credentials']['updatePolicy']>;
 	'apps.credentials.rotate': OperationInputOf<AppOperations['credentials']['rotate']>;
@@ -285,6 +287,7 @@ const parsers: OperationInputParsers = {
 			...(answer === undefined ? {} : { input: answer })
 		};
 	},
+	'agent.custody': parseCustodyRequest,
 	'agent.codexRecall': (value) => {
 		const source = input(value, 'agent.codexRecall');
 		if (source?.action === 'review') return { action: 'review' };
