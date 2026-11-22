@@ -167,6 +167,12 @@ Guardian authentication/moderation/ownership/path containment protections.
 These are shipped defaults and release-test expectations, not a policy imposed
 on an operator's Docker host. Compose policy comparisons belong in optional
 `fhold doctor` diagnostics, never start/restart/update or offline-recovery gates.
+The owner-approved experimental credential-custody MVP is an explicit Docker
+overlay exception: native sudo may switch to UID 1101 using SETUID/SETGID with
+no-new-privileges disabled. Default deployments retain the baseline. Only the
+operator owns the private AKM home and native sudoers task grants; do not add a
+fhold credential broker, secret resolver, approval service or agent restrictions.
+See `docs/credential-custody.md` for its limited scope and recovery exclusions.
 Keep native Compose parsing, instance targeting, lifecycle locks and actual
 restore integrity/ownership checks; do not reintroduce a policy bypass flag.
 
