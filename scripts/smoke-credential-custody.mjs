@@ -142,7 +142,9 @@ try {
 `]);
 	const cron = exec(['crontab', '-l']);
 	try {
-		exec(['crontab', '-'], `${cron}\n* * * * * * * ${approved.join(' ')} > /tmp/credential-result 2>/tmp/credential-error && touch /tmp/credential-done\n`);
+		// The next scheduled run must not truncate the completed result while
+		// the assertion reads it. Publish each successful result atomically.
+		exec(['crontab', '-'], `${cron}\n* * * * * * * ${approved.join(' ')} > /tmp/credential-result.next 2>/tmp/credential-error && mv /tmp/credential-result.next /tmp/credential-result && touch /tmp/credential-done\n`);
 		const deadline = Date.now() + 15_000;
 		while (execResult(['test', '-f', '/tmp/credential-done']).status !== 0) {
 			assert.ok(Date.now() < deadline, execResult(['cat', '/tmp/credential-error']).stdout);
