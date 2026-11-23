@@ -1,5 +1,36 @@
 # AKM beta and credential custody MVP
 
+## Final release update
+
+For the authorized 0.4.1114-beta release, the final pins supersede the earlier
+development pins below: AKM CLI/web **0.10.261130** and OpenCode/Claude/Codex
+plugins **0.10.261136**. Actual npm availability and exact CLI dependencies were
+verified on November 22. The native release archive is commit
+`9d23be6b543479ce5c0bc037f8f44cffc1aebd79`, SHA-256
+`54df415166019bf51341ef93810c7c1cc9632086a66d117e75cc022b938c4219`;
+both native manifests and the bundled CLI agree with the selected versions.
+
+The CLI promotion from beta.12 updates documentation, help/deprecation text and
+release metadata. The plugin promotion pins the stable CLI. Existing native V5
+task execution and per-step secret bindings remain the integration contract;
+this update does not introduce an encrypted secret backend.
+
+The targeted install changes only the three AKM package resolutions and owning
+pins. The frozen install and reviewed source audit pass with the same three
+owner-approved exclusions; no override or exception is added. The complete
+workspace freshness review also found newer OpenCode 2.3.2, Claude Code 2.1.330,
+Codex 0.171.0, Playwright 1.65.1, Effect 4.1.5, Electron 45.4.1 and routine
+build/docs packages. These unrelated upgrades are deferred to a compatibility
+batch. OpenCode remains 2.2.6 and Effect 4.1.0; the AKM plugin still declares
+SDK 2.1.4 / Effect 4.0.1 peers, so real harness checks remain required.
+
+Use the final canonical candidate's source, image, browser, keyring, custody,
+native harness, security, recovery and packaged CLI/Admin checks as release
+evidence. Earlier local results below describe the earlier beta dependency set
+and do not substitute for the final candidate's checks.
+
+## Earlier development review
+
 This feature branch is based on PR #131's SSH and native keyring work. It does
 not merge that PR or stamp/publish a release. The dependency review is scoped to
 the requested AKM beta and its required web and native plugin integrations.

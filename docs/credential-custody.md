@@ -17,6 +17,21 @@ Only credentials placed in this private AKM home are protected by this boundary.
 OpenCode, Codex, Claude Code and the Assistant's own OS keyring keep their native
 auth handling. Their agent-readable credentials do not become protected.
 
+## Which credentials belong here
+
+| Credential | Current owner and boundary | Use this private task home? |
+| --- | --- | --- |
+| Token for an operator-approved task | Private AKM account; Assistant can invoke only its exact granted task | Yes, after reviewing the task and arranging private backup coverage. |
+| Discord or Slack bot token | The corresponding Portal container, outside Assistant | No. Keep its existing Portal-only mount; copying it into Assistant would expand its exposure. |
+| Portal-to-Guardian access keys | Adapter-scoped Portal mounts and Guardian's credential store | No. Preserve the existing service boundary. |
+| OpenCode provider credentials | OpenCode's native credential database, owned by the Assistant user | Not with this MVP. Moving the files to the task account breaks native provider access; copying them leaves the original readable. |
+| Codex or Claude Code sign-in | The harness's native authentication store | Not with this MVP. Keep native sign-in and do not represent task isolation as harness credential isolation. |
+
+A successful synthetic probe proves the task boundary, not migration of these
+other credentials. Provision real task credentials only for a specific reviewed
+operation. An approved script can disclose a credential deliberately, so review
+its destinations and output as well as its local file access.
+
 ## Enable on a disposable instance first
 
 Build this branch's image and select its tag using the normal fhold image
@@ -183,6 +198,15 @@ This MVP stores native AKM secret files as plaintext with private ownership.
 The existing GNOME keyring does **not** encrypt these AKM assets. The separate
 encrypted-file/tmpfs approach has been investigated, but automatic unlock and
 encrypted AKM storage are not implemented here.
+
+An unlocked keyring available to the Assistant user does not provide this
+separate-user boundary. Mounting a desktop wallet file also does not make it a
+native AKM secret store: AKM currently resolves these assets as files. Do not
+expose the host's session bus or personal keyring to Assistant to bridge that gap.
+Native host storage encryption can protect the underlying volume at rest, but
+its unlock, unattended-start and backup arrangements must be established by the
+host operator. It does not remove the need for the private runtime identity or
+protect values from a trusted host administrator.
 
 These two volumes are **outside fhold's automatic recovery and full-instance
 export**. The Assistant cannot read the private home, and its recovery process
