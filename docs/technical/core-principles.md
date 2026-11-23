@@ -436,6 +436,11 @@ requirements. No bypass flag or automatic rewrite of operator overrides is neede
 Guardian's own authentication and request protections remain unchanged.
 
 - No service runs as root or receives additional Linux capabilities.
+- The explicit experimental [credential-custody overlay](../credential-custody.md)
+  is an owner-approved exception: Assistant stays non-root, but SETUID/SETGID and
+  disabling no-new-privileges allow native sudo to enter a separate credential
+  user's exact approved AKM task. No credential daemon, fhold task dispatcher or
+  generic sudo grant is added. Normal deployments keep the baseline above.
 - Assistant never receives Docker, host-admin, Guardian or portal authority.
 - Sharing Assistant's user identity alone does not isolate code from that user's
   readable files or credentials. Preserve and reuse native sandbox controls;

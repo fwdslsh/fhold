@@ -169,6 +169,7 @@ export function composeInstanceSession(bindings: InstanceSessionBindings): Compo
 		codexRecall:
 			bindings.agent?.codexRecall ??
 			unsupportedOperation('Codex recall is not configured for this instance.'),
+		custody: bindings.agent?.custody ?? unsupportedOperation('Credential custody requires Docker host administration.'),
 		modelInventory: bindings.agent?.modelInventory ?? unsupportedOperation(agentUnavailable)
 	};
 	const apps: AppOperations = bindings.apps ?? {
@@ -383,6 +384,7 @@ export function rpcManagementBindings(
 		assistantPassword: operation('agent.assistantPassword'),
 		remote: operation('agent.remote'),
 		codexRecall: operation('agent.codexRecall'),
+		custody: operation('agent.custody'),
 		modelInventory: supportedOperation(
 			async () => (await manager.call('agent.providers')).providers
 		)

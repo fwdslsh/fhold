@@ -7,6 +7,10 @@ the additional native clients, not the shared assistant features.
 Slim also includes the OpenSSH client tools (`ssh`, `scp`, `sftp`, `ssh-keygen`
 and `ssh-agent`). This installs the client only, with no SSH server or listener.
 
+All editions also include the default-off, experimental
+[task-only credential access MVP](credential-custody.md). It uses an explicit
+Docker overlay and native sudo rules; it does not create another image edition.
+
 | Edition | Native harnesses | Image repository | Automatic publication |
 |---|---|---|---|
 | AIO (default) | OpenCode, Claude Code, Codex | fwdslsh/fhold-assistant | Yes |

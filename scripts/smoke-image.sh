@@ -454,6 +454,7 @@ CONFIG
 	verify_explicit_remote_modes
 	verify_environment_upgrade
 	node scripts/smoke-keyring.mjs "$image"
+	node scripts/smoke-credential-custody.mjs "$image"
 	fi
 	;;
 guardian)

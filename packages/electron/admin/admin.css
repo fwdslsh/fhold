@@ -2,6 +2,11 @@
 	box-sizing: border-box;
 }
 
+.custody-review {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
 html,
 body {
 	min-width: 0;

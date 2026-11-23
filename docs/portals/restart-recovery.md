@@ -1,5 +1,25 @@
 # Portal restart recovery
 
+## Startup failures and current readiness
+
+A container's restart count is cumulative. Compare timestamped `startup_failed`
+events with the latest `connected` event and current health before diagnosing an
+ongoing outage. Portal readiness checks the adapter's current connection; it does
+not certify successful model requests or every conversation's delivery.
+
+During host startup, correlate DNS lookup failures and connection timeouts with
+the host network manager, resolver and Docker logs. A host's network-online
+target can complete before its intended physical connection or DNS service is
+usable. Docker's existing restart policy retries a failed Portal startup; keep
+that evidence separate from a crash after a successful connection.
+
+A TLS hostname mismatch must remain a failed connection. Check the requested
+hostname, returned certificate and resolver/network path. Do not disable
+certificate verification, pin a service's current IP address, or attribute the
+failure to authentication without evidence. Public Discord gateway metadata can
+be checked without a bot token or sending a message; keep tokens, private
+conversation content and Guardian handles out of diagnostic output.
+
 Discord and Slack keep private delivery receipts in their existing `portal.db`.
 No additional service or configuration is needed. Existing conversation mappings
 remain intact. Keep this database private: unfinished receipts contain queued

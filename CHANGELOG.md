@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.4.1114-beta — Assistant editions and private task access
+
+Publish Slim and AIO Assistant editions side by side. Slim includes OpenCode,
+AKM/web, browser utilities and SSH clients; AIO additionally includes Claude Code
+and Codex. Harness-specific keep-alive and native consent remain edition-aware.
+Claude-only and Codex-only builds remain available as manual targets.
+
+Update AKM CLI/web to **0.10.261130** and all three harness plugins to
+**0.10.261136**, with the native marketplace pinned by revision and checksum.
+Add native encrypted Assistant OS keyrings, using an independent mounted unlock
+secret in managed deployments. An unlocked Assistant keyring is accessible to
+the Assistant account; it is not the private task credential store.
+
+Add experimental, default-off credential custody using a separate Linux account
+and exact native sudo task grants. Admin can enter or rotate a private credential,
+review and approve a task, and revoke future invocations. These private AKM files
+remain plaintext with restrictive permissions and are excluded from fhold
+recovery/export. Existing provider credentials are not migrated or isolated by
+this feature. See [the limits and setup](docs/credential-custody.md).
+
+This release includes CLI/Admin, both published Assistant editions, Guardian,
+Portal and the desktop extension. Existing instances are not upgraded
+automatically.
+
 ## 0.4.1113-beta — Extra browser origins for OpenCode
 
 `FH_OPENCODE_CORS` lets a web UI on another origin use the Assistant's OpenCode

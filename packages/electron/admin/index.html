@@ -883,6 +883,40 @@
           </section>
 
           <section id="view-system" class="view-panel ready-only disclosure-inventory" data-view-panel="system" hidden aria-labelledby="view-title">
+            <details id="custody-panel" class="panel panel-disclosure">
+              <summary><span>Private task access · Experimental</span></summary>
+              <p>Store credentials separately from your assistant and approve specific tasks that may use them. Requires the credential custody Docker overlay. These settings may change or be removed.</p>
+              <p class="help-text">Credentials remain plaintext in a private volume, outside normal fhold backups. Trusted host administrators and approved scripts can access them. Approval allows repeated use, without a prompt each time.</p>
+              <button id="custody-load" class="secondary" type="button">Load private task access</button>
+              <p id="custody-status" role="status">Load private task access to inspect this instance.</p>
+              <div id="custody-forms" class="form-stack" hidden>
+                <form id="custody-secret-form" class="form-stack" autocomplete="off">
+                  <h3>Add or replace a credential</h3>
+                  <label class="field" for="custody-secret-name"><span>Credential name</span><input id="custody-secret-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-secret-value"><span>Credential value</span><input id="custody-secret-value" type="password" autocomplete="new-password" required maxlength="16384" spellcheck="false" placeholder="Enter the credential privately"></label>
+                  <p class="help-text">The value is sent privately and cleared from this form when submitted. There is no reveal action. Replacing a name changes the credential used by tasks that reference it.</p>
+                  <button class="primary" type="submit">Save credential</button>
+                </form>
+                <form id="custody-task-form" class="form-stack" autocomplete="off">
+                  <h3>Create a task draft</h3>
+                  <label class="field" for="custody-task-name"><span>New task name</span><input id="custody-task-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="check-service"></label>
+                  <label class="field" for="custody-task-credential"><span>Credential name to use</span><input id="custody-task-credential" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-task-script"><span>Reviewed shell script</span><textarea id="custody-task-script" required rows="10" maxlength="32768" spellcheck="false" placeholder="#!/bin/sh&#10;set -eu&#10;# Use CREDENTIAL in a fixed, trusted operation."></textarea></label>
+                  <p class="help-text">Start with #!/bin/sh. The credential is provided as CREDENTIAL in the script environment. Never paste its value here, echo it, put it in process arguments, or load assistant-writable code. Use fixed trusted destinations. Existing drafts are not overwritten; create a new name for revisions and revoke the old grant.</p>
+                  <button class="secondary" type="submit">Save draft for review</button>
+                </form>
+                <h3>Admin-created tasks</h3>
+                <p class="help-text">Manual tasks and grants are preserved and are not managed in this list.</p>
+                <div id="custody-task-list" class="button-row"></div>
+                <div id="custody-review-panel" class="form-stack" hidden>
+                  <h3>Review task access</h3>
+                  <p id="custody-grant-status"></p>
+                  <pre id="custody-review" class="custody-review"></pre>
+                  <label><input id="custody-reviewed" type="checkbox"> I reviewed the entire script, its dependencies and destinations, and trust it to use this credential.</label>
+                  <div class="button-row"><button id="custody-approve" class="primary" type="button">Approve task</button><button id="custody-revoke" class="secondary" type="button">Revoke task access</button></div>
+                </div>
+              </div>
+            </details>
             <details id="deployment-settings" class="panel panel-disclosure">
               <summary>Deployment settings</summary>
               <p id="deployment-fields-unavailable" class="capability-note" hidden></p>
