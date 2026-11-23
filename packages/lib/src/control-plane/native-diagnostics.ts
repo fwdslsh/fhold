@@ -10,6 +10,7 @@ export type DiagnosticCheck = {
 	detail: string;
 	advisory?: boolean;
 	status?: 'pass' | 'warn' | 'fail' | 'not-checked' | 'off';
+	reason?: 'off' | 'not-probed' | 'blocked' | 'idle';
 };
 
 function check(name: string, status: NonNullable<DiagnosticCheck['status']>, detail: string): DiagnosticCheck {
@@ -36,10 +37,30 @@ function healthChecks(health: Record<string, unknown>): DiagnosticCheck[] {
 	if (!valid) return [check('AKM health', 'not-checked', 'Native read-only AKM health is unavailable or returned an unsupported response. Open Knowledge → Health or inspect Assistant diagnostics; no health success is inferred.'), taskCheck(undefined)];
 	return [
 		check('AKM health', health.status as 'pass' | 'warn' | 'fail', `Native AKM reported ${health.status}. Read-only inspection; network and harness probes disabled. Open Knowledge → Health for full diagnostics.`),
-		...native.map((row) => check(`AKM ${row.name}`, row.status === 'unknown' ? 'not-checked' : row.status as 'pass' | 'warn' | 'fail',
-			`Native AKM reported ${row.status}. Open Knowledge → Health for details; network and harness probes were disabled.`)),
+		...native.map(nativeHealthCheck),
 		taskCheck(health.scheduler)
 	];
+}
+
+function nativeHealthCheck(row: Record<string, unknown>): DiagnosticCheck {
+	// Only native enum values cross the summary boundary, never arbitrary
+	// messages, evidence or unknown future reason strings.
+	const reasons = {
+		off: 'This feature is disabled.',
+		'not-probed': 'This probe was not requested; network and harness probes are disabled for this inspection.',
+		blocked: 'AKM could not complete this check or determine its result.',
+		idle: 'No activity is available to evaluate yet.'
+	};
+	if (row.status === 'unknown' && typeof row.reason === 'string' && Object.hasOwn(reasons, row.reason)) {
+		const reason = row.reason as keyof typeof reasons;
+		return {
+			...check(`AKM ${row.name}`, reason === 'off' ? 'off' : 'not-checked',
+				`${reasons[reason]} Open Knowledge → Health for details.`),
+			reason
+		};
+	}
+	return check(`AKM ${row.name}`, row.status === 'unknown' ? 'not-checked' : row.status as 'pass' | 'warn' | 'fail',
+		`Native AKM reported ${row.status}. Open Knowledge → Health for details; network and harness probes were disabled.`);
 }
 
 // The same read-only native report carries scheduler bindings; report only

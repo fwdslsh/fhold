@@ -77,6 +77,18 @@ absolute `/usr/bin/env` and private working directory: the Assistant can replace
 commands in its own PATH or put runtime preloads in `/work`. Operator commands
 must not execute either of those as the private user or root.
 
+AKM's daily anonymous usage reporting defaults to on for this separate account
+too. Its setting is independent of the Assistant's embedded AKM UI. To opt this
+account out after setup, use the operator-side helper above:
+
+```sh
+cred akm config set usage.report false
+cred akm config get usage.report
+```
+
+Set it to `true` to opt back in. The choice lives in the private home and survives
+container replacement; it does not change local usage capture or task grants.
+
 ## Provision a synthetic proof task
 
 ### Admin
@@ -96,6 +108,15 @@ Docker and SSH-managed Docker; it is unavailable for ACA.
    for its single script step. Never paste the credential value into the script.
 3. Review the exact saved task and script, check the review acknowledgement,
    and choose **Approve task**. A changed definition requires another review.
+   Before writing the grant, Admin runs native `akm doctor explain` as the
+   private account. AKM validates the task and its referenced
+   assets without executing it. A validation failure or timeout prevents the
+   grant; repair the references and review again. Diagnostic output is not
+   returned to Admin because it may contain private details. This check does
+   not establish that the script is safe or that a remote service will accept
+   its credential; the operator still reviews its behavior. Native CLI usage
+   bookkeeping follows that account's settings. Unlike `akm doctor` health
+   inspection, `doctor explain` does not accept a `--read-only` flag.
    Copy the displayed command to the Assistant. Approval permits repeated use.
 4. **Revoke task access** removes the native sudo grant for future invocations;
    it does not terminate already-running tasks or delete credentials.

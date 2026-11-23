@@ -10,6 +10,7 @@
 	},
 	"defaultBundle": "stash",
 	"defaultWriteTarget": "stash",
+	"usage": { "report": true },
 	"plugins": {
 		"redact": { "pii": true, "highEntropy": true }
 	},

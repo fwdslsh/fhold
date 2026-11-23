@@ -178,6 +178,34 @@ test('native plugin mismatch and unknown proposal outcomes retain native statuse
 	expect(f.http.every((call) => call.startsWith('GET '))).toBe(true);
 });
 
+test.each([
+	['off', 'off', 'disabled', true],
+	['not-probed', 'not-checked', 'not requested', false],
+	['blocked', 'not-checked', 'could not complete', false],
+	['idle', 'not-checked', 'No activity', false],
+	['synthetic-secret', 'not-checked', 'reported unknown', false],
+	['__proto__', 'not-checked', 'reported unknown', false]
+])('native unknown reason %s is explained without inferring success or reflecting private data', async (reason, status, detail, ok) => {
+	const f = fixture();
+	f.state.health = healthReport('pass', [{ name: 'state-db-integrity', status: 'pass' }], []);
+	(f.state.health as Record<string, unknown>).advisories = [{ name: 'proposal-queue', status: 'unknown', reason, message: 'synthetic-secret' }];
+	const checks = await f.diagnose();
+	const row = checks.find((check) => check.name === 'AKM proposal-queue');
+	expect(row).toMatchObject({ status, ok, advisory: true });
+	expect(row?.detail).toContain(String(detail));
+	expect(row?.reason).toBe(['off', 'not-probed', 'blocked', 'idle'].includes(String(reason)) ? reason : undefined);
+	expect(JSON.stringify(checks)).not.toContain('synthetic-secret');
+});
+
+test('unknown-only reasons cannot override a native failure', async () => {
+	const f = fixture();
+	f.state.health = { ...healthReport('fail'), hardChecks: [{ name: 'state-db-integrity', status: 'fail', reason: 'off' }] };
+	f.state.healthExit = 1;
+	const row = (await f.diagnose()).find((check) => check.name === 'AKM state-db-integrity');
+	expect(row).toMatchObject({ status: 'fail', ok: false });
+	expect(row?.reason).toBeUndefined();
+});
+
 test.each(['state-db-readable', 'state-db-integrity'])('native unavailable/corrupt state stays failed and advisory: %s', async (name) => {
 	const f = fixture(); f.state.health = healthReport('fail', [{ name, status: 'fail' }], []);
 	f.state.healthExit = 1;

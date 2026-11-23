@@ -123,7 +123,7 @@ printf 'require("node:fs").writeFileSync("/tmp/custody-startup-compromised","pre
 				action: 'save-task' as const,
 				name: 'probe',
 				credential: 'service',
-				script: '#!/bin/sh\nset -eu\nprintf "used %s\\n" "$CREDENTIAL"\n'
+				script: '#!/bin/sh\nset -eu\ntouch /tmp/admin-custody-task-executed\nprintf "used %s\\n" "$CREDENTIAL"\n'
 			};
 			const review = (await call(draft)).review!;
 			expect(review.approved).toBe(false);
@@ -145,9 +145,22 @@ printf 'require("node:fs").writeFileSync("/tmp/custody-startup-compromised","pre
 			await expect(
 				call({ action: 'approve', name: 'probe', digest: '0'.repeat(64) })
 			).rejects.toThrow('changed since review');
+			// The operator can draft before entering a credential. Approval must
+			// use AKM's native dependency check, not just fhold's JSON template.
+			const missing = (await call({ ...draft, name: 'missing', credential: 'not-entered' })).review!;
+			await expect(call({ action: 'approve', name: 'missing', digest: missing.digest }))
+				.rejects.toThrow('Native AKM task validation failed');
+			expect((await call({ action: 'inspect' })).grants).not.toContain('missing');
+			// A failed validation leaves the draft reviewable and can be repaired
+			// by entering the referenced secret, without replacing approved code.
+			await call({ action: 'set-secret', name: 'not-entered', value: 'synthetic-missing-now-present' });
+			expect((await call({ action: 'approve', name: 'missing', digest: missing.digest })).review?.approved).toBe(true);
+			await call({ action: 'revoke', name: 'missing' });
+			expect((await privateExec("const fs=require('node:fs');fs.unlinkSync('/var/lib/fhold-credentials/akm/scripts/admin-missing.sh');fs.unlinkSync('/var/lib/fhold-credentials/akm/tasks/admin-missing.yml');")).ok).toBe(true);
 			expect(
 				(await call({ action: 'approve', name: 'probe', digest: review.digest })).review?.approved
 			).toBe(true);
+			expect((await run(['exec', '-T', 'assistant', '/usr/bin/test', '-e', '/tmp/admin-custody-task-executed'])).ok).toBe(false);
 			const result = await run(command);
 			expect(result.ok).toBe(true);
 			expect(result.stdout).toContain('[REDACTED]');

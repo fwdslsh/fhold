@@ -83,7 +83,7 @@ fi
 	stub(
 		'akm',
 		`if [ "$1" = index ]; then
-  test "$*" = 'index --skip-if-locked --format json -q'
+  test "$*" = 'index --format json -q'
   printf 'index\\n' >>"$EVENTS"
   exit "\${FIXTURE_INDEX_EXIT:-0}"
 fi

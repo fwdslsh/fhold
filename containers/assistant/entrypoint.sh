@@ -452,7 +452,7 @@ fi
 # AKM reads never build the index. Build or refresh it once per boot, after
 # restore and migration, beside the agent; reads serve what is indexed so far.
 setsid env "${writer_env[@]}" bash -c '
-  akm index --skip-if-locked --format json -q >"$1/akm-index.json" 2>"$1/akm-index.log" ||
+  akm index --format json -q >"$1/akm-index.json" 2>"$1/akm-index.log" ||
     printf "%s\n" "The AKM index could not be built. Run akm index and check private akm-index.log; the agent remains available." >"$1/degraded-akm-index"
 ' akm-index "$RUNTIME_DIR" &
 writer_pids+=("$!")
