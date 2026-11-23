@@ -474,8 +474,10 @@ Health uses `akm doctor --read-only --no-probe`; migration inspection uses
 configuration and working directory.
 It does not write application rows or apply migrations; native SQLite may create
 its ordinary WAL/shared-memory coordination files when reading an existing database.
-It preserves native pass/warn/fail results and reports unknown checks as
-`NOT CHECKED`; these AKM checks are advisory and never restart or block the agent.
+It preserves native pass/warn/fail results. Unknown checks include AKM's reason:
+disabled features are `OFF`; probes not requested, blocked checks and checks
+with no activity yet remain `NOT CHECKED`, with an explanation. Unknown future
+reasons remain `NOT CHECKED`. These AKM checks are advisory and never restart or block the agent.
 Task-binding status comes from the same read-only report's native `scheduler`
 field; run `akm doctor` in Assistant when you want binding details, and
 `akm doctor scheduler sync --rebind` to repair them. Doctor does not start a stopped
@@ -490,7 +492,7 @@ the previous argument repair for a preserved native invocation. Native health ow
 plugin CLI-version, state-database, proposal queue and extraction diagnostics.
 Doctor reports their check names and statuses while keeping private native messages
 and evidence out of its summary. Open **Knowledge → Health** for the full native
-diagnostics. A native unknown result stays not checked; configuration, file
+diagnostics. A native unknown result never becomes a passed check; configuration, file
 presence and a running process do not prove successful learning or proposal writes.
 
 `--no-probe` alone skips network and harness probes but does not prevent writes.
@@ -516,6 +518,34 @@ AKM owns learning. Turn it off or on inside the Assistant with
 The choice is saved in AKM's own configuration, so it survives restarts and also
 applies to commands run with `docker exec`.
 
+### AKM usage reporting
+
+Daily anonymous usage reporting is **on by default**, using AKM's native
+`usage.report` setting. Reports contain counts of configured/used features under
+a random install ID, not prompts, asset contents, names or credential values.
+AKM sends at most once per day per surface (CLI and AKM Web/Desktop).
+
+To opt out in Admin, open **Knowledge → Open AKM UI**, then AKM's
+**Settings → Configuration → Usage reports** and turn off **Send a daily usage
+report**. Save the change. This controls the selected Assistant's AKM, not a
+separate desktop installation.
+
+Alternatively, run inside the Assistant:
+
+```sh
+akm config set usage.report false
+akm config get usage.report
+```
+
+Use `akm config set usage.report true` to opt back in. The native setting persists
+in the operator-owned `config/akm/config.json`; fhold startup and updates do not
+reset an explicit opt-out. Reporting is separate from local usage capture and
+learning: turning reports off does not disable either. Independently configured
+AKM accounts, including the optional private credential-custody account, have
+their own setting; see [credential custody](credential-custody.md).
+
+### Knowledge and recurring tasks
+
 For project-specific knowledge, use AKM's native `projects` configuration and run
 the agent in the corresponding project directory (normally under `/work`). The
 bundled plugins pass the working directory to AKM, which owns project selection,
@@ -537,6 +567,12 @@ for example `fhold task pause stash//tasks/project-news`. Copy refs from AKM out
 AKM resolves and validates them. Run delegates to native `akm run`; adopt uses
 native `akm import --type task`. Remove takes a local task name, not a
 bundle-qualified ref.
+
+AKM Web also offers native retirement with proposal history. Fhold's immediate
+`task remove` retains its existing disable-and-preserve behavior: AKM 0.10.261130
+has no equivalent public CLI operation to create and accept a retirement in one
+step. Its workspace write API is not used by fhold's task wrapper. Native
+retirement is available through the embedded AKM UI when that workflow is wanted.
 
 Timezone is explicit Assistant intent; daylight saving follows that IANA zone.
 Downtime does not replay missed slots. Remove preserves the definition in

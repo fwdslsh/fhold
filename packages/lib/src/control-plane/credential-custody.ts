@@ -259,6 +259,23 @@ export async function manageCustody(
 		);
 		if (input.action === 'approve' && output.digest !== input.digest)
 			throw Error('Task changed since review. Review its current definition before approving.');
+		if (input.action === 'approve') {
+			// AKM owns task/source/reference validation. Inspect as the private
+			// identity without executing the task or exposing its diagnostic
+			// output. Keep fhold's ownership and review checks. Native CLI usage
+			// bookkeeping follows the private account's settings.
+			try {
+				const validation = JSON.parse(await exec('1101:1101', [
+					'/usr/bin/timeout', '--kill-after=2s', '10s',
+					'/usr/local/bin/akm', 'doctor', 'explain', `tasks/admin-${input.name}`,
+					'--format', 'json', '--quiet'
+				], ''));
+				if (validation?.ok !== true || validation.shape !== 'task-explain' || validation.schemaVersion !== 1)
+					throw Error('Unsupported native validation response');
+			} catch {
+				throw Error('Native AKM task validation failed or timed out. No approval was written. Check the task and referenced assets in the private AKM home, then review and approve again.');
+			}
+		}
 		const policy = JSON.parse(
 			await exec(
 				'0',

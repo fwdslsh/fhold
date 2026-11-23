@@ -31,6 +31,19 @@ async function fixture() {
 	return { home, archive };
 }
 
+test('AKM reporting defaults on while reseeding preserves native opt-out and other settings byte for byte', async () => {
+	const { home } = await fixture();
+	const path = join(home, 'config/akm/config.json');
+	const config = JSON.parse(readFileSync(path, 'utf8'));
+	expect(config.usage.report).toBe(true);
+	config.usage.report = false;
+	config.usage.capture = true;
+	const saved = `${JSON.stringify(config, null, 2)}\n`;
+	writeFileSync(path, saved);
+	await applyHomeSeed(home);
+	expect(readFileSync(path, 'utf8')).toBe(saved);
+});
+
 test('updates retire exact removed product output outside autoload, retaining user agents and data', async () => {
 	const { home, archive } = await fixture();
 	const user = join(home, 'config/assistant/agents/custom.md');

@@ -231,7 +231,7 @@ describe('published AKM scheduler compatibility', () => {
 		// AKM reads never build the index and akm import --type task does not
 		// index the file it writes; listing shows tasks as of the last build.
 		expect(
-			Bun.spawnSync(['akm', 'index', '--skip-if-locked', '--format', 'json', '-q'], {
+			Bun.spawnSync(['akm', 'index', '--format', 'json', '-q'], {
 				env,
 				timeout: 30000
 			}).exitCode
