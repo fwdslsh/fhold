@@ -30,6 +30,9 @@ for file in "$runtime"/degraded-*; do
     warning "$(cat "$file")"
   fi
 done
+if ! keyring_status=$(fhold-keyring status 2>/dev/null); then
+  warning "$keyring_status"
+fi
 if [ "${FH_SCHEDULER_ENABLED-1}" = 1 ] && [ ! -s "$runtime/degraded-scheduler" ]; then
   alive scheduler || warning 'Scheduled tasks are unavailable. Check scheduler logs and restart to resume them; the agent is still usable.'
 fi

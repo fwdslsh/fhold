@@ -517,7 +517,9 @@ test('templates use published runtime contract, secure parameters, private probe
 	expect(JSON.stringify(app)).not.toContain('FH_TIMEZONE');
 	expect(template.scale).toEqual({ minReplicas: 1, maxReplicas: 1 });
 	expect(template.terminationGracePeriodSeconds).toBe(360);
-	expect(app.parameters).toEqual({ password: { type: 'secureString' } });
+	expect(app.parameters).toEqual({ password: { type: 'secureString' }, keyringPassword: { type: 'secureString' } });
+	expect(container.env).toContainEqual({ name: 'FH_KEYRING_PASSWORD_FILE', value: '/run/secrets/keyring-password' });
+	expect(azureObject(props.configuration).secrets).toContainEqual({ name: 'keyring-password', value: "[parameters('keyringPassword')]" });
 	expect(JSON.stringify(app)).not.toContain('EmptyDir');
 	expect(JSON.stringify(infrastructure)).toContain('/usr/local/bin/fhold-recovery');
 	expect(azureObject(azureObject(props.configuration).ingress).targetPort).toBe(4096);
@@ -553,6 +555,7 @@ test('fresh initialization job includes the Files mounts required by its recover
 	});
 	expect(JSON.stringify(job)).not.toContain('native-auth');
 	expect(JSON.stringify(job)).not.toContain('opencode-password');
+	expect(JSON.stringify(job)).not.toContain('keyring-password');
 	const reused = azureApplicationTemplate(connection, {
 		...input,
 		environment: { ...input.environment, create: false }

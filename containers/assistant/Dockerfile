@@ -155,6 +155,12 @@ RUN node /opt/fhold/tools/node_modules/playwright/cli.js install --with-deps chr
     && chmod -R a+rX /opt/ms-playwright \
     && chmod -R a-w /opt/ms-playwright \
     && rm -rf /var/lib/apt/lists/*
+# A private session bus and the native Secret Service provider are shared by
+# all editions. Start only the secrets component, without desktop/PAM services.
+# Keep these OS tools after the browser layer so that it remains reusable.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client dbus gnome-keyring libsecret-tools libglib2.0-bin \
+    && rm -rf /var/lib/apt/lists/*
 FROM runtime-base
 ARG ASSISTANT_EDITION=aio
 LABEL dev.fwdslsh.fhold.edition="${ASSISTANT_EDITION}"
@@ -168,6 +174,7 @@ COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_mod
 COPY --from=tools /selected-tools.json /opt/fhold/tools/package.json
 COPY containers/assistant/entrypoint.sh /usr/local/bin/fhold-assistant
 COPY containers/assistant/healthcheck.sh /usr/local/bin/fhold-healthcheck
+COPY --chmod=0555 containers/assistant/keyring.sh /usr/local/bin/fhold-keyring
 COPY containers/assistant/fhold-task.mjs /usr/local/bin/fhold-task
 COPY --chmod=0555 containers/assistant/crontab.sh /usr/local/bin/crontab
 COPY containers/assistant/fhold-recovery.mjs /usr/local/bin/fhold-recovery
@@ -227,6 +234,8 @@ RUN test -n "$PLATFORM_VERSION" \
     && chmod -R a+rwX /home/fhold /etc/akm /opt/akm /stash /work
 
 ENV HOME=/home/fhold \
+    XDG_RUNTIME_DIR=/tmp/fhold-session \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/fhold-session/bus \
     OPENCODE_CONFIG_DIR=/etc/opencode \
     OPENCODE_CONFIG=/home/fhold/.config/opencode/opencode.json \
     OPENCODE_DISABLE_EMBEDDED_WEB_UI=true \

@@ -167,7 +167,10 @@ export function azureProvisioning(
 					? azureInfrastructureTemplate(connection, input)
 					: azureApplicationTemplate(connection, input),
 				saved.step === 'application'
-					? { password: { value: randomBytes(32).toString('base64url') } }
+					? {
+						password: { value: randomBytes(32).toString('base64url') },
+						keyringPassword: { value: randomBytes(32).toString('base64url') }
+					}
 					: undefined,
 				(response) => {
 					initial ??= response;

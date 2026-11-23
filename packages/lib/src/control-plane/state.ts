@@ -128,6 +128,8 @@ function randomSecret(): string {
 }
 
 function ensureSecrets(homeDir: string): void {
+	// GNOME Keyring consumes every password-file byte, including newlines.
+	ensureRegularFile(stateSecretFile(homeDir, 'fhold_keyring_password'), randomSecret());
 	for (const name of ['fhold_opencode_password', 'fhold_guardian_handle_key']) {
 		ensureRegularFile(stateSecretFile(homeDir, name), `${randomSecret()}\n`);
 	}

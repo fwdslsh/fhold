@@ -29,6 +29,7 @@ const TREES = [
 	['home', '.config/opencode'],
 	['home', '.local/share/opencode'],
 	['home', '.local/state/opencode'],
+	['home', '.local/share/keyrings'],
 	['home', '.codex'],
 	['home', '.claude'],
 	['home', '.claude.json'],

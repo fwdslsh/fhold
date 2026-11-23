@@ -32,8 +32,8 @@ function fixture(extra: Record<string, string | undefined> = {}) {
 		.replaceAll('/opt/fhold/tools/package.json', imageManifest)
 		.replace('prepare_identity\numask', 'printf "identity\\n" >>"$EVENTS"\numask')
 		.replace(
-			'prepare_filesystem\nload_opencode_password',
-			'printf "seed\\n" >>"$EVENTS"\nload_opencode_password'
+			'\nprepare_filesystem\n',
+			'\nprintf "seed\\n" >>"$EVENTS"\n'
 		)
 		.replace('cd /work', 'cd "$FIXTURE_ROOT"')
 		.replace(
@@ -176,6 +176,10 @@ while sleep 0.1; do :; done`
 			FIXTURE_ROOT: root,
 			FIXTURE_CHECK_ENV: '0',
 			FH_RUNTIME_DIR: join(root, 'runtime'),
+			// Lifecycle command fixtures must never connect to the desktop's bus.
+			// Native keyring behavior is covered by shipped-image smokes.
+			XDG_RUNTIME_DIR: undefined,
+			DBUS_SESSION_BUS_ADDRESS: undefined,
 			FH_SCHEDULER_ENABLED: '0',
 			FH_CODEX_REMOTE: '0',
 			FH_CLAUDE_REMOTE: '0',

@@ -26,6 +26,7 @@ afterEach(() => {
 describe('Assistant readiness and optional-feature degradation', () => {
 	it('keeps a usable authenticated agent healthy when scheduling fails', async () => {
 		const root = home();
+		writeFileSync(join(root, 'fhold-keyring'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 		const script = join(import.meta.dir, '../containers/assistant/healthcheck.sh');
 		const server = Bun.serve({
 			hostname: '127.0.0.1',
@@ -40,6 +41,7 @@ describe('Assistant readiness and optional-feature degradation', () => {
 			const child = Bun.spawn(['bash', script], {
 				env: {
 					...process.env,
+					PATH: `${root}:${process.env.PATH}`,
 					FH_RUNTIME_DIR: root,
 					FH_SCHEDULER_ENABLED: '1',
 					FH_RECOVERY_URL: '',

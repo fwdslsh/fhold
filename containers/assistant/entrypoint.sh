@@ -222,6 +222,43 @@ prepare_filesystem() {
   fi
 }
 
+start_keyring() {
+  # The image environment exposes this same private bus to ordinary docker exec
+  # clients as well as OpenCode, native harnesses and scheduled subprocesses.
+  if [[ "${XDG_RUNTIME_DIR:-}" != /* ]] || [ "$XDG_RUNTIME_DIR" = / ] ||
+     [[ "$XDG_RUNTIME_DIR" =~ (^|/)\.{1,2}(/|$) ]] || [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then return 1; fi
+  local ancestor="$XDG_RUNTIME_DIR"
+  while [ "$ancestor" != / ]; do
+    [ ! -L "$ancestor" ] || return 1
+    ancestor=$(dirname "$ancestor")
+  done
+  mkdir -p "$XDG_RUNTIME_DIR" || return
+  [ "$(stat -c %u "$XDG_RUNTIME_DIR")" = "$(id -u)" ] || return 1
+  chmod 0700 "$XDG_RUNTIME_DIR" || return
+  setsid dbus-daemon --session --nofork --nopidfile --address="$DBUS_SESSION_BUS_ADDRESS" >"$RUNTIME_DIR/dbus.log" 2>&1 &
+  local bus_pid=$! deadline=$((SECONDS + 5))
+  writer_pids+=("$bus_pid")
+  until timeout 1s gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames >/dev/null 2>&1; do
+    kill -0 "$bus_pid" 2>/dev/null || return 1
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 0.1
+  done
+  kill -0 "$bus_pid" 2>/dev/null || return 1
+  if [ -n "${FH_KEYRING_PASSWORD_FILE:-}" ]; then
+    [ -r "$FH_KEYRING_PASSWORD_FILE" ] && [ -s "$FH_KEYRING_PASSWORD_FILE" ] || return 1
+    setsid gnome-keyring-daemon --foreground --unlock --components=secrets <"$FH_KEYRING_PASSWORD_FILE" >"$RUNTIME_DIR/keyring.log" 2>&1 &
+  else
+    setsid gnome-keyring-daemon --start --foreground --components=secrets >"$RUNTIME_DIR/keyring.log" 2>&1 &
+  fi
+  writer_pids+=("$!")
+  deadline=$((SECONDS + 5))
+  until fhold-keyring initialize >"$RUNTIME_DIR/keyring-status" 2>/dev/null; do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 0.1
+  done
+  cat "$RUNTIME_DIR/keyring-status" >&2
+}
+
 prepare_akm_assets() {
   local cache source target parent ancestor temporary
   cache=$(realpath -m "${AKM_CACHE_DIR:-/opt/akm/cache}") || return
@@ -392,6 +429,9 @@ if [ -n "${FH_RECOVERY_URL:-}" ]; then
   done
 fi
 prepare_filesystem
+if ! start_keyring; then
+  mark_degraded keyring 'OS keyring could not unlock. Run fhold-keyring status and inspect private keyring.log/dbus.log; check FH_KEYRING_PASSWORD_FILE if configured. The assistant remains available.'
+fi
 load_opencode_password
 # Restore and seed first; let AKM perform its own backed-up migrations before
 # any native agent or task writer starts. Blocked external assets are optional

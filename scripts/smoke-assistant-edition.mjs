@@ -6,6 +6,20 @@ import { spawnSync } from 'node:child_process';
 const manifest = JSON.parse(readFileSync('/opt/fhold/tools/package.json', 'utf8'));
 assert.equal(manifest.fholdEdition, process.env.EXPECTED_EDITION);
 assert.ok(manifest.harnesses.includes('opencode'));
+assert.notEqual(process.getuid(), 0, 'Edition smoke must use the non-root Assistant');
+const keyring = spawnSync('fhold-keyring', ['status'], { encoding: 'utf8', timeout: 8000 });
+assert.equal(keyring.status, 0, keyring.stdout + keyring.stderr);
+try {
+  const stored = spawnSync('secret-tool', ['store', '--label=fhold-edition-smoke', 'fhold-smoke', 'edition'], {
+    input: 'synthetic-keyring-probe', encoding: 'utf8', timeout: 5000
+  });
+  assert.equal(stored.status, 0, stored.stderr);
+  const found = spawnSync('secret-tool', ['lookup', 'fhold-smoke', 'edition'], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(found.status, 0, found.stderr);
+  assert.equal(found.stdout.trim(), 'synthetic-keyring-probe');
+} finally {
+  spawnSync('secret-tool', ['clear', 'fhold-smoke', 'edition'], { timeout: 5000 });
+}
 for (const [tool, packageName, skill] of [
   ['claude', '@anthropic-ai/claude-code', 'claude-code-login'],
   ['codex', '@openai/codex', 'codex-remote-setup']
@@ -29,5 +43,13 @@ for (const [tool, packageName, skill] of [
     assert.equal(JSON.parse(status.stdout).state, 'not-included');
   }
 }
-if (manifest.fholdEdition === 'slim') assert.deepEqual(readdirSync('/akm-marketplace'), []);
+if (manifest.fholdEdition === 'slim') {
+  assert.deepEqual(readdirSync('/akm-marketplace'), []);
+  for (const tool of ['ssh', 'scp', 'sftp', 'ssh-keygen', 'ssh-agent']) {
+    const command = spawnSync('sh', ['-c', 'command -v "$1"', 'edition-smoke', tool], { encoding: 'utf8' });
+    assert.equal(command.status, 0, tool + ' must be usable by the non-root Assistant');
+  }
+  assert.equal(spawnSync('ssh', ['-V'], { encoding: 'utf8' }).status, 0);
+  assert.equal(spawnSync('ssh', ['-G', '-F', '/dev/null', '-o', 'BatchMode=yes', '127.0.0.1'], { encoding: 'utf8' }).status, 0);
+}
 console.log('Edition binaries, packages, native defaults and skills verified: ' + manifest.fholdEdition);

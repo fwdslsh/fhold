@@ -74,6 +74,56 @@ mounts them; no migration or automatic compatibility layer is supplied. See
 [managed harness configuration](../managed-harness-configuration.md) for exact
 mounts, task permissions and standalone deployment inputs.
 
+## Assistant OS keyring
+
+Every Assistant edition includes GNOME Keyring's native Secret Service provider,
+`secret-tool`, and a private D-Bus session. They run as the assistant's non-root
+identity, with only the secrets component enabled. OpenCode tools, scheduled
+processes, included native harnesses and ordinary `docker exec` sessions inherit
+the same bus address. Applications still choose their own native credential backend;
+installing Secret Service does not rewrite AKM or harness authentication settings.
+
+CLI/Admin Docker and SSH installs create an independent unlock secret at
+`state/secrets/fhold_keyring_password` (mode 0600), preserved on update and mounted
+read-only as `/run/secrets/assistant_keyring_password`. New ACA installs use an
+independent native Container Apps secret mounted at `/run/secrets/keyring-password`.
+These managed deployments use an **encrypted persistent** native login keyring.
+Keep the unlock secret separately from Assistant recovery checkpoints.
+
+Standalone images without `FH_KEYRING_PASSWORD_FILE` use a **session-only**
+collection on new homes: usable without setup, but entries disappear when the
+container restarts. Existing persistent default collections are preserved,
+including locked ones. `fhold-keyring status` checks
+the actual collection's lock state without creating or unlocking it. An unavailable
+or locked keyring is reported as degraded without stopping the assistant.
+
+For standalone encrypted persistence, create an unlock-password file outside the Assistant
+home and mount it read-only, then set `FH_KEYRING_PASSWORD_FILE` to its container
+path. Supply the exact password bytes (for example, write with `printf '%s'`);
+it is not the OpenCode server password. A new native login keyring is created and
+unlocked on boot; an existing one requires its original password. Neither a missing
+nor a wrong password resets existing credentials or enables plaintext persistence.
+Keep the unlock secret separately from keyring files and recovery checkpoints.
+
+For an operator-supplied replacement secret, merge this into
+`config/stack/custom.compose.yml` (normal managed installs need no overlay):
+
+```yaml
+services:
+  assistant:
+    environment:
+      FH_KEYRING_PASSWORD_FILE: /run/secrets/assistant_keyring_password
+    volumes:
+      - /absolute/private/keyring-password:/run/secrets/assistant_keyring_password:ro
+```
+
+The file must be readable by the configured Assistant UID. Native encrypted files
+live in `$HOME/.local/share/keyrings`, covered by default Assistant recovery and
+stopped full-instance export. Restores require the separately retained password;
+session-only secrets are not backup members. Do not mount the host desktop bus or
+keyring into Assistant. The default socket is `/tmp/fhold-session/bus`; if overriding
+`XDG_RUNTIME_DIR`, also set a matching `DBUS_SESSION_BUS_ADDRESS=unix:path=.../bus`.
+
 ## Host-side Compose variables
 
 The control plane writes or preserves these non-secret values in

@@ -453,6 +453,7 @@ CONFIG
 	verify_optional_failure_isolation
 	verify_explicit_remote_modes
 	verify_environment_upgrade
+	node scripts/smoke-keyring.mjs "$image"
 	fi
 	;;
 guardian)
