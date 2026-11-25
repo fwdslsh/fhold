@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installHome } from '../control-plane/install.js';
 import { KnowledgeUi } from './knowledge-ui.js';
+import { readStackConfig, writeStackConfig } from '../control-plane/stack-config.js';
+import { readAkmWebSecret } from '../control-plane/akm-web.js';
 
 const roots: string[] = [];
 const originalDocker = process.env.FH_DOCKER_BIN;
@@ -88,6 +90,20 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 			expect(bearer).toBe(`Bearer ${access.secret}`);
 			expect(probes).toBe(1);
 			expect(await ui.open()).toEqual(access);
+			expect(probes).toBe(2);
+			// Reopening after enabling hosting must stop the old session child and
+			// use the configured origin/credential, not the cached session URL.
+			const home = join(roots.at(-1)!, 'home');
+			const read = readStackConfig(home);
+			if (!read.ok) throw new Error(read.error);
+			read.config.assistant.web = {
+				enabled: true, origin: 'https://knowledge.example', publish: false,
+				bindAddress: '127.0.0.1', port: 3811
+			};
+			writeStackConfig(home, read.config);
+			expect(await ui.open()).toEqual({
+				mode: 'persistent', url: 'https://knowledge.example/', secret: readAkmWebSecret(home)
+			});
 			expect(probes).toBe(2);
 		} finally {
 			await ui.close();

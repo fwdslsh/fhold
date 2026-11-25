@@ -44,6 +44,14 @@ export class KnowledgeUi {
 	}
 
 	private async start(input?: { loopbackPort: number }): Promise<KnowledgeUiAccess> {
+		requireInstall(this.homeDir);
+		const config = readStackConfig(this.homeDir);
+		if (!config.ok) throw new Error(config.error);
+		if (config.config.assistant.web?.enabled) {
+			await this.stop();
+			if (this.closed) throw new Error('This instance session is closed. Open it again.');
+			return { mode: 'persistent', url: `${config.config.assistant.web.origin}/`, secret: readAkmWebSecret(this.homeDir) };
+		}
 		if (this.child && this.url && this.secret) {
 			try {
 				await this.probe(new URL(this.url));
@@ -51,12 +59,6 @@ export class KnowledgeUi {
 			} catch {
 				await this.stop();
 			}
-		}
-		requireInstall(this.homeDir);
-		const config = readStackConfig(this.homeDir);
-		if (!config.ok) throw new Error(config.error);
-		if (config.config.assistant.web?.enabled) {
-			return { mode: 'persistent', url: `${config.config.assistant.web.origin}/`, secret: readAkmWebSecret(this.homeDir) };
 		}
 		const options = buildComposeOptions(createFholdState(this.homeDir));
 		await assertProjectOwnership(config.config.deployment.projectName, options.projectDirectory);

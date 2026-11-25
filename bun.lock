@@ -28,9 +28,9 @@
         "@opencode/cli": "2.2.6",
         "@opencode/client": "2.2.6",
         "@opencode/plugin": "2.2.6",
-        "akm-cli": "0.10.261133-beta.2",
-        "akm-opencode-v2": "0.10.261136",
-        "akm-web": "0.10.261133-beta.2",
+        "akm-cli": "0.10.261133",
+        "akm-opencode-v2": "0.10.261139",
+        "akm-web": "0.10.261133",
         "playwright": "1.65.0",
       },
     },
@@ -128,7 +128,7 @@
       "name": "@fhold/harness-hooks",
       "dependencies": {
         "@opencode/plugin": "2.2.6",
-        "akm-opencode-v2": "0.10.261136",
+        "akm-opencode-v2": "0.10.261139",
         "effect": "4.1.0",
       },
     },
@@ -691,11 +691,11 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.10.261133-beta.2", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-U4L0hGTsXVNuh8+rJGWYzeNqYylAnFGgKtwk8AKEi95NzOfaY17DmSUXewCv0WXHpzUenf5UjUuTat9J5X2YoQ=="],
+    "akm-cli": ["akm-cli@0.10.261133", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-TDvbUZZh6fvzCKem2WBL2FjcRiJ+CKyZsmY98xv5cEgzml69ZO5WmLtWra1L6CYmrwPmrb5HrL7j62vqG0NKFg=="],
 
-    "akm-opencode-v2": ["akm-opencode-v2@0.10.261136", "", { "dependencies": { "akm-cli": "0.10.261130" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-CvYJrVXrB3hZyD7KJ+rQe2AnzSqc6U4JWrvUNFLTk/SyZLOQyOzMfkFnc6/JL+EIWk1qE7OVUlDjfx/B+tZZEg=="],
+    "akm-opencode-v2": ["akm-opencode-v2@0.10.261139", "", { "dependencies": { "akm-cli": "0.10.261133" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-T9+HVRBkNlRTaDIKhr9wGVk9PATzoneE7WZ4KAGJqhISTqke7kisudwEKWqnxljnge2XmrdF/xTJ8I3podjwOQ=="],
 
-    "akm-web": ["akm-web@0.10.261133-beta.2", "", { "dependencies": { "akm-cli": "0.10.261133-beta.2", "jsonc-parser": "3.3.1" }, "bin": { "akm-web": "server/server.mjs" } }, "sha512-5IeyiSt0OrwjDu+hTwMJ7dLXmOry7mWBCJnvJGMXY0Skxe21E3jg39Kxoiy3BuXFxoOSwoEReUiom9OUBgFThA=="],
+    "akm-web": ["akm-web@0.10.261133", "", { "dependencies": { "akm-cli": "0.10.261133", "jsonc-parser": "3.3.1" }, "bin": { "akm-web": "server/server.mjs" } }, "sha512-YGkPmfx+3BqQxY3dX+VF+pq4xbJiWMqYui3noiiu9kB4trtj7+qAUMG6lXJKyK0ZxafrchcTT3YY+kBarux74A=="],
 
     "ansi-escapes": ["ansi-escapes@4.3.2", "", { "dependencies": { "type-fest": "^0.21.3" } }, "sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ=="],
 
@@ -1654,8 +1654,6 @@
     "@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
     "akm-opencode-v2/@opencode/plugin": ["@opencode/plugin@2.1.4", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode/ai": "2.1.4", "@opencode/client": "2.1.4", "@opencode/protocol": "2.1.4", "@opencode/schema": "2.1.4", "@opencode/util": "2.1.4", "effect": "4.0.1" }, "peerDependencies": { "@opencode/theme": "2.1.4", "@opentui/core": ">=0.6.8", "@opentui/solid": ">=0.6.8", "solid-js": ">=1.9.0" }, "optionalPeers": ["@opencode/theme", "@opentui/core", "@opentui/solid", "solid-js"] }, "sha512-SGAkdGp0VRxos2BEkRiyRl75G7DtuvP0ywgiEiHz1PbdUwUe2EAURMrzFgLCYCpWEm/zaNrguxPDVL0carrCsA=="],
-
-    "akm-opencode-v2/akm-cli": ["akm-cli@0.10.261130", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-ebFwtTWfcKZPx+jkMv8DhV8HZ5k72HyXo1+g/Yn9f0euQmxscr7QqjgNmcSnJf65t5r7YMDXNusqAZF+F4RC3A=="],
 
     "akm-opencode-v2/effect": ["effect@4.0.1", "", {}, "sha512-b1VlQG9g8fwxE5QnIZuPoOP/0MsqHJSRKxUijjoM80E5q95FXrX5yWtY5XI8G+GJsBQAVSDbLS458z9a++uVvw=="],
 
