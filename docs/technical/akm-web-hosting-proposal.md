@@ -1,13 +1,13 @@
 # Optional persistent AKM Web hosting
 
-Status: implementation started November 25, 2026; not merge-ready or released.
+Status: implemented against stable AKM 0.10.261133; not released by fhold.
 Prepared November 24, 2026, against fetched `origin/main`
 `7ee55f15e72e8894d548a5a768d2af0a1de0b63a`.
 
 Implementation follows the revised [AKM issue #1801](https://github.com/itlackey/akm/issues/1801).
-The approved contract is recorded below; its implementation and published package
-still need qualification. At the start of this work, the public AKM
-`release/0.10.261133` branch still contained the old launch-token implementation.
+The approved contract and implementation plan are retained below. Current
+operator instructions are in [AKM Web access](../akm-web.md); dated verification
+is recorded in the [pre-merge review](akm-web-premerge-review.md).
 
 ### Current implementation slice
 
@@ -20,10 +20,9 @@ and unregisters the handler when the view closes. No renderer IPC response or
 ordinary snapshot carries the bearer.
 
 Socket-backed contract tests and real Electron tests verify this fhold boundary.
-CLI/Web pins now select published `0.10.261133-beta.2`; direct and forwarded
-Chromium smoke and the actual embedded Admin view pass against those packages.
-Matching plugin publication and final image qualification remain required:
-this intermediate branch must not merge or ship with its older plugin set.
+CLI/Web pins select stable `0.10.261133`; the matching OpenCode, Claude and Codex
+plugins are `0.10.261139`, all carrying the same CLI. The immutable marketplace
+archive and root lockfile are updated together.
 
 Persistent hosting, optional port publication, authenticated readiness/activity,
 and the CLI settings command are implemented against the revised contract.
@@ -35,8 +34,8 @@ The value never enters stack JSON, generated Compose environment, URLs, renderer
 IPC, or diagnostics. The Assistant UID can read its web login secret; this is
 not a credential-custody boundary for the agent or a provider credential.
 
-Upstream PR #1804 is merged and published in `0.10.261133-beta.2`, release commit
-`766d342dd684271242f7fa1432eeb01093252293`. Its earlier source review covered
+Upstream PR #1804 is merged and included in stable `0.10.261133`, release commit
+`59415233457306809c909697200b2934ea723076`. Its earlier source review covered
 `675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.
 The native configuration, authentication, framing and readiness protocol are now
 implemented. `config.webSettings({resolveSecret:false})` allows the environment
@@ -60,7 +59,9 @@ process trees remain outside the Linux process-group verification.
 The published beta also stops subsequent commands started during forced
 termination (AKM #1813). All eight runtime shutdown regressions pass against
 the npm artifact. The [review record](akm-web-premerge-review.md) distinguishes
-published-package evidence from the remaining plugin and image qualification.
+published-package evidence from final image qualification. Stable also replaces
+the global child-process patch with AKM's own native child registry (#1814).
+Fhold does not need to adopt or duplicate that internal web lifecycle machinery.
 
 ## Decision and ownership
 
@@ -100,25 +101,24 @@ are not requirements for fhold or this integration. Recommend an existing proxy,
 firewall, or VPN when exposing the service beyond its host. Host/origin checks
 and framing allowlists do not identify client computers or encrypt HTTP traffic.
 
-## Pending upstream contract
+## Published upstream contract
 
-Replace each placeholder with an upstream reference and verified published
-behavior before implementing the dependent step. The locally discussed AKM
-proposal is design input, not a substitute for that contract.
+The [stable release](https://github.com/itlackey/akm/releases/tag/v0.10.261133)
+implements #1801. The earlier review findings are resolved upstream.
 
-| Decision | Placeholder to resolve with AKM | Fhold consequence |
+| Decision | Native AKM contract | Fhold consequence |
 | --- | --- | --- |
-| Proposal and release | CLI/Web `0.10.261133-beta.2`, commit `766d342dd684`; matching plugin publication remains pending | CLI/Web pinned and lockfile regenerated. Complete the published plugin set before merge; no speculative pins or startup downloads. |
-| Server configuration | #1801 specifies `experimental.web` (`host`, `port`, `origin`, `secret`, `allowedHosts`, `frameParents`), with native `--host`, `--port`, `--origin` overrides. **TBD-AKM-02:** verify final schema/API | Native configuration remains authoritative; fhold only adds hosting intent/wiring. |
+| Proposal and release | CLI/Web `0.10.261133`, plugins `0.10.261139` | Exact matching pins, immutable archive and generated lockfile; no startup downloads. |
+| Server configuration | `experimental.web` (`host`, `port`, `origin`, `secret`, `allowedHosts`, `frameParents`), with native `--host`, `--port`, `--origin` overrides | Native configuration remains authoritative; fhold only adds hosting intent/wiring. |
 | Login and sessions | #1801 specifies native secret references, an `AKM_WEB_SECRET` run override, login/logout, in-memory expiring sessions and restart rotation. Dedicated host file feeds the native override; no resolver API is needed | No native credential-file option and no fhold resolver. Keep bearer values in private host memory/transport, not snapshots, renderer IPC or URLs. |
-| Framing | `frameParents` denies framing when absent; explicit parents use runtime CSP without conflicting X-Frame-Options. **TBD-AKM-04:** verify nested-frame and final header behavior | Pass explicit choices through; no fhold CORS or header rewriting. |
-| Cookies and browsers | #1801 specifies Strict cookies by default; configured framing with HTTPS uses None/Secure/Partitioned. **TBD-AKM-05:** real-browser support matrix | Cross-site browser restrictions remain; no cookie workaround in fhold. |
-| Readiness | Native ready line contains `type` and `origin`, no URL. Authenticated `GET /api/session` returns `{ok:true,active:boolean,session:boolean}`; startup returns 503 STARTING. **TBD-AKM-06:** qualify implementation | Probe with a private bearer and canonical Host; expose no credential in diagnostics. |
-| Shutdown | Native SIGTERM stops admission and drains in-flight requests for a fixed period. Ten-second HTTP grace confirmed; **TBD-AKM-07:** host-tool descendant cleanup is blocked by the reproduced review finding | Stop all writers before final recovery capture; verify management and container shutdown budgets. |
-| Activity | `/api/session.active` excludes the probe itself and covers requests/host-tool operations. **TBD-AKM-08:** verify long-running jobs/descendants | Integrate with existing keep-alive; do not claim coverage before native verification. |
-| Desktop/Admin launch | #1801 removes `desktop_session`; launchers supply a secret and scoped bearer headers. **TBD-AKM-09:** native end-to-end qualification | Preserve session-owned lifecycle and SSH forwarding, replacing the old authentication protocol rather than retaining a compatibility path. |
+| Framing | `frameParents` denies framing when absent; explicit parents use runtime CSP without conflicting X-Frame-Options | Pass explicit choices through; no fhold CORS or header rewriting. |
+| Cookies and browsers | Strict cookies by default; configured framing with HTTPS uses None/Secure/Partitioned | Cross-site browser restrictions remain; no cookie workaround in fhold. |
+| Readiness | Ready line contains `type` and `origin`, no credential. Authenticated `GET /api/session` returns `{ok:true,active:boolean,session:boolean}`; startup returns 503 STARTING | Probe with a private bearer and canonical Host; expose no credential in diagnostics. |
+| Shutdown | Ten-second grace followed by bounded native child-group termination; total thirteen seconds | Stop all writers before final recovery capture; Admin allows fifteen seconds. |
+| Activity | `/api/session.active` excludes the probe itself and covers requests/host-tool operations | Integrate with existing keep-alive; unknown remains active for idle decisions. |
+| Desktop/Admin launch | Launchers supply a secret and scoped bearer headers instead of `desktop_session` | Preserve session-owned lifecycle and SSH forwarding; no old-protocol compatibility path. |
 
-No placeholder is permission to create a substitute in fhold. If a required
+If a required
 native capability is missing, resolve it upstream or explicitly narrow the
 qualified deployment scope.
 
@@ -198,15 +198,14 @@ Same-site cross-origin frames may use existing cookie behavior; genuinely
 cross-site cookie authentication generally requires different cookie attributes
 and can still be blocked by browser privacy settings. An HTTPS parent can also
 block an HTTP frame. A parent allowlist cannot override these browser rules.
-Leave final guarantees to TBD-AKM-04/05 and test them with real browsers. A
+Test the desired browser/deployment combination with real browsers. A
 shared-site deployment or external proxy can be documented without putting a
 proxy into fhold. Arbitrary cross-site HTTP embedding is not promised.
 
 ## Admin and SSH access contract
 
-The current SSH management path assumes every knowledge URL is an on-demand
-token-bearing address to tunnel. Merely returning a persistent HTTPS URL from
-`KnowledgeUi` would violate those assumptions.
+The SSH management path distinguishes on-demand forwarded access from a
+persistent URL reached directly from the Admin workstation.
 
 Extend the existing typed operation/result with an explicit distinction between
 persistent direct access and session-owned forwarded access. Final type names
@@ -237,7 +236,7 @@ web operation must not be mistaken for idle solely because OpenCode is idle.
 Verify native activity reporting against existing keep-alive behavior using real
 web operations, including long-running operations and their CLI descendants.
 
-TBD-AKM-08 is a qualification dependency, not a documentation-only caveat. If
+Native activity is a qualification dependency, not a documentation-only caveat. If
 native activity is incomplete, request the upstream signal and explicitly leave
 automatic idle shutdown with active web work unqualified. Do not silently change
 the operator's idle settings or add fake activity, a parallel tracker, or a new
@@ -290,13 +289,13 @@ live-instance rollout.
 
 | Existing owner | Expected work |
 | --- | --- |
-| `containers/assistant/tools/package.json`, `bun.lock`, and relevant image plugin pins | Qualified matching AKM Web/CLI/plugin versions after TBD-AKM-01; no unrelated dependency refresh. |
+| `containers/assistant/tools/package.json`, `bun.lock`, and relevant image plugin pins | Matching published AKM Web/CLI/plugin versions; no unrelated dependency refresh. |
 | `packages/lib/src/control-plane/stack-config.ts`, `compose.ts`, existing seed/secret/runtime-input owners, `packages/skeleton/system/stack/stack.compose.yml` | Typed optional intent, secret/mount/publication wiring and existing activation bookkeeping. |
 | `containers/assistant/entrypoint.sh`, `healthcheck.sh` | Optional native child, readiness/degraded observations and existing writer shutdown. |
 | `packages/lib/src/management/knowledge-ui.ts`, `types.ts`, `contracts.ts`, `wire-input.ts`, `instance.ts`, `instance-session.ts`, `ssh.ts` | Explicit access-route contract, persistent URL opening, preserved session-owned launch/forwarding. |
 | `packages/lib/src/hosting/provider.ts` and applicable existing bindings | Capability composition; no provider switches in shared pages and no newly claimed ACA support. |
 | `packages/electron/src/admin-app.ts`, `admin-knowledge.ts`, existing settings presentation | Persistent URL in the current isolated browser view and settings through shared typed operations. |
-| `plugins/fhold/scripts/activity.mjs` and existing keep-alive integration, only if required by verified native behavior | Consume native activity without another tracker; long-running native operation qualification remains TBD-AKM-08. |
+| `plugins/fhold/scripts/activity.mjs` and existing keep-alive integration | Consume native activity without another tracker; verify long-running operations. |
 | Existing configuration/management tests, `scripts/smoke-akm-web.mjs`, `scripts/smoke-keepalive.mjs`, recovery/lifecycle smokes and Electron E2E | Targeted native regression and feature coverage listed below. |
 
 ## Acceptance and verification
@@ -322,7 +321,7 @@ live-instance rollout.
 - Verify Assistant-UID denial of delegate-private plaintext secrets and actual
   read-only paths. Do not repair fixture permissions to manufacture a pass.
 - Observe idle serving separately from active native work. Record evidence for
-  TBD-AKM-08 before claiming automatic idle-shutdown support.
+  native activity before claiming automatic idle-shutdown support.
 - Qualify affected Assistant editions/architectures and CLI/Admin artifacts using
   existing release gates. Reuse eligible evidence; do not create an extra build
   or publication pipeline for this feature.
@@ -348,7 +347,7 @@ document each additional reachability path before exposing that capability.
 - [Core principles](core-principles.md), [environment and mounts](environment-and-mounts.md), and [hosting guide](../hosting.md).
 - [Native credential custody](../credential-custody.md) and [Assistant recovery](../assistant-recovery.md).
 - [Dependency and release process](../operations/updating-dependencies-and-releasing.md).
-- [AKM server/embedding contract, issue #1801](https://github.com/itlackey/akm/issues/1801); final release/implementation reference remains **TBD-AKM-01**.
+- [AKM server/embedding contract, issue #1801](https://github.com/itlackey/akm/issues/1801), implemented in [stable 0.10.261133](https://github.com/itlackey/akm/releases/tag/v0.10.261133).
 - [CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors), [cookie attributes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie), and [third-party cookie constraints](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
 
 ## Operator controls (awaiting the upstream package)
@@ -397,9 +396,8 @@ settings form, ACA management support, or subpath hosting is claimed here.
 - Documentation checks, shell syntax, and lint passed (existing repository lint
   warnings remain).
 
-Published beta 2 now passes browser/authentication, embedded Admin and native
-shutdown checks; see the dated [verification record](akm-web-premerge-review.md).
-Still required: matching published plugins and native image/Admin smoke tests,
-including persistent hosting, configured-secret override, iframe settings and
-activity through the shipped container. Package and source fixtures do not
-establish that final image behavior.
+Stable CLI/Web and matching plugins are now verified in local AIO and Slim
+images, including persistent hosting, configured-secret override, iframe login,
+activity and the actual embedded Admin view. See the dated
+[verification record](akm-web-premerge-review.md) for evidence and limits,
+including the stalled full-window harness and remaining canonical release CI.

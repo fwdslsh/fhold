@@ -93,7 +93,9 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 			expect(probes).toBe(2);
 			// Reopening after enabling hosting must stop the old session child and
 			// use the configured origin/credential, not the cached session URL.
-			const home = join(roots.at(-1)!, 'home');
+			const root = roots.at(-1);
+			if (!root) throw new Error('Missing test fixture');
+			const home = join(root, 'home');
 			const read = readStackConfig(home);
 			if (!read.ok) throw new Error(read.error);
 			read.config.assistant.web = {

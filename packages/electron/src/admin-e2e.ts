@@ -3468,6 +3468,7 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 // running home. It changes no stack settings and never starts/stops containers.
 async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 	const homeDir = requiredEnvironment('FH_HOME');
+	const persistentWeb = process.env.FH_ADMIN_E2E_PERSISTENT_WEB === '1';
 	const outputDir = requiredEnvironment('FH_ADMIN_E2E_OUTPUT');
 	mkdirSync(outputDir, { recursive: true });
 	app.setPath('userData', join(outputDir, 'knowledge-electron-profile'));
@@ -3480,8 +3481,10 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 	const originalOpen = shell.openExternal;
 	const openedUrls: string[] = [];
 	try {
+		progress('knowledge: waiting for Admin welcome');
 		await waitForLoad(window);
-		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'welcome');
+		progress('knowledge: Admin document loaded');
+		await waitForRenderer(window, "document.body.dataset.phase === 'welcome'", 'welcome', 15_000);
 		// Replace only the human folder selection. Remote mode uses the same
 		// native connection/instance IPC as the host picker, never a fake tunnel.
 		const sshHost = process.env.FH_ADMIN_E2E_SSH_HOST?.trim();
@@ -3519,6 +3522,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 			"document.body.dataset.phase === 'ready' && document.body.dataset.busy !== 'true'",
 			'running instance'
 		);
+		progress('knowledge: connected to disposable instance');
 		shell.openExternal = async (url) => {
 			openedUrls.push(url);
 		};
@@ -3653,6 +3657,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		);
 		const restartContainer = process.env.FH_ADMIN_E2E_RESTART_WEB_CONTAINER;
 		if (restartContainer) {
+			assert(!persistentWeb, 'The session restart probe requires on-demand hosting.');
 			assert(
 				/^[a-f0-9]{12,64}$/.test(restartContainer),
 				'Choose an exact disposable container ID.'
@@ -3702,16 +3707,21 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		})()`);
 		assert(concurrentRead, 'A concurrent status read reopened the instance during disconnect.');
 		assert(guest.isDestroyed(), 'Knowledge browser survived instance disconnect.');
-		assert(
-			await fetch(origin, { signal: AbortSignal.timeout(2000) }).then(
-				() => false,
-				() => true
-			),
-			'Native AKM server/tunnel survived instance disconnect.'
-		);
+		if (persistentWeb) {
+			assert(
+				(await fetch(new URL('/api/session', origin), { signal: AbortSignal.timeout(2000) })).status === 401,
+				'Persistent AKM must remain running and authenticated after Admin disconnects.'
+			);
+		} else {
+			assert(
+				await fetch(origin, { signal: AbortSignal.timeout(2000) }).then(() => false, () => true),
+				'Native AKM server/tunnel survived instance disconnect.'
+			);
+		}
 		return {
 			ok: true,
 			knowledgeClickThrough: true,
+			persistentWeb,
 			transport: sshHost ? 'native-ssh' : 'local-docker',
 			bearerAuthenticatedReload: true,
 			embedded: true,

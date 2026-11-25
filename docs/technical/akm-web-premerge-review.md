@@ -1,8 +1,60 @@
 # AKM Web pre-merge review — November 25, 2026
 
-**Current recommendation: published beta 2 passes the focused Linux web
-integration checks. Matching plugin publication and image qualification still
-block merging this branch.**
+**Current state: stable AKM and matching plugins are integrated and locally
+verified on Linux amd64. The PR is stacked on #135; canonical CI and release
+qualification remain separate.**
+
+## Stable release verification — November 25
+
+- CLI/Web: `0.10.261133`; published web build provenance `594152334573`.
+- OpenCode/Claude/Codex plugins: `0.10.261139`, each requiring/bundling CLI
+  `0.10.261133`. Marketplace commit `faa365375171f6c5f35cd3d07120d85e20cbabae`,
+  archive SHA-256 `a42f40046e05a63c8d6066cb5b99b76d77beffc0cb5c6c6819ffb755c07b2fe3`.
+- Reviewed intervening #1814: AKM Web now uses AKM's native child registry
+  instead of patching Node's global child process implementation. No additional
+  fhold process registry or workspace API integration is needed.
+- Included the pending #135 branch so its native flat bundle configuration,
+  migration/cache fixes and custody corrections are preserved. Dependency
+  conflicts were resolved to the stable set, without vendor overrides.
+- Corrected stale session reuse: enabling persistent hosting now stops a cached
+  on-demand child and returns the configured persistent URL and credential.
+
+Checks on the combined branch:
+
+- Full source suite: 1,302 passed, 11 opt-in cases skipped; workspace type
+  checks, CLI/Admin builds, frozen lockfile, docs checks/tests and shell checks
+  passed. Approved audit policy passed with the same three exceptions.
+- Both locally built AIO and Slim passed native runtime smokes: browser/Web
+  direct and forwarded authentication, OpenCode tools/recall, installed harness
+  plugins, operator settings preservation and workspace execution boundaries.
+- All eight native shutdown runtime regressions passed against the installed
+  stable packages; the separate Desktop launcher assertion passed against
+  exact-release source (Electron source is not shipped in the web npm package).
+- A disposable Compose instance passed normal CLI activation, private single-file
+  secret mounting, no secret value in Docker environment, authenticated native
+  readiness, idle and active software-operation reporting, browser login/reload/
+  logout, and an unresolved configured-secret reference overridden by fhold's
+  dedicated secret. Native `frameParents` CSP and same-site cross-origin iframe
+  login/reload passed in Chromium.
+- The actual `KnowledgeUi` launcher and `AdminKnowledge` Electron view passed
+  against the local image: bearer readiness, browser-origin writes, no Admin
+  preload in the web renderer, persistent-server survival after view close and
+  on-demand server termination on disconnect. Disabling persistent hosting
+  removed its managed mount and published port while retaining the login file.
+- The final AIO native custody smoke passed: the ordinary assistant could not
+  read private files, delegate memory/environment or its open secret descriptor;
+  approved tasks, redacted OpenCode/Supercronic results and replacement/disable/
+  re-enable persistence still worked with stable AKM.
+
+Verification limits: the full Admin-window click-through harness stalled at its
+welcome-screen renderer wait under local Xvfb and was stopped. The focused real
+launcher/view check above is narrower evidence, not a claim that full-window
+navigation passed. Native ARM64/canonical candidate CI and release publication
+were not run. No live instance or recovery settings were changed. Unrelated
+tool upgrades and the existing OpenCode SDK/Effect peer-version difference were
+held; actual native harness checks passed with the selected stable AKM set.
+
+Earlier beta/source reviews below are historical, including their resolved holds.
 
 ## Published beta 2 verification
 
@@ -33,7 +85,7 @@ Verification against the actual npm packages, using disposable homes:
   policy reported no unexcepted vulnerabilities; its three existing exceptions
   were unchanged.
 
-**Plugin hold:** npm's latest `akm-opencode-v2` is `0.10.261138`, requiring
+**Plugin hold at the beta 2 check (now resolved):** npm's latest `akm-opencode-v2` was `0.10.261138`, requiring
 CLI `0.10.261132`; the repository has no open plugin update PR at this check.
 Fhold's existing `0.10.261136` plugin pins and native marketplace archive remain
 unchanged, with their own published CLI `0.10.261130`. The lockfile preserves
