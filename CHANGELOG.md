@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.4.1115-beta — Hosted AKM Web and safer private task access
+
+Update Assistant to stable AKM CLI/web **0.10.261133** and all three harness
+plugins to **0.10.261139**, with the matching native marketplace revision and
+checksum. Use AKM's native bundle configuration, migration, task validation and
+health reporting; preserve optional index-cache recovery across configuration
+migration by rebuilding incompatible caches.
+
+Add optional persistent AKM Web hosting through `fhold config web`. AKM owns
+login, sessions, Host/Origin validation, iframe policy and shutdown; fhold supplies
+the dedicated secret mount, optional host port and lifecycle integration. Admin
+uses private bearer authentication in its isolated embedded view and retains
+on-demand access when persistent hosting is disabled. See [AKM Web access](docs/akm-web.md).
+
+Keep delegated credentials in the explicitly selected private bundle, reject
+unsafe setup paths, and validate the exact approved native task before granting
+access. The ordinary Assistant cannot read delegate-owned secret files or process
+state. This is permission-based isolation, not encrypted private storage;
+existing provider credentials and trusted task scripts retain their documented
+limits. See [credential custody](docs/credential-custody.md).
+
+Fix Admin credential/portal controls, local Docker import and folder selection,
+instance-discovery races, Knowledge layout at high zoom, and false restart
+notices when AKM only reformats its configuration. Full native Admin verification
+covered checkpoint recovery, whole-instance export/import and reopening.
+
+Publish new AIO/Slim Assistant images and Linux x64/arm64 CLI and Admin downloads.
+Guardian, Portal and the desktop extension retain **0.4.1114-beta** because their
+inputs are unchanged. Existing instances are not upgraded automatically.
+
 ## 0.4.1114-beta — Assistant editions and private task access
 
 Publish Slim and AIO Assistant editions side by side. Slim includes OpenCode,

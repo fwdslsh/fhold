@@ -28,9 +28,9 @@
         "@opencode/cli": "2.2.6",
         "@opencode/client": "2.2.6",
         "@opencode/plugin": "2.2.6",
-        "akm-cli": "0.10.261131",
-        "akm-opencode-v2": "0.10.261137",
-        "akm-web": "0.10.261131",
+        "akm-cli": "0.10.261133",
+        "akm-opencode-v2": "0.10.261139",
+        "akm-web": "0.10.261133",
         "playwright": "1.65.0",
       },
     },
@@ -49,7 +49,7 @@
     },
     "packages/cli": {
       "name": "fhold",
-      "version": "0.4.1114-beta",
+      "version": "0.4.1115-beta",
       "devDependencies": {
         "@fhold/lib": "workspace:*",
         "@types/node": "^26.6.6",
@@ -61,7 +61,7 @@
     },
     "packages/electron": {
       "name": "@fhold/electron",
-      "version": "0.4.1114-beta",
+      "version": "0.4.1115-beta",
       "dependencies": {
         "electron-updater": "6.8.12",
       },
@@ -93,7 +93,7 @@
     },
     "packages/lib": {
       "name": "@fhold/lib",
-      "version": "0.4.1114-beta",
+      "version": "0.4.1115-beta",
       "dependencies": {
         "@azure/arm-appcontainers": "4.0.0",
         "@azure/arm-resources": "8.0.0",
@@ -122,13 +122,13 @@
     },
     "packages/skeleton": {
       "name": "@fhold/skeleton",
-      "version": "0.4.1114-beta",
+      "version": "0.4.1115-beta",
     },
     "plugins/fhold": {
       "name": "@fhold/harness-hooks",
       "dependencies": {
         "@opencode/plugin": "2.2.6",
-        "akm-opencode-v2": "0.10.261137",
+        "akm-opencode-v2": "0.10.261139",
         "effect": "4.1.0",
       },
     },
@@ -691,11 +691,11 @@
 
     "ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
-    "akm-cli": ["akm-cli@0.10.261131", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-qy88vaLpDUKTHJvNmEqOLGEyny80SbRzzTBnXMFm1emsmIw0XfRc/GQ90Uowie0WverGgFPXgICPDnlf+9x++w=="],
+    "akm-cli": ["akm-cli@0.10.261133", "", { "dependencies": { "@clack/prompts": "^1.3.0", "@huggingface/tokenizers": "0.1.3", "citty": "^0.2.2", "dotenv": "^17.4.2", "fast-xml-parser": "^5.10.1", "jsonc-parser": "^3.3.1", "marked": "^18.1.1", "node-html-parser": "^9.0.1", "semver": "^7.6.0", "smol-toml": "^1.9.1", "turndown": "^7.2.4", "yaml": "^2.8.4", "zod": "^4.6.6" }, "optionalDependencies": { "better-sqlite3": "13.0.3", "sqlite-vec": "^0.1.9" }, "bin": { "akm": "dist/akm", "akm-migrate": "dist/akm-migrate" } }, "sha512-TDvbUZZh6fvzCKem2WBL2FjcRiJ+CKyZsmY98xv5cEgzml69ZO5WmLtWra1L6CYmrwPmrb5HrL7j62vqG0NKFg=="],
 
-    "akm-opencode-v2": ["akm-opencode-v2@0.10.261137", "", { "dependencies": { "akm-cli": "0.10.261131" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-G4Ei15xBodyU5AVKKYY2GVYPyrp2DnhVyb6RuWFXDlU+7FNuJ+qMt1jRr4mT5AF16pjHuQlnHn3WUNtBF68VJw=="],
+    "akm-opencode-v2": ["akm-opencode-v2@0.10.261139", "", { "dependencies": { "akm-cli": "0.10.261133" }, "peerDependencies": { "@opencode/plugin": "2.1.4", "effect": "4.0.1" } }, "sha512-T9+HVRBkNlRTaDIKhr9wGVk9PATzoneE7WZ4KAGJqhISTqke7kisudwEKWqnxljnge2XmrdF/xTJ8I3podjwOQ=="],
 
-    "akm-web": ["akm-web@0.10.261131", "", { "dependencies": { "akm-cli": "0.10.261131", "jsonc-parser": "3.3.1" }, "bin": { "akm-web": "server/server.mjs" } }, "sha512-NNvbUvG+3MWvuBVSgUqnkMxr/x4M/aQdyAXjGFvcEgsrrHEJ/HU+HsXWXsastu32agFrH47xwYSGzGA4rdUzFQ=="],
+    "akm-web": ["akm-web@0.10.261133", "", { "dependencies": { "akm-cli": "0.10.261133", "jsonc-parser": "3.3.1" }, "bin": { "akm-web": "server/server.mjs" } }, "sha512-YGkPmfx+3BqQxY3dX+VF+pq4xbJiWMqYui3noiiu9kB4trtj7+qAUMG6lXJKyK0ZxafrchcTT3YY+kBarux74A=="],
 
     "ansi-escapes": ["ansi-escapes@4.3.2", "", { "dependencies": { "type-fest": "^0.21.3" } }, "sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ=="],
 

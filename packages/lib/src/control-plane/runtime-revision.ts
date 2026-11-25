@@ -64,6 +64,8 @@ export function runtimeRevision(homeDir: string): string {
 		'state/secrets/fhold_guardian_handle_key',
 		'state/secrets/fhold_keyring_password'
 	);
+	if (read.config.assistant.web?.enabled)
+		files.push('state/secrets/fhold_akm_web_secret', 'state/akm-web.compose.json');
 	if (
 		read.config.recovery.enabled &&
 		read.config.recovery.destination.startsWith('azblob:') &&

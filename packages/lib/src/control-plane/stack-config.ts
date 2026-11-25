@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { parseAkmWebSettings, writeAkmWebDeployment, type AkmWebSettings } from './akm-web.js';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { basename, dirname, join } from 'node:path';
@@ -60,6 +61,7 @@ export type StackConfig = {
 		images: { assistant: string; guardian: string; portal: string };
 	};
 	assistant: {
+		web?: AkmWebSettings;
 		edition?: AssistantEdition;
 		bindAddress: string;
 		port: number;
@@ -357,6 +359,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			'portals'
 		]) ||
 		!hasOnlyKeys(assistant, [
+			'web',
 			'edition',
 			'bindAddress',
 			'port',
@@ -427,6 +430,11 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 	}
 
 	let recovery: RecoverySettings;
+	let web: AkmWebSettings | undefined;
+	try { web = parseAkmWebSettings(assistant.web); }
+	catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid AKM Web settings.' }; }
+	if (web?.enabled && web.publish && (web.port === assistantPort || ((gateway.enabled || discord.enabled || slack.enabled) && web.port === gatewayPort)))
+		return { ok: false, error: 'AKM Web host port conflicts with another published service.' };
 	try { recovery = parseRecoverySettings(root.recovery, deployment.projectName); }
 	catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid recovery settings.' }; }
 	const config: StackConfig = {
@@ -442,6 +450,7 @@ export function parseStackConfig(value: unknown): StackConfigReadResult {
 			}
 		},
 		assistant: {
+			...(web ? { web } : {}),
 			...(assistant.edition === undefined ? {} : { edition: assistant.edition as AssistantEdition }),
 			bindAddress: assistant.bindAddress,
 			port: assistantPort,
@@ -555,6 +564,7 @@ export function writeStackConfig(homeDir: string, value: StackConfig): StackConf
 
 	const config = parsed.config;
 	recoveryDirectory(homeDir, config.recovery);
+	writeAkmWebDeployment(homeDir, config.assistant.web);
 	writeFileAtomic(stackConfigFile(homeDir), `${JSON.stringify(config, null, 2)}\n`, 0o600);
 	writeCredentialRegistry(homeDir, config);
 
@@ -572,6 +582,7 @@ export function ensureStackConfig(homeDir: string): StackConfig {
 		return writeStackConfig(homeDir, defaultStackConfig(homeDir));
 	const result = readStackConfig(homeDir);
 	if (!result.ok) throw new Error(result.error);
+	writeAkmWebDeployment(homeDir, result.config.assistant.web);
 	const envPath = stackEnvFile(homeDir);
 	const disk = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
 	const next = mergeEnvContent(disk, {

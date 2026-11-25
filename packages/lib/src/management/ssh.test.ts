@@ -14,6 +14,19 @@ const connection = {
 	port: 2222,
 	roots: []
 };
+test.skipIf(process.env.FH_SOCKET_TESTS !== '1')('persistent Knowledge access preserves its canonical origin and does not start an SSH forwarding process', async () => {
+	let spawns = 0;
+	const secret = 'a'.repeat(64);
+	const native = (() => {
+		spawns++;
+		return spawn(process.execPath, ['-e', `const {createInterface}=require('node:readline');createInterface({input:process.stdin}).on('line',line=>{const request=JSON.parse(line);console.log(JSON.stringify({id:request.id,ok:true,value:{mode:'persistent',url:'https://knowledge.example/',secret:'${secret}'}}));});`], { stdio: 'pipe' });
+	}) as typeof spawn;
+	const api = new SshInstanceManagement(connection, '/synthetic/home', { spawn: native, helper: async () => 'fixture' });
+	try {
+		expect(await api.call('data.knowledgeUi')).toEqual({ mode: 'persistent', url: 'https://knowledge.example/', secret });
+		expect(spawns).toBe(1);
+	} finally { await api.close(); }
+});
 test('one native SSH process preserves setup context and delivers browser events on the management computer', async () => {
 	const commands: Array<{ binary: string; args: readonly string[] }> = [];
 	const urls: string[] = [];

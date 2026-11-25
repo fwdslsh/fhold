@@ -132,7 +132,7 @@ const COMMAND_USAGE: Readonly<Record<string, string>> = {
 	portal:
 		'fhold portal enable <discord|slack> | disable <portal> | credential <portal> --credential <username> | show <portal> | access <portal> [allowlists] | token <portal> --bot-token-file <path|-> [--app-token-file <path|->]',
 	config:
-		'fhold config show | path | assistant [--bind <ip>] [--port <port>] [--timezone <IANA-zone>] | oauth [--resource <https-url> --issuer <https-url> --jwks-url <https-url> [--audience <value>] [--scopes <list>] [--algorithms <list>]] [--disable]',
+		'fhold config show | path | web [--enable|--disable] [--origin <http(s)-origin>] [--publish|--no-publish] [--bind <ip>] [--port <port>] [--no-apply] | assistant [--bind <ip>] [--port <port>] [--timezone <IANA-zone>] | oauth [--resource <https-url> --issuer <https-url> --jwks-url <https-url> [--audience <value>] [--scopes <list>] [--algorithms <list>]] [--disable]',
 	doctor: 'fhold doctor [--json] [--readiness]',
 	start: 'fhold start',
 	stop: 'fhold stop',

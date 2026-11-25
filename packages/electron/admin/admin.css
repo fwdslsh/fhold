@@ -2908,6 +2908,10 @@ body[data-active-view="knowledge"] #main-content {
 	}
 	body[data-active-view="knowledge"] .sidebar {
 		flex-shrink: 0;
+		/* Keep alerts/navigation reachable without consuming the entire embedded
+		   browser at high zoom or on a short window. */
+		max-height: 40dvh;
+		overflow-y: auto;
 	}
 	body[data-active-view="knowledge"] .workspace {
 		flex: 1;

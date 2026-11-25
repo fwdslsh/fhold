@@ -49,7 +49,9 @@ let instances: AdminInstances;
 let updates: AdminUpdates;
 let desktop: AdminDesktop;
 let activeSession: { key: string; api: ComposedInstanceSession } | undefined;
-let knowledge: { owner: BrowserWindow; url: string; browser: AdminKnowledge } | undefined;
+let knowledge:
+	| { owner: BrowserWindow; url: string; secret: string; browser: AdminKnowledge }
+	| undefined;
 let closingSession: Promise<void> | undefined;
 // A native sign-in flow can request that Admin opens a browser after its IPC call
 // has completed. Keep that callback bound to the selected session rather than the
@@ -115,7 +117,15 @@ function selectedConnection(id: string) {
 	return target?.kind === 'hosted' && target.ref.connectionId === id;
 }
 async function hostingInfo(id: string) {
-	const installation = hostingProvider(instances.hosting.connection(id)).installation;
+	const provider = hostingProvider(instances.hosting.connection(id));
+	// Local Docker uses the native folder picker and directory provisioning.
+	// It deliberately has no remote directory-browser adapter.
+	if (id === LOCAL_CONNECTION.id && provider.provisioning) {
+		const options = await invoke(provider.provisioning.options, undefined);
+		if (options.kind === 'directory')
+			return { instancesDirectory: options.instancesDirectory, defaultHome: options.defaultHome };
+	}
+	const installation = provider.installation;
 	if (!installation)
 		throw Error(
 			'This provider does not expose an instance-directory installer. Use its deployment tooling.'
@@ -217,17 +227,16 @@ export function registerAdminIpc(): void {
 	});
 	updates = new AdminUpdates(new AdminSettingsStore(app.getPath('userData')), {
 		version: app.getVersion(),
-		unavailableReason:
-			!app.isPackaged
-				? 'Automatic updates are available in installed releases, not development builds.'
-				: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
-						true
-					? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
-					: process.platform === 'linux' && !process.env.APPIMAGE
-						? 'Run the AppImage to enable automatic updates, or download Admin from GitHub.'
-						: process.platform !== 'linux'
-							? 'Automatic updates are not yet published for Windows or macOS. Use a new native build to update Admin.'
-							: undefined,
+		unavailableReason: !app.isPackaged
+			? 'Automatic updates are available in installed releases, not development builds.'
+			: JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')).fholdPreview ===
+					true
+				? 'Automatic updates are disabled in PR previews. Use a released Admin to receive updates.'
+				: process.platform === 'linux' && !process.env.APPIMAGE
+					? 'Run the AppImage to enable automatic updates, or download Admin from GitHub.'
+					: process.platform !== 'linux'
+						? 'Automatic updates are not yet published for Windows or macOS. Use a new native build to update Admin.'
+						: undefined,
 		createUpdater: () =>
 			process.platform === 'win32'
 				? new electronUpdater.NsisUpdater()
@@ -306,7 +315,7 @@ export function registerAdminIpc(): void {
 		const provider = hostingProvider(instances.hosting.connection(id));
 		return {
 			installation: !!provider.provisioning,
-			directory: !!provider.installation,
+			directory: id === LOCAL_CONNECTION.id || !!provider.installation,
 			emptyHint: provider.emptyHint
 		};
 	});
@@ -409,16 +418,16 @@ export function registerAdminIpc(): void {
 	);
 	handleAdmin(ADMIN_CHANNELS.openKnowledge, async (event) => {
 		const selected = session();
-		const { url } = await invoke(selected.data.knowledgeUi, undefined);
+		const { url, secret } = await invoke(selected.data.knowledgeUi, undefined);
 		if (activeSession?.api !== selected)
 			throw new Error('The selected instance changed. Try again.');
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		if (!owner || owner.isDestroyed()) throw new Error('The Admin window is closed.');
 		const origin = new URL(url).origin;
-		if (knowledge?.owner !== owner || knowledge.url !== url) {
+		if (knowledge?.owner !== owner || knowledge.url !== url || knowledge.secret !== secret) {
 			knowledge?.browser.close();
-			const browser = new AdminKnowledge(owner, origin);
-			knowledge = { owner, url, browser };
+			const browser = new AdminKnowledge(owner, origin, secret);
+			knowledge = { owner, url, secret, browser };
 			try {
 				await browser.open(url);
 			} catch (error) {

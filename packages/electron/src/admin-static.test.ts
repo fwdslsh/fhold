@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultStackConfig } from '@fhold/lib';
+import { isManagementOperation } from '../../lib/src/management/wire-input.js';
 import { bindAccessEvents, copyAccessKey, renderCredentials } from '../admin/access.js';
 import {
 	restoreInput,
@@ -61,6 +62,7 @@ import {
 } from '../admin/snapshot.js';
 import { createAdminState, state } from '../admin/state.js';
 import { targetKey, bindHostingEvents, showHostingChooser } from '../admin/hosting.js';
+import { chooseManagedDirectory } from '../admin/directories.js';
 import {
 	instanceCapability,
 	instancePresentation,
@@ -315,8 +317,9 @@ function normalizedSnapshot({
 			'agent.connect': unsupported(),
 			'agent.remote': supported(),
 			'agent.codexRecall': supported(),
-			'apps.credentials': supported(),
-			'apps.portal': supported(),
+			'apps.credentials.create': supported(),
+			'apps.credentials.revealKey': supported(),
+			'apps.portal.saveToken': supported(),
 			'data.backup': supported(),
 			'data.restoreData': supported(),
 			'data.restoreInstance': supported(),
@@ -820,6 +823,36 @@ describe('Admin static security boundary', () => {
 		expect(control('provider-fields').disabled).toBe(false);
 		expect(control('transfer-fields').disabled).toBe(false);
 	});
+	it('uses concrete credential and portal operations for app capability fieldsets', () => {
+		for (const [, operation] of html.matchAll(/data-instance-feature="(apps\.[^"]+)"/g))
+			expect(isManagementOperation(operation)).toBe(true);
+		renderInstanceCapabilities(normalizedSnapshot());
+		for (const id of [
+			'mcp-fields',
+			'access-fields',
+			'keys-fields',
+			'discord-fields',
+			'slack-fields'
+		])
+			expect(control(id).disabled).toBe(false);
+		renderInstanceCapabilities(
+			normalizedSnapshot({
+				operations: {
+					'apps.credentials.create': unsupported(),
+					'apps.credentials.revealKey': unsupported(),
+					'apps.portal.saveToken': unsupported()
+				}
+			})
+		);
+		for (const id of [
+			'mcp-fields',
+			'access-fields',
+			'keys-fields',
+			'discord-fields',
+			'slack-fields'
+		])
+			expect(control(id).disabled).toBe(true);
+	});
 	it('omits unsupported log options for both managed and inspect-only connections', () => {
 		renderInstanceDetails(normalizedSnapshot({ config: defaultStackConfig() }));
 		expect(selectedLogOptions()).toBeUndefined();
@@ -889,6 +922,21 @@ describe('Admin static security boundary', () => {
 		expect(control('hosting-subscription').value).toBe('subscription');
 		expect(control('hosting-group').value).toBe('group');
 		expect(state.currentSnapshot).toBe(originalSnapshot);
+	});
+	it('uses the native folder picker for an explicitly selected local Docker connection', async () => {
+		state.installConnection = { id: 'local', kind: 'local-docker', label: 'This computer' };
+		const picked: unknown[] = [];
+		state.api = {
+			chooseDirectory: async (value: unknown) => {
+				picked.push(value);
+				return '/new-instance';
+			},
+			hostingDirectory: async () => {
+				throw new Error('Local directories must not use the remote browser');
+			}
+		};
+		expect(await chooseManagedDirectory('instance')).toBe('/new-instance');
+		expect(picked).toEqual([{ purpose: 'instance' }]);
 	});
 	it('explains and exposes whole-instance snapshot/import as a separate stopped choice', async () => {
 		expect(html).toContain('Entire instance (must be stopped)');
@@ -2194,7 +2242,7 @@ describe('Admin instance picker and automatic status', () => {
 		expect(closed).toBe(true);
 		expect(control('instance-picker').disabled).toBe(false);
 	});
-	it('waits for pending status before browsing and returns without losing the target or drafts', async () => {
+	it('waits for pending status and provider discovery before browsing without losing the target or drafts', async () => {
 		const current = normalizedSnapshot({
 			ref: { kind: 'azure-container-apps', connectionId: 'cloud', resourceId: '/agent' },
 			lifecycle: 'deployed',
@@ -2209,6 +2257,10 @@ describe('Admin instance picker and automatic status', () => {
 		state.snapshotPromise = new Promise<void>((resolve) => {
 			finish = resolve;
 		});
+		let finishProviders!: () => void;
+		state.providerLoadPromise = new Promise<void>((resolve) => {
+			finishProviders = resolve;
+		});
 		state.api = {
 			hostingConnections: async () => [
 				{ kind: 'local-docker', id: 'local', label: 'This computer' }
@@ -2221,6 +2273,10 @@ describe('Admin instance picker and automatic status', () => {
 		expect(control('app-shell').hidden).toBe(false);
 		expect(control('open-hosting').hidden).toBe(true);
 		finish();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(control('app-shell').hidden).toBe(false);
+		expect(control('open-hosting').hidden).toBe(true);
+		finishProviders();
 		await browsing;
 		expect(control('app-shell').hidden).toBe(true);
 		expect(control('open-hosting').hidden).toBe(false);

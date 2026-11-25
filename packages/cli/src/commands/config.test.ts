@@ -28,6 +28,23 @@ async function setup(): Promise<string> {
 }
 
 describe('config commands', () => {
+	it('enables, inspects, and disables persistent web hosting without printing or replacing its secret', async () => {
+		const home = await setup();
+		await main(['config', 'web', '--enable', '--origin', 'http://localhost:3811', '--publish', '--no-apply']);
+		const file = join(home, 'state', 'stack.json');
+		const secretFile = join(home, 'state', 'secrets', 'fhold_akm_web_secret');
+		const secret = readFileSync(secretFile, 'utf8');
+		expect(JSON.parse(readFileSync(file, 'utf8')).assistant.web).toMatchObject({ enabled: true, publish: true, port: 3811 });
+		const before = readFileSync(file, 'utf8');
+		await main(['config', 'web']);
+		expect(readFileSync(file, 'utf8')).toBe(before);
+		await expect(main(['config', 'web', '--origin', 'https://example/invalid', '--no-apply'])).rejects.toThrow();
+		expect(readFileSync(file, 'utf8')).toBe(before);
+		await main(['config', 'web', '--disable', '--no-publish', '--no-apply']);
+		expect(JSON.parse(readFileSync(file, 'utf8')).assistant.web).toMatchObject({ enabled: false, publish: false });
+		expect(readFileSync(secretFile, 'utf8')).toBe(secret);
+		expect(readFileSync(file, 'utf8')).not.toContain(secret.trim());
+	});
 	it('refuses raw remote startup toggles without saving native intent', async () => {
  const home = await setup();
  const file = join(home, 'state', 'stack.json');

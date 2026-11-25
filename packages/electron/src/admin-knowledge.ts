@@ -1,6 +1,7 @@
 import { type BrowserWindow, WebContentsView, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { externalAdminUrl } from './admin-domain.js';
+import { knowledgeRequestHeaders } from './admin-knowledge-auth.js';
 
 /** The native AKM page owns its UI and cookie. Admin only hosts its browser view. */
 export class AdminKnowledge {
@@ -17,7 +18,8 @@ export class AdminKnowledge {
 	private readonly ownerClosed = () => this.close();
 	constructor(
 		private readonly owner: BrowserWindow,
-		private readonly origin: string
+		private readonly origin: string,
+		private secret: string | undefined
 	) {
 		this.view = new WebContentsView({
 			webPreferences: {
@@ -28,6 +30,10 @@ export class AdminKnowledge {
 			}
 		});
 		const contents = this.view.webContents;
+		// This partition belongs only to this view. Never register on defaultSession.
+		contents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+			callback({ requestHeaders: knowledgeRequestHeaders(details.url, this.origin, this.secret, details.requestHeaders) });
+		});
 		contents.session.setPermissionRequestHandler((requester, permission, callback) =>
 			callback(
 				permission === 'clipboard-sanitized-write' &&
@@ -124,6 +130,7 @@ export class AdminKnowledge {
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
+		this.secret = undefined;
 		this.layoutGeneration++;
 		this.owner.removeListener('resize', this.resize);
 		this.owner.removeListener('closed', this.ownerClosed);
@@ -132,6 +139,7 @@ export class AdminKnowledge {
 		if (!this.owner.isDestroyed()) this.owner.contentView.removeChildView(this.view);
 		if (!this.view.webContents.isDestroyed()) {
 			const storage = this.view.webContents.session;
+			storage.webRequest.onBeforeSendHeaders(null);
 			this.view.webContents.close();
 			void storage.clearStorageData().catch(() => undefined);
 		}

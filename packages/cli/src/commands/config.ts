@@ -233,7 +233,37 @@ const oauth = defineCommand({
 	}
 });
 
+const web = defineCommand({
+	meta: { name: 'web', description: 'Configure optional persistent AKM Web hosting' },
+	args: {
+		enable: { type: 'boolean', description: 'Enable persistent hosting' },
+		disable: { type: 'boolean', description: 'Disable persistent hosting' },
+		origin: { type: 'string', description: 'Browser-facing HTTP(S) origin, without a path' },
+		publish: { type: 'boolean', description: 'Publish a host port (use --no-publish for proxy-only access)' },
+		bind: { type: 'string', description: 'Host publication IP address; defaults to loopback' },
+		port: { type: 'string', description: 'Host publication port; defaults to 3811' },
+		apply: { type: 'boolean', description: 'Apply immediately (use --no-apply to defer)', default: true }
+	},
+	async run({ args }) {
+		if (args.enable && args.disable) throw new Error('Choose --enable or --disable.');
+		const { homeDir, config, baseline } = current();
+		const settings = config.assistant.web ?? { enabled: false, origin: '', publish: false, bindAddress: '127.0.0.1', port: 3811 };
+		const changed = args.enable || args.disable || args.origin !== undefined || args.publish !== undefined || args.bind !== undefined || args.port !== undefined;
+		if (!changed) { console.log(JSON.stringify(settings, null, 2)); return; }
+		config.assistant.web = {
+			...settings,
+			...(args.enable ? { enabled: true } : args.disable ? { enabled: false } : {}),
+			...(args.origin !== undefined ? { origin: String(args.origin) } : {}),
+			...(args.publish !== undefined ? { publish: args.publish } : {}),
+			...(args.bind !== undefined ? { bindAddress: String(args.bind) } : {}),
+			...(args.port !== undefined ? { port: Number(args.port) } : {})
+		};
+		const written = await save(homeDir, config, args.apply !== false, baseline);
+		console.log(JSON.stringify(written.assistant.web, null, 2));
+	}
+});
+
 export default defineCommand({
 	meta: { name: 'config', description: 'Inspect or change the stack intent' },
-	subCommands: { show, path, assistant, oauth }
+	subCommands: { show, path, assistant, oauth, web }
 });

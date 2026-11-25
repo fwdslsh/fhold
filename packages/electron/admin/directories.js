@@ -5,7 +5,7 @@ import { byId, message } from './ui.js';
 export async function chooseManagedDirectory(purpose) {
 	const connectionId =
 		state.installConnection?.id || state.currentSnapshot?.identity?.ref?.connectionId;
-	if (!connectionId || purpose === 'backup' || purpose === 'restore')
+	if (!connectionId || connectionId === 'local' || purpose === 'backup' || purpose === 'restore')
 		return state.api.chooseDirectory({ purpose });
 	const dialog = byId('remote-directory-dialog');
 	const path = byId('remote-directory-path');

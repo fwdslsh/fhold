@@ -30,6 +30,11 @@ for file in "$runtime"/degraded-*; do
     warning "$(cat "$file")"
   fi
 done
+if [ "${FH_AKM_WEB_ENABLED:-0}" = 1 ]; then
+  if ! alive akm-web || ! node /fhold-plugins/fhold/scripts/akm-web.mjs >/dev/null; then
+    warning 'AKM Web is unavailable. Check its configuration and private akm-web.log; the agent remains usable.'
+  fi
+fi
 if ! keyring_status=$(fhold-keyring status 2>/dev/null); then
   warning "$keyring_status"
 fi
