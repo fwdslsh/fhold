@@ -713,7 +713,7 @@
               <summary><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></summary>
               <div class="app-connection-body">
                 <p id="discord-fields-unavailable" class="capability-note" hidden></p>
-                <fieldset id="discord-fields" class="capability-fields" data-instance-feature="apps.portal" aria-describedby="discord-fields-unavailable" aria-label="Discord connection settings">
+                <fieldset id="discord-fields" class="capability-fields" data-instance-feature="apps.portal.saveToken" aria-describedby="discord-fields-unavailable" aria-label="Discord connection settings">
                 <details class="disclosure setup-help"><summary>Set up your Discord bot</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with View Channels, Read Message History, Send Messages, Create Public Threads, Send Messages in Threads, and Add Reactions.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></details>
                 <details id="discord-tokens" class="disclosure">
                   <summary><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></summary>
@@ -755,7 +755,7 @@
               <summary><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></summary>
               <div class="app-connection-body">
                 <p id="slack-fields-unavailable" class="capability-note" hidden></p>
-                <fieldset id="slack-fields" class="capability-fields" data-instance-feature="apps.portal" aria-describedby="slack-fields-unavailable" aria-label="Slack connection settings">
+                <fieldset id="slack-fields" class="capability-fields" data-instance-feature="apps.portal.saveToken" aria-describedby="slack-fields-unavailable" aria-label="Slack connection settings">
                 <details class="disclosure setup-help"><summary>Set up your Slack bot</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need. Add <code>reactions:write</code> for tool reactions.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need.</li><li>Enable Interactivity &amp; Shortcuts for question, approval and Stop buttons. Socket Mode needs no public Request URL.</li><li>Install or reinstall the app, save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
                 <details id="slack-tokens" class="disclosure">
                   <summary><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></summary>
@@ -798,7 +798,7 @@
               <summary><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
               <div class="app-connection-body">
                 <p id="mcp-fields-unavailable" class="capability-note" hidden></p>
-                <fieldset id="mcp-fields" class="capability-fields" data-instance-feature="apps.credentials" aria-describedby="mcp-fields-unavailable" aria-label="MCP connection settings">
+                <fieldset id="mcp-fields" class="capability-fields" data-instance-feature="apps.credentials.create" aria-describedby="mcp-fields-unavailable" aria-label="MCP connection settings">
                 <form id="mcp-connections-form" class="form-stack" data-managed-form>
                   <label class="switch"><input id="gateway" type="checkbox" /><span>Enable MCP access</span></label>
                   <button class="secondary" type="submit">Save MCP settings</button>
@@ -874,7 +874,7 @@
             <details id="advanced-access" class="disclosure">
               <summary>Advanced access</summary>
               <p id="access-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="access-fields" class="capability-fields" data-instance-feature="apps.credentials" aria-describedby="access-fields-unavailable" aria-label="Advanced app permissions">
+              <fieldset id="access-fields" class="capability-fields" data-instance-feature="apps.credentials.create" aria-describedby="access-fields-unavailable" aria-label="Advanced app permissions">
               <p class="help-text">Change permissions for existing connections. Changes apply to every app using that connection; external apps may not be listed. OpenCode, Claude remote connection and Codex use their own permissions.</p>
               <div id="saved-access" class="saved-access-list"></div>
               <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
@@ -966,7 +966,7 @@
             <details id="connection-keys" class="panel panel-disclosure">
               <summary><span>Connection keys <small>Advanced security maintenance</small></span></summary>
               <p id="keys-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
+              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials.revealKey" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
               <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
               <form id="key-rotation-form" class="form-stack">
                 <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>

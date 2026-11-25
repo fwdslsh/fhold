@@ -131,9 +131,10 @@ async function discover() {
 }
 export async function showHostingChooser(id) {
 	if (state.operationInFlight) return;
-	// Finish a status render before hiding the app: a late hosted snapshot must
-	// not reopen it over the chooser. Browsing leaves the selected target intact.
+	// Finish tracked reads before discovery, which shares the selected session's
+	// busy guard. Their late renders must not reopen the app over the chooser.
 	await state.snapshotPromise;
+	await state.providerLoadPromise?.catch(() => {});
 	if (state.operationInFlight) return;
 	clearInstanceOpenError();
 	for (const surface of [

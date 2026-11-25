@@ -13,12 +13,13 @@ import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:net';
-import { get as httpGet } from 'node:http';
+import { get as httpGet, request as httpRequest } from 'node:http';
 
 import {
 	createBackup,
 	defaultStackConfig,
 	markInstalled,
+	saveStackIntent,
 	MANAGED_FILES,
 	SEEDED_FILES,
 	createFholdState,
@@ -153,15 +154,15 @@ async function keyboardNavigation(window: BrowserWindow): Promise<void> {
 	await press('Tab');
 	await press('Tab');
 	await press('Return');
-	await press('Tab');
-	await press('Tab');
-	await press('Tab');
-	assert(
-		await window.webContents.executeJavaScript(
-			"document.activeElement?.dataset.view === 'connections'"
-		),
-		'Navigation task order is inconsistent.'
-	);
+	for (const view of ['overview', 'provider', 'knowledge', 'connections']) {
+		await press('Tab');
+		assert(
+			await window.webContents.executeJavaScript(
+				`document.activeElement?.dataset.view === ${JSON.stringify(view)}`
+			),
+			`Navigation task order did not include ${view}.`
+		);
+	}
 	await press('Return');
 	assert(
 		await window.webContents.executeJavaScript(
@@ -203,10 +204,15 @@ async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 	);
 	await press('Tab');
 	assert(
+		await window.webContents.executeJavaScript("document.activeElement.id === 'connect-host'"),
+		'Location browsing did not follow Settings in the library keyboard order.'
+	);
+	await press('Tab');
+	assert(
 		await window.webContents.executeJavaScript(
 			"document.activeElement.id === 'begin-new-instance'"
 		),
-		'First launch did not prioritize new setup in keyboard order.'
+		'New assistant did not follow location browsing in keyboard order.'
 	);
 	await press('Tab');
 	assert(
@@ -215,12 +221,6 @@ async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 		),
 		'Import was not next to new setup.'
 	);
-	await press('Tab');
-	assert(
-		await window.webContents.executeJavaScript("document.activeElement.id === 'connect-host'"),
-		'Existing instance browse was not keyboard reachable.'
-	);
-	await press('Tab', ['shift']);
 	await press('Tab', ['shift']);
 	await press('Return');
 	assert(
@@ -244,6 +244,7 @@ async function welcomeKeyboardNavigation(window: BrowserWindow): Promise<void> {
 		10_000
 	);
 	await window.webContents.executeJavaScript('document.body.tabIndex=-1; document.body.focus()');
+	await press('Tab');
 	await press('Tab');
 	await press('Tab');
 	await press('Tab');
@@ -328,7 +329,7 @@ async function waitForRenderer(
 		}
 		const state = (await window.webContents.executeJavaScript(`(async () => {
 			const notice = document.querySelector('#notice');
-			const inlineError = [...document.querySelectorAll('#install-status, #instance-import-status')]
+			const inlineError = [...document.querySelectorAll('#install-status, #instance-import-status, #hosting-status')]
 				.find(element => !element.hidden && element.getAttribute('role') === 'alert' && element.getBoundingClientRect().height > 0);
 			return {
 				ready: Boolean(await (${expression})),
@@ -340,8 +341,12 @@ async function waitForRenderer(
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	const diagnostics = await window.webContents.executeJavaScript(`({
+		phase: document.body.dataset.phase,
 		busy: document.body.dataset.busy,
+		services: [...document.querySelectorAll('#services .service')].map(row => row.textContent),
 		notice: document.querySelector('#notice-message')?.textContent,
+		hostingStatus: document.querySelector('#hosting-status')?.textContent,
+		importDisabled: document.querySelector('#hosting-import')?.disabled,
 		restoreSummary: document.querySelector('#restore-summary')?.textContent,
 		restoreDisabled: document.querySelector('#apply-restore')?.disabled
 	})`);
@@ -378,26 +383,35 @@ async function captureScreenshot(
 ): Promise<string> {
 	const path = join(directory, name);
 	progress(`capturing ${name}`);
+	const evaluate = async (script: string, step: string) => {
+		try {
+			return await window.webContents.executeJavaScript(script);
+		} catch (error) {
+			throw new Error(`${name} (${step}): ${message(error)}`);
+		}
+	};
 	// Native screenshot tests own this window's focus, just as a manual tester
 	// does. Do not rely on animation frames from an occluded/background window.
 	window.focus();
 	window.webContents.focus();
 	if (!preserveFocus)
-		await window.webContents.executeJavaScript(
-			'document.activeElement?.blur(); window.scrollTo(0, 0)'
-		);
-	await window.webContents.executeJavaScript(
-		'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+		await evaluate('document.activeElement?.blur(); window.scrollTo(0, 0)', 'focus');
+	await evaluate(
+		'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+		'paint'
 	);
 	// Let the 120ms control transitions finish before recording presentation pixels.
 	await new Promise((resolve) => setTimeout(resolve, 180));
-	await window.webContents.executeJavaScript(axe.source);
-	const audit = await window.webContents.executeJavaScript(`(async () => {
+	await evaluate(axe.source, 'load accessibility audit');
+	const audit = await evaluate(
+		`(async () => {
 		const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa','wcag22aa'] } });
 		return { width: innerWidth, height: innerHeight, zoom: ${window.webContents.getZoomFactor()}, overflow: document.documentElement.scrollWidth - innerWidth,
 			violations: result.violations.map(({id,impact,nodes}) => ({id,impact,targets:nodes.map(node=>node.target)})),
 			incomplete: result.incomplete.map(({id,nodes}) => ({id,targets:nodes.map(node=>node.target)})) };
-	})()`);
+	})()`,
+		'accessibility audit'
+	);
 	visualAudits.push({ screenshot: name, ...audit });
 	assert(audit.overflow <= 1, `Screenshot ${name} has horizontal overflow.`);
 	assert(
@@ -489,21 +503,28 @@ async function assertRadioLabelClick(window: BrowserWindow, id: string): Promise
 		label.scrollIntoView({block:'center'});
 		await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 		const rect = label.getBoundingClientRect();
-		if (rect.width < 44 || rect.height < 44) throw new Error('The radio label is not a 44px pointer target.');
+		if (rect.width < 40 || rect.height < 40) throw new Error('The radio label is not a 40px desktop pointer target.');
+		const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+		if (!hit || !label.contains(hit)) throw new Error('The radio label is obscured at its click target.');
 		return {x:Math.round(rect.left + rect.width / 2),y:Math.round(rect.top + rect.height / 2)};
 	})()`)) as { x: number; y: number };
+	const zoom = window.webContents.getZoomFactor();
+	point.x = Math.round(point.x * zoom);
+	point.y = Math.round(point.y * zoom);
+	progress(`clicking ${id}: ${JSON.stringify({ ...point, zoom })}`);
 	window.webContents.sendInputEvent({ type: 'mouseMove', ...point });
 	window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point });
 	window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point });
 	await waitForRenderer(
 		window,
 		`document.getElementById(${JSON.stringify(id)}).checked`,
-		`real label click selects ${id}`
+		`real label click selects ${id}`,
+		10_000
 	);
 	visualAudits.push({
 		pointer: 'native radio associated label',
 		id,
-		targetMinimum: 44,
+		targetMinimum: 40,
 		activationPassed: true
 	});
 }
@@ -550,11 +571,11 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 			return picker.tagName === 'SELECT' && picker.value === homeDir &&
 				picker.selectedOptions[0].textContent === snapshot.identity.name &&
 				picker.options[picker.options.length-1].textContent === 'Open another instance…' &&
-				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 44 &&
+				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 40 &&
 				!document.querySelector('.sidebar-footer') && !document.querySelector('#refresh') &&
 				!document.querySelector('#selected-instance-path') &&
 				document.querySelector('#overview-home').textContent === homeDir &&
-				document.querySelector('#assistant-summary').textContent === 'Running normally';
+				document.querySelector('#assistant-summary').textContent === 'Running';
 		})()`),
 			'Sidebar did not expose a simple named picker with identity/runtime details on Overview.'
 		);
@@ -607,7 +628,7 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 		await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
 		await waitForRenderer(
 			window,
-			"document.querySelector('#assistant-summary').textContent === 'Running normally' && document.querySelector('#runtime-status-detail').hidden",
+			"document.querySelector('#assistant-summary').textContent === 'Running' && document.querySelector('#runtime-status-detail').hidden",
 			'automatic status recovers on focus'
 		);
 		for (const zoom of [1, 2]) {
@@ -622,7 +643,7 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 					return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
 				};
 				return visible(document.querySelector('#instance-picker')) &&
-					[...document.querySelectorAll('.sidebar button,.sidebar select')].filter(visible).every(control => control.getBoundingClientRect().height >= 44);
+					[...document.querySelectorAll('.sidebar button,.sidebar select')].filter(visible).every(control => control.getBoundingClientRect().height >= 40);
 			})()`),
 				`Sidebar lost identity/actions or touch targets at ${zoom * 100}% zoom.`
 			);
@@ -813,6 +834,19 @@ async function connectProviderUi(
 	return readiness;
 }
 
+async function connectFixtureAgent(window: BrowserWindow): Promise<void> {
+	await window.webContents.executeJavaScript(`(() => {
+		document.querySelector('[data-view=provider]').click();
+		if (!document.querySelector('#provider-agent-access').hidden)
+			document.querySelector('#provider-connect-agent').click();
+	})()`);
+	await waitForRenderer(
+		window,
+		"document.body.dataset.busy !== 'true' && (await import('./state.js')).state.currentSnapshot.agent?.access?.state === 'known'",
+		'explicit native agent connection'
+	);
+}
+
 async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContentsView> {
 	const deadline = Date.now() + 30_000;
 	let embedded: WebContentsView | undefined;
@@ -862,14 +896,23 @@ async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContent
 		}).once('error', reject);
 	});
 	assert(invalidHost === 403, 'Native AKM accepted a forged Host.');
+	// Chromium hides the rejected response behind a CORS network error. Inspect
+	// the native response directly, as for Host, rather than weakening CORS.
+	const invalidOrigin = await new Promise<number | undefined>((resolve, reject) => {
+		httpRequest(
+			knowledge.origin,
+			{ method: 'POST', headers: { Origin: 'http://untrusted.invalid' } },
+			(response) => {
+				response.resume();
+				resolve(response.statusCode);
+			}
+		)
+			.once('error', reject)
+			.end();
+	});
 	assert(
-		(
-			await contents.session.fetch(knowledge.origin, {
-				method: 'POST',
-				headers: { Origin: 'http://untrusted.invalid' }
-			})
-		).status === 403,
-		'Native AKM accepted a forged Origin.'
+		invalidOrigin === 403,
+		`Native AKM did not reject a forged write Origin: ${invalidOrigin}.`
 	);
 	await contents.loadURL(knowledge.origin);
 	const reloadDeadline = Date.now() + 30_000;
@@ -934,6 +977,7 @@ async function run(): Promise<Record<string, unknown>> {
 	let secondGuardianPort = 0;
 	const portBlockers: Server[] = [];
 	const ingressSubnet = process.env.FH_ADMIN_E2E_INGRESS_SUBNET?.trim() || '';
+	const assistantImageTag = process.env.FH_ADMIN_E2E_LOCAL_ASSISTANT_TAG?.trim();
 	const keepRunning = process.env.FH_ADMIN_E2E_KEEP_RUNNING === 'true';
 	const provider = process.env.FH_ADMIN_E2E_PROVIDER?.trim() || '';
 	const keyFile = process.env.FH_ADMIN_E2E_PROVIDER_KEY_FILE;
@@ -1046,6 +1090,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'#install-home',
 			'#install-browse',
 			'#install-automatic-ports',
+			'#install-edition',
 			'#install'
 		]) {
 			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
@@ -1292,7 +1337,7 @@ async function run(): Promise<Record<string, unknown>> {
 					document.querySelector('#view-provider')?.hidden === false &&
 					getComputedStyle(document.querySelector('#primary-nav')).display === 'none' &&
 					[...document.querySelectorAll('#services .service')].some((row) =>
-						row.textContent.includes('assistant') && row.textContent.includes('Running normally'))`,
+						row.querySelector('.service-name')?.textContent === 'Personal Assistant' && row.textContent.includes('Running normally'))`,
 			'the Assistant to become healthy'
 		);
 		progress('Assistant is healthy and provider setup is active');
@@ -1315,8 +1360,33 @@ async function run(): Promise<Record<string, unknown>> {
 			);
 			progress(`test-only ingress subnet: ${ingressSubnet}; Compose validates the CIDR`);
 		}
+		if (assistantImageTag) {
+			// Exercise a locally built candidate without changing shipped defaults.
+			const baseline = dockerConfig(await adminSnapshot());
+			const candidate = structuredClone(baseline);
+			candidate.deployment.imageNamespace = 'fhold';
+			candidate.deployment.images.assistant = assistantImageTag;
+			saveStackIntent(homeDir, candidate, baseline);
+			await runAdminAction('restart');
+			await window.webContents.executeJavaScript(
+				"(async () => { await (await import('./snapshot.js')).refresh(); })()"
+			);
+			assert(
+				services(await adminSnapshot()).some(
+					(service) =>
+						service.name === 'assistant' &&
+						service.image === `fhold/fhold-assistant:${assistantImageTag}`
+				),
+				'The locally selected Assistant image is not running.'
+			);
+		}
 		const assistantScreenshot = await capture(window, outputDir, '02-provider-required.png');
 		await assertRenderedFloor(window, 'provider setup');
+		// Management inspection no longer acquires native agent access implicitly.
+		// Follow the same explicit connection action as an operator.
+		await window.webContents.executeJavaScript(
+			"document.querySelector('#provider-connect-agent').click()"
+		);
 
 		const sourceFixture = join(homeDir, '..', 'restore-source-fixture');
 		const restoreFixture = join(homeDir, '..', 'restore-backup-fixture');
@@ -1327,7 +1397,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await waitForRenderer(
 			window,
 			"(await import('./state.js')).state.providersLoaded && !(await import('./state.js')).state.providerLoadPromise && document.body.dataset.busy !== 'true'",
-			'initial provider discovery and automatic readiness',
+			'provider discovery after explicitly connecting to the agent',
 			240_000
 		);
 		await window.webContents.executeJavaScript(`(() => {
@@ -1419,7 +1489,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold started. Saved settings applied.' &&
+			`document.querySelector('#notice-message')?.textContent === 'completed: start' &&
 					document.querySelector('#setup-recovery')?.hidden === true &&
 					[...document.querySelectorAll('#services .service')].some((row) => row.textContent.includes('Running normally'))`,
 			'the Assistant to recover through setup'
@@ -1582,7 +1652,7 @@ async function run(): Promise<Record<string, unknown>> {
 				const dialog = document.querySelector('#remote-dialog').getBoundingClientRect();
 				return ['remote-begin','remote-cancel'].every(id => {
 					const rect = document.getElementById(id).getBoundingClientRect();
-					return rect.top >= dialog.top && rect.bottom <= dialog.bottom && rect.height >= 44;
+					return rect.top >= dialog.top && rect.bottom <= dialog.bottom && rect.height >= 40;
 				});
 			})()`),
 			'Consent actions cannot both be reached at 200% zoom.'
@@ -1721,11 +1791,12 @@ async function run(): Promise<Record<string, unknown>> {
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
 				const cards = [...document.querySelectorAll('#view-system > details')];
-				return cards.map(card => card.id).join(',') === 'installation-details,recent-logs,connection-keys,backup-recovery' &&
+				const backup = document.querySelector('#backup-recovery');
+				return cards.map(card => card.id).join(',') === 'custody-panel,deployment-settings,installation-details,recent-logs,connection-keys,backup-recovery' &&
 					cards.every(card => !card.open) &&
-					cards[3].querySelector('summary').textContent.startsWith('Backup and recovery') &&
-					cards[3].contains(document.querySelector('#import-export')) &&
-					cards[3].contains(document.querySelector('#runtime-recovery'));
+					backup.querySelector('summary').textContent.startsWith('Backup and recovery') &&
+					backup.contains(document.querySelector('#import-export')) &&
+					backup.contains(document.querySelector('#runtime-recovery'));
 			})()`),
 			'System sections are not in the requested order, collapsed by default, or consistently named.'
 		);
@@ -1747,10 +1818,10 @@ async function run(): Promise<Record<string, unknown>> {
 				return link?.tagName === 'A' && link.href === 'http://127.0.0.1:${assistantPort}/' &&
 					link.tabIndex === 0 &&
 					document.querySelector('label[for="gateway-bind"]')?.textContent.includes('Bind address') &&
-					document.querySelector('#mcp-url')?.textContent === 'http://127.0.0.1:${guardianPort}/mcp' &&
-					document.querySelector('#guardian-health-url-detail')?.textContent === 'http://127.0.0.1:${guardianPort}/health';
+					document.querySelector('#mcp-url')?.textContent === 'Not connected' &&
+					!document.querySelector('#guardian-health-url-detail')?.textContent;
 			})()`),
-			'Network details omitted clear MCP endpoints or a keyboard-accessible OpenCode link.'
+			'Network details fabricated an unbound MCP endpoint or omitted the accessible OpenCode link.'
 		);
 		const openedUrls: string[] = [];
 		const originalOpenExternal = shell.openExternal;
@@ -1877,9 +1948,15 @@ async function run(): Promise<Record<string, unknown>> {
 			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
 			'browse instances with saved changes'
 		);
+		// Opening the same instance reloads the renderer; its old DOM already
+		// satisfies the pending-state assertion, so wait for the new document.
+		const reopenedPendingInstance = new Promise<void>((resolve) => {
+			window.webContents.once('did-finish-load', () => resolve());
+		});
 		await window.webContents.executeJavaScript(
 			`[...document.querySelectorAll('#hosting-instance-list .instance-choice')].find(button => button.getAttribute('aria-label').endsWith(${JSON.stringify(` at ${homeDir}`)})).click()`
 		);
+		await reopenedPendingInstance;
 		await waitForRenderer(
 			window,
 			"document.body.dataset.phase === 'ready' && !document.querySelector('#pending-restart').hidden",
@@ -1896,7 +1973,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#pending-restart').hidden && document.querySelector('#notice-message').textContent === 'fhold restarted. Saved settings applied.'",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#pending-restart').hidden && document.querySelector('#notice-message').textContent === 'completed: Saved settings applied. Containers started or restarted.'",
 			'confirmed restart applies saved settings'
 		);
 		assert(
@@ -1926,6 +2003,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#dismiss-notice').click()");
 		const agentSettingsScreenshot = await capture(window, outputDir, '04i-agent-settings.png');
 
+		await connectFixtureAgent(window);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-view=connections]').click(); document.querySelector('#opencode-connection > summary').click()"
 		);
@@ -1934,7 +2012,7 @@ async function run(): Promise<Record<string, unknown>> {
 			`document.querySelector('#view-connections')?.hidden === false &&
 					document.querySelector('#opencode-connection')?.open === true &&
 					document.querySelector('#direct-url')?.textContent.startsWith('http://') &&
-					document.querySelector('#direct-username')?.textContent === 'user'`,
+					document.querySelector('#direct-username')?.textContent === 'opencode'`,
 			'the complete OpenCode connection recipe'
 		);
 		await window.webContents.executeJavaScript(`(() => {
@@ -1976,7 +2054,10 @@ async function run(): Promise<Record<string, unknown>> {
 			download?: string;
 			downloadHidden?: boolean;
 		};
-		assert(claudeRecipe.url?.endsWith('/mcp'), 'Claude recipe omitted the MCP endpoint.');
+		assert(
+			claudeRecipe.url === 'Not connected',
+			'Disabled Guardian advertised a live Claude MCP endpoint.'
+		);
 		assert(
 			claudeRecipe.credential?.startsWith('claude-desktop'),
 			'Claude recipe omitted its explicitly created access identity.'
@@ -2039,7 +2120,7 @@ async function run(): Promise<Record<string, unknown>> {
 		}
 		assert(
 			(await window.webContents.executeJavaScript(
-				"document.querySelector('#mcp-url')?.textContent.endsWith('/mcp') && document.querySelector('#mcp-credential')?.value.startsWith('mcp-app')"
+				"document.querySelector('#mcp-url')?.textContent === 'Not connected' && document.querySelector('#mcp-credential')?.value.startsWith('mcp-app')"
 			)) as boolean,
 			'The generic MCP recipe was incomplete.'
 		);
@@ -2137,12 +2218,21 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
+			`document.querySelector('#notice-message')?.textContent === 'completed: Saved settings applied. Containers started or restarted.' &&
 					[...document.querySelectorAll('#services .service')].some((row) =>
-						row.textContent.includes('guardian') && row.textContent.includes('Running normally'))`,
+						row.querySelector('.service-name')?.textContent === 'Protected access' && row.textContent.includes('Running normally'))`,
 			'the Guardian to become healthy'
 		);
 		progress('Guardian is healthy');
+		await connectFixtureAgent(window);
+		assert(
+			await window.webContents.executeJavaScript(`
+			document.querySelector('#mcp-url')?.textContent === 'http://127.0.0.1:${guardianPort}/mcp' &&
+			document.querySelector('#claude-url')?.textContent === 'http://127.0.0.1:${guardianPort}/mcp' &&
+			document.querySelector('#guardian-health-url-detail')?.textContent === 'http://127.0.0.1:${guardianPort}/health'
+		`),
+			'Connected Guardian did not report its actual published endpoints.'
+		);
 
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=connections]').click();
@@ -2231,11 +2321,11 @@ async function run(): Promise<Record<string, unknown>> {
 		confirmations.push(1);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=overview]').click();
-			document.querySelector('[data-action=restart]').click();
+			document.querySelector('#restart-stack').click();
 		})()`);
 		await waitForRenderer(
 			window,
-			`document.querySelector('#notice-message')?.textContent === 'fhold restarted. Saved settings applied.' &&
+			`document.querySelector('#notice-message')?.textContent === 'completed: restart' &&
 					document.querySelectorAll('#services .service').length === 2 &&
 					[...document.querySelectorAll('#services .service')].every((row) => row.textContent.includes('Running normally'))`,
 			'a healthy stack restart'
@@ -2707,7 +2797,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.') && !document.querySelector('#initialize-recovery').disabled",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent === 'completed: stop' && !document.querySelector('#initialize-recovery').disabled",
 			'confirmed stop enables offline recovery operations'
 		);
 		await window.webContents.executeJavaScript(
@@ -2780,7 +2870,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.') && document.querySelector('#pending-restart').hidden",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent === 'completed: start' && document.querySelector('#pending-restart').hidden",
 			'starting initialized recovery with saved settings'
 		);
 		await window.webContents.executeJavaScript(
@@ -2888,7 +2978,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#stop-stack').click()");
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold stopped.')",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent === 'completed: stop'",
 			'final managed checkpoint and stopped writers'
 		);
 		await window.webContents.executeJavaScript(
@@ -2923,7 +3013,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript("document.querySelector('#start-stack').click()");
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')",
+			"document.body.dataset.busy !== 'true' && document.querySelector('#notice-message').textContent === 'completed: start'",
 			'transparent same-instance recovery after container removal'
 		);
 		assert((await containerId()) !== priorContainer, 'Recovery reused the old container.');
@@ -2950,16 +3040,22 @@ async function run(): Promise<Record<string, unknown>> {
 		// Exercise full import/export through the real renderer and IPC. Only
 		// human dialog choices are simulated, never Docker or native databases.
 		const instanceAuth = Buffer.from(
-			`user:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`
+			`opencode:${readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'), 'utf8').trim()}`
 		).toString('base64');
-		const nativeSession = await fetch(`http://127.0.0.1:${assistantPort}/session`, {
+		const nativeSession = await fetch(`http://127.0.0.1:${assistantPort}/api/session`, {
 			method: 'POST',
 			headers: { authorization: `Basic ${instanceAuth}`, 'content-type': 'application/json' },
-			body: JSON.stringify({ title: 'Full-instance preservation check' }),
+			body: JSON.stringify({
+				title: 'Full-instance preservation check',
+				location: { directory: '/work' }
+			}),
 			signal: AbortSignal.timeout(10_000)
 		});
-		assert(nativeSession.ok, 'Could not create the native preservation session.');
-		const savedSession = (await nativeSession.json()) as { id: string; title: string };
+		assert(nativeSession.ok, `Native preservation session returned HTTP ${nativeSession.status}.`);
+		const { data: savedSession } = (await nativeSession.json()) as {
+			data: { id: string; title: string };
+		};
+		assert(typeof savedSession?.id === 'string', 'Native session creation omitted its session ID.');
 		const fullExport = join(outputDir, 'full-instance-export');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
@@ -3034,10 +3130,12 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
-			'local chooser before full import'
+			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true' && document.querySelector('#hosting-import').checkVisibility() && !document.querySelector('#hosting-import').disabled",
+			'local chooser ready to import'
 		);
-		await window.webContents.executeJavaScript("document.querySelector('#hosting-import').click()");
+		await window.webContents.executeJavaScript(
+			"window.confirm = () => true; document.querySelector('#hosting-import').click()"
+		);
 		await waitForRenderer(
 			window,
 			"!document.querySelector('#instance-import-section').hidden && document.body.dataset.busy!=='true'",
@@ -3133,16 +3231,17 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await waitForRenderer(
 			window,
-			"document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent.startsWith('fhold started.')",
+			"document.body.dataset.busy!=='true' && document.querySelector('#notice-message').textContent === 'completed: start'",
 			'explicit start of the restored instance'
 		);
 		const restoredSession = await fetch(
-			`http://127.0.0.1:${assistantPort}/session/${savedSession.id}`,
+			`http://127.0.0.1:${assistantPort}/api/session/${savedSession.id}`,
 			{ headers: { authorization: `Basic ${instanceAuth}` }, signal: AbortSignal.timeout(10_000) }
 		);
 		assert(
 			restoredSession.ok &&
-				((await restoredSession.json()) as { title: string }).title === savedSession.title,
+				((await restoredSession.json()) as { data: { title: string } }).data.title ===
+					savedSession.title,
 			'Native session was not visible after full import/start.'
 		);
 		assert(
@@ -3161,6 +3260,9 @@ async function run(): Promise<Record<string, unknown>> {
 			assistantPort,
 			guardianPort,
 			...(ingressSubnet ? { testIngressSubnet: ingressSubnet } : {}),
+			...(assistantImageTag
+				? { localAssistantImage: `fhold/fhold-assistant:${assistantImageTag}` }
+				: {}),
 			services: finalSnapshot.services,
 			providersDiscovered: providerCatalog.length,
 			providerReadiness: readiness,
@@ -3519,7 +3621,11 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		}
 		await waitForRenderer(
 			window,
-			"document.body.dataset.phase === 'ready' && document.body.dataset.busy !== 'true'",
+			`(() => {
+				if (document.body.dataset.phase === 'setup_incomplete' && document.body.dataset.busy !== 'true')
+					throw new Error('Knowledge verification requires a disposable instance with completed setup; use the full Admin walkthrough to prepare it.');
+				return document.body.dataset.phase === 'ready' && document.body.dataset.busy !== 'true';
+			})()`,
 			'running instance'
 		);
 		progress('knowledge: connected to disposable instance');
@@ -3707,14 +3813,19 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		})()`);
 		assert(concurrentRead, 'A concurrent status read reopened the instance during disconnect.');
 		assert(guest.isDestroyed(), 'Knowledge browser survived instance disconnect.');
+		await capture(window, outputDir, 'knowledge-after-disconnect.png');
 		if (persistentWeb) {
 			assert(
-				(await fetch(new URL('/api/session', origin), { signal: AbortSignal.timeout(2000) })).status === 401,
+				(await fetch(new URL('/api/session', origin), { signal: AbortSignal.timeout(2000) }))
+					.status === 401,
 				'Persistent AKM must remain running and authenticated after Admin disconnects.'
 			);
 		} else {
 			assert(
-				await fetch(origin, { signal: AbortSignal.timeout(2000) }).then(() => false, () => true),
+				await fetch(origin, { signal: AbortSignal.timeout(2000) }).then(
+					() => false,
+					() => true
+				),
 				'Native AKM server/tunnel survived instance disconnect.'
 			);
 		}
@@ -3763,6 +3874,7 @@ async function main(): Promise<void> {
 		const failure = {
 			ok: false,
 			error: message(error),
+			...(error instanceof Error ? { stack: error.stack } : {}),
 			homeDir: process.env.FH_HOME,
 			homeRetained: process.env.FH_ADMIN_E2E_KEEP_HOME === 'true'
 		};

@@ -18,12 +18,43 @@ qualification remain separate.**
   conflicts were resolved to the stable set, without vendor overrides.
 - Corrected stale session reuse: enabling persistent hosting now stops a cached
   on-demand child and returns the configured persistent URL and credential.
+- Local native startup verification found that AKM can rewrite JSON formatting
+  and object-key order without changing settings. Runtime receipts now compare
+  parsed AKM configuration values, without rewriting or interpreting its schema;
+  real value changes still require a restart.
+- The full Knowledge window exposed a collapsed embedded pane at 200% zoom
+  when sidebar alerts were visible. Bound the sidebar height and keep it
+  scrollable so both navigation and the native Web pane remain usable.
+- Real pointer verification found credential and portal fieldsets still gated
+  by retired operation-group names. Bind them to the concrete management
+  operations and check those bindings against the wire contract. Correct the
+  stale unit fixture so it cannot conceal disabled native controls again.
+- Instance browsing now waits for the existing background provider lookup,
+  just as instance switching already did. This prevents discovery from racing
+  the session's busy guard immediately after a renderer reload.
+- Local Docker import no longer requires a remote directory-browser adapter.
+  It uses existing directory provisioning for defaults and the native folder
+  picker; remote-only providers retain their existing capability checks.
 
 Checks on the combined branch:
+
+Local Assistant image IDs (Linux amd64, image inputs unchanged by the host/Admin
+corrections below):
+
+- AIO: `sha256:b769ce55230e568a1f3e64f46e1d1a8b729711210baef7adedee87c439fdc43c`.
+- Slim: `sha256:23eca33bd40c638d658052ed762668202f5638c5dd8eb5fb8c46b67936f77a2e`.
+
+The native Admin walkthrough supports `FH_ADMIN_E2E_LOCAL_ASSISTANT_TAG` to
+select a candidate after exercising normal installation. This uses the existing
+`fhold` local-only image namespace; provide local aliases for the unchanged
+Guardian and Portal component pins as well. Shipped install defaults are unchanged.
 
 - Full source suite: 1,302 passed, 11 opt-in cases skipped; workspace type
   checks, CLI/Admin builds, frozen lockfile, docs checks/tests and shell checks
   passed. Approved audit policy passed with the same three exceptions.
+  After the final capability/chooser/import fixes, the affected Admin suite was rerun
+  (210 tests, including capability and local folder-picker regressions); unrelated source evidence
+  is retained rather than repeating the full suite for renderer-only changes.
 - Both locally built AIO and Slim passed native runtime smokes: browser/Web
   direct and forwarded authentication, OpenCode tools/recall, installed harness
   plugins, operator settings preservation and workspace execution boundaries.
@@ -45,12 +76,32 @@ Checks on the combined branch:
   read private files, delegate memory/environment or its open secret descriptor;
   approved tasks, redacted OpenCode/Supercronic results and replacement/disable/
   re-enable persistence still worked with stable AKM.
+- Expanded local Linux amd64 checks passed for both editions: provider/scheduler,
+  native recall, diagnostics, migration, keyring and custody. AIO also passed
+  native policies, workload behavior, directory/blob recovery, both upgrade
+  paths and active/idle keep-alive.
+  Unchanged published Guardian and Portal image smokes passed. The provider
+  browser test passed all 380 assertions; extension packaging passed.
+- The actual Admin window passed focused on-demand and persistent Knowledge
+  navigation, bearer-authenticated reload, Host/write-Origin rejection, native
+  clipboard, renderer isolation, modal/settings overlays, external-link handling,
+  200% zoom/narrow-window bounds and disconnect cleanup. The native Web view was
+  captured separately because Xvfb did not expose it through desktop capture.
 
-Verification limits: the full Admin-window click-through harness stalled at its
-welcome-screen renderer wait under local Xvfb and was stopped. The focused real
-launcher/view check above is narrower evidence, not a claim that full-window
-navigation passed. Native ARM64/canonical candidate CI and release publication
-were not run. No live instance or recovery settings were changed. Unrelated
+- The complete native Admin walkthrough and fresh-process relaunch passed under
+  Xvfb against the local AIO image. Coverage includes keyboard/pointer controls,
+  narrow/200% zoom, embedded Knowledge, credentials, Guardian authentication,
+  two-instance isolation, managed checkpoint recovery, stopped full export/import,
+  preserved keys/settings/native sessions, and reopening without startup or writes.
+  The run retained 49 screenshots and reported no automated accessibility
+  violations. Local evidence: `/tmp/fhold-ready-admin-full21/report.json` and
+  `reopen-report.json`; disposable instances were stopped after verification.
+
+Verification limits: the full Admin walkthrough used a management-only fixture
+without external provider/subscription credentials. Native provider behavior was
+tested separately with the local model fixture; real subscription sign-in was
+not claimed. Native ARM64/canonical candidate CI and release publication were
+not run. No live instance or recovery settings were changed. Unrelated
 tool upgrades and the existing OpenCode SDK/Effect peer-version difference were
 held; actual native harness checks passed with the selected stable AKM set.
 
