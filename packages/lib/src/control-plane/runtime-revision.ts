@@ -9,6 +9,22 @@ import { readStackConfig } from './stack-config.js';
 const RECEIPT = 'state/applied-runtime.json';
 export type RestartStatus = { required: boolean; error?: string };
 
+function startupContents(path: string, nativeJson: boolean): Buffer | string {
+	const contents = readFileSync(path);
+	if (!nativeJson) return contents;
+	// Native AKM migration may rewrite JSON formatting/key order during startup.
+	// Compare values without rewriting config or interpreting AKM's schema.
+	try {
+		return JSON.stringify(JSON.parse(contents.toString('utf8')), (_key, value) =>
+			value && typeof value === 'object' && !Array.isArray(value)
+				? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
+				: value
+		);
+	} catch {
+		return contents;
+	}
+}
+
 /** Hash startup inputs, not mutable agent data or native provider login files. */
 export function runtimeRevision(homeDir: string): string {
 	const read = readStackConfig(homeDir);
@@ -43,7 +59,11 @@ export function runtimeRevision(homeDir: string): string {
 			path !== 'config/guardian/opencode.json' &&
 			path !== 'config/guardian/oauth-identities.json'
 	);
-	files.push('state/secrets/fhold_opencode_password', 'state/secrets/fhold_guardian_handle_key', 'state/secrets/fhold_keyring_password');
+	files.push(
+		'state/secrets/fhold_opencode_password',
+		'state/secrets/fhold_guardian_handle_key',
+		'state/secrets/fhold_keyring_password'
+	);
 	if (
 		read.config.recovery.enabled &&
 		read.config.recovery.destination.startsWith('azblob:') &&
@@ -57,9 +77,9 @@ export function runtimeRevision(homeDir: string): string {
 		assertSafePortablePath(homeDir, path, true);
 		const absolute = join(homeDir, path);
 		const digest = existsSync(absolute)
-			? createHash('sha256').update(
-				readFileSync(absolute)
-			).digest('hex')
+			? createHash('sha256')
+					.update(startupContents(absolute, path === 'config/akm/config.json'))
+					.digest('hex')
 			: null;
 		hash.update(JSON.stringify([path, digest]));
 	}

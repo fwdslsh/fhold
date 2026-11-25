@@ -51,10 +51,10 @@ npm view @openai/codex@latest version engines --json
 
 Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
-AKM's npm `latest` is stable; `next` carries prereleases and may lag a later stable
-release. The current pins use the matching prerelease pair selected under the
-owner's approval to use AKM betas; see the
-[November 8 review](dependency-refresh-2026-11-08.md). Select channels explicitly.
+AKM's npm `latest` is stable. The `next` tag carries prereleases and may lag a
+later stable release. Select channels explicitly. See the
+[November 24 review](dependency-refresh-2026-11-24.md) for the stable pins and
+their compatibility review.
 Resolve the plugins' and `akm-web`'s required CLI version before choosing pins.
 Assistant's shared tools live in containers/assistant/tools/package.json. Claude
 Code and Codex pins live in containers/assistant/claude-tools/package.json and
@@ -94,7 +94,7 @@ compatibility decision, not an automatic `--latest` bulk update.
 | AKM web interface | `akm-web` in Assistant tools; matching CLI dependency, ordinary binary link in Dockerfile, native Admin launcher and image browser smoke |
 | Claude/Codex AKM plugins | Immutable archive commit, SHA-256 and extraction paths in `containers/assistant/Dockerfile` |
 | OpenCode | Assistant's `@opencode/cli`, `@opencode/client`, `@opencode/plugin`; Guardian client; fhold plugin SDK and Effect dependency |
-| Claude Code and Codex | Assistant tools manifest |
+| Claude Code and Codex | `containers/assistant/claude-tools/package.json` and `containers/assistant/codex-tools/package.json` |
 | Bun | Root `packageManager`, all Bun Docker stages, all workflow `bun-version` values, workspace `bun-types` |
 | Node/npm | Assistant Node stage and `NPM_VERSION`; Portal Node base; docs workflow's supported Node line |
 | Scheduler/compiler | Assistant `SUPERCRONIC_VERSION` and Go build stage |

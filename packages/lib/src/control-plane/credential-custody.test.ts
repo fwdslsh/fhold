@@ -92,9 +92,6 @@ printf 'require("node:fs").writeFileSync("/tmp/custody-startup-compromised","pre
 			]);
 			expect(planted.ok).toBe(true);
 			expect((await call({ action: 'inspect' })).enabled).toBe(true);
-			const secret = 'synthetic-admin-credential';
-			const saved = await call({ action: 'set-secret', name: 'service', value: secret });
-			expect(saved).toEqual({ enabled: true, saved: true });
 			const privateExec = (code: string) =>
 				run([
 					'exec',
@@ -111,6 +108,67 @@ printf 'require("node:fs").writeFileSync("/tmp/custody-startup-compromised","pre
 					'-e',
 					code
 				]);
+			// A customized native default write target must never receive Admin's
+			// secret. Keep the alternate directory visible to both identities.
+			expect(
+				(
+					await run([
+						'exec',
+						'-T',
+						'assistant',
+						'/bin/sh',
+						'-eu',
+						'-c',
+						'mkdir -m 777 /work/custody-shared; chmod 777 /work/custody-shared'
+					])
+				).ok
+			).toBe(true);
+			expect(
+				(await privateExec(`
+const fs = require('node:fs');
+const bundle = '/var/lib/fhold-credentials/akm';
+fs.mkdirSync(bundle, { mode: 0o700 });
+fs.symlinkSync('/work/custody-shared', bundle + '/scripts');
+`)).ok
+			).toBe(true);
+			const secret = 'synthetic-admin-credential';
+			await expect(call({ action: 'set-secret', name: 'service', value: secret })).rejects.toThrow(
+				'Credential custody operation failed'
+			);
+			expect(
+				(await privateExec(`
+const fs = require('node:fs');
+if (fs.readdirSync('/work/custody-shared').length !== 0 ||
+    fs.existsSync('/var/lib/fhold-credentials/.config/akm/config.json')) process.exit(1);
+fs.unlinkSync('/var/lib/fhold-credentials/akm/scripts');
+`)).ok
+			).toBe(true);
+			const saved = await call({ action: 'set-secret', name: 'service', value: secret });
+			expect(saved).toEqual({ enabled: true, saved: true });
+			expect(
+				(
+					await privateExec(`
+const fs = require('node:fs');
+const p = '/var/lib/fhold-credentials/.config/akm/config.json';
+const config = JSON.parse(fs.readFileSync(p, 'utf8'));
+config.bundles.shared = { path: '/work/custody-shared', writable: true };
+config.defaultWriteTarget = 'shared';
+fs.writeFileSync(p, JSON.stringify(config));
+`)
+				).ok
+			).toBe(true);
+			expect(
+				await call({ action: 'set-secret', name: 'constrained', value: 'synthetic-private-only' })
+			).toEqual({ enabled: true, saved: true });
+			expect(
+				(
+					await privateExec(`
+const fs = require('node:fs');
+if (!fs.existsSync('/var/lib/fhold-credentials/akm/secrets/constrained') ||
+    fs.existsSync('/work/custody-shared/secrets/constrained')) process.exit(1);
+`)
+				).ok
+			).toBe(true);
 			expect(
 				(
 					await privateExec(

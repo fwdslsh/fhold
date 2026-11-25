@@ -568,11 +568,16 @@ AKM resolves and validates them. Run delegates to native `akm run`; adopt uses
 native `akm import --type task`. Remove takes a local task name, not a
 bundle-qualified ref.
 
+AKM 0.10.261131 writes bundle-qualified refs to the crontab during native
+scheduler sync. Keep task files in directories AKM indexes. Files under
+dot-directories, ignored by Git, or reached through a symlinked directory
+are unavailable by task ref. Newly adopted tasks are searchable immediately
+and stay paused until resumed.
+
 AKM Web also offers native retirement with proposal history. Fhold's immediate
-`task remove` retains its existing disable-and-preserve behavior: AKM 0.10.261130
-has no equivalent public CLI operation to create and accept a retirement in one
-step. Its workspace write API is not used by fhold's task wrapper. Native
-retirement is available through the embedded AKM UI when that workflow is wanted.
+`task remove` disables the schedule and moves the definition to the retained
+task directory. Use the embedded AKM UI to record a retirement through the
+native proposal workflow.
 
 Timezone is explicit Assistant intent; daylight saving follows that IANA zone.
 Downtime does not replay missed slots. Remove preserves the definition in
