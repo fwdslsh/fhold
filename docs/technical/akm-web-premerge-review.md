@@ -1,6 +1,41 @@
 # AKM Web pre-merge review — November 25, 2026
 
-**Recommendation: hold merge for the shutdown findings below.**
+**Current recommendation: hold PR #1804 for descendant shutdown cleanup.**
+
+## PR #1804 follow-up at ba1e5ca
+
+Reviewed `ba1e5ca53b0975da02eb2c826461ba503dd5f44c`. The earlier direct-child
+shutdown finding and the five-second Desktop timeout described below are fixed.
+The new native bound is thirteen seconds; Desktop and fhold both allow fifteen.
+
+Two findings were posted on the PR: [descendant shutdown](https://github.com/itlackey/akm/pull/1804#discussion_r4692063156) and [generated npm documentation](https://github.com/itlackey/akm/pull/1804#issuecomment-7156735392).
+
+- **P1:** `desktop/server/shutdown.mjs:41` removes process-group ownership when
+  the direct child exits. A TERM-exiting leader with a TERM-resistant grandchild
+  leaves that grandchild writing after `terminate()` returns; the SIGKILL pass
+  no longer knows its group. Independently reproduced with the exact module in
+  isolated Linux Node processes, for both detached and non-detached parents.
+  Synthetic descendants were explicitly cleaned up. The existing regression
+  where the leader ignores TERM does not cover this case. Retain ownership and
+  verify the entire tree/group has stopped; keep this fix in AKM.
+- **P2:** `desktop/scripts/package-web.mjs` still generates a quick start without
+  a secret and describes a printed token-bearing `url`. Fresh startup now fails
+  without a secret, and ready output contains only `type` and `origin`. Update
+  the generated npm README, not only the source documentation.
+
+Validation on the exact PR revision: 293 Desktop unit tests, 54 native
+web/browser/shutdown tests, 34 native configuration/migration tests, a clean core
+and Desktop build, and Desktop type/format checks passed. Fhold's actual
+`AdminKnowledge` Electron view loaded the native server, authenticated readiness,
+performed a browser-origin write, and had no Admin preload exposed to its
+renderer. No published-image or live-instance qualification is implied.
+
+The existing fhold implementation matches the revised protocol and timeout.
+No additional runtime workaround was added. Published dependency pins and final
+image qualification remain pending the corrected upstream release.
+
+The following records the earlier review and its reproduction, for history.
+
 
 Reviewed `itlackey/akm` branch `feature/akm-web-access` at
 `61e4352850d32fea3d5177eee9ce69ba8706429c`, compared with `release/0.10.261133`.

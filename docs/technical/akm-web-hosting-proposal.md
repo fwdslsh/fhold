@@ -36,20 +36,24 @@ IPC, or diagnostics. The Assistant UID can read its web login secret; this is
 not a credential-custody boundary for the agent or a provider credential.
 
 Active upstream implementation: `itlackey/akm` branch `feature/akm-web-access`.
-Reviewed implementation commit `61e4352850d32fea3d5177eee9ce69ba8706429c`.
+Reviewed PR #1804 at `ba1e5ca53b0975da02eb2c826461ba503dd5f44c`.
 The native configuration, authentication, framing and readiness protocol are now
 implemented. `config.webSettings({resolveSecret:false})` allows the environment
 override to bypass an unreadable configured reference. Fhold continues using its
 dedicated file and native override rather than importing that API.
-`GET /api/session` now also returns `session`; bearer callers receive `false`.
-The native HTTP shutdown grace is ten seconds; fhold's management launcher allows
-fifteen seconds for native draining and transport cleanup. The ordinary container
-writer budget remains twenty-five seconds.
+`GET /api/session` also returns `session`; bearer callers receive `false`.
+The native shutdown bound is thirteen seconds (ten-second grace plus termination
+and exit waiting); both Desktop and fhold allow fifteen seconds. The ordinary
+fhold container writer budget remains twenty-five seconds.
 
-The [final upstream review](akm-web-premerge-review.md) records two shutdown
-findings, including a reproduced orphaned host-tool writer. Fhold's direct and
-forwarded native browser smokes pass against this source build, but the upstream
-shutdown finding must be fixed before merge qualification.
+The [upstream review](akm-web-premerge-review.md) records the current PR findings.
+The earlier direct-child and Desktop timeout findings are fixed. A separately
+reproduced process-tree ownership gap still permits descendant writers to outlive
+termination and was posted on PR #1804, along with stale generated npm README
+instructions. The actual fhold embedded Electron view passed authenticated native
+readiness, browser-origin writes and renderer isolation against this source build.
+No further fhold runtime change is needed for the current contract; do not add a
+second descendant supervisor to compensate for the upstream finding.
 Published-package integration and native lifecycle/browser qualification remain
 required before merging or releasing this branch.
 
