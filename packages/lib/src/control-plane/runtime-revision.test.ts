@@ -1,5 +1,13 @@
 import { afterEach, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { installHome } from './install.js';
@@ -69,7 +77,12 @@ test('native policy files and enabled portal tokens require apply, but live auth
 	writeFileSync(join(home, 'workspace/note.txt'), 'ongoing work');
 	savePortalTokens(home, { portal: 'discord', botToken: 'disabled-test-token' });
 	expect(restartStatus(home)).toEqual({ required: false });
-	for (const path of ['system/assistant/opencode.json', 'system/codex/config.toml', 'system/codex/requirements.toml', 'system/claude/managed-settings.json']) {
+	for (const path of [
+		'system/assistant/opencode.json',
+		'system/codex/config.toml',
+		'system/codex/requirements.toml',
+		'system/claude/managed-settings.json'
+	]) {
 		writeFileSync(join(home, path), 'changed system policy\n');
 		expect(restartStatus(home)).toEqual({ required: true });
 		recordAppliedRuntime(home, runtimeRevision(home));
@@ -106,7 +119,12 @@ test('native preferences accept ordinary atomic saves without restart; changing 
 test('unreferenced old config policies never create pending runtime changes', async () => {
 	const { home } = await fixture();
 	recordAppliedRuntime(home, runtimeRevision(home));
-	for (const path of ['config/opencode/opencode.json', 'config/codex/config.toml', 'config/codex/requirements.toml', 'config/claude/managed-settings.json']) {
+	for (const path of [
+		'config/opencode/opencode.json',
+		'config/codex/config.toml',
+		'config/codex/requirements.toml',
+		'config/claude/managed-settings.json'
+	]) {
 		mkdirSync(dirname(join(home, path)), { recursive: true });
 		writeFileSync(join(home, path), 'inert old operator policy');
 		expect(restartStatus(home)).toEqual({ required: false });
@@ -194,11 +212,15 @@ test('restart accepts older Compose and operator customizations without a policy
 	const { root, home } = await fixture();
 	const state = createFholdState(home);
 	const compose = join(home, 'system/stack/stack.compose.yml');
-	const installed = readFileSync(compose, 'utf8').replace(/^.*FH_RECOVERY_AKM_INDEX_(?:CAPTURE|RESTORE):.*\n/gm, '');
+	const installed = readFileSync(compose, 'utf8').replace(
+		/^.*FH_RECOVERY_AKM_INDEX_(?:CAPTURE|RESTORE):.*\n/gm,
+		''
+	);
 	writeFileSync(compose, installed);
 	// Exercise the normal merged Compose path, with no real container launched.
 	const overlay = join(home, 'config/stack/custom.compose.yml');
-	const custom = 'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n';
+	const custom =
+		'services:\n  assistant:\n    environment:\n      OPERATOR_SETTING: custom-value\n';
 	writeFileSync(overlay, custom);
 	const before = readFileSync(join(home, 'state/stack.json'));
 	writeFileSync(join(home, 'workspace/note.txt'), 'preserve user work');
@@ -207,7 +229,9 @@ test('restart accepts older Compose and operator customizations without a policy
 	expect(auditCompose(resolved.config, home)).toEqual([]);
 	const binary = join(root, 'docker');
 	const calls = join(root, 'activation-args');
-	writeFileAtomic(binary, `#!${process.execPath}
+	writeFileAtomic(
+		binary,
+		`#!${process.execPath}
 import { writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args[0] === 'image') console.log('1');
@@ -215,7 +239,9 @@ else if (args[0] === 'compose' && args.includes('config')) console.log(${JSON.st
 else if (args[0] === 'compose' && args.includes('up')) writeFileSync(${JSON.stringify(calls)}, JSON.stringify(args));
 else if (args[0] === 'ps') process.exit(0);
 else process.exit(1);
-`, 0o700);
+`,
+		0o700
+	);
 	process.env.FH_DOCKER_BIN = binary;
 	await activateComposeCommand(state, ['up', '-d', '--force-recreate', '--wait']);
 	expect(JSON.parse(readFileSync(calls, 'utf8'))).toContain('--force-recreate');
@@ -230,7 +256,10 @@ test('fingerprints native engine settings without normalizing or rewriting them'
 	const { home } = await fixture();
 	const path = join(home, 'config/akm/config.json');
 	const baseline = runtimeRevision(home);
-	const original = JSON.stringify({ engines: { custom: { kind: 'agent', platform: 'opencode' } }, defaults: { engine: 'custom' } });
+	const original = JSON.stringify({
+		engines: { custom: { kind: 'agent', platform: 'opencode' } },
+		defaults: { engine: 'custom' }
+	});
 	writeFileSync(path, original);
 	expect(runtimeRevision(home)).not.toBe(baseline);
 	expect(readFileSync(path, 'utf8')).toBe(original);
@@ -238,13 +267,25 @@ test('fingerprints native engine settings without normalizing or rewriting them'
 	expect(() => runtimeRevision(home)).not.toThrow();
 });
 
-test('existing raw server receipts remain applied without normalization or inspection writes', async () => {
+test('native AKM formatting and key ordering do not require restart or inspection writes', async () => {
 	const { home } = await fixture();
 	const path = join(home, 'config/akm/config.json');
-	const original = readFileSync(path);
+	const original = JSON.parse(readFileSync(path, 'utf8'));
 	recordAppliedRuntime(home, runtimeRevision(home));
+	const reformatted = JSON.stringify(
+		original,
+		(_key, value) =>
+			value && typeof value === 'object' && !Array.isArray(value)
+				? Object.fromEntries(Object.entries(value).reverse())
+				: value,
+		2
+	);
+	writeFileSync(path, reformatted);
 	expect(restartStatus(home)).toEqual({ required: false });
-	expect(readFileSync(path)).toEqual(original);
+	expect(readFileSync(path, 'utf8')).toBe(reformatted);
+	original.usage.report = !original.usage.report;
+	writeFileSync(path, JSON.stringify(original));
+	expect(restartStatus(home).required).toBe(true);
 });
 
 test('invalid restart evidence is not silently treated as applied', async () => {
