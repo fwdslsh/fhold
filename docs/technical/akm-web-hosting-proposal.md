@@ -36,7 +36,7 @@ IPC, or diagnostics. The Assistant UID can read its web login secret; this is
 not a credential-custody boundary for the agent or a provider credential.
 
 Active upstream implementation: `itlackey/akm` branch `feature/akm-web-access`.
-Reviewed PR #1804 at `ba1e5ca53b0975da02eb2c826461ba503dd5f44c`.
+Reviewed PR #1804 through `675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.
 The native configuration, authentication, framing and readiness protocol are now
 implemented. `config.webSettings({resolveSecret:false})` allows the environment
 override to bypass an unreadable configured reference. Fhold continues using its
@@ -46,14 +46,16 @@ The native shutdown bound is thirteen seconds (ten-second grace plus termination
 and exit waiting); both Desktop and fhold allow fifteen seconds. The ordinary
 fhold container writer budget remains twenty-five seconds.
 
-The [upstream review](akm-web-premerge-review.md) records the current PR findings.
-The earlier direct-child and Desktop timeout findings are fixed. A separately
-reproduced process-tree ownership gap still permits descendant writers to outlive
-termination and was posted on PR #1804, along with stale generated npm README
-instructions. The actual fhold embedded Electron view passed authenticated native
-readiness, browser-origin writes and renderer isolation against this source build.
-No further fhold runtime change is needed for the current contract; do not add a
-second descendant supervisor to compensate for the upstream finding.
+The [upstream review](akm-web-premerge-review.md) records the findings and their
+verified fixes. The direct-child, descendant process-group, Desktop timeout and
+generated npm README findings are fixed. Eight shutdown tests, both independent
+descendant probes, and the packed-package smoke pass on the updated revision.
+The actual fhold embedded Electron view passed authenticated native readiness,
+browser-origin writes and renderer isolation against the earlier source build;
+no UI/authentication code changed in the fix revision.
+No further fhold runtime change is needed for the current contract. No second
+descendant supervisor was added. Windows and independently session-escaping
+process trees remain outside the Linux process-group verification.
 Published-package integration and native lifecycle/browser qualification remain
 required before merging or releasing this branch.
 

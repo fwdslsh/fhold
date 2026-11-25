@@ -1,6 +1,25 @@
 # AKM Web pre-merge review — November 25, 2026
 
-**Current recommendation: hold PR #1804 for descendant shutdown cleanup.**
+**Current recommendation: no remaining blocker for fhold's Linux integration at
+`675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.**
+
+## Fix verification at 675ad5e6
+
+Both PR findings are fixed and acknowledged on GitHub; the inline shutdown thread
+is resolved. The eight updated shutdown tests pass. Both independent probes
+(detached and caller-requested non-detached parent) now report the leader exited
+and no descendant writes after termination returned. The locally packed npm
+package smoke passes, including staged README checks and authenticated startup.
+Unchanged core/UI build artifacts from the prior verified revision were reused;
+no dependency or core/UI source changed in this update.
+
+Native shutdown still has the documented limitations for Windows child trees and
+processes escaping into independent sessions. These were not qualified by the
+Linux process-group tests. Fhold's bearer/readiness contract and fifteen-second
+wait need no further runtime change. Published pins and final image qualification
+remain pending release; this review did not merge, publish, or deploy anything.
+
+Earlier findings and verification are retained below for history.
 
 ## PR #1804 follow-up at ba1e5ca
 
