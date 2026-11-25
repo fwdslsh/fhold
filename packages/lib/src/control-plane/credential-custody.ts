@@ -29,6 +29,47 @@ export type CustodyResult = {
 };
 
 const privateHome = '/var/lib/fhold-credentials';
+const privateBundle = `${privateHome}/akm`;
+const assertPrivateWriteTarget = `
+const fs = require('node:fs');
+const cp = require('node:child_process');
+const home = '/var/lib/fhold-credentials';
+const bundle = home + '/akm';
+const name = process.argv[1];
+const configPath = home + '/.config/akm/config.json';
+function safe(path, directory) {
+ const stat = fs.lstatSync(path, { throwIfNoEntry: false });
+ if (!stat) return false;
+ if (!(directory ? stat.isDirectory() : stat.isFile()) || stat.uid !== 1101 ||
+     (stat.mode & 0o022) || fs.realpathSync(path) !== path) process.exit(1);
+ return true;
+}
+function verifySetupTree(path) {
+ if (!safe(path, true)) return;
+ for (const entry of fs.readdirSync(path, { withFileTypes: true })) {
+  const child = path + '/' + entry.name;
+  if (entry.isDirectory()) verifySetupTree(child);
+  else safe(child, false);
+ }
+}
+const configured = safe(configPath, false);
+safe(bundle, true);
+safe(bundle + '/secrets', true);
+if (fs.lstatSync(home + '/.git', { throwIfNoEntry: false })) process.exit(1);
+if (safe(bundle + '/.git', true)) {
+ const remotes = cp.execFileSync('/usr/bin/git', ['-C', bundle, 'remote'], { encoding: 'utf8', timeout: 5000 });
+ if (remotes.trim()) process.exit(1);
+}
+if (!configured) {
+ if (name) process.exit(1);
+ for (const root of [bundle, home + '/.config', home + '/.cache', home + '/.local']) verifySetupTree(root);
+}
+if (name) {
+ const entry = JSON.parse(fs.readFileSync(configPath, 'utf8')).bundles?.[name];
+ if (entry?.path !== bundle || (entry.root !== undefined && entry.root !== '.')) process.exit(1);
+}
+process.stdout.write(String(configured));
+`;
 const namePattern = /^[a-z][a-z0-9-]{0,47}$/;
 export function parseCustodyRequest(value: unknown): CustodyRequest {
 	if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -198,7 +239,7 @@ export async function manageCustody(
 				[
 					'/usr/local/bin/node',
 					'-e',
-					"process.stdout.write(String(require('node:fs').existsSync('/var/lib/fhold-credentials/.config/akm/config.json')))"
+					assertPrivateWriteTarget
 				],
 				''
 			);
@@ -213,13 +254,49 @@ export async function manageCustody(
 						'--embedding',
 						'off',
 						'--dir',
-						`${privateHome}/akm`
+						privateBundle
 					],
 					''
 				);
+			// Native secret writes otherwise follow defaultWriteTarget, which can
+			// point to a shared directory or a remote store.
+			let bundleName: string;
+			try {
+				const inventory = JSON.parse(
+					await exec(
+						'1101:1101',
+						['/usr/local/bin/akm', 'bundle', 'list', '--format', 'json', '--quiet'],
+						''
+					)
+				);
+				const bundle = inventory.sources?.find(
+					(source: { kind?: string; path?: string; writable?: boolean }) =>
+						source.kind === 'filesystem' &&
+						source.path === privateBundle &&
+						source.writable === true
+				);
+				if (
+					inventory.ok !== true ||
+					inventory.shape !== 'list' ||
+					inventory.schemaVersion !== 1 ||
+					typeof bundle?.name !== 'string' ||
+					!bundle.name
+				)
+					throw Error('Private AKM bundle is unavailable');
+				bundleName = bundle.name;
+				await exec(
+					'1101:1101',
+					['/usr/local/bin/node', '-e', assertPrivateWriteTarget, '--', bundleName],
+					''
+				);
+			} catch {
+				throw Error(
+					'Credential custody operation failed. The private AKM bundle must be writable and located in the private credential home.'
+				);
+			}
 			await exec(
 				'1101:1101',
-				['/usr/local/bin/akm', 'secret', 'set', `secrets/${input.name}`],
+				['/usr/local/bin/akm', 'secret', 'set', `secrets/${input.name}`, '--bundle', bundleName],
 				input.value
 			);
 			return { enabled: true, saved: true };
@@ -265,15 +342,35 @@ export async function manageCustody(
 			// output. Keep fhold's ownership and review checks. Native CLI usage
 			// bookkeeping follows the private account's settings.
 			try {
-				const validation = JSON.parse(await exec('1101:1101', [
-					'/usr/bin/timeout', '--kill-after=2s', '10s',
-					'/usr/local/bin/akm', 'doctor', 'explain', `tasks/admin-${input.name}`,
-					'--format', 'json', '--quiet'
-				], ''));
-				if (validation?.ok !== true || validation.shape !== 'task-explain' || validation.schemaVersion !== 1)
+				const validation = JSON.parse(
+					await exec(
+						'1101:1101',
+						[
+							'/usr/bin/timeout',
+							'--kill-after=2s',
+							'10s',
+							'/usr/local/bin/akm',
+							'doctor',
+							'explain',
+							`tasks/admin-${input.name}`,
+							'--format',
+							'json',
+							'--quiet'
+						],
+						''
+					)
+				);
+				if (
+					validation?.ok !== true ||
+					validation.shape !== 'task-explain' ||
+					validation.schemaVersion !== 1 ||
+					validation.sourcePath !== `${privateBundle}/tasks/admin-${input.name}.yml`
+				)
 					throw Error('Unsupported native validation response');
 			} catch {
-				throw Error('Native AKM task validation failed or timed out. No approval was written. Check the task and referenced assets in the private AKM home, then review and approve again.');
+				throw Error(
+					'Native AKM task validation failed or timed out. No approval was written. Check the task and referenced assets in the private AKM home, then review and approve again.'
+				);
 			}
 		}
 		const policy = JSON.parse(

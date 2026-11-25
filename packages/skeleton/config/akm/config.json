@@ -1,11 +1,12 @@
 {
 	"configVersion": "0.9.0",
 	"bundles": {
-		"stash": { "path": "/stash", "writable": true, "components": { "main": { "adapter": "akm" } } },
+		"stash": { "path": "/stash", "writable": true, "adapter": "akm" },
 		"fhold": {
 			"path": "/fhold-bundle",
 			"writable": false,
-			"components": { "skills": { "root": "skills", "adapter": "agent-skills", "writable": false } }
+			"root": "skills",
+			"adapter": "agent-skills"
 		}
 	},
 	"defaultBundle": "stash",

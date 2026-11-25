@@ -67,6 +67,10 @@ test "$(dc exec -T assistant /usr/bin/id -u):$(dc exec -T assistant /usr/bin/id 
   printf 'Unsupported Assistant identity; stop before provisioning credentials.\n' >&2
   exit 1
 }
+test "$(cred stat -c '%u:%g:%a' /var/lib/fhold-credentials)" = '1101:1101:700' || {
+  printf 'Credential home must belong to 1101:1101 and have mode 0700.\n' >&2
+  exit 1
+}
 cred akm setup --yes --no-probe --embedding off --dir /var/lib/fhold-credentials/akm
 ```
 
@@ -103,14 +107,17 @@ Docker and SSH-managed Docker; it is unavailable for ACA.
    submission, including failure, and values are never returned in snapshots,
    logs or a reveal action. Saving the same name rotates its value for all
    tasks using that name.
+   Admin selects the local private bundle explicitly, even if the private
+   account has a different default write target.
 2. Create a new task draft with a credential name and a shell script beginning
    with `#!/bin/sh`. The native AKM V5 task binds that credential to `CREDENTIAL`
    for its single script step. Never paste the credential value into the script.
 3. Review the exact saved task and script, check the review acknowledgement,
    and choose **Approve task**. A changed definition requires another review.
    Before writing the grant, Admin runs native `akm doctor explain` as the
-   private account. AKM validates the task and its referenced
-   assets without executing it. A validation failure or timeout prevents the
+   private account. Admin checks that AKM resolves the exact reviewed task
+   file. AKM validates the task and its referenced assets without executing
+   it. A validation failure or timeout prevents the
    grant; repair the references and review again. Diagnostic output is not
    returned to Admin because it may contain private details. This check does
    not establish that the script is safe or that a remote service will accept
@@ -157,9 +164,20 @@ TASK
 The operator reviews the entire task and its scripts, destinations, dependencies
 and input handling. Never execute agent-writable code, load its configuration,
 or use caller-selected network destinations in a credential-bearing step.
+Keep the delegate's bundle, AKM configuration, index, logs and native migration
+backups under its private home. The delegate's native configuration and every
+bundle it can use must stay under operator control. Use a local directory bundle
+without a Git remote or shared write target. For manual provisioning, confirm the bundle's
+path with `cred akm bundle list` and specify its name with `--bundle` if you
+have changed the native default write target.
 Do not put credentials on agent/prompt steps or task-wide environment bindings.
-Known-value redaction is useful, but it does not stop a trusted script deliberately
-encoding or sending a token elsewhere. A task grant permits repeated use.
+Pass credentials to subprocesses through their environment or stdin if needed.
+Linux protects the delegate's process environment and open files from the
+Assistant's UID, but the Assistant can read command arguments in `/proc`.
+For example, expanding a credential into an HTTP client's header argument
+exposes it while the client is running. The operator remains responsible for
+reviewing writes, network calls and output, including encoded or transformed
+credential values that bypass known-value redaction. A grant permits repeated use.
 
 Install an exact native sudo rule as the operator:
 
@@ -249,5 +267,9 @@ The smoke uses the actual Compose overlay and published AKM package in the image
 disposable named volumes and synthetic credentials. It checks default-off behavior,
 the documented operator commands against hostile PATH/preload files, persisted
 project selection, direct-read/tamper/argument/environment/cwd attacks, native
-OpenCode and scheduled execution, and persistence across replacement. It makes no model requests or
+OpenCode and scheduled execution, and persistence across replacement. It also
+checks that the Assistant cannot read a running task's environment, memory or
+open credential file descriptor, or the private AKM config, databases and native
+migration backup.
+It makes no model requests or
 changes to existing instances. Run it on both Slim and AIO.

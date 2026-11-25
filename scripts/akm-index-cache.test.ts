@@ -213,14 +213,18 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 			await source.release();
 		});
 
-	test('default bundle with an explicitly supported component content root remains eligible', async () => {
+	test.each(['flat', 'legacy'])('default bundle with a supported %s content root remains eligible', async (form) => {
 		const f = await fixture();
+		const content = { root: 'knowledge', adapter: 'akm' };
 		await fs.writeFile(
 			path.join(f.roots.akmConfig, 'config.json'),
 			JSON.stringify({
 				...f.config,
 				bundles: {
-					fixture: { path: f.bundle, components: { main: { root: 'knowledge', adapter: 'akm' } } }
+					fixture: {
+						path: f.bundle,
+						...(form === 'flat' ? content : { components: { main: content } })
+					}
 				}
 			})
 		);
@@ -232,6 +236,38 @@ describe('experimental AKM cache using the pinned native CLI', () => {
 		expect(source.status().akmIndexCache.state).toBe('captured');
 		expect((await f.saved()).manifest.akmIndexCache).toBeDefined();
 		await source.release();
+	});
+
+	test('native bundle config migration can skip an older vector cache and rebuild normally', async () => {
+		const f = await fixture();
+		const selected = path.join(f.dir, 'selected.json');
+		const config = {
+			...f.config,
+			bundles: { fixture: { ...f.config.bundles.fixture, writable: true } }
+		};
+		await fs.writeFile(selected, JSON.stringify(config));
+		f.env.AKM_CONFIG_FILE = selected;
+		const source = f.engine();
+		await source.initialize();
+		await source.acquireRestore();
+		await source.checkpoint();
+		expect(source.status().akmIndexCache.state).toBe('captured');
+		await source.release();
+
+		await f.native(['migrate', 'apply', '--format', 'json', '--quiet']);
+		expect(JSON.parse(await fs.readFile(selected, 'utf8')).bundles.fixture).toEqual({
+			path: f.bundle,
+			adapter: 'akm',
+			writable: true
+		});
+		await f.replacement();
+		const target = f.engine();
+		await target.acquireRestore();
+		expect(target.status().akmIndexCache.reason).toBe('source-policy-changed');
+		expect(target.status().ready).toBe(true);
+		await f.native();
+		expect(f.entries()).toHaveLength(2);
+		await target.release();
 	});
 
 	for (const capture of [false, true])
