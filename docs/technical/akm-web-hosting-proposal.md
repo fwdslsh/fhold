@@ -19,11 +19,11 @@ Electron session for the exact AKM origin, removes it on cross-origin requests,
 and unregisters the handler when the view closes. No renderer IPC response or
 ordinary snapshot carries the bearer.
 
-Socket-backed contract tests and a real Electron test against disposable HTTP
-fixtures verify this fhold boundary. The native browser smoke and Admin E2E
-expectations are updated but cannot qualify the new AKM behavior until that
-implementation is available. Existing package pins are unchanged: this branch
-must not merge or ship with the old AKM Web protocol.
+Socket-backed contract tests and real Electron tests verify this fhold boundary.
+CLI/Web pins now select published `0.10.261133-beta.2`; direct and forwarded
+Chromium smoke and the actual embedded Admin view pass against those packages.
+Matching plugin publication and final image qualification remain required:
+this intermediate branch must not merge or ship with its older plugin set.
 
 Persistent hosting, optional port publication, authenticated readiness/activity,
 and the CLI settings command are implemented against the revised contract.
@@ -35,8 +35,9 @@ The value never enters stack JSON, generated Compose environment, URLs, renderer
 IPC, or diagnostics. The Assistant UID can read its web login secret; this is
 not a credential-custody boundary for the agent or a provider credential.
 
-Active upstream implementation: `itlackey/akm` branch `feature/akm-web-access`.
-Reviewed PR #1804 through `675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.
+Upstream PR #1804 is merged and published in `0.10.261133-beta.2`, release commit
+`766d342dd684271242f7fa1432eeb01093252293`. Its earlier source review covered
+`675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.
 The native configuration, authentication, framing and readiness protocol are now
 implemented. `config.webSettings({resolveSecret:false})` allows the environment
 override to bypass an unreadable configured reference. Fhold continues using its
@@ -56,8 +57,10 @@ no UI/authentication code changed in the fix revision.
 No further fhold runtime change is needed for the current contract. No second
 descendant supervisor was added. Windows and independently session-escaping
 process trees remain outside the Linux process-group verification.
-Published-package integration and native lifecycle/browser qualification remain
-required before merging or releasing this branch.
+The published beta also stops subsequent commands started during forced
+termination (AKM #1813). All eight runtime shutdown regressions pass against
+the npm artifact. The [review record](akm-web-premerge-review.md) distinguishes
+published-package evidence from the remaining plugin and image qualification.
 
 ## Decision and ownership
 
@@ -105,7 +108,7 @@ proposal is design input, not a substitute for that contract.
 
 | Decision | Placeholder to resolve with AKM | Fhold consequence |
 | --- | --- | --- |
-| Proposal and release | **TBD-AKM-01:** #1801 targets 0.10.261133; final implementation commit, publication and plugin compatibility remain pending | Pin a qualified published set and update the lockfile normally. No speculative pins or startup downloads. |
+| Proposal and release | CLI/Web `0.10.261133-beta.2`, commit `766d342dd684`; matching plugin publication remains pending | CLI/Web pinned and lockfile regenerated. Complete the published plugin set before merge; no speculative pins or startup downloads. |
 | Server configuration | #1801 specifies `experimental.web` (`host`, `port`, `origin`, `secret`, `allowedHosts`, `frameParents`), with native `--host`, `--port`, `--origin` overrides. **TBD-AKM-02:** verify final schema/API | Native configuration remains authoritative; fhold only adds hosting intent/wiring. |
 | Login and sessions | #1801 specifies native secret references, an `AKM_WEB_SECRET` run override, login/logout, in-memory expiring sessions and restart rotation. Dedicated host file feeds the native override; no resolver API is needed | No native credential-file option and no fhold resolver. Keep bearer values in private host memory/transport, not snapshots, renderer IPC or URLs. |
 | Framing | `frameParents` denies framing when absent; explicit parents use runtime CSP without conflicting X-Frame-Options. **TBD-AKM-04:** verify nested-frame and final header behavior | Pass explicit choices through; no fhold CORS or header rewriting. |
@@ -394,7 +397,9 @@ settings form, ACA management support, or subpath hosting is claimed here.
 - Documentation checks, shell syntax, and lint passed (existing repository lint
   warnings remain).
 
-Still required: final native secret-override precedence (including an unreadable
-configured reference), login/iframe behavior, long-running activity, descendant
-shutdown within the existing budget, published dependency pins, and the native
-image/Admin smoke tests. Fixture verification does not establish these behaviors.
+Published beta 2 now passes browser/authentication, embedded Admin and native
+shutdown checks; see the dated [verification record](akm-web-premerge-review.md).
+Still required: matching published plugins and native image/Admin smoke tests,
+including persistent hosting, configured-secret override, iframe settings and
+activity through the shipped container. Package and source fixtures do not
+establish that final image behavior.

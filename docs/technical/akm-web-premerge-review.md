@@ -1,7 +1,48 @@
 # AKM Web pre-merge review — November 25, 2026
 
-**Current recommendation: no remaining blocker for fhold's Linux integration at
-`675ad5e6e0de7c7f153ba3d06bfa78a86871b39a`.**
+**Current recommendation: published beta 2 passes the focused Linux web
+integration checks. Matching plugin publication and image qualification still
+block merging this branch.**
+
+## Published beta 2 verification
+
+On November 25, npm supplied `akm-cli` and `akm-web` at
+`0.10.261133-beta.2`. The web package's `build-info.json` identifies
+`766d342dd684`, matching the [release commit](https://github.com/itlackey/akm/releases/tag/v0.10.261133-beta.2).
+Both direct Assistant pins and the root lockfile now select this version.
+No override, startup download, or upstream package modification was added.
+
+Beta 2 adds [PR #1813](https://github.com/itlackey/akm/pull/1813): commands an
+operation starts during forced termination are stopped too. The installed
+package contains that correction. Its native thirteen-second shutdown bound
+still fits fhold's fifteen-second wait, without another runtime change.
+
+Verification against the actual npm packages, using disposable homes:
+
+- Direct and TCP-forwarded Chromium smoke: authenticated readiness, bearer
+  access, Host/Origin rejection, navigation and reload passed.
+- Fhold's actual `AdminKnowledge` Electron view: authenticated readiness,
+  browser-origin writes and renderer isolation passed.
+- All eight upstream runtime shutdown regressions passed, including the new
+  command-started-during-termination case and descendant process groups.
+  The separate Desktop launcher source assertion initially could not run because
+  Electron source is intentionally absent from the web package; it passed when
+  checked against the exact release commit's source files.
+- Frozen lockfile install, workspace type checks, all 16 focused fhold tests
+  (socket tests enabled), CLI build and Admin bundle passed. The approved audit
+  policy reported no unexcepted vulnerabilities; its three existing exceptions
+  were unchanged.
+
+**Plugin hold:** npm's latest `akm-opencode-v2` is `0.10.261138`, requiring
+CLI `0.10.261132`; the repository has no open plugin update PR at this check.
+Fhold's existing `0.10.261136` plugin pins and native marketplace archive remain
+unchanged, with their own published CLI `0.10.261130`. The lockfile preserves
+that dependency rather than forcing it to beta 2. This is an intermediate
+feature branch, not a qualified mixed-version release. Before merge, select
+the published plugin set supporting beta 2 (OpenCode, Claude and Codex), update
+the immutable marketplace revision/checksum, regenerate the lockfile, and run
+the affected harness/image and final Admin smoke checks. No live instance,
+release tag or image was changed.
 
 ## Fix verification at 675ad5e6
 
