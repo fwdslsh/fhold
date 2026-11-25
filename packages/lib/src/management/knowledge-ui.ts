@@ -245,10 +245,12 @@ export class KnowledgeUi {
 				clearTimeout(timer);
 				resolve();
 			});
+			// AKM drains HTTP requests for up to ten seconds before exiting.
+			// Allow that native budget plus transport/process cleanup.
 			const timer = setTimeout(() => {
 				child.kill('SIGTERM');
 				resolve();
-			}, 5_000);
+			}, 15_000);
 			child.stdin.end();
 		});
 		if (this.child === child) this.child = undefined;

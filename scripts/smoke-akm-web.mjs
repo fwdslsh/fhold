@@ -83,7 +83,10 @@ try {
 			const session = await fetch(`${origin}/api/session`, { headers: { Authorization: `Bearer ${secret}` } });
 			assert.equal(session.status, 200);
 			assert.equal(session.headers.get('set-cookie'), null);
-			assert.deepEqual(await session.json(), { ok: true, active: false });
+			const status = await session.json();
+			assert.equal(status.ok, true);
+			assert.equal(status.active, false);
+			assert.equal(status.session, false);
 			const invalidHost = await new Promise((resolve, reject) => {
 				get(origin, { headers: { Host: 'untrusted.invalid' } }, (response) => {
 					response.resume();

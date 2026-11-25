@@ -13,7 +13,7 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function fixture(native: string, address = '127.0.0.1') {
+async function fixture(native: string, address = '127.0.0.1', closeDelay = 0) {
 	const root = mkdtempSync(join(tmpdir(), 'fhold-knowledge-ui-'));
 	roots.push(root);
 	const homeDir = join(root, 'home');
@@ -37,7 +37,7 @@ if (args[0] === 'exec') {
  ${native}
  });
  process.stdin.resume();
- process.stdin.once('end', () => process.exit(0));
+ process.stdin.once('end', () => setTimeout(() => process.exit(0), ${closeDelay}));
 }
 `,
 		{ mode: 0o700 }
@@ -76,7 +76,7 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')(
 				bearer = request.headers.get('authorization') ?? '';
 				expect(bearer).toMatch(/^Bearer [a-f0-9]{64}$/);
 				probes++;
-				return Response.json({ ok: true, active: false });
+				return Response.json({ ok: true, active: false, session: false });
 			}
 		});
 		const ui = await fixture(
@@ -135,3 +135,14 @@ test.skipIf(process.env.FH_SOCKET_TESTS !== '1')('a ready line cannot disguise a
 		await expect(ui.open({ loopbackPort: server.port! })).rejects.toThrow('Could not open');
 	} finally { await ui.close(); server.stop(true); }
 });
+
+test.skipIf(process.env.FH_SOCKET_TESTS !== '1')('closing lets native shutdown drain beyond the old five-second cutoff', async () => {
+	const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => Response.json({ ok: true, active: false, session: false }) });
+	const ui = await fixture(`console.log(JSON.stringify({type:'ready',origin:'http://127.0.0.1:${server.port}'}));`, '127.0.0.1', 6000);
+	try {
+		await ui.open({ loopbackPort: server.port! });
+		const began = performance.now();
+		await ui.close();
+		expect(performance.now() - began).toBeGreaterThan(5500);
+	} finally { await ui.close(); server.stop(true); }
+}, 12_000);

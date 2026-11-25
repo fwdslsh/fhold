@@ -36,12 +36,20 @@ IPC, or diagnostics. The Assistant UID can read its web login secret; this is
 not a credential-custody boundary for the agent or a provider credential.
 
 Active upstream implementation: `itlackey/akm` branch `feature/akm-web-access`.
-Reviewed commit `3665bb344d0d0465c00d6143f0392176f62d094b`: the native schema
-and `config.webSettings()` API are implemented, with path-prefix browser tests.
-The server/authentication implementation at that commit still uses the old
-`desktop_session` protocol. Fhold needs the remaining authentication/lifecycle
-work before native end-to-end verification can run. The new resolver API is not
-needed for the dedicated-file configuration.
+Reviewed implementation commit `61e4352850d32fea3d5177eee9ce69ba8706429c`.
+The native configuration, authentication, framing and readiness protocol are now
+implemented. `config.webSettings({resolveSecret:false})` allows the environment
+override to bypass an unreadable configured reference. Fhold continues using its
+dedicated file and native override rather than importing that API.
+`GET /api/session` now also returns `session`; bearer callers receive `false`.
+The native HTTP shutdown grace is ten seconds; fhold's management launcher allows
+fifteen seconds for native draining and transport cleanup. The ordinary container
+writer budget remains twenty-five seconds.
+
+The [final upstream review](akm-web-premerge-review.md) records two shutdown
+findings, including a reproduced orphaned host-tool writer. Fhold's direct and
+forwarded native browser smokes pass against this source build, but the upstream
+shutdown finding must be fixed before merge qualification.
 Published-package integration and native lifecycle/browser qualification remain
 required before merging or releasing this branch.
 
@@ -96,8 +104,8 @@ proposal is design input, not a substitute for that contract.
 | Login and sessions | #1801 specifies native secret references, an `AKM_WEB_SECRET` run override, login/logout, in-memory expiring sessions and restart rotation. Dedicated host file feeds the native override; no resolver API is needed | No native credential-file option and no fhold resolver. Keep bearer values in private host memory/transport, not snapshots, renderer IPC or URLs. |
 | Framing | `frameParents` denies framing when absent; explicit parents use runtime CSP without conflicting X-Frame-Options. **TBD-AKM-04:** verify nested-frame and final header behavior | Pass explicit choices through; no fhold CORS or header rewriting. |
 | Cookies and browsers | #1801 specifies Strict cookies by default; configured framing with HTTPS uses None/Secure/Partitioned. **TBD-AKM-05:** real-browser support matrix | Cross-site browser restrictions remain; no cookie workaround in fhold. |
-| Readiness | Native ready line contains `type` and `origin`, no URL. Authenticated `GET /api/session` returns `{ok:true,active:boolean}`; startup returns 503 STARTING. **TBD-AKM-06:** qualify implementation | Probe with a private bearer and canonical Host; expose no credential in diagnostics. |
-| Shutdown | Native SIGTERM stops admission and drains in-flight requests for a fixed period. **TBD-AKM-07:** exact grace and CLI-descendant behavior | Stop all writers before final recovery capture; verify management and container shutdown budgets. |
+| Readiness | Native ready line contains `type` and `origin`, no URL. Authenticated `GET /api/session` returns `{ok:true,active:boolean,session:boolean}`; startup returns 503 STARTING. **TBD-AKM-06:** qualify implementation | Probe with a private bearer and canonical Host; expose no credential in diagnostics. |
+| Shutdown | Native SIGTERM stops admission and drains in-flight requests for a fixed period. Ten-second HTTP grace confirmed; **TBD-AKM-07:** host-tool descendant cleanup is blocked by the reproduced review finding | Stop all writers before final recovery capture; verify management and container shutdown budgets. |
 | Activity | `/api/session.active` excludes the probe itself and covers requests/host-tool operations. **TBD-AKM-08:** verify long-running jobs/descendants | Integrate with existing keep-alive; do not claim coverage before native verification. |
 | Desktop/Admin launch | #1801 removes `desktop_session`; launchers supply a secret and scoped bearer headers. **TBD-AKM-09:** native end-to-end qualification | Preserve session-owned lifecycle and SSH forwarding, replacing the old authentication protocol rather than retaining a compatibility path. |
 
