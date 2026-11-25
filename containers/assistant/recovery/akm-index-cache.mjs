@@ -175,9 +175,15 @@ export function createAkmIndexCache({
 			if (bundle.enabled === false) continue;
 			if (!canonicalPath(bundle.path) || bundle.git || bundle.npm || bundle.website)
 				throw new Error('unsupported-source-policy');
-			const components = Object.values(bundle.components ?? {});
-			if (components.length !== 1) throw new Error('unsupported-source-policy');
-			const component = components[0];
+			// Keep the established fingerprint for legacy checkpoints. AKM
+			// flattens these fields on apply, and fresh homes already use that form.
+			let component = bundle;
+			if (Object.hasOwn(bundle, 'components')) {
+				const components = Object.values(bundle.components ?? {});
+				if (components.length !== 1 || bundle.adapter !== undefined || bundle.root !== undefined)
+					throw new Error('unsupported-source-policy');
+				component = components[0];
+			}
 			// Native auto-detection can select other adapter families. Decline
 			// caching rather than forcing a different adapter or widening consent.
 			if (!['akm', 'agent-skills'].includes(component.adapter))

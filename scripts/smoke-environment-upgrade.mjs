@@ -1,7 +1,7 @@
 // Populated older native state, followed by the image's ordinary startup.
 // Only disposable fixture data is written here; product files stay read-only.
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { includedRemotes } from '/fhold-plugins/fhold/scripts/activity.mjs';
 const remotes = includedRemotes();
@@ -253,9 +253,15 @@ if (process.argv[2] === 'prepare') {
 		writable: false,
 		components: { main: { adapter: 'akm' } }
 	};
+	config.bundles.linked = {
+		path: `${fixture}/linked-bundle`,
+		writable: false,
+		adapter: 'akm'
+	};
 	config.scheduler.enabled = [];
 	json(configPath, config);
 	mkdirSync(`${fixture}/external/tasks`, { recursive: true });
+	mkdirSync(`${fixture}/linked-bundle`);
 	const legacy =
 		'version: 4\nengine: opencode\nrun: node --version\nschedule:\n  - cron: "0 0 1 1 *"\n    enabled: true\n';
 	writeFileSync(`${fixture}/external/tasks/readonly.yml`, legacy);
@@ -299,7 +305,7 @@ if (process.argv[2] === 'prepare') {
 		run(['bash', '--login', '-c', 'command -v crontab']).trim(),
 		'/usr/local/bin/crontab'
 	);
-	assert.match(run(['crontab', '-l']), /upgrade-command/);
+	assert.match(run(['crontab', '-l']), /['"]?stash\/\/tasks\/upgrade-command['"]?\s+['"]?--scheduled/);
 	const deadline = Date.now() + 70000;
 	while (!existsSync(`${fixture}/task-ran`) && Date.now() < deadline) await Bun.sleep(250);
 	assert.equal(readFileSync(`${fixture}/task-ran`, 'utf8'), 'native scheduler');
@@ -310,6 +316,38 @@ if (process.argv[2] === 'prepare') {
 	// The scheduled command has been verified. Quiesce this synthetic writer
 	// before comparing state bytes across diagnostic reads.
 	run(['akm', 'task', 'disable', 'upgrade-command', '--quiet']);
+	const staged = '/stash/imported-tasks/upgrade-import.yml';
+	mkdirSync('/stash/imported-tasks', { recursive: true });
+	const task = 'version: 4\ndescription: Upgrade import fixture\nrun: node --version\nschedule: "0 0 1 1 *"\n';
+	writeFileSync(staged, task);
+	run(['fhold-task', 'adopt', staged]);
+	const imported = JSON.parse(
+		run(['fhold-task', 'list', 'upgrade-import', '--format', 'json', '--quiet'])
+	);
+	assert.ok(imported.hits.some((hit) => hit.ref === 'tasks/upgrade-import'));
+	assert.doesNotMatch(run(['crontab', '-l']), /upgrade-import/);
+	assert.equal(readFileSync(staged, 'utf8'), task);
+
+	mkdirSync('/stash/tasks/.hidden', { recursive: true });
+	writeFileSync('/stash/tasks/.hidden/upgrade-hidden.yml', task);
+	mkdirSync(`${fixture}/linked-tasks`);
+	writeFileSync(`${fixture}/linked-tasks/upgrade-linked.yml`, task);
+	symlinkSync(`${fixture}/linked-tasks`, `${fixture}/linked-bundle/tasks`);
+	run(['git', 'init', '--quiet', `${fixture}/external`]);
+	writeFileSync(`${fixture}/external/.gitignore`, '/tasks/upgrade-ignored.yml\n');
+	writeFileSync(`${fixture}/external/tasks/upgrade-ignored.yml`, task);
+	for (const [ref, exitCode, code] of [
+		['stash//tasks/.hidden/upgrade-hidden', 2, 'INVALID_FLAG_VALUE'],
+		['linked//tasks/upgrade-linked', 1, 'ASSET_NOT_FOUND'],
+		['external//tasks/upgrade-ignored', 1, 'ASSET_NOT_FOUND']
+	]) {
+		const result = Bun.spawnSync(
+			['akm', 'task', 'explain', ref, '--format', 'json', '--quiet'],
+			{ stdout: 'pipe', stderr: 'pipe', timeout: 30000 }
+		);
+		assert.equal(result.exitCode, exitCode, result.stderr.toString());
+		assert.equal(JSON.parse(result.stderr.toString()).code, code);
+	}
 	verifyReadOnlyDiagnostics();
 	await verifyAgentAndProposal();
 	console.log(

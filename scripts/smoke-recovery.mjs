@@ -571,7 +571,7 @@ async function qualifyAkmIndexCache() {
 	report.checks.experimentalAkmCacheNativeReplacement = true;
 }
 
-async function qualifyRuntimeRecovery() {
+async function initializeRecovery() {
 	report.imageId = await docker(['image', 'inspect', image, '--format', '{{.Id}}']);
 	report.sourceImageId = await docker(['image', 'inspect', sourceImage, '--format', '{{.Id}}']);
 	const initName = `fhold-recovery-smoke-${instance}-init`;
@@ -589,6 +589,110 @@ async function qualifyRuntimeRecovery() {
 		'init',
 		'--confirm-new-instance'
 	]);
+}
+
+async function qualifyAkm031() {
+	assert.notEqual(sourceImage, image, 'Supply the AKM 0.10.261130 source image');
+	assert.equal(url, 'file:///backup', 'Use a disposable directory recovery destination');
+	await initializeRecovery();
+	const first = await start('akm-031-source', sourceImage);
+	assert.equal(await docker(['exec', first.id, 'akm', '--version']), '0.10.261130');
+	const proposalId = randomUUID();
+	const proposalRef = 'lessons/akm-recovery-fixture';
+	const content = 'Synthetic proposal retained across AKM migration and rollback.';
+	const change = { path: `${proposalRef}.md`, op: 'create', after: content };
+	const metadata = { changes: [change], proposedTarget: { source: 'stash', root: '/stash' } };
+	const database = '/opt/akm/data/state.db';
+	const originalName = 'state.db.pre-031-bundle-id-columns.bak';
+	const rollback = join(root, 'akm-rollback');
+	const rollbackConfig = join(rollback, 'config');
+	const rollbackData = join(rollback, 'data');
+	await mkdir(rollbackConfig, { recursive: true, mode: 0o700 });
+	await mkdir(rollbackData, { mode: 0o700 });
+	await docker(['exec', first.id, 'akm', 'proposal', 'list', '--quiet']);
+	await execBun(first.id, `
+		import { Database } from 'bun:sqlite';
+		const db = new Database(${JSON.stringify(database)}, { create: false });
+		const now = new Date().toISOString();
+		db.query('INSERT INTO proposals (id, stash_dir, ref, source, created_at, updated_at, content, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+			.run(${JSON.stringify(proposalId)}, '/stash', ${JSON.stringify(proposalRef)}, 'extract', now, now, ${JSON.stringify(content)}, ${JSON.stringify(JSON.stringify(metadata))});
+		db.close();
+	`);
+	const show = ['akm', 'proposal', 'show', proposalId, '--format', 'json', '--quiet'];
+	const before = JSON.parse(await docker(['exec', first.id, ...show]));
+	await docker(['cp', `${first.id}:/etc/akm/config.json`, join(rollbackConfig, 'config.json')]);
+	await stop(first);
+
+	const second = await start('akm-031-replacement');
+	assert.equal(await docker(['exec', second.id, 'akm', '--version']), '0.10.261131');
+	const original = `/opt/akm/data/${originalName}`;
+	const migration = JSON.parse(
+		await docker(['exec', second.id, 'cat', '/tmp/fhold-runtime/akm-migration.json'])
+	);
+	assert.equal(migration.status, 'current');
+	assert.deepEqual(migration.stateMigrations.applied, ['031-bundle-id-columns']);
+	assert.equal(migration.stateMigrations.safetyCopyPath, original);
+	assert.equal(migration.proposalRecords.applied, 1);
+	await docker(['exec', second.id, 'test', '!', '-e', '/tmp/fhold-runtime/degraded-akm-migration']);
+	// Inspect persisted rows before a proposal CLI read could convert them in memory.
+	await execBun(second.id, `
+		import assert from 'node:assert/strict';
+		import { Database } from 'bun:sqlite';
+		const db = new Database(${JSON.stringify(database)}, { readonly: true });
+		const row = db.query('SELECT bundle_id, content, metadata_json FROM proposals WHERE id = ?').get(${JSON.stringify(proposalId)});
+		assert.equal(row.bundle_id, 'stash');
+		assert.equal(row.content, ${JSON.stringify(content)});
+		const metadata = JSON.parse(row.metadata_json);
+		assert.deepEqual(metadata.proposedTarget, { source: 'stash' });
+		assert.deepEqual(metadata.changes, [{ ref: ${JSON.stringify(`stash//${proposalRef}`)}, op: 'create', content: ${JSON.stringify(content)} }]);
+		db.close();
+	`);
+	assert.match(await docker(['exec', second.id, ...show]), new RegExp(proposalRef));
+	const backupPath = join(rollbackData, 'state.db');
+	await docker(['cp', `${second.id}:${original}`, backupPath]);
+	const backupBytes = await readFile(backupPath);
+	await docker(['exec', second.id, 'akm', 'migrate', 'apply', '--format', 'json', '--quiet']);
+	await docker(['cp', `${second.id}:${original}`, backupPath]);
+	assert.deepEqual(
+		await readFile(backupPath),
+		backupBytes,
+		'Repeat apply changed the original safety copy'
+	);
+	report.checks.nativeAkm031AndProposalRecordsMigratedOnRecovery = true;
+	await stop(second);
+
+	const rollbackName = `fhold-recovery-smoke-${instance}-akm-031-rollback`;
+	created.add(rollbackName);
+	const restored = JSON.parse(
+		await docker([
+			'run',
+			'--rm',
+			'--pull',
+			'never',
+			'--name',
+			rollbackName,
+			'--network',
+			'none',
+			'--user',
+			runtimeUser,
+			'--mount',
+			`type=bind,source=${rollback},target=/rollback`,
+			'--env=AKM_CONFIG_DIR=/rollback/config',
+			'--env=AKM_DATA_DIR=/rollback/data',
+			'--env=AKM_STATE_DIR=/rollback/state',
+			'--env=AKM_CACHE_DIR=/rollback/cache',
+			'--entrypoint',
+			show[0],
+			sourceImage,
+			...show.slice(1)
+		])
+	);
+	assert.deepEqual(restored, before, 'The old image could not read the original proposal after rollback');
+	report.checks.nativeAkm031SafetyCopyRestoresOriginalProposal = true;
+}
+
+async function qualifyRuntimeRecovery() {
+	await initializeRecovery();
 	const outsideIndex = common.indexOf(`type=bind,source=${external.outside},target=/mounted-drive`);
 	assert.ok(outsideIndex > 0);
 	const missingMount = [...common.slice(0, outsideIndex - 1), ...common.slice(outsideIndex + 1)];
@@ -947,8 +1051,12 @@ async function qualifyRuntimeRecovery() {
 }
 
 try {
-	if (!process.argv.includes('--akm-index-cache-only')) await qualifyRuntimeRecovery();
-	await qualifyAkmIndexCache();
+	if (process.argv.includes('--akm-031-only')) {
+		await qualifyAkm031();
+	} else {
+		if (!process.argv.includes('--akm-index-cache-only')) await qualifyRuntimeRecovery();
+		await qualifyAkmIndexCache();
+	}
 	report.ok = true;
 } catch (error) {
 	report.ok = false;

@@ -2,7 +2,7 @@
 // Native AKM/sudo boundary through the real opt-in Compose overlay. All state,
 // grants and credentials are synthetic, in disposable project-scoped volumes.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -25,6 +25,7 @@ writeFileSync(join(root, 'state/stack.json'), JSON.stringify({ deployment: { pro
 writeFileSync(join(root, 'state/stack.env'), `FH_PROJECT_NAME=${project}\n`);
 writeFileSync(join(root, 'config/stack/custom.compose.yml'), readFileSync(overlay));
 const privateHome = '/var/lib/fhold-credentials';
+const privateData = `${privateHome}/.local/share/akm`;
 const token = 'synthetic-custody-canary';
 const auth = 'synthetic-custody-http';
 let enabled = false;
@@ -106,15 +107,104 @@ printf 'console.error("ATTACKER_PRELOAD_UID="+process.getuid());' > /work/attack
 	credential(['akm', 'setup', '--yes', '--no-probe', '--embedding', 'off', '--dir', `${privateHome}/akm`]);
 	credential(['akm', 'secret', 'set', 'secrets/probe'], token);
 	credential(['sh', '-eu', '-c', 'mkdir -p "$HOME/akm/scripts" "$HOME/akm/tasks"']);
-	credential(['sh', '-eu', '-c', 'cat > "$HOME/akm/scripts/probe.sh"; chmod 700 "$HOME/akm/scripts/probe.sh"'],
-		'#!/bin/sh\nset -eu\ntest -n "$TOKEN"\nprintf "credential-used %s\\n" "$TOKEN"\n');
-	credential(['sh', '-eu', '-c', 'cat > "$HOME/akm/tasks/probe.yml"'],
-		'version: 5-beta.1\nsteps:\n  - name: probe\n    run: scripts/probe.sh\n    secret: [secrets/probe:TOKEN]\n');
+	credential(
+		[
+			'sh',
+			'-eu',
+			'-c',
+			'cat > "$HOME/akm/scripts/probe.sh"; chmod 700 "$HOME/akm/scripts/probe.sh"'
+		],
+		`#!/bin/sh
+set -eu
+test -n "$TOKEN"
+if test -p "$HOME/probe-release"; then
+	exec 3<"$HOME/akm/secrets/probe"
+	printf '%s\\n' "$$" > "$HOME/probe-pid"
+	read -r _ < "$HOME/probe-release"
+fi
+printf 'credential-used %s\\n' "$TOKEN"
+`
+	);
+	credential(
+		['sh', '-eu', '-c', 'cat > "$HOME/akm/tasks/probe.yml"'],
+		'version: 5-beta.1\nsteps:\n  - name: probe\n    run: scripts/probe.sh\n    secret: [secrets/probe:TOKEN]\n'
+	);
 	operator(policy);
-	console.log('Documented helpers target the persisted project and exclude agent PATH/cwd during privileged setup.');
+	console.log(
+		'Documented helpers target the persisted project and exclude agent PATH/cwd during privileged setup.'
+	);
 	checkResult(exec(approved));
+	const id = compose(['ps', '-q', 'assistant']).trim();
+	credential(['mkfifo', `${privateHome}/probe-release`]);
+	const live = spawn('docker', ['exec', '--user', '1000:1000', id, ...approved]);
+	const completed = new Promise((resolve, reject) => {
+		live.on('error', reject);
+		live.on('close', resolve);
+	});
+	let output = '';
+	live.stdout.on('data', (chunk) => {
+		output += chunk;
+	});
+	live.stderr.on('data', (chunk) => {
+		output += chunk;
+	});
+	try {
+		const deadline = Date.now() + 10_000;
+		let pid = '';
+		while (!pid) {
+			pid = credential([
+				'sh',
+				'-eu',
+				'-c',
+				'if test -s "$HOME/probe-pid"; then cat "$HOME/probe-pid"; fi'
+			]).trim();
+			assert.ok(Date.now() < deadline, 'Credential task did not expose its fixture PID');
+			if (!pid) await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		assert.match(pid, /^\d+$/);
+		assert.equal(
+			credential([
+				'sh',
+				'-c',
+				'tr "\\0" "\\n" < "/proc/$1/environ" | grep -q "^TOKEN="',
+				'probe',
+				pid
+			]),
+			''
+		);
+		credential(['test', '-r', `/proc/${pid}/fd/3`]);
+		for (const file of ['environ', 'mem', 'fd/3']) denied(['cat', `/proc/${pid}/${file}`]);
+		assert.ok(
+			!exec(['cat', `/proc/${pid}/cmdline`]).includes(token),
+			'Token appeared in the process arguments'
+		);
+		credential(['timeout', '3s', 'sh', '-c', 'printf "release\\n" > "$HOME/probe-release"']);
+		credential(['rm', `${privateHome}/probe-release`, `${privateHome}/probe-pid`]);
+		assert.equal(await completed, 0, output);
+	} finally {
+		if (live.exitCode === null) live.kill();
+	}
+	checkResult(output);
+	credential(['test', '-s', `${privateHome}/akm/secrets/probe`]);
+	credential(['test', '-s', `${privateData}/index.db`]);
+	credential(['test', '-s', `${privateData}/state.db`]);
+	const legacyTask = `${privateHome}/akm/tasks/native-backup.yml`;
+	credential(
+		['sh', '-eu', '-c', 'cat > "$1"', 'custody-fixture', legacyTask],
+		'version: 4\nrun: echo migration\n'
+	);
+	credential(['akm', 'migrate', 'apply', legacyTask, '--format', 'json', '--quiet']);
+	const backup = credential([
+		'find', `${privateData}/backups`, '-type', 'f', '-name', '*-native-backup.yml'
+	]).trim();
+	assert.ok(backup.startsWith(`${privateData}/backups/`), 'Missing native task migration backup');
+	credential(['test', '-s', backup]);
 	for (const args of [
 		['cat', `${privateHome}/akm/secrets/probe`],
+		['cat', `${privateHome}/.config/akm/config.json`],
+		['cat', `${privateData}/index.db`],
+		['cat', `${privateData}/state.db`],
+		['cat', backup],
 		['sh', '-c', `printf tamper >> ${privateHome}/akm/scripts/probe.sh`],
 		['sh', '-c', 'printf tamper >> /etc/sudoers.d/fhold-credentials'],
 		['sh', '-c', 'test -w "$(readlink -f /usr/local/bin/akm)"'],
@@ -122,6 +212,7 @@ printf 'console.error("ATTACKER_PRELOAD_UID="+process.getuid());' > /work/attack
 		[...approved, '--cwd', '/work'], [...approved, '--secret', 'secrets/probe:OTHER'],
 		['sudo', '-n', 'sh'], ['sudo', '-n', '-E', ...approved.slice(2)]
 	]) denied(args);
+	console.log('Live delegate environment, memory, open credential file descriptor, private config, databases and migration backup were inaccessible.');
 	checkResult(exec(['env', 'AKM_CONFIG_FILE=/tmp/attacker.json', 'AKM_BUNDLE_DIR=/tmp/attacker', 'BUN_OPTIONS=--preload=/tmp/attacker.ts', ...approved]));
 	exec(['sh', '-eu', '-c', 'mkdir -p /work/caller; printf \'preload = ["./attack.ts"]\\n\' > /work/caller/bunfig.toml; printf \'throw new Error("CALLER_PRELOAD");\' > /work/caller/attack.ts']);
 	checkResult(exec(approved, undefined, '1000:1000', '/work/caller'));

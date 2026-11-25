@@ -489,6 +489,29 @@ special files are refused rather than silently followed or copied.
 Directory artifacts can live on qualifying local or network mounts, but no real
 network-mounted filesystem was exercised in the current qualification.
 
+### Roll back an Assistant image with AKM state
+
+Before upgrading across AKM 0.10.261131, retain a verified, stopped
+[entire-instance export](managing-fhold.md#backup-and-recovery) or a verified
+pre-upgrade recovery copy. AKM 0.10.261131 keys proposals and improvement state
+by bundle ID. It saves `state.db.pre-031-bundle-id-columns.bak` beside
+`state.db` before changing the schema, then backs up proposal metadata before
+rewriting stored paths as refs and retirement handles. Retain the pre-031 copy
+while rollback remains possible. The proposal metadata backup can already have
+the new schema.
+
+To return to a pre-031 AKM image, stop the current writers and restore the
+pre-upgrade state and matching configuration before starting the older image.
+Use an empty, isolated target when verifying the backup. For a database-only
+rollback, restore the pre-031 copy as `state.db` in a clean data directory
+without newer SQLite WAL or SHM files. Changes recorded after the backup will
+be absent. With external recovery, protect and verify ownership of the
+checkpoint namespace before starting a restored instance.
+
+For the experimental credential-custody overlay, back up and restore its
+separate private AKM home using the operator-owned private storage procedure.
+Assistant recovery covers the ordinary AKM home.
+
 ## Which files are included?
 
 The image owns an explicit, versioned catalog in
@@ -585,6 +608,9 @@ Cache admission adds a
 bounded startup delay; no cache means no full index build in core startup.
 Surviving local indexes retain native AKM migration/freshness behavior; these
 switches do not repair, replace or erase them.
+An unchanged legacy bundle configuration retains its cache fingerprint. After
+AKM rewrites the configuration to flat bundle fields, a fingerprint change
+can skip the old optional artifact and let the normal boot index build run.
 
 Experimental limits are 64 MiB for each local index including its WAL/SHM and
 each artifact, and a separate five-second normal-operation budget per cache
@@ -853,6 +879,8 @@ FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE bun run smoke:recovery:b
 # Exercise a published-image upgrade with empty storage, then a surviving home:
 FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE FH_RECOVERY_UPGRADE_FROM_IMAGE=YOUR_PUBLISHED_SOURCE_IMAGE bun run smoke:recovery
 FH_RECOVERY_TEST_IMAGE=YOUR_EXACT_LOCAL_CANDIDATE_IMAGE FH_RECOVERY_UPGRADE_FROM_IMAGE=YOUR_PUBLISHED_SOURCE_IMAGE FH_RECOVERY_TEST_SURVIVING_HOME=1 bun run smoke:recovery
+# Exercise AKM migration 031, proposal conversion and rollback in isolation:
+FH_RECOVERY_TEST_IMAGE=YOUR_LOCAL_AKM_261131_IMAGE FH_RECOVERY_UPGRADE_FROM_IMAGE=YOUR_LOCAL_AKM_261130_IMAGE bun run smoke:recovery --akm-031-only
 ```
 
 `FH_RECOVERY_TEST_IMAGE` is required for both image commands; choose the exact
