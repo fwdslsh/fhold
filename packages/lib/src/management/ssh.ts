@@ -216,19 +216,27 @@ export class SshInstanceManagement implements InstanceManagement {
 			const result = await this.rpc('data.knowledgeUi', { loopbackPort: port });
 			if (this.closing) throw new Error('This instance connection is closed.');
 			const url = new URL(result.url);
+			if (result.mode === 'persistent') {
+				if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash ||
+					typeof result.secret !== 'string' || !/^[\x21-\x7e]{32,4096}$/.test(result.secret))
+					throw Error('The selected Assistant returned an invalid AKM UI address.');
+				return result;
+			}
 			if (
+				result.mode !== 'session' ||
 				url.protocol !== 'http:' ||
 				isIP(url.hostname) !== 4 ||
 				Number(url.port) !== port ||
 				url.pathname !== '/' ||
-				!url.searchParams.get('desktop_session') ||
+				url.search || url.hash ||
+				!(/^[a-f0-9]{64}$/.test(result.secret)) ||
 				url.username ||
 				url.password
 			)
 				throw new Error('The selected Assistant returned an invalid AKM UI address.');
 			this.knowledgeTunnel ??= new SshTunnel(this.connection);
 			// The server was started with this exact loopback browser origin.
-			// Preserve native Host, Origin and session-cookie validation end to end.
+			// Preserve native Host and Origin validation; the bearer stays in private management IPC.
 			await this.knowledgeTunnel.ensure([
 				{ bind: url.hostname, port: Number(url.port), localPort: Number(url.port) }
 			]);
@@ -237,7 +245,7 @@ export class SshInstanceManagement implements InstanceManagement {
 				throw new Error('This instance connection is closed.');
 			}
 			url.hostname = '127.0.0.1';
-			return { url: url.href };
+			return { mode: 'session', url: url.href, secret: result.secret };
 		}
 		if (operation === 'data.backup') {
 			if (

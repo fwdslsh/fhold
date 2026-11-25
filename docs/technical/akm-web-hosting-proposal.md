@@ -1,13 +1,49 @@
 # Optional persistent AKM Web hosting
 
-Status: proposal and implementation plan only; not implemented or released.
+Status: implementation started November 25, 2026; not merge-ready or released.
 Prepared November 24, 2026, against fetched `origin/main`
 `7ee55f15e72e8894d548a5a768d2af0a1de0b63a`.
 
-Implementation depends on AKM's server and embedding proposal, which is under
-upstream review. The contract table below deliberately leaves its final details
-unresolved. This document does not define new native AKM flags or claim that a
-published package already supports them.
+Implementation follows the revised [AKM issue #1801](https://github.com/itlackey/akm/issues/1801).
+The approved contract is recorded below; its implementation and published package
+still need qualification. At the start of this work, the public AKM
+`release/0.10.261133` branch still contained the old launch-token implementation.
+
+### Current implementation slice
+
+The session-owned local/SSH launcher now supplies a random `AKM_WEB_SECRET`
+through private Docker stdin, reads the credential-free native ready record,
+and probes authenticated `GET /api/session`. Its private management result keeps
+the bearer separate from the URL. Admin adds it only in its isolated view's
+Electron session for the exact AKM origin, removes it on cross-origin requests,
+and unregisters the handler when the view closes. No renderer IPC response or
+ordinary snapshot carries the bearer.
+
+Socket-backed contract tests and a real Electron test against disposable HTTP
+fixtures verify this fhold boundary. The native browser smoke and Admin E2E
+expectations are updated but cannot qualify the new AKM behavior until that
+implementation is available. Existing package pins are unchanged: this branch
+must not merge or ship with the old AKM Web protocol.
+
+Persistent hosting, optional port publication, authenticated readiness/activity,
+and the CLI settings command are implemented against the revised contract.
+The host creates a dedicated mode-0600 file at
+`state/secrets/fhold_akm_web_secret`. Only that file is mounted into Assistant;
+the web child reads it and supplies native `AKM_WEB_SECRET`. Host-side Admin
+reads the same file. No AKM secret resolver API or delegate-store access is needed.
+The value never enters stack JSON, generated Compose environment, URLs, renderer
+IPC, or diagnostics. The Assistant UID can read its web login secret; this is
+not a credential-custody boundary for the agent or a provider credential.
+
+Active upstream implementation: `itlackey/akm` branch `feature/akm-web-access`.
+Reviewed commit `3665bb344d0d0465c00d6143f0392176f62d094b`: the native schema
+and `config.webSettings()` API are implemented, with path-prefix browser tests.
+The server/authentication implementation at that commit still uses the old
+`desktop_session` protocol. Fhold needs the remaining authentication/lifecycle
+work before native end-to-end verification can run. The new resolver API is not
+needed for the dedicated-file configuration.
+Published-package integration and native lifecycle/browser qualification remain
+required before merging or releasing this branch.
 
 ## Decision and ownership
 
@@ -55,15 +91,15 @@ proposal is design input, not a substitute for that contract.
 
 | Decision | Placeholder to resolve with AKM | Fhold consequence |
 | --- | --- | --- |
-| Proposal and release | **TBD-AKM-01:** canonical proposal/PR URL; release version and source commit; exact CLI/Web/plugin compatibility requirements | Pin a qualified published set and update the lockfile normally. No speculative pins or startup downloads. |
-| Server configuration | **TBD-AKM-02:** supported executable, mode selection, bind/port/public-origin settings, configuration precedence and error behavior | Pass native arguments/configuration using existing typed setup; do not invent upstream flags or a translating compatibility layer. |
-| Login and sessions | **TBD-AKM-03:** credential-file format, native login URL, session/logout/expiry behavior, rotation and restart semantics | Mount a dedicated credential and open the bare URL; keep credential values out of state, status, logs and URLs returned to ordinary status consumers. |
-| Framing | **TBD-AKM-04:** parent-origin allowlist syntax, defaults, nested-frame rules, CSP and conflicting-header behavior | Pass explicit operator choices through; qualify allowed and rejected embedding without changing CORS or injecting headers. |
-| Cookies and browsers | **TBD-AKM-05:** supported same-site/cross-site arrangements, cookie attributes, HTTP behavior and third-party-cookie restrictions | Publish an accurate support matrix; do not repair unsupported arrangements with fhold authentication or cookie rewriting. |
-| Readiness | **TBD-AKM-06:** credential-free readiness record or safe HTTP probe, canonical Host requirements, runtime failure diagnostics | Observe actual availability without using a login credential as a health token or treating PID existence as readiness. |
-| Shutdown | **TBD-AKM-07:** native termination behavior, request admission, in-flight operations and spawned CLI descendants | Stop all writers before the existing final recovery capture; retain the existing deadline and failure semantics. |
-| Activity | **TBD-AKM-08:** native signal/API that distinguishes idle serving from active web operations, including long-running jobs | Reuse existing keep-alive integration. Do not claim idle-shutdown compatibility until real native activity is observed. |
-| Desktop/Admin launch | **TBD-AKM-09:** continued on-demand launch/bootstrap contract and compatibility with server mode | Preserve existing local/SSH launch and cleanup; keep persistent direct access distinct from temporary forwarded access. |
+| Proposal and release | **TBD-AKM-01:** #1801 targets 0.10.261133; final implementation commit, publication and plugin compatibility remain pending | Pin a qualified published set and update the lockfile normally. No speculative pins or startup downloads. |
+| Server configuration | #1801 specifies `experimental.web` (`host`, `port`, `origin`, `secret`, `allowedHosts`, `frameParents`), with native `--host`, `--port`, `--origin` overrides. **TBD-AKM-02:** verify final schema/API | Native configuration remains authoritative; fhold only adds hosting intent/wiring. |
+| Login and sessions | #1801 specifies native secret references, an `AKM_WEB_SECRET` run override, login/logout, in-memory expiring sessions and restart rotation. Dedicated host file feeds the native override; no resolver API is needed | No native credential-file option and no fhold resolver. Keep bearer values in private host memory/transport, not snapshots, renderer IPC or URLs. |
+| Framing | `frameParents` denies framing when absent; explicit parents use runtime CSP without conflicting X-Frame-Options. **TBD-AKM-04:** verify nested-frame and final header behavior | Pass explicit choices through; no fhold CORS or header rewriting. |
+| Cookies and browsers | #1801 specifies Strict cookies by default; configured framing with HTTPS uses None/Secure/Partitioned. **TBD-AKM-05:** real-browser support matrix | Cross-site browser restrictions remain; no cookie workaround in fhold. |
+| Readiness | Native ready line contains `type` and `origin`, no URL. Authenticated `GET /api/session` returns `{ok:true,active:boolean}`; startup returns 503 STARTING. **TBD-AKM-06:** qualify implementation | Probe with a private bearer and canonical Host; expose no credential in diagnostics. |
+| Shutdown | Native SIGTERM stops admission and drains in-flight requests for a fixed period. **TBD-AKM-07:** exact grace and CLI-descendant behavior | Stop all writers before final recovery capture; verify management and container shutdown budgets. |
+| Activity | `/api/session.active` excludes the probe itself and covers requests/host-tool operations. **TBD-AKM-08:** verify long-running jobs/descendants | Integrate with existing keep-alive; do not claim coverage before native verification. |
+| Desktop/Admin launch | #1801 removes `desktop_session`; launchers supply a secret and scoped bearer headers. **TBD-AKM-09:** native end-to-end qualification | Preserve session-owned lifecycle and SSH forwarding, replacing the old authentication protocol rather than retaining a compatibility path. |
 
 No placeholder is permission to create a substitute in fhold. If a required
 native capability is missing, resolve it upstream or explicitly narrow the
@@ -72,10 +108,10 @@ qualified deployment scope.
 ## Configuration and exposure
 
 Extend existing typed installation settings and generated environment rather
-than creating another settings store. Proposed inputs are enablement, container
-bind address/port, canonical browser origin, credential-file location, embedding
-parents, and optional host publication address/port. Final fhold names follow
-the existing `FH_*` convention; native setting names await TBD-AKM-02.
+than creating another settings store. `assistant.web` stores enablement, canonical browser origin, optional host
+publication, bind address, and host port. The image listener is `0.0.0.0:4097`.
+AKM's `experimental.web.allowedHosts` and `frameParents` stay in operator-owned
+`config/akm/config.json`; fhold does not duplicate these native settings.
 
 Keep the container bind distinct from host publication. A container-loopback
 listener is not reachable through ordinary Docker port publication. Select a
@@ -122,10 +158,11 @@ the [recovery contract](../assistant-recovery.md).
 
 ## Native authentication and access boundaries
 
-Mount a dedicated AKM Web access credential through existing private secret-file
-mechanisms. Do not reuse OpenCode's password, provider keys or another service's
-credential. AKM loads the file and owns browser authentication. Its exact file
-format, provisioning expectations and rotation behavior remain TBD-AKM-03.
+Use a dedicated native AKM Web secret reference or the native per-run environment
+override. Do not reuse OpenCode's password, provider keys or another service's
+credential. AKM owns resolution and browser authentication. Fhold reads its dedicated
+web login file on the host and supplies the same value to the server using
+`AKM_WEB_SECRET`; it does not read or mount the credential delegate store.
 
 Preserve ordinary Assistant filesystem grants and read-only mounts. Give the
 web process no root privileges, Docker socket, credential-delegate identity or
@@ -159,14 +196,15 @@ persistent direct access and session-owned forwarded access. Final type names
 are implementation details, not new native AKM settings. The provider/management
 layer chooses the access route; common UI code does not branch on provider names.
 
-For persistent mode, validate and return the configured HTTP(S) canonical URL
-without a bootstrap credential. Admin loads it in the existing isolated
-`WebContentsView` and keeps its origin/navigation restrictions. Closing the view
+For persistent mode, validate the configured HTTP(S) canonical URL. Keep any
+native bearer separate in the private management result, never in the URL or
+renderer IPC. Admin loads it in the existing isolated `WebContentsView`, adds
+the header only for that exact origin, and keeps its navigation restrictions. Closing the view
 or management session releases only Admin-owned resources. Repeated opens must
 not spawn another persistent server.
 
-For on-demand mode, preserve the private native handshake, Linux bridge discovery,
-session-bound child lifetime, and SSH forwarding. Closing stdin stops only that
+For on-demand mode, replace the old bootstrap with the native bearer contract
+while preserving Linux bridge discovery, session-bound child lifetime, and SSH forwarding. Closing stdin stops only that
 session's child. Do not silently fall back to launching a second server if the
 persistent endpoint is unavailable.
 
@@ -241,7 +279,7 @@ live-instance rollout.
 | `packages/lib/src/management/knowledge-ui.ts`, `types.ts`, `contracts.ts`, `wire-input.ts`, `instance.ts`, `instance-session.ts`, `ssh.ts` | Explicit access-route contract, persistent URL opening, preserved session-owned launch/forwarding. |
 | `packages/lib/src/hosting/provider.ts` and applicable existing bindings | Capability composition; no provider switches in shared pages and no newly claimed ACA support. |
 | `packages/electron/src/admin-app.ts`, `admin-knowledge.ts`, existing settings presentation | Persistent URL in the current isolated browser view and settings through shared typed operations. |
-| `plugins/fhold/scripts/activity.mjs` and existing keep-alive integration, only if required by verified native behavior | Consume native activity without another tracker; exact changes pending TBD-AKM-08. |
+| `plugins/fhold/scripts/activity.mjs` and existing keep-alive integration, only if required by verified native behavior | Consume native activity without another tracker; long-running native operation qualification remains TBD-AKM-08. |
 | Existing configuration/management tests, `scripts/smoke-akm-web.mjs`, `scripts/smoke-keepalive.mjs`, recovery/lifecycle smokes and Electron E2E | Targeted native regression and feature coverage listed below. |
 
 ## Acceptance and verification
@@ -272,9 +310,9 @@ live-instance rollout.
   existing release gates. Reuse eligible evidence; do not create an extra build
   or publication pipeline for this feature.
 
-This planning commit changes documentation only. Its checks are documentation
-generation/tests and link/format review; runtime tests above are future acceptance
-work, not claims of completed implementation.
+The original planning commit changed documentation only. The current implementation
+slice is described at the top; the remaining native and shipped-image checks above
+are acceptance work, not claims of completed verification.
 
 ## Non-goals and remaining decisions
 
@@ -293,5 +331,56 @@ document each additional reachability path before exposing that capability.
 - [Core principles](core-principles.md), [environment and mounts](environment-and-mounts.md), and [hosting guide](../hosting.md).
 - [Native credential custody](../credential-custody.md) and [Assistant recovery](../assistant-recovery.md).
 - [Dependency and release process](../operations/updating-dependencies-and-releasing.md).
-- AKM server/embedding proposal: **TBD-AKM-01** (upstream link pending; no broken placeholder link).
+- [AKM server/embedding contract, issue #1801](https://github.com/itlackey/akm/issues/1801); final release/implementation reference remains **TBD-AKM-01**.
 - [CSP frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors), [cookie attributes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie), and [third-party cookie constraints](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
+
+## Operator controls (awaiting the upstream package)
+
+Enable persistent access at a loopback URL:
+
+```sh
+fhold config web --enable --origin http://localhost:3811 --publish --no-apply
+fhold restart
+```
+
+For an existing proxy on the container network, use the browser-facing origin
+with `--no-publish`; for host publication specify `--bind` and `--port`.
+Remote Admin needs that canonical URL to be reachable from its workstation.
+Fhold does not silently tunnel or rewrite a persistent origin.
+`fhold config web` displays non-secret settings. `--disable` removes the web
+process, mount and publication on the next apply, retaining the login file.
+Without `--no-apply`, settings changes use the existing restart flow.
+
+Retrieve the dedicated login file through the host's trusted file manager or
+terminal for a normal browser login. Do not paste it into an assistant chat.
+To rotate it, replace the file with a new random secret, preserving private
+permissions, then recreate Assistant. A restart invalidates native sessions.
+Admin reads the file privately and supplies bearer authentication only to the
+configured origin in its isolated browser partition.
+
+Native `frameParents` allows other web applications to embed the UI. It is not
+CORS or SSO: users still authenticate with AKM, and browser cookie policies
+apply. Prefer a proxy/firewall/VPN for exposure beyond the host. No new Admin
+settings form, ACA management support, or subpath hosting is claimed here.
+
+## Implementation verification — November 25
+
+- All workspace type checks and CLI/Admin builds passed.
+- 30 focused configuration, local/SSH launcher, Electron header-scoping, and
+  native-activity contract tests passed with local sockets enabled.
+- 20 CLI/Node tests passed, including the new `config web` controls. Five broader
+  suite failures were traced to Bun masquerading as Node in the workstation
+  PATH; those tests passed with native Node 24.18.0. No product workaround was added.
+- Real Electron 45.2.3 verification passed against disposable HTTP fixtures:
+  same-origin authentication, cross-origin redirects/requests, unrelated browser
+  partitions, and cleanup after closing the view.
+- Native Docker Compose parsed both modes: enabled mounts only the dedicated
+  secret and publishes the requested loopback port; disabled has neither.
+  No containers or live instances were changed.
+- Documentation checks, shell syntax, and lint passed (existing repository lint
+  warnings remain).
+
+Still required: final native secret-override precedence (including an unreadable
+configured reference), login/iframe behavior, long-running activity, descendant
+shutdown within the existing budget, published dependency pins, and the native
+image/Admin smoke tests. Fixture verification does not establish these behaviors.

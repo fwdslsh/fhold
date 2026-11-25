@@ -14,6 +14,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { webActivity } from './akm-web.mjs';
 
 export const harnesses = ['opencode', 'claude', 'codex'];
 // The image's installed-package manifest is authoritative. Missing metadata
@@ -247,9 +248,11 @@ export function keepaliveConfig(env, installed = includedRemotes()) {
 // before the next load. Confirm every currently loaded location still has its
 // observer before suppressing a heartbeat. The global list does not load a
 // location; inventories are read only for locations already in that list.
-export async function observedActivity(root, config, fetch = globalThis.fetch) {
+export async function observedActivity(root, config, fetch = globalThis.fetch, probeWeb = webActivity) {
 	const state = activityStatus(root, config.remotes);
 	if (state !== 'idle') return state;
+	const web = await probeWeb();
+	if (web !== 'idle') return web;
 	try {
 		if (!config.opencodeAuthorization) return 'unknown';
 		const signal = AbortSignal.timeout(5000);

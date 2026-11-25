@@ -327,9 +327,12 @@ export type RestoreRequest = {
 	includePortalMaps?: boolean;
 	includeOAuth?: boolean;
 };
+/** Private management result. Never include the credential in renderer IPC or snapshots. */
+export type KnowledgeUiAccess = { url: string; secret: string; mode: 'session' | 'persistent' };
+
 export type DataOperations = {
-	/** Private native launch URL, retained only by the host opening the browser. */
-	knowledgeUi: Operation<void, { url: string }>;
+	/** Native bearer credential, retained only by the host opening the browser. */
+	knowledgeUi: Operation<void, KnowledgeUiAccess>;
 	backup: Operation<BackupRequest, BackupManifest | InstanceBackupManifest>;
 	restoreData: Operation<RestoreRequest, RestorePlan>;
 	restoreInstance: Operation<RestoreRequest, InstanceRestorePlan>;

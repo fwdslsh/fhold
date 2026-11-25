@@ -845,15 +845,15 @@ async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContent
 		'AKM bootstrap stayed in the embedded URL.'
 	);
 	assert(
-		(await fetch(knowledge.origin)).status === 401,
+		(await fetch(new URL('/api/session', knowledge.origin))).status === 401,
 		'AKM knowledge was exposed without native authentication.'
 	);
 	const cookies = await contents.session.cookies.get({
 		url: knowledge.origin
 	});
 	assert(
-		cookies.some((cookie) => cookie.httpOnly && cookie.sameSite === 'strict'),
-		'Native AKM session cookie missing.'
+		!cookies.some((cookie) => cookie.name.startsWith('akm_desktop_session_')),
+		'Bearer-authenticated Admin unexpectedly created an AKM session cookie.'
 	);
 	const invalidHost = await new Promise<number | undefined>((resolve, reject) => {
 		httpGet(knowledge.origin, { headers: { Host: 'untrusted.invalid' } }, (response) => {
@@ -862,12 +862,11 @@ async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContent
 		}).once('error', reject);
 	});
 	assert(invalidHost === 403, 'Native AKM accepted a forged Host.');
-	const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
 	assert(
 		(
-			await fetch(knowledge.origin, {
+			await contents.session.fetch(knowledge.origin, {
 				method: 'POST',
-				headers: { Cookie: cookie, Origin: 'http://untrusted.invalid' }
+				headers: { Origin: 'http://untrusted.invalid' }
 			})
 		).status === 403,
 		'Native AKM accepted a forged Origin.'
@@ -3714,7 +3713,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 			ok: true,
 			knowledgeClickThrough: true,
 			transport: sshHost ? 'native-ssh' : 'local-docker',
-			cookieAuthenticatedReload: true,
+			bearerAuthenticatedReload: true,
 			embedded: true,
 			reused: true,
 			disconnectCleanup: true,

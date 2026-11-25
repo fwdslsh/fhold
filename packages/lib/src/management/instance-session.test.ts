@@ -35,7 +35,7 @@ test('knowledge opens only through the selected manager and stays out of snapsho
 	const manager: InstanceManagement = {
 		call: (async (method: string) => {
 			calls.push(method);
-			if (method === 'data.knowledgeUi') return { url: 'http://127.0.0.1:43210/?token=synthetic-private' };
+			if (method === 'data.knowledgeUi') return { url: 'http://127.0.0.1:43210/', secret: 'synthetic-private' };
 			throw new Error('Unexpected operation');
 		}) as InstanceManagement['call'],
 		busy: () => false,
@@ -45,7 +45,7 @@ test('knowledge opens only through the selected manager and stays out of snapsho
 	expect(calls).toEqual([]);
 	const operation = bindings.data!.knowledgeUi;
 	if (operation.support !== 'supported') throw new Error('Missing Knowledge operation');
-	expect(await operation.invoke(undefined, {})).toEqual({ url: 'http://127.0.0.1:43210/?token=synthetic-private' });
+	expect(await operation.invoke(undefined, {})).toEqual({ url: 'http://127.0.0.1:43210/', secret: 'synthetic-private' });
 	expect(calls).toEqual(['data.knowledgeUi']);
 	await bindings.close!();
 	await expect(operation.invoke(undefined, {})).rejects.toThrow();

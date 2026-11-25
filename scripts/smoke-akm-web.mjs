@@ -1,5 +1,6 @@
 // Published akm-web, native auth and a real browser, with only disposable data.
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -25,6 +26,8 @@ try {
 		}
 		const bundle = join(root, 'bundle');
 		for (const value of [...Object.values(env).slice(1), bundle]) mkdirSync(value, { recursive: true });
+		const secret = randomBytes(32).toString('hex');
+		env.AKM_WEB_SECRET = secret;
 		writeFileSync(join(env.AKM_CONFIG_DIR, 'config.json'), JSON.stringify({
 			bundles: { stash: { path: bundle, writable: true, components: { main: { adapter: 'akm' } } } },
 			defaultBundle: 'stash', defaultWriteTarget: 'stash'
@@ -61,7 +64,7 @@ try {
 		server.stdout.on('data', (chunk) => {
 			output = (output + chunk).slice(-8192);
 		});
-		server.stderr.resume(); // Never emit launch tokens or private native diagnostics.
+		server.stderr.resume(); // Never emit private native diagnostics.
 		let context;
 		try {
 			const deadline = Date.now() + 15000;
@@ -72,31 +75,40 @@ try {
 			}
 			const ready = JSON.parse(output.split('\n')[0]);
 			assert.equal(ready.type, 'ready');
-			const origin = new URL(ready.url).origin;
+			const origin = new URL(ready.origin).origin;
 			assert.equal(ready.origin, origin);
-			assert(new URL(ready.url).searchParams.has('desktop_session'));
-			assert.equal((await fetch(origin)).status, 401);
+			assert.equal(ready.url, undefined);
+			assert(!output.includes(secret));
+			assert.equal((await fetch(`${origin}/api/session`)).status, 401);
+			const session = await fetch(`${origin}/api/session`, { headers: { Authorization: `Bearer ${secret}` } });
+			assert.equal(session.status, 200);
+			assert.equal(session.headers.get('set-cookie'), null);
+			assert.deepEqual(await session.json(), { ok: true, active: false });
 			const invalidHost = await new Promise((resolve, reject) => {
-				get(ready.url, { headers: { Host: 'untrusted.invalid' } }, (response) => {
+				get(origin, { headers: { Host: 'untrusted.invalid' } }, (response) => {
 					response.resume();
 					resolve(response.statusCode);
 				}).once('error', reject);
 			});
 			assert.equal(invalidHost, 403);
 			context = await browser.newContext();
+			await context.route('**/*', async (route) => {
+				if (new URL(route.request().url()).origin === origin)
+					await route.continue({ headers: { ...route.request().headers(), Authorization: `Bearer ${secret}` } });
+				else await route.continue();
+			});
 			const page = await context.newPage();
 			page.setDefaultTimeout(10000);
-			await page.goto(ready.url);
+			await page.goto(origin);
 			await page.getByRole('link', { name: 'Library', exact: true }).waitFor();
-			assert(!new URL(page.url()).searchParams.has('desktop_session'));
+			assert.equal(new URL(page.url()).search, '');
 			const cookies = await context.cookies();
-			assert(cookies.some((cookie) => cookie.httpOnly && cookie.sameSite === 'Strict'));
-			const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
+			assert(!cookies.some((cookie) => cookie.name.startsWith('akm_desktop_session_')));
 			assert.equal(
 				(
 					await fetch(origin, {
 						method: 'POST',
-						headers: { Cookie: cookie, Origin: 'http://untrusted.invalid' }
+						headers: { Authorization: `Bearer ${secret}`, Origin: 'http://untrusted.invalid' }
 					})
 				).status,
 				403
@@ -104,7 +116,7 @@ try {
 			await page.reload();
 			await page.getByRole('link', { name: 'Library', exact: true }).waitFor();
 			console.log(
-				`akm-web native browser, cookie, Host and Origin checks passed (${forwarded ? 'forwarded' : 'direct'})`
+				`akm-web native browser, bearer, readiness, Host and Origin checks passed (${forwarded ? 'forwarded' : 'direct'})`
 			);
 		} finally {
 			await context?.close();

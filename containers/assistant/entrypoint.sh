@@ -404,7 +404,7 @@ fi
 mkdir -p "$RUNTIME_DIR"
 chmod 0700 "$RUNTIME_DIR"
 # These are boot diagnostics, not restored instance state.
-rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,scheduler,codex,claude}.pid || true
+rm -f "$RUNTIME_DIR"/degraded-* "$RUNTIME_DIR"/{recovery,scheduler,codex,claude,akm-web}.pid || true
 if [ "$configuration_degraded" = 1 ]; then
   mark_degraded configuration 'Some runtime settings are invalid; conservative defaults are in use. Correct the logged setting names and restart.'
 fi
@@ -458,6 +458,23 @@ setsid env "${writer_env[@]}" bash -c '
 writer_pids+=("$!")
 
 cd /work
+# Optional native AKM Web. The dedicated login secret is read only in this child;
+# no secret value is put into Docker settings, arguments, or other writers' env.
+case "${FH_AKM_WEB_ENABLED:-0}" in
+  0) ;;
+  1)
+    setsid env "${writer_env[@]}" bash -c '
+      set -euo pipefail
+      AKM_WEB_SECRET=$(cat "${FH_AKM_WEB_SECRET_FILE:-/run/secrets/akm_web_secret}")
+      [[ "$AKM_WEB_SECRET" =~ ^[[:graph:]]{32,4096}$ ]]
+      export AKM_WEB_SECRET
+      exec akm-web --host 0.0.0.0 --port "${FH_AKM_WEB_PORT:-4097}" --origin "${FH_AKM_WEB_ORIGIN:?}"
+    ' >"$RUNTIME_DIR/akm-web.log" 2>&1 &
+    writer_pids+=("$!")
+    printf '%s\n' "$!" >"$RUNTIME_DIR/akm-web.pid"
+    ;;
+  *) mark_degraded akm-web 'FH_AKM_WEB_ENABLED must be 0 or 1; the optional web listener is disabled.' ;;
+esac
 (
   # Remove export attributes rather than mutating shell variables (including
   # readonly environment imports); exec receives only the resulting environment.

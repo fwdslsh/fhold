@@ -82,7 +82,7 @@ export type ManagementOperationMap = {
 	'apps.portal.mapUser': Io<AppOperations['portal']['mapUser']>;
 	'apps.portal.saveToken': Io<AppOperations['portal']['saveToken']>;
 	/** SSH supplies the loopback port its private forward will use. */
-	'data.knowledgeUi': { input: { loopbackPort: number } | void; result: { url: string } };
+	'data.knowledgeUi': { input: { loopbackPort: number } | void; result: Io<DataOperations['knowledgeUi']>['result'] };
 	'data.backup': Io<DataOperations['backup']>;
 	'data.restoreData': Io<DataOperations['restoreData']>;
 	'data.restoreInstance': Io<DataOperations['restoreInstance']>;

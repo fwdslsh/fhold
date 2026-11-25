@@ -49,7 +49,7 @@ let instances: AdminInstances;
 let updates: AdminUpdates;
 let desktop: AdminDesktop;
 let activeSession: { key: string; api: ComposedInstanceSession } | undefined;
-let knowledge: { owner: BrowserWindow; url: string; browser: AdminKnowledge } | undefined;
+let knowledge: { owner: BrowserWindow; url: string; secret: string; browser: AdminKnowledge } | undefined;
 let closingSession: Promise<void> | undefined;
 // A native sign-in flow can request that Admin opens a browser after its IPC call
 // has completed. Keep that callback bound to the selected session rather than the
@@ -409,16 +409,16 @@ export function registerAdminIpc(): void {
 	);
 	handleAdmin(ADMIN_CHANNELS.openKnowledge, async (event) => {
 		const selected = session();
-		const { url } = await invoke(selected.data.knowledgeUi, undefined);
+		const { url, secret } = await invoke(selected.data.knowledgeUi, undefined);
 		if (activeSession?.api !== selected)
 			throw new Error('The selected instance changed. Try again.');
 		const owner = BrowserWindow.fromWebContents(event.sender);
 		if (!owner || owner.isDestroyed()) throw new Error('The Admin window is closed.');
 		const origin = new URL(url).origin;
-		if (knowledge?.owner !== owner || knowledge.url !== url) {
+		if (knowledge?.owner !== owner || knowledge.url !== url || knowledge.secret !== secret) {
 			knowledge?.browser.close();
-			const browser = new AdminKnowledge(owner, origin);
-			knowledge = { owner, url, browser };
+			const browser = new AdminKnowledge(owner, origin, secret);
+			knowledge = { owner, url, secret, browser };
 			try {
 				await browser.open(url);
 			} catch (error) {
