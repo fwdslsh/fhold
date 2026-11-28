@@ -1,6 +1,6 @@
 # AKM Web access
 
-Assistant includes AKM Web. Admin's **Knowledge → Open AKM UI** opens it inside
+Assistant includes AKM Web. Selecting Admin's **Knowledge** page opens it automatically inside
 Admin without an external browser. By default, this starts a private session
 server and stops it when the instance disconnects. Local and SSH access require
 a reachable Linux Docker bridge; Docker Desktop is not supported for this mode.

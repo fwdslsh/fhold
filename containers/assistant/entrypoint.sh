@@ -310,19 +310,32 @@ native_included() {
   jq -e --arg tool "$1" '.harnesses | index($tool) != null' /opt/fhold/tools/package.json >/dev/null
 }
 
+read_native_plugins() {
+  local output status
+  if output=$(env "${writer_env[@]}" timeout 30 "$@"); then
+    printf '%s\n' "$output"
+  else
+    status=$?
+    printf 'assistant: native plugin query failed (exit %s): %s\n' "$status" "$*" >&2
+    return "$status"
+  fi
+}
+
 refresh_native_plugins() {
   local claude_plugins claude_marketplaces codex_plugins name marketplace root version failed=0
   if ! native_included claude && ! native_included codex; then return 0; fi
   claude_plugins='[]'; claude_marketplaces='[]'; codex_plugins='{"installed":[]}'
   if native_included claude; then
-    claude_plugins=$(env "${writer_env[@]}" timeout 30 claude plugin list --json) || return
-    claude_marketplaces=$(env "${writer_env[@]}" timeout 30 claude plugin marketplace list --json) || return
-  fi
-  if native_included codex; then
-    codex_plugins=$(env "${writer_env[@]}" timeout 30 codex plugin list --json) || return
+    claude_plugins=$(read_native_plugins claude plugin list --json) || return
+    claude_marketplaces=$(read_native_plugins claude plugin marketplace list --json) || return
   fi
   for name in akm fhold; do
     marketplace="$name-plugins"
+    # Only inspect the image-owned local marketplace. Enumerating every Codex
+    # marketplace also contacts unrelated remote catalogs and can time out.
+    if native_included codex; then
+      codex_plugins=$(read_native_plugins codex plugin list --marketplace "$marketplace" --json) || return
+    fi
     if [ "$name" = akm ]; then root=/akm-marketplace; else root=/fhold-plugins; fi
     if [ "$name" = fhold ]; then
       version=$(jq -er '.version' "$root/fhold/.claude-plugin/plugin.json") || return

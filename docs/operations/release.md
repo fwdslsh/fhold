@@ -327,8 +327,9 @@ No global major-version override, vendor patch, severity-wide exclusion or
 disabled audit is introduced. Source checks run before the mandatory audit, so
 an advisory cannot hide unrelated test failures. The separately approved Assistant
 image scope is documented below.
-Re-review with the next AKM update, before any release, and no later than
-**November 6, 2026**. Remove each exception as soon as its supported dependency
+Last re-reviewed **November 28, 2026**; supported parent-chain fixes remain
+outstanding. Re-review with the next AKM update and before any release.
+Remove each exception as soon as its supported dependency
 chain is patched (including the separate MCPB and Azure chains), and qualify AKM
 or Blob behavior when updating those dependencies. This is not a clean-audit claim.
 
@@ -351,7 +352,8 @@ existing MCPB Zod ID. The mandatory audit still gates images and catches all
 other advisories; raw reports remain unfiltered. No image exception, unsupported
 major override or installed vendor edit is added. Adopt supported parent-chain
 fixes and remove each ignore when its affected chains are patched. Re-review
-before the next release and by the existing **November 6, 2026** review deadline.
+before the next release. The November 28, 2026 dependency review confirms that
+the supported parent-chain fixes remain outstanding.
 
 ## Assistant image exceptions removed with npm 12.2.2
 

@@ -4,7 +4,7 @@ import { renderRuntimeControls } from './runtime.js';
 import { refresh, render } from './snapshot.js';
 import { managedFormIds, state, viewMeta } from './state.js';
 import { renderInstallationReadiness } from './instances.js';
-import { instancePresentation, selectedLogOptions } from './instance-presentation.js';
+import { instanceCapability, instancePresentation, selectedLogOptions } from './instance-presentation.js';
 
 export const byId = (id) => document.getElementById(id);
 
@@ -174,10 +174,11 @@ export function showView(name, options = {}) {
 			: undefined;
 	const ready = lifecycle === 'ready' || lifecycle === 'deployed';
 	if (!ready && name !== 'provider') return;
+	const enteringKnowledge = name === 'knowledge' && state.currentView !== name;
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;
 	document.body.dataset.activeView = name;
-	byId('knowledge-header-actions').hidden = name !== 'knowledge';
+	byId('knowledge-fields').hidden = name !== 'knowledge';
 	for (const panel of all('[data-view-panel]')) panel.hidden = panel.dataset.viewPanel !== name;
 	for (const button of all('[data-view]')) {
 		const active = button.dataset.view === name;
@@ -202,6 +203,10 @@ export function showView(name, options = {}) {
 			: meta.description
 	);
 	if (options.focus === true) byId(overview ? 'overview-name' : 'view-title').focus();
+	// Navigation opens native access once. Snapshot renders must not reload the
+	// browser or repeatedly retry a failed launch.
+	if (enteringKnowledge && instanceCapability('data.knowledgeUi').supported)
+		void operation('Opening AKM UI', () => state.api.openKnowledge(), '');
 }
 
 export function showConnectionApp(name) {

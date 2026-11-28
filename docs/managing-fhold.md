@@ -230,7 +230,7 @@ It replaces the removed `akm ui` command. Update older Assistant images before
 using this action; a host-local AKM Desktop manages its own library, not the
 selected container's bundles.
 
-Select an instance, then choose **Knowledge → Open AKM UI** in the page header. Admin opens the
+Select an instance, then choose **Knowledge**. Admin automatically opens the
 Assistant's native AKM interface inside Admin, using that instance's
 bundles, configuration and index. Keep Admin open with that instance selected;
 switching instances or closing Admin ends this temporary UI session. Opening it
@@ -525,7 +525,7 @@ Daily anonymous usage reporting is **on by default**, using AKM's native
 a random install ID, not prompts, asset contents, names or credential values.
 AKM sends at most once per day per surface (CLI and AKM Web/Desktop).
 
-To opt out in Admin, open **Knowledge → Open AKM UI**, then AKM's
+To opt out in Admin, open **Knowledge**, then AKM's
 **Settings → Configuration → Usage reports** and turn off **Send a daily usage
 report**. Save the change. This controls the selected Assistant's AKM, not a
 separate desktop installation.

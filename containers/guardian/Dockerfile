@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.4 AS dependencies
+FROM oven/bun:1.4.5 AS dependencies
 
 WORKDIR /repo
 COPY package.json bun.lock ./
@@ -15,7 +15,7 @@ COPY containers/assistant/codex-tools/package.json ./containers/assistant/codex-
 COPY plugins/fhold/package.json ./plugins/fhold/package.json
 RUN bun install --frozen-lockfile --production --linker hoisted --filter @fhold/guardian
 
-FROM oven/bun:1.4.4-slim
+FROM oven/bun:1.4.5-slim
 
 ENV HOME=/home/fhold \
     PORT=8080 \

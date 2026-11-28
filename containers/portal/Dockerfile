@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.4-slim AS build
+FROM oven/bun:1.4.5-slim AS build
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -19,7 +19,7 @@ RUN bun build src/index.ts --target=node --packages=external --outfile=dist/inde
 
 # Slack Socket Mode needs the real undici WebSocket and heartbeat implementation.
 # Bun substitutes an incomplete builtin; use the SDK's supported Node runtime.
-FROM node:26.13.0-trixie-slim
+FROM node:26.13.1-trixie-slim
 ARG PLATFORM_VERSION
 ARG VCS_REF
 ARG BUILD_DATE

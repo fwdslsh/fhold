@@ -1017,7 +1017,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		}
 		expect(
 			await evaluate(
-				"document.querySelector('#open-knowledge').matches(':disabled') && !document.querySelector('#knowledge-fields-unavailable').hidden"
+				"!document.querySelector('#open-knowledge') && !document.querySelector('#knowledge-fields-unavailable').hidden"
 			)
 		).toBe(true);
 		await evaluate(

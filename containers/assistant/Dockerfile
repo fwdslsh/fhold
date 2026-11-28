@@ -1,5 +1,5 @@
-FROM node:26.13.0-bookworm-slim AS node-runtime
-ARG NPM_VERSION=12.2.2
+FROM node:26.13.1-bookworm-slim AS node-runtime
+ARG NPM_VERSION=12.2.3
 # Use npm's supported self-upgrade at build time, without altering its bundle.
 # Keep npm's patched upstream bundle intact; do not override private packages.
 RUN npm install --global "npm@${NPM_VERSION}" \
@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
 
-FROM oven/bun:1.4.4 AS manifests
+FROM oven/bun:1.4.5 AS manifests
 ARG TARGETARCH
 WORKDIR /repo
 COPY package.json bun.lock ./
@@ -73,18 +73,18 @@ COPY plugins /fhold-plugins
 
 # Both native harnesses install the same immutable upstream marketplace.
 # Retain the release's bundled CLI: local marketplaces do not install dependencies.
-ADD --checksum=sha256:a42f40046e05a63c8d6066cb5b99b76d77beffc0cb5c6c6819ffb755c07b2fe3 \
-    https://codeload.github.com/itlackey/akm-plugins/tar.gz/faa365375171f6c5f35cd3d07120d85e20cbabae /tmp/akm-claude.tar.gz
+ADD --checksum=sha256:e97cb77cae66f77bbfb106f083a7186f181d2e6c947b0ee7e5838dc86b858126 \
+    https://codeload.github.com/itlackey/akm-plugins/tar.gz/bb643c425870905e450699c7099a084e838dfb6a /tmp/akm-claude.tar.gz
 RUN mkdir -p /akm-marketplace/claude \
-    && plugin_root=akm-plugins-faa365375171f6c5f35cd3d07120d85e20cbabae/claude \
+    && plugin_root=akm-plugins-bb643c425870905e450699c7099a084e838dfb6a/claude \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace/claude --strip-components=2 \
       "$plugin_root/.claude-plugin" "$plugin_root/.codex-plugin" "$plugin_root/commands" "$plugin_root/hooks" \
       "$plugin_root/shared" "$plugin_root/skills" "$plugin_root/package.json" "$plugin_root/README.md" \
       "$plugin_root/bun.lock" "$plugin_root/node_modules" \
     && tar -xzf /tmp/akm-claude.tar.gz -C /akm-marketplace --strip-components=1 \
-      akm-plugins-faa365375171f6c5f35cd3d07120d85e20cbabae/.agents/plugins/marketplace.json \
-      akm-plugins-faa365375171f6c5f35cd3d07120d85e20cbabae/.claude-plugin/marketplace.json \
-      akm-plugins-faa365375171f6c5f35cd3d07120d85e20cbabae/LICENSE
+      akm-plugins-bb643c425870905e450699c7099a084e838dfb6a/.agents/plugins/marketplace.json \
+      akm-plugins-bb643c425870905e450699c7099a084e838dfb6a/.claude-plugin/marketplace.json \
+      akm-plugins-bb643c425870905e450699c7099a084e838dfb6a/LICENSE
 # The published Codex catalog selects a Git source. This image distributes the
 # same verified files locally, using Codex's native local marketplace source.
 RUN bun -e 'const file = "/akm-marketplace/.agents/plugins/marketplace.json"; const catalog = await Bun.file(file).json(); const plugin = catalog.plugins.find(p => p.name === "akm"); if (!plugin) throw new Error("AKM marketplace entry missing"); plugin.source = {source: "local", path: "./claude"}; await Bun.write(file, JSON.stringify(catalog, null, 2) + "\n");'

@@ -24,10 +24,10 @@
   },
   "devDependencies": {
     "@fhold/lib": "workspace:*",
-    "@types/node": "^26.6.6",
-    "bun-types": "^1.4.4",
+    "@types/node": "^26.6.11",
+    "bun-types": "^1.4.5",
     "citty": "^0.2.2",
-    "tar": "^7.5.22",
+    "tar": "^7.5.24",
     "typescript": "^7.0.2"
   }
 }

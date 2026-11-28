@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - id: scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -56,7 +56,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - run: bun install --frozen-lockfile
       - name: Build the PR's Admin
         run: bun run --cwd packages/electron build:linux-x64 --config.extraMetadata.fholdPreview=true

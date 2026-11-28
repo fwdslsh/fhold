@@ -2865,7 +2865,7 @@ body[data-admin-settings="true"]
 	flex: 1 1 240px;
 	min-inline-size: 0;
 }
-#knowledge-header-actions {
+#knowledge-fields {
 	flex: none;
 	max-width: 100%;
 	margin-left: auto;

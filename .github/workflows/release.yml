@@ -58,7 +58,7 @@ jobs:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - id: version
         name: Validate the stamped release
         env:
@@ -224,7 +224,7 @@ jobs:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.candidates.outputs.assets_ids }}

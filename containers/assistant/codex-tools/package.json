@@ -2,5 +2,5 @@
 	"name": "@fhold/codex-tools",
 	"private": true,
 	"license": "MIT",
-	"dependencies": { "@openai/codex": "0.167.0" }
+	"dependencies": { "@openai/codex": "0.172.0" }
 }
