@@ -332,7 +332,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			const modalSize = (await evaluate(
 				"document.querySelector('dialog:modal')?{width:innerWidth,height:innerHeight}:null"
 			)) as { width: number; height: number } | null;
-			const clipSize = modalSize || size;
+			// Full-page capture removes the scrollbar while composing. Keep the
+			// viewport width so that this reflow cannot crop the rightmost controls.
+			const viewportWidth = Number(await evaluate('innerWidth'));
+			const clipSize =
+				modalSize || (size && { ...size, width: Math.max(size.width, viewportWidth) });
 			const result = await command('Page.captureScreenshot', {
 				format: 'png',
 				captureBeyondViewport: true,
@@ -394,6 +398,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate('location.pathname')).toBe('/');
 		expect(await evaluate("document.querySelector('#direct-password').value")).toBe('');
 		expect(await evaluate("document.querySelector('#overview-name').textContent")).toBe('april');
+		expect(await evaluate("document.querySelector('#overview-home').hidden")).toBe(true);
 		expect(await evaluate("document.querySelector('#overview-location').textContent")).toBe(
 			'/home/user/fhold/instances/april'
 		);
@@ -468,6 +473,40 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		}
 		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
 		await capture('system-desktop.png');
+		// The Overview guideposts use the actual navigation handlers and native
+		// disclosure. Visiting backup settings must not start a backup operation.
+		const callsBeforeShortcut = await evaluate('window.providerQa.calls.length');
+		await evaluate("import('./ui.js').then(({showView})=>showView('overview'))");
+		await evaluate("document.querySelector('[data-section-target=backup-recovery]').focus()");
+		await keypress('Enter', 'Enter', 13);
+		expect(await evaluate('document.body.dataset.activeView')).toBe('system');
+		expect(await evaluate("document.querySelector('#backup-recovery').open")).toBe(true);
+		expect(
+			await evaluate(
+				"document.activeElement === document.querySelector('#backup-recovery > summary')"
+			)
+		).toBe(true);
+		expect(await evaluate('window.providerQa.calls.length')).toBe(callsBeforeShortcut);
+		expect(await evaluate("document.querySelector('#view-system > details').id")).toBe(
+			'backup-recovery'
+		);
+		await capture('overview-backup-shortcut.png');
+		await evaluate("document.querySelector('#backup-recovery > summary').focus()");
+		await keypress('Enter', 'Enter', 13);
+		expect(await evaluate("document.querySelector('#backup-recovery').open")).toBe(false);
+		for (const view of ['overview', 'provider', 'connections', 'system']) {
+			await command('Emulation.setEmulatedMedia', {
+				features: [{ name: 'prefers-color-scheme', value: 'light' }]
+			});
+			await evaluate(`import('./ui.js').then(({showView})=>showView(${JSON.stringify(view)}))`);
+			// Admin's existing palette is fixed dark, including on light OS
+			// preference. This exercises the preference without inventing a theme.
+			await capture(`${view}-light-preference-desktop.png`);
+		}
+		await command('Emulation.setEmulatedMedia', {
+			features: [{ name: 'prefers-color-scheme', value: 'dark' }]
+		});
+		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
 		for (const section of ['installation-details', 'import-export', 'runtime-recovery']) {
 			await evaluate(
 				`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}||panel.id==='backup-recovery'; document.querySelector('#${section}').open=true`
@@ -476,6 +515,17 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		}
 		for (const view of ['overview', 'provider', 'knowledge', 'connections', 'system']) {
 			await evaluate(`import('./ui.js').then(({showView})=>showView(${JSON.stringify(view)}))`);
+			if (view === 'knowledge') {
+				expect(
+					await evaluate("getComputedStyle(document.querySelector('.workspace-context')).display")
+				).toBe('none');
+				expect(await evaluate("document.querySelector('#view-title').textContent")).toBe(
+					'Knowledge'
+				);
+				expect(await evaluate("document.querySelector('#view-description').textContent")).toBe(
+					'Browse and manage your assistant’s knowledge with AKM.'
+				);
+			}
 			for (const width of [320, 360, 375, 414, 480, 640, 768, 1024, 1280, 1440]) {
 				await command('Emulation.setDeviceMetricsOverride', {
 					width,
@@ -1074,9 +1124,16 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				await evaluate(`import('./ui.js').then(({showView})=>showView('${view}'))`);
 				expect(
 					await evaluate(
-						'document.documentElement.scrollWidth<=document.documentElement.clientWidth'
+						`(() => {
+							const width = document.documentElement.clientWidth;
+							if (document.documentElement.scrollWidth <= width) return [];
+							return [...document.querySelectorAll('body *')].filter(el => {
+								const r = el.getBoundingClientRect();
+								return r.width > 0 && r.right > width + 1;
+							}).map(el => ({view: document.body.dataset.activeView, width, tag: el.tagName, id: el.id, className: el.className, right: el.getBoundingClientRect().right})).slice(-12);
+						})()`
 					)
-				).toBe(true);
+				).toEqual([]);
 				await capture(`aca-${view}-${width}.png`);
 			}
 		}

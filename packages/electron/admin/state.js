@@ -79,12 +79,12 @@ export const viewMeta = {
 	provider: {
 		kicker: 'AI CONNECTION',
 		title: 'Agent settings',
-		description: 'Choose the AI service and model your agent uses.'
+		description: 'Choose the default AI model for new conversations. Test its response before you start working.'
 	},
 	connections: {
 		kicker: 'YOUR APPS',
 		title: 'Apps',
-		description: 'Choose the app you want to use with your agent.'
+		description: 'Choose how to work with this assistant. Open a card for connection steps, permissions and access details.'
 	},
 	knowledge: {
 		kicker: 'KNOWLEDGE',
@@ -94,6 +94,6 @@ export const viewMeta = {
 	system: {
 		kicker: 'SYSTEM',
 		title: 'System',
-		description: 'Installation details, logs, connection keys, and backup and recovery.'
+		description: 'Protect this assistant, manage its deployment and investigate problems. Open a card to review its settings.'
 	}
 };

@@ -250,7 +250,14 @@ export function bindUiEvents() {
 	}
 
 	for (const button of all('[data-view-target]')) {
-		button.addEventListener('click', () => showView(button.dataset.viewTarget, { focus: true }));
+		button.addEventListener('click', () => {
+			showView(button.dataset.viewTarget, { focus: true });
+			const section = button.dataset.sectionTarget ? byId(button.dataset.sectionTarget) : null;
+			if (section && section.closest('[data-view-panel]')?.dataset.viewPanel === state.currentView) {
+				section.open = true;
+				section.querySelector('summary')?.focus();
+			}
+		});
 	}
 
 	byId('load-logs').addEventListener('click', async () => {

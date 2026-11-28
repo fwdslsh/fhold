@@ -22,7 +22,7 @@
     </svg>
     <main id="admin-settings" class="admin-settings-shell" tabindex="-1" hidden aria-labelledby="admin-settings-title">
       <button id="admin-settings-back" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button>
-      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Settings</h1><p class="page-description">Host connections and preferences for Admin.</p></header>
+      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Admin settings</h1><p class="page-description">Manage host connections and this desktop app. For an assistant’s model, apps or backups, return to its workspace.</p></header>
       <div class="admin-settings-sections">
     <section id="hosting-manager" class="settings-section" aria-labelledby="hosting-manager-title">
       <header class="hosting-manager-header"><div><h2 id="hosting-manager-title">Host connections</h2><p class="help-text">Your saved remote locations. This computer is always available.</p></div><button id="hosting-new" class="secondary" type="button">Add connection</button></header>
@@ -99,7 +99,7 @@
       <section class="welcome-card instance-card" aria-label="Choose an instance">
         <header class="instance-intro">
           <p class="instance-wordmark">f<span aria-hidden="true">/</span>hold</p>
-          <button class="text-button" type="button" data-admin-settings>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
+          <button class="text-button" type="button" data-admin-settings>Admin settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
         </header>
         <div class="library-layout">
           <aside class="library-rail" aria-label="Instance locations and actions">
@@ -126,7 +126,7 @@
             </div>
           </aside>
           <div class="library-content">
-            <header class="library-heading"><h1 id="hosting-chooser-title" tabindex="-1">Assistants</h1></header>
+            <header class="library-heading"><h1 id="hosting-chooser-title" tabindex="-1">Assistants</h1><p class="page-description">Choose an assistant to manage its model, apps and backups. Browse locations to find one on this computer or a saved host.</p></header>
             <p id="instance-preference-warning" class="inline-status error" role="status" hidden></p>
             <div id="instance-options" class="instance-options">
           <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
@@ -179,6 +179,7 @@
           <li><span>3</span><bdi id="install-third-step">Ready</bdi></li>
         </ol>
         <h1 id="welcome-title" class="visually-hidden">Set up fhold</h1>
+        <p class="wizard-context">Install a private assistant, connect its AI model, then check that it can respond.</p>
         <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div id="install-requirements" class="install-requirements" data-install-requirements role="status" aria-live="polite">
@@ -289,6 +290,7 @@
           <li><span>2</span> Review &amp; import</li>
         </ol>
         <h1 id="instance-import-title" class="visually-hidden">Import an instance</h1>
+        <p class="wizard-context">Continue an existing assistant from a verified export. Choose the package, review its contents, then import into an empty folder.</p>
         <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="instance-import-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div class="install-requirements" data-install-requirements role="status" aria-live="polite">
@@ -348,6 +350,7 @@
     <div id="app-shell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-instance">
+          <label class="workspace-context" for="instance-picker">Selected assistant</label>
           <select id="instance-picker" class="sidebar-instance-picker" aria-label="Choose instance">
             <option value="">Loading…</option>
           </select>
@@ -391,7 +394,7 @@
             </div>
           </section>
         </div>
-        <button class="nav-item admin-settings-link" type="button" data-admin-settings><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
+        <button class="nav-item admin-settings-link" type="button" data-admin-settings><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span><span class="workspace-context-inline">Admin </span>Settings</span><span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
       </aside>
 
       <div class="workspace">
@@ -435,7 +438,7 @@
 
             <section class="runtime-panel" aria-labelledby="runtime-heading">
               <div class="section-heading">
-                <div><h2 id="runtime-heading">Services</h2></div>
+                <div><h2 id="runtime-heading">Services</h2><p class="help-text">Run, stop or update this assistant’s services.</p></div>
                 <div class="button-row compact">
                   <button id="start-stack" data-action="host.start" class="secondary" type="button">Start</button>
                   <button id="restart-stack" data-action="host.restart" class="text-button" type="button">Restart</button>
@@ -452,6 +455,15 @@
                   <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
                 <p id="runtime-version-help" class="help-text">Included with this fhold version. Custom image settings are kept.</p>
+              </div>
+            </section>
+
+            <section class="overview-tasks" aria-labelledby="overview-tasks-title">
+              <h2 id="overview-tasks-title">Manage this assistant</h2>
+              <div class="task-grid">
+                <button class="task-card" type="button" data-view-target="provider"><strong>AI model</strong><span>Choose a service and test the model’s response.</span><span class="task-link">Agent settings <span aria-hidden="true">→</span></span></button>
+                <button class="task-card" type="button" data-view-target="connections"><strong>Apps and connections</strong><span>Use OpenCode, connect an app or configure a bot.</span><span class="task-link">Browse apps <span aria-hidden="true">→</span></span></button>
+                <button class="task-card" type="button" data-view-target="system" data-section-target="backup-recovery"><strong>Backup and recovery</strong><span>Protect this assistant or review export options.</span><span class="task-link">Manage backups <span aria-hidden="true">→</span></span></button>
               </div>
             </section>
 
@@ -880,104 +892,8 @@
           </section>
 
           <section id="view-system" class="view-panel ready-only disclosure-inventory" data-view-panel="system" hidden aria-labelledby="view-title">
-            <details id="custody-panel" class="panel panel-disclosure">
-              <summary><span>Private task access · Experimental</span></summary>
-              <p>Store credentials separately from your assistant and approve specific tasks that may use them. Requires the credential custody Docker overlay. These settings may change or be removed.</p>
-              <p class="help-text">Credentials remain plaintext in a private volume, outside normal fhold backups. Trusted host administrators and approved scripts can access them. Approval allows repeated use, without a prompt each time.</p>
-              <button id="custody-load" class="secondary" type="button">Load private task access</button>
-              <p id="custody-status" role="status">Load private task access to inspect this instance.</p>
-              <div id="custody-forms" class="form-stack" hidden>
-                <form id="custody-secret-form" class="form-stack" autocomplete="off">
-                  <h3>Add or replace a credential</h3>
-                  <label class="field" for="custody-secret-name"><span>Credential name</span><input id="custody-secret-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
-                  <label class="field" for="custody-secret-value"><span>Credential value</span><input id="custody-secret-value" type="password" autocomplete="new-password" required maxlength="16384" spellcheck="false" placeholder="Enter the credential privately"></label>
-                  <p class="help-text">The value is sent privately and cleared from this form when submitted. There is no reveal action. Replacing a name changes the credential used by tasks that reference it.</p>
-                  <button class="primary" type="submit">Save credential</button>
-                </form>
-                <form id="custody-task-form" class="form-stack" autocomplete="off">
-                  <h3>Create a task draft</h3>
-                  <label class="field" for="custody-task-name"><span>New task name</span><input id="custody-task-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="check-service"></label>
-                  <label class="field" for="custody-task-credential"><span>Credential name to use</span><input id="custody-task-credential" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
-                  <label class="field" for="custody-task-script"><span>Reviewed shell script</span><textarea id="custody-task-script" required rows="10" maxlength="32768" spellcheck="false" placeholder="#!/bin/sh&#10;set -eu&#10;# Use CREDENTIAL in a fixed, trusted operation."></textarea></label>
-                  <p class="help-text">Start with #!/bin/sh. The credential is provided as CREDENTIAL in the script environment. Never paste its value here, echo it, put it in process arguments, or load assistant-writable code. Use fixed trusted destinations. Existing drafts are not overwritten; create a new name for revisions and revoke the old grant.</p>
-                  <button class="secondary" type="submit">Save draft for review</button>
-                </form>
-                <h3>Admin-created tasks</h3>
-                <p class="help-text">Manual tasks and grants are preserved and are not managed in this list.</p>
-                <div id="custody-task-list" class="button-row"></div>
-                <div id="custody-review-panel" class="form-stack" hidden>
-                  <h3>Review task access</h3>
-                  <p id="custody-grant-status"></p>
-                  <pre id="custody-review" class="custody-review"></pre>
-                  <label><input id="custody-reviewed" type="checkbox"> I reviewed the entire script, its dependencies and destinations, and trust it to use this credential.</label>
-                  <div class="button-row"><button id="custody-approve" class="primary" type="button">Approve task</button><button id="custody-revoke" class="secondary" type="button">Revoke task access</button></div>
-                </div>
-              </div>
-            </details>
-            <details id="deployment-settings" class="panel panel-disclosure">
-              <summary>Deployment settings</summary>
-              <p id="deployment-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="deployment-fields" class="capability-fields" data-instance-feature="host.deployment.prepare" aria-describedby="deployment-fields-unavailable">
-                <p class="help-text">Save a small pending change, then choose when to apply it. Unrelated deployment settings are preserved. Changing availability does not silently change scheduling.</p>
-                <button id="load-deployment-settings" class="secondary" type="button">Load current settings</button>
-                <form id="deployment-edit-form" class="form-stack" hidden>
-                  <p id="deployment-current" class="help-text"></p>
-                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability" aria-describedby="deployment-availability-help"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select><small id="deployment-availability-help"></small></label>
-                  <label class="field" for="deployment-container"><span>Image to update</span><select id="deployment-container"></select></label>
-                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" aria-describedby="deployment-image-help" /><small id="deployment-image-help"></small></label>
-                  <p class="help-text">The settings below apply to the Assistant, regardless of the image selected above.</p>
-                  <label class="field" for="deployment-timezone"><span>Scheduler timezone (optional)</span><input id="deployment-timezone" placeholder="Keep current timezone" aria-describedby="deployment-timezone-help" /><small id="deployment-timezone-help"></small></label>
-                  <label class="field" for="deployment-schedule"><span>Scheduling</span><select id="deployment-schedule"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-schedule-current"></small></label>
-                  <label class="field" for="deployment-claude"><span>Claude worker startup</span><select id="deployment-claude"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-claude-current"></small></label>
-                  <label class="field" for="deployment-codex"><span>Codex worker startup</span><select id="deployment-codex"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-codex-current"></small></label>
-                  <p class="help-text">Worker startup is separate from native sign-in and consent. Outbound connections cannot wake an on-demand instance. No credentials are saved in this draft.</p>
-                  <div class="button-row"><button class="primary" type="submit">Save changes</button><button id="discard-deployment" class="secondary" type="button">Discard pending changes</button></div>
-                </form>
-              </fieldset>
-            </details>
-            <details id="installation-details" class="panel panel-disclosure">
-              <summary id="diagnostics-heading">Installation details</summary>
-              <dl class="detail-list">
-                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
-                <div><dt>Instance location</dt><dd id="home">Loading…</dd></div>
-                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
-                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
-              </dl>
-              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
-              <a id="deployment-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open deployment tools</a>
-              <pre id="deployment-revisions" class="help-text" hidden></pre>
-            </details>
-
-            <details id="recent-logs" class="panel panel-disclosure">
-              <summary>Recent logs</summary>
-              <p id="log-help" class="help-text"></p>
-              <div class="field-grid three-column">
-                <label class="field" for="log-source"><span>Source</span><select id="log-source"><option value="system">System</option><option value="console">Agent console</option></select></label>
-                <label class="field" for="log-revision"><span>Revision</span><select id="log-revision"><option value="">Current</option></select></label>
-                <label class="field" for="log-container"><span>Container</span><select id="log-container"><option value="">All services</option></select></label>
-              </div>
-              <button id="load-logs" class="secondary" type="button">Load logs</button>
-              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
-            </details>
-
-            <details id="connection-keys" class="panel panel-disclosure">
-              <summary><span>Connection keys <small>Advanced security maintenance</small></span></summary>
-              <p id="keys-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials.revealKey" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
-              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
-              <form id="key-rotation-form" class="form-stack">
-                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
-                <button class="secondary" type="submit">Rotate key</button>
-              </form>
-              <div id="rotated-key-details" hidden>
-                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
-                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
-              </div>
-              </fieldset>
-            </details>
-
             <details id="backup-recovery" class="panel panel-disclosure">
-              <summary><span>Backup and recovery <small>Automatic backups and manual exports</small></span></summary>
+              <summary><span>Backup and recovery <small>Protect conversations and sign-ins, restore an Assistant or export files.</small></span></summary>
               <p class="section-intro">Protect the same Assistant with automatic backups, or export an entire stopped instance or reviewed portable content. The same backup settings work with persistent and replaceable containers.</p>
               <details id="runtime-recovery" class="disclosure" open>
                 <summary>Automatic Assistant backups</summary>
@@ -1090,6 +1006,99 @@
                 </fieldset>
               </details>
 
+            </details>
+            <details id="deployment-settings" class="panel panel-disclosure">
+              <summary><span>Deployment settings<small>Change images, availability and worker startup. Review before applying.</small></span></summary>
+              <p id="deployment-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="deployment-fields" class="capability-fields" data-instance-feature="host.deployment.prepare" aria-describedby="deployment-fields-unavailable">
+                <p class="help-text">Save a small pending change, then choose when to apply it. Unrelated deployment settings are preserved. Changing availability does not silently change scheduling.</p>
+                <button id="load-deployment-settings" class="secondary" type="button">Load current settings</button>
+                <form id="deployment-edit-form" class="form-stack" hidden>
+                  <p id="deployment-current" class="help-text"></p>
+                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability" aria-describedby="deployment-availability-help"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select><small id="deployment-availability-help"></small></label>
+                  <label class="field" for="deployment-container"><span>Image to update</span><select id="deployment-container"></select></label>
+                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" aria-describedby="deployment-image-help" /><small id="deployment-image-help"></small></label>
+                  <p class="help-text">The settings below apply to the Assistant, regardless of the image selected above.</p>
+                  <label class="field" for="deployment-timezone"><span>Scheduler timezone (optional)</span><input id="deployment-timezone" placeholder="Keep current timezone" aria-describedby="deployment-timezone-help" /><small id="deployment-timezone-help"></small></label>
+                  <label class="field" for="deployment-schedule"><span>Scheduling</span><select id="deployment-schedule"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-schedule-current"></small></label>
+                  <label class="field" for="deployment-claude"><span>Claude worker startup</span><select id="deployment-claude"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-claude-current"></small></label>
+                  <label class="field" for="deployment-codex"><span>Codex worker startup</span><select id="deployment-codex"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-codex-current"></small></label>
+                  <p class="help-text">Worker startup is separate from native sign-in and consent. Outbound connections cannot wake an on-demand instance. No credentials are saved in this draft.</p>
+                  <div class="button-row"><button class="primary" type="submit">Save changes</button><button id="discard-deployment" class="secondary" type="button">Discard pending changes</button></div>
+                </form>
+              </fieldset>
+            </details>
+            <details id="installation-details" class="panel panel-disclosure">
+              <summary id="diagnostics-heading"><span>Installation details<small>Find this assistant’s location, configuration and native access.</small></span></summary>
+              <dl class="detail-list">
+                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
+                <div><dt>Instance location</dt><dd id="home">Loading…</dd></div>
+                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
+                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
+              </dl>
+              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
+              <a id="deployment-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open deployment tools</a>
+              <pre id="deployment-revisions" class="help-text" hidden></pre>
+            </details>
+            <details id="recent-logs" class="panel panel-disclosure">
+              <summary><span>Recent logs<small>Inspect service output when something needs attention.</small></span></summary>
+              <p id="log-help" class="help-text"></p>
+              <div class="field-grid three-column">
+                <label class="field" for="log-source"><span>Source</span><select id="log-source"><option value="system">System</option><option value="console">Agent console</option></select></label>
+                <label class="field" for="log-revision"><span>Revision</span><select id="log-revision"><option value="">Current</option></select></label>
+                <label class="field" for="log-container"><span>Container</span><select id="log-container"><option value="">All services</option></select></label>
+              </div>
+              <button id="load-logs" class="secondary" type="button">Load logs</button>
+              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
+            </details>
+            <details id="connection-keys" class="panel panel-disclosure">
+              <summary><span>Connection keys <small>Replace an exposed key and reconnect the apps that use it.</small></span></summary>
+              <p id="keys-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials.revealKey" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
+              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
+              <form id="key-rotation-form" class="form-stack">
+                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
+                <button class="secondary" type="submit">Rotate key</button>
+              </form>
+              <div id="rotated-key-details" hidden>
+                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
+                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
+              </div>
+              </fieldset>
+            </details>
+            <details id="custody-panel" class="panel panel-disclosure">
+              <summary><span>Private task access · Experimental<small>Review specific tasks that may use separately stored credentials.</small></span></summary>
+              <p>Store credentials separately from your assistant and approve specific tasks that may use them. Requires the credential custody Docker overlay. These settings may change or be removed.</p>
+              <p class="help-text">Credentials remain plaintext in a private volume, outside normal fhold backups. Trusted host administrators and approved scripts can access them. Approval allows repeated use, without a prompt each time.</p>
+              <button id="custody-load" class="secondary" type="button">Load private task access</button>
+              <p id="custody-status" role="status">Load private task access to inspect this instance.</p>
+              <div id="custody-forms" class="form-stack" hidden>
+                <form id="custody-secret-form" class="form-stack" autocomplete="off">
+                  <h3>Add or replace a credential</h3>
+                  <label class="field" for="custody-secret-name"><span>Credential name</span><input id="custody-secret-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-secret-value"><span>Credential value</span><input id="custody-secret-value" type="password" autocomplete="new-password" required maxlength="16384" spellcheck="false" placeholder="Enter the credential privately"></label>
+                  <p class="help-text">The value is sent privately and cleared from this form when submitted. There is no reveal action. Replacing a name changes the credential used by tasks that reference it.</p>
+                  <button class="primary" type="submit">Save credential</button>
+                </form>
+                <form id="custody-task-form" class="form-stack" autocomplete="off">
+                  <h3>Create a task draft</h3>
+                  <label class="field" for="custody-task-name"><span>New task name</span><input id="custody-task-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="check-service"></label>
+                  <label class="field" for="custody-task-credential"><span>Credential name to use</span><input id="custody-task-credential" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-task-script"><span>Reviewed shell script</span><textarea id="custody-task-script" required rows="10" maxlength="32768" spellcheck="false" placeholder="#!/bin/sh&#10;set -eu&#10;# Use CREDENTIAL in a fixed, trusted operation."></textarea></label>
+                  <p class="help-text">Start with #!/bin/sh. The credential is provided as CREDENTIAL in the script environment. Never paste its value here, echo it, put it in process arguments, or load assistant-writable code. Use fixed trusted destinations. Existing drafts are not overwritten; create a new name for revisions and revoke the old grant.</p>
+                  <button class="secondary" type="submit">Save draft for review</button>
+                </form>
+                <h3>Admin-created tasks</h3>
+                <p class="help-text">Manual tasks and grants are preserved and are not managed in this list.</p>
+                <div id="custody-task-list" class="button-row"></div>
+                <div id="custody-review-panel" class="form-stack" hidden>
+                  <h3>Review task access</h3>
+                  <p id="custody-grant-status"></p>
+                  <pre id="custody-review" class="custody-review"></pre>
+                  <label><input id="custody-reviewed" type="checkbox"> I reviewed the entire script, its dependencies and destinations, and trust it to use this credential.</label>
+                  <div class="button-row"><button id="custody-approve" class="primary" type="button">Approve task</button><button id="custody-revoke" class="secondary" type="button">Revoke task access</button></div>
+                </div>
+              </div>
             </details>
           </section>
         </main>

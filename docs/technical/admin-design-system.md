@@ -54,7 +54,7 @@ instructions and editable prose do not.
 | Field | Persistent visible label, full-width control within its form, helper below, common height with its adjacent button. A placeholder is not a label. |
 | Checkbox/radio | 16px native mark and a generous clickable label. Never turn ordinary options into oversized colored switches or policy cards. |
 | Navigation | Same icon/text alignment and neutral selected surface; `aria-current` identifies the active page. The agent picker has no brand mark or path. |
-| Disclosure | Explicit chevron, consistent hit area and open/hover/focus states. Apps/System are separator-based inventories, not stacks of independent cards. Nested advanced settings use the same smaller disclosure component. |
+| Disclosure | Explicit chevron, consistent hit area and open/hover/focus states. Apps/System use responsive task cards with purpose text visible when closed. Expanded cards span the row; nested advanced settings use the smaller disclosure component. |
 | Status | Concise text, optionally a small decorative dot. Running is not authenticated or paired. Color alone never carries meaning. |
 | Feedback | Shared bordered notice/callout, contextual error and next action. Keep pending restart in the sidebar and preserve explicit restart confirmation. |
 | Dialog | Named native dialog, bounded width/height, ordinary form components and separated footer. Cancel precedes the final primary action. Escape and native focus containment remain available. |
@@ -69,8 +69,10 @@ context; active work must never appear completed optimistically.
 
 ## Screen composition
 
-Every selected instance uses the same four pages: Overview, Agent settings,
-Apps and System. Hosting providers never replace the navigation or page layout.
+Every selected instance uses the same navigation: Overview, Agent settings,
+Knowledge, Apps and System. Knowledge retains its native embedded AKM browser,
+header and full-height layout. Card styles belong to management content, not
+the embedded browser or its shell. Hosting providers never replace the navigation or page layout.
 The renderer maps the selected snapshot into one presentation contract; it does
 not branch on provider names. A missing management capability disables the existing
 section's native fieldset and explains why immediately above it. The disclosure
@@ -82,22 +84,26 @@ with a reason when unsupported. A platform status is not native-agent readiness.
 Logs and installation details remain under System, not on a separate cloud page.
 
 - **Assistant library:** stable location/task rail and named recent/discovered
-  rows. Empty recents do not mean no instances exist. New/import are separate.
+  cards with locations. Empty recents do not mean no instances exist. New/import are separate.
 - **Overview:** named assistant, observed status/location/path, one OpenCode
-  action and one service inventory. Update/version information stays together.
+  action and one service card. Update/version information stays together.
+  Task cards lead to models, apps and directly to Backup and recovery without
+  executing an operation.
 - **Agent settings:** current model first; native service/model editing uses
   the same fields, list choices and action hierarchy. Never imply saved sign-in
   proves readiness.
 - **Apps:** one inventory ordered OpenCode, Claude, Codex, Discord, Slack, MCP.
   Settings and permissions stay with the app, with advanced actions subordinate.
-- **System:** installation, logs, key maintenance and one Backup and recovery
-  hub use the same disclosure inventory. Common automatic backup settings do
+- **System:** Backup and recovery comes first, followed by deployment,
+  installation, logs, key maintenance and experimental private task access.
+  Each card explains its purpose before opening. Common automatic backup settings do
   not ask users to classify a container as ephemeral. Manual export actions
   remain inside the hub with accurate coverage and
   stopped-writer/sensitive-data consequences. Instructions must name
   actual current controls, not retired Welcome/import toggles.
-- **Admin Settings:** connection rows, bounded editor and update-preference
-  rows. Do not visually turn host connections into agent Apps or AI accounts.
+- **Admin Settings:** separate cards for host connections, application-menu
+  installation and desktop updates, with bounded editors and preference rows.
+  The page explains its Admin-wide scope; assistant settings stay in the workspace.
 - **Setup/import:** stable top anchor, compact task identity, one step at a
   time, a visible exit and shared field/action components. Do not restore the
   removed Welcome/Create headings.

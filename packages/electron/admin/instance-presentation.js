@@ -61,6 +61,7 @@ export function renderInstanceCapabilities(snapshot) {
 export function renderInstanceDetails(snapshot) {
 	const view = instancePresentation(snapshot);
 	setText('overview-home', view.path);
+	byId('overview-home').hidden = view.path === view.location;
 	setText('home', view.path);
 	setText('instance-name', view.name);
 	setText('config-path', view.docker?.configPath || 'Not managed through this connection');

@@ -382,13 +382,13 @@ beforeEach(() => {
 	);
 	selector(
 		'[data-instance-feature]',
-		...[...html.matchAll(/<(?:fieldset|div) id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(
-			(match) => {
-				const fields = control(match[1]);
-				fields.dataset.instanceFeature = match[2];
-				return fields;
-			}
-		)
+		...[
+			...html.matchAll(/<(?:fieldset|div) id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)
+		].map((match) => {
+			const fields = control(match[1]);
+			fields.dataset.instanceFeature = match[2];
+			return fields;
+		})
 	);
 	selector(
 		'#install-advanced input',
@@ -720,9 +720,11 @@ describe('Admin static security boundary', () => {
 	it('reports a Knowledge launch failure without adding a retry button or a render retry loop', async () => {
 		state.currentSnapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
 		let attempts = 0;
-		state.api = { openKnowledge: async () => {
-			if (++attempts === 1) throw new Error('Could not load this Assistant’s AKM UI.');
-		} };
+		state.api = {
+			openKnowledge: async () => {
+				if (++attempts === 1) throw new Error('Could not load this Assistant’s AKM UI.');
+			}
+		};
 		bindConnectionsEvents();
 		showView('knowledge');
 		await Promise.resolve();
@@ -1054,7 +1056,14 @@ describe('Admin static security boundary', () => {
 	it('groups automatic backup and manual export in one System hub without a container-lifetime mode', () => {
 		const start = html.indexOf('<section id="view-system"');
 		const system = html.slice(start, html.indexOf('</main>', start));
-		const ids = ['installation-details', 'recent-logs', 'connection-keys', 'backup-recovery'];
+		const ids = [
+			'backup-recovery',
+			'deployment-settings',
+			'installation-details',
+			'recent-logs',
+			'connection-keys',
+			'custody-panel'
+		];
 		const positions = ids.map((id) => system.indexOf(`<details id="${id}"`));
 		expect(positions.every((position) => position >= 0)).toBe(true);
 		expect(positions).toEqual([...positions].sort((a, b) => a - b));
