@@ -74,6 +74,7 @@ import {
 import { openAdminSettings, closeAdminSettings, renderAdminSettings } from '../admin/settings.js';
 import {
 	initializeAdmin,
+	openInstance,
 	renderWelcome,
 	renderInstancePicker,
 	bindInstanceEvents,
@@ -179,6 +180,7 @@ class Control {
 	setAttribute(name: string, value: string) {
 		this.attributes.set(name, value);
 	}
+	hasAttribute(name: string) { return this.attributes.has(name); }
 	getAttribute(name: string) {
 		return this.attributes.get(name) ?? null;
 	}
@@ -1064,10 +1066,10 @@ describe('Admin static security boundary', () => {
 			'connection-keys',
 			'custody-panel'
 		];
-		const positions = ids.map((id) => system.indexOf(`<details id="${id}"`));
+		const positions = ids.map((id) => system.indexOf(`<section id="${id}"`));
 		expect(positions.every((position) => position >= 0)).toBe(true);
 		expect(positions).toEqual([...positions].sort((a, b) => a - b));
-		const backupHub = system.slice(system.indexOf('<details id="backup-recovery"'));
+		const backupHub = system.slice(system.indexOf('<section id="backup-recovery"'));
 		expect(backupHub.indexOf('id="runtime-recovery"')).toBeLessThan(
 			backupHub.indexOf('id="import-export"')
 		);
@@ -1670,11 +1672,11 @@ describe('Admin static security boundary', () => {
 		);
 	});
 
-	it('opens optional portal tokens before focusing a validation or setup target', async () => {
+	it('focuses visible portal tokens for a validation or setup target', async () => {
 		state.currentSnapshot = normalizedSnapshot({ config: defaultStackConfig() });
 		showPortalTokenForm('discord');
 		await Bun.sleep(0);
-		expect(control('discord-tokens').open).toBe(true);
+		expect(html).toContain('<section id="discord-tokens"');
 		expect(control('discord-bot-token').focused).toBe(true);
 		expect(control('slack-tokens').open).toBe(false);
 	});
@@ -1780,10 +1782,10 @@ describe('Admin static security boundary', () => {
 		for (const name of ['Claude remote connection', 'Codex'])
 			expect(html).toMatch(
 				new RegExp(
-					`<summary><span>${name}<small>[^<]*<\\/small><\\/span><span class="card-label">Experimental<\\/span><\\/summary>`
+					`<h[23][^>]*><span>${name}<small>[^<]*<\\/small><\\/span><span class="card-label">Experimental<\\/span><\\/h[23]>`
 				)
 			);
-		expect(html).toMatch(/<summary><span>Desktop chat<small>[^<]*<\/small><\/span><\/summary>/);
+		expect(html).toMatch(/<h3><span>Desktop chat<small>[^<]*<\/small><\/span><\/h3>/);
 		for (const tool of ['claude', 'codex']) {
 			const button = new Control();
 			button.dataset.remoteConnect = tool;
@@ -2154,16 +2156,10 @@ describe('Admin instance picker and automatic status', () => {
 			{ kind: 'local', homeDir: '/missing/june' }
 		];
 		render(snapshot);
-		expect(control('instance-picker').options.map((option) => option.textContent)).toEqual([
-			'personal-agent',
-			'may',
-			'june',
-			'Open another instance…'
-		]);
-		expect(control('instance-picker').value).toBe(snapshot.identity.ref.homeDir);
+		expect(control('instance-picker').textContent).toBe('personal-agent');
 		const sidebarStart = html.indexOf('<aside class="sidebar">');
 		const sidebar = html.slice(sidebarStart, html.indexOf('</aside>', sidebarStart));
-		expect(sidebar).toContain('aria-label="Choose instance"');
+		expect(sidebar).toContain('aria-label="Choose another assistant"');
 		for (const removed of [
 			'sidebar-footer',
 			'stack-status',
@@ -2195,11 +2191,9 @@ describe('Admin instance picker and automatic status', () => {
 			}
 		};
 		bindInstanceEvents();
-		control('instance-picker').value = '/other';
-		await control('instance-picker').listeners.get('change')?.({});
+		await openInstance(state.recentInstances[0]);
 		expect(opened).toEqual(state.recentInstances[0]);
 		expect(reloads).toBe(1);
-		expect(control('instance-picker').value).toBe(state.currentSnapshot.identity.ref.homeDir);
 	});
 	it('browses other instances without discarding selection or drafts, and only confirms an explicit switch', async () => {
 		state.currentSnapshot = emptySnapshot();
@@ -2226,8 +2220,8 @@ describe('Admin instance picker and automatic status', () => {
 		};
 		bindInstanceEvents();
 		const choose = async (value: string) => {
-			control('instance-picker').value = value;
-			await control('instance-picker').listeners.get('change')?.({});
+			if (value === 'open-another') await control('instance-picker').listeners.get('click')?.({});
+			else await openInstance(state.recentInstances[0]);
 		};
 		state.dirtyForms.add('preferences-form');
 		await choose('/missing');
@@ -2236,7 +2230,6 @@ describe('Admin instance picker and automatic status', () => {
 		expect(reloads).toBe(0);
 		expect(control('open-hosting').hidden).toBe(false);
 		expect(state.dirtyForms.has('preferences-form')).toBe(true);
-		expect(control('instance-picker').value).toBe(state.currentSnapshot.identity.ref.homeDir);
 		state.dirtyForms.clear();
 		await choose('/missing');
 		expect(control('notice-message').textContent).toBe('Recent instance is unavailable');
@@ -3562,11 +3555,11 @@ describe('Admin renderer behavior', () => {
 		expect(control('view-title').focused).toBe(true);
 	});
 
-	it('opens the requested app disclosure in Connections without separate client tabs', () => {
+	it('routes app shortcuts to Connections; browser tests verify the dedicated editor', () => {
 		state.currentSnapshot = normalizedSnapshot();
 		showConnectionApp('claude');
 		expect(state.currentView).toBe('connections');
-		expect(control('claude-connection').open).toBe(true);
+		expect(html).toContain('<section id="claude-connection"');
 		expect(control('opencode-connection').open).toBe(false);
 		expect(html).not.toContain('data-client-panel');
 		showConnectionApp('not-an-app');

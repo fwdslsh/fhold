@@ -266,7 +266,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				'agent.selectModel':async value=>{qa.calls.push({operation:'use',...value});if(!qa.rejectUse)qa.settings.currentModel={...value};return structuredClone(qa.settings);},
 				'agent.removeProvider':async value=>{qa.calls.push({operation:'remove',...value});const item=qa.settings.providers.find(item=>item.id===value.provider);if(value.endpoint){item.disabled=true;item.connected=false;item.models=[];}else item.authenticated=false;return structuredClone(qa.settings);},
 };
-			render(${JSON.stringify(snapshot)});showView('provider');bindUiEvents();providers.bindProvidersEvents();await providers.loadProviders(false,true);
+			window.openAdminDetail=(await import('./navigation.js')).openDetail;render(${JSON.stringify(snapshot)});showView('provider');bindUiEvents();providers.bindProvidersEvents();await providers.loadProviders(false,true);
 		})()`);
 		const idle = async () => {
 			const deadline = Date.now() + 10000;
@@ -466,11 +466,25 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		);
 		await capture('apps-desktop.png');
 		for (const app of ['opencode', 'claude', 'codex', 'discord', 'slack', 'mcp']) {
-			await evaluate(`document.querySelector('#${app}-connection').open=true`);
-			if (app === 'claude')
-				await evaluate("document.querySelector('#claude-connection .connection-method').open=true");
+			await evaluate(`window.openAdminDetail('${app}-connection')`);
 			await capture(`app-${app}-desktop.png`);
 		}
+		// Back retains drafts and restores focus. Snapshot refreshes keep the editor open.
+		await pointerClick('[data-view="connections"]');
+		await pointerClick('[data-detail-target="discord-connection"]');
+		expect(await evaluate("document.activeElement === document.querySelector('#discord-connection > h2')")).toBe(true);
+		expect(await evaluate("document.querySelector('#view-connections > nav').hidden")).toBe(true);
+		expect(await evaluate("document.querySelectorAll('#view-connections details').length")).toBe(0);
+		await value('#discord-users', '123456789');
+		await pointerClick('#discord-connection > .detail-back');
+		expect(await evaluate("document.activeElement.dataset.detailTarget")).toBe('discord-connection');
+		await keypress('Enter', 'Enter', 13);
+		expect(await evaluate("document.querySelector('#discord-users').value")).toBe('123456789');
+		await evaluate("import('./snapshot.js').then(({render})=>render(window.overviewQa))");
+		expect(await evaluate("document.querySelector('#discord-connection').hidden")).toBe(false);
+		expect(await evaluate("document.querySelector('#discord-users').value")).toBe('123456789');
+		await evaluate("window.providerQa.state.dirtyForms.clear()");
+		expect(await evaluate("document.querySelector('#main-content').getBoundingClientRect().width >= document.querySelector('.workspace').clientWidth - 64")).toBe(true);
 		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
 		await capture('system-desktop.png');
 		// The Overview guideposts use the actual navigation handlers and native
@@ -480,20 +494,20 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate("document.querySelector('[data-section-target=backup-recovery]').focus()");
 		await keypress('Enter', 'Enter', 13);
 		expect(await evaluate('document.body.dataset.activeView')).toBe('system');
-		expect(await evaluate("document.querySelector('#backup-recovery').open")).toBe(true);
+		expect(await evaluate("!document.querySelector('#backup-recovery').hidden")).toBe(true);
 		expect(
 			await evaluate(
-				"document.activeElement === document.querySelector('#backup-recovery > summary')"
+				"document.activeElement === document.querySelector('#backup-recovery > h2')"
 			)
 		).toBe(true);
 		expect(await evaluate('window.providerQa.calls.length')).toBe(callsBeforeShortcut);
-		expect(await evaluate("document.querySelector('#view-system > details').id")).toBe(
+		expect(await evaluate("document.querySelector('#view-system > [data-detail-page]').id")).toBe(
 			'backup-recovery'
 		);
 		await capture('overview-backup-shortcut.png');
-		await evaluate("document.querySelector('#backup-recovery > summary').focus()");
+		await evaluate("document.querySelector('#backup-recovery > .detail-back').focus()");
 		await keypress('Enter', 'Enter', 13);
-		expect(await evaluate("document.querySelector('#backup-recovery').open")).toBe(false);
+		expect(await evaluate("!document.querySelector('#backup-recovery').hidden")).toBe(false);
 		for (const view of ['overview', 'provider', 'connections', 'system']) {
 			await command('Emulation.setEmulatedMedia', {
 				features: [{ name: 'prefers-color-scheme', value: 'light' }]
@@ -509,7 +523,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate("import('./ui.js').then(({showView})=>showView('system'))");
 		for (const section of ['installation-details', 'import-export', 'runtime-recovery']) {
 			await evaluate(
-				`for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id===${JSON.stringify(section)}||panel.id==='backup-recovery'; document.querySelector('#${section}').open=true`
+				`window.openAdminDetail(${JSON.stringify(section)})`
 			);
 			await capture(`system-${section}-desktop.png`);
 		}
@@ -550,7 +564,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		// Native dialog presentation and Escape/focus containment, without starting
 		// vendor sign-in, changing a policy or granting tool access.
 		await evaluate(
-			`(async()=>{const {bindRemoteEvents}=await import('./remote.js');const {showView}=await import('./ui.js');bindRemoteEvents();showView('connections');document.querySelector('#claude-connection').open=true;document.querySelectorAll('#claude-connection .connection-method')[1].open=true;})()`
+			`(async()=>{const {bindRemoteEvents}=await import('./remote.js');const {showView}=await import('./ui.js');bindRemoteEvents();showView('connections');window.openAdminDetail('claude-connection');})()`
 		);
 		await pointerClick('[data-remote-enable="claude"]');
 		expect(await evaluate("document.querySelector('#remote-trust').checked")).toBe(false);
@@ -564,7 +578,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await keypress('Escape', 'Escape', 27);
 		expect(await evaluate("document.querySelector('#remote-dialog').open")).toBe(false);
 		await evaluate(
-			`document.querySelector('#advanced-access').open=true;document.querySelector('#permissions-dialog').showModal()`
+			`window.openAdminDetail('advanced-access');document.querySelector('#permissions-dialog').showModal()`
 		);
 		await capture('permissions-dialog-desktop.png');
 		expect(await evaluate("document.querySelector('#permissions-dialog').open")).toBe(true);
@@ -597,7 +611,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			'team/second-model'
 		);
 		expect(await evaluate("document.querySelector('#provider-editor').hidden")).toBe(true);
-		expect(await evaluate("document.querySelector('#provider-saved-accounts').open")).toBe(false);
+		expect(await evaluate("document.querySelector('#provider-saved-accounts').tagName")).toBe('SECTION');
 		expect(await count('test')).toBe(0);
 		await capture('model-current-unverified.png');
 		expect(await evaluate("document.querySelector('#instance-page-header').hidden")).toBe(false);
@@ -732,7 +746,6 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			}
 			await click('#cancel-provider-editor');
 		}
-		await evaluate("document.querySelector('#provider-saved-accounts').open=true");
 		await capture('model-saved-setups.png');
 		expect(
 			await evaluate(
@@ -984,7 +997,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(await evaluate("document.querySelector('#provider-fields').disabled")).toBe(false);
 		expect(await evaluate("document.querySelector('#transfer-fields').disabled")).toBe(false);
 		await evaluate(
-			`(async()=>{const {state}=await import('./state.js');window.logQa=[];window.qaOps['host.logs']=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};document.querySelector('#recent-logs').open=true;})()`
+			`(async()=>{const {state}=await import('./state.js');window.logQa=[];window.qaOps['host.logs']=async options=>{window.logQa.push(options??null);return 'Synthetic logs';};window.openAdminDetail('recent-logs');})()`
 		);
 		await click('#load-logs');
 		expect(await evaluate('window.logQa.at(-1)')).toEqual({ tail: 250 });
@@ -1019,7 +1032,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		).toBe(true);
 		expect(await evaluate("document.querySelector('#update-stack').disabled")).toBe(true);
 		expect(
-			await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")
+			await evaluate("document.querySelector('#instance-picker').textContent")
 		).toBe('cloud-agent · cloud');
 		await evaluate(`(async()=>{
 			const {state}=await import('./state.js');
@@ -1071,7 +1084,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe(true);
 		await evaluate(
-			"document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true"
+			"window.openAdminDetail('backup-recovery'); window.openAdminDetail('import-export')"
 		);
 		await value('#log-source', 'console');
 		await click('#load-logs');
@@ -1093,7 +1106,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		await evaluate("document.querySelector('#add-provider-service').focus()");
 		expect(await evaluate("document.activeElement.id==='add-provider-service'")).toBe(false);
 		await pointerClick('[data-view="connections"]');
-		await pointerClick('#discord-connection > summary');
+		await pointerClick('[data-detail-target=discord-connection]');
 		expect(
 			await evaluate(
 				"document.querySelector('#discord').matches(':disabled') && !document.querySelector('#discord-fields-unavailable').hidden"
@@ -1162,7 +1175,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			)
 		).toBe(true);
 		expect(
-			await evaluate("document.querySelector('#instance-picker').selectedOptions[0].textContent")
+			await evaluate("document.querySelector('#instance-picker').textContent")
 		).toBe('cloud-agent · lab');
 		await evaluate(
 			`(async()=>{const {bindRestartEvents}=await import('./restart.js');bindRestartEvents();})()`
@@ -1270,7 +1283,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		expect(
 			await evaluate('window.connectionQa.connections.find(item=>item.id==="krang").roots')
 		).toEqual(['/opt/stacks']);
-		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('krang');
+		expect(await evaluate("window.providerQa.state.hostingConnectionId")).toBe('krang');
 		await capture('hosting-connections-desktop.png');
 		await click('button[aria-label="Remove Krang lab"]');
 		expect(await evaluate('window.connectionQa.removed')).toBe(0);
@@ -1324,7 +1337,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			document.querySelector('#hosting-discover').click();
 		})()`);
 		await evaluate(
-			`document.querySelector('#hosting-connection').value='local';document.querySelector('#hosting-connection').dispatchEvent(new Event('change'));window.rejectOldDiscovery(Error('Old connection failure'));`
+			`window.providerQa.state.hostingConnectionId='another-location';document.querySelector('#hosting-status').hidden=true;document.querySelector('#hosting-instance-list').replaceChildren();window.rejectOldDiscovery(Error('Old connection failure'));`
 		);
 		expect(await evaluate("document.querySelector('#hosting-status').hidden")).toBe(true);
 		expect(await evaluate("document.querySelector('#hosting-instance-list').children.length")).toBe(
@@ -1370,13 +1383,14 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			apps:{config:{state:'not-inspected',reason:'Not managed.'},connections:{state:'not-inspected',reason:'Connect explicitly.'},status:{state:'not-inspected',reason:'Not managed.'}},
 			data:{recovery:{state:'not-inspected',reason:'Not managed.'}}
 		});state.dirtyForms.add('preferences-form');})()`);
-		await value('#instance-picker', 'open-another', 'change');
+		await click('#instance-picker');
+		await click('[data-connection-id=local]');
 		expect(
 			await evaluate(
 				"!document.querySelector('#open-hosting').hidden && document.querySelector('#app-shell').hidden"
 			)
 		).toBe(true);
-		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('local');
+		expect(await evaluate("window.providerQa.state.hostingConnectionId")).toBe('local');
 		expect(
 			await evaluate("document.querySelector('#hosting-instance-list .instance-name').textContent")
 		).toBe('april');
@@ -1398,10 +1412,11 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			`(async()=>{const {state}=await import('./state.js');const {renderWelcome}=await import('./instances.js');state.currentSnapshot=null;state.dirtyForms.clear();renderWelcome(window.instanceQaWelcome);})()`
 		);
 		expect(
-			await evaluate("document.querySelector('#begin-new-instance').classList.contains('primary')")
+			await evaluate("document.querySelector('#begin-new-instance').classList.contains('navigation-card')")
 		).toBe(true);
 		await click('#connect-host');
-		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('local');
+		await click('[data-connection-id=local]');
+		expect(await evaluate("window.providerQa.state.hostingConnectionId")).toBe('local');
 		expect(
 			await evaluate(
 				"!document.querySelector('#choose-instance').hidden && document.querySelector('#hosting-open-folder').hidden"
@@ -1425,10 +1440,12 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 		);
 		await capture('instances-open-error.png');
 		await click('#connect-host');
+		await click('[data-connection-id=local]');
 		expect(await evaluate("document.querySelector('#instance-preference-warning').hidden")).toBe(
 			true
 		);
-		await value('#hosting-connection', 'krang', 'change');
+		await click('#hosting-locations-back');
+		await click('[data-connection-id=krang]');
 		expect(
 			await evaluate(
 				"!document.querySelector('#hosting-open-folder').hidden && document.querySelector('#choose-instance').hidden"
@@ -1471,7 +1488,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			mobile: false
 		});
 		await click('#hosting-manage');
-		expect(await evaluate("document.querySelector('#hosting-connection').value")).toBe('krang');
+		expect(await evaluate("window.providerQa.state.hostingConnectionId")).toBe('krang');
 		const discoveryCount = (await evaluate('window.instanceQa.discoveries.length')) as number;
 		await click('#admin-settings-back');
 		expect(await evaluate('window.instanceQa.discoveries.length')).toBeGreaterThan(discoveryCount);
@@ -1618,7 +1635,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			state.api.applyDeployment=async()=>{window.cloudDraftQa.applied++;throw Error('Later must not apply cloud changes');};
 			state.api.confirmRestart=async action=>{window.cloudDraftQa.confirmations.push(action);return false;};
 			bindConfigurationEvents();render(window.cloudAccessQa);
-			document.querySelector('#deployment-settings').open=true;
+			window.openAdminDetail('deployment-settings');
 		})()`);
 		await click('#load-deployment-settings');
 		await value('#deployment-availability', 'on-demand');
@@ -1657,7 +1674,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 				window.cloudDraftQa.prepared=[];window.cloudDraftQa.confirmations=[];
 				window.cloudDraftQa.settings={containers:[{name:'assistant',image:'fwdslsh/fhold-assistant:0.4.1001'}],environment:{FH_TIMEZONE:'America/Chicago',FH_CLAUDE_REMOTE:'1',FH_CODEX_REMOTE:'1'},unavailable:{availability:'Automatic scale-to-zero is not available on this host. Use Start and Stop.',FH_SCHEDULER_ENABLED:'Scheduling overrides are configured in this instance’s custom Compose file.'}};
 				window.cloudAccessQa={...window.cloudAccessQa,identity:{name:'Test assistant',location:'/synthetic/instance',ref:{kind:${JSON.stringify(kind)},connectionId:'synthetic',homeDir:'/synthetic/instance',remoteHome:'/synthetic/instance'}}};
-				render(window.cloudAccessQa);document.querySelector('#deployment-settings').open=true;
+				render(window.cloudAccessQa);window.openAdminDetail('deployment-settings');
 			})()`);
 			await click('#load-deployment-settings');
 			expect(await evaluate("document.querySelector('#deployment-fields').disabled")).toBe(false);
@@ -1709,8 +1726,8 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			window.qaOps['data.recovery.status']=async()=>{qa.calls.push({action:'status'});return {state:'ready',lastPublishedAt:Date.now()};};
 			window.qaOps['data.recovery.save']=async input=>{qa.calls.push({action:'save',...input});recovery.settings=input.settings;qa.snapshot.pendingChanges=known({pending:true});};
 			render(qa.snapshot,{preserveDirty:false});showView('system');bindRecoveryEvents();
-			for(const panel of document.querySelectorAll('#view-system > details'))panel.open=panel.id==='backup-recovery';
-			document.querySelector('#runtime-recovery').open=true;document.querySelector('#import-export').open=false;
+			window.openAdminDetail('backup-recovery');
+			window.openAdminDetail('runtime-recovery');
 		})()`);
 		expect(await evaluate("document.querySelector('#inspect-recovery').disabled")).toBe(false);
 		expect(await evaluate("document.querySelector('#runtime-recovery-form').hidden")).toBe(true);
@@ -1766,7 +1783,7 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			qa.snapshot.operations['data.recovery.package']={support:'supported',availability:{state:'ready'}};
 			window.qaOps['data.recovery.package']=async(input,context)=>{qa.packageCalls.push({input,context});return {product:'fhold',scope:'assistant-checkpoint',instanceId:'agent',generation:'b'.repeat(64),previewDigest:'a'.repeat(64),files:3,totalBytes:4000,warnings:['Private sign-ins and task intent'],...(input.operation==='import'?{restored:true,homeDir:input.destinationHome}:{})};};
 			state.api.confirmRestart=async action=>{qa.confirmations.push(action);return qa.approveImport;};
-			render(qa.snapshot,{preserveDirty:false});document.querySelector('#checkpoint-packages').open=true;
+			render(qa.snapshot,{preserveDirty:false});window.openAdminDetail('checkpoint-packages');
 		})()`);
 		await value('#checkpoint-source', '/private/package');
 		await value('#checkpoint-home', '/private/restored');

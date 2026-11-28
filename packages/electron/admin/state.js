@@ -6,6 +6,7 @@ export function createAdminState() {
 		currentSnapshot: null,
 		currentView: 'overview',
 		adminSettingsOpen: false,
+		hostingConnectionId: 'local',
 		appSettingsSnapshot: undefined,
 		instancesDirectory: '',
 		recentInstances: [],

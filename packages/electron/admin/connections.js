@@ -149,7 +149,7 @@ export function updatePortalTokenFields() {
 
 export function showPortalTokenForm(portal, field = `${portal}-bot-token`) {
 	showConnectionApp(portal);
-	byId(`${portal}-tokens`).open = true;
+	byId(`${portal}-tokens`).scrollIntoView({ block: 'nearest' });
 	updatePortalTokenFields();
 	byId(`${portal}-token-form`).scrollIntoView({ block: 'nearest' });
 	queueMicrotask(() => byId(field).focus());
@@ -421,7 +421,7 @@ export function bindConnectionsEvents() {
 			const title = portal === 'discord' ? 'Discord' : 'Slack';
 			if (enabled && allowed.length === 0) {
 				showConnectionApp(portal);
-				byId(`${portal}-access-disclosure`).open = true;
+				byId(`${portal}-access-disclosure`).scrollIntoView({ block: 'nearest' });
 				notice(
 					`Add at least one allowed ${portal === 'discord' ? 'server, role or user' : 'channel or user'} before enabling ${title}.`,
 					'error',

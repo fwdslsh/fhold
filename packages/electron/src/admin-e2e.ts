@@ -543,6 +543,8 @@ async function openControlDisclosures(window: BrowserWindow, selector: string): 
 	await window.webContents.executeJavaScript(`(() => {
 		const control = document.querySelector(${JSON.stringify(selector)});
 		if (!control) throw new Error('Missing expected control.');
+		const page = control.closest('[data-detail-page]');
+		if (page) document.querySelector('[data-detail-target=' + page.id + ']').click();
 		const ancestors = [];
 		for (let node = control.parentElement; node; node = node.parentElement)
 			if (node.tagName === 'DETAILS') ancestors.push(node);
@@ -576,10 +578,8 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 			const homeDir = snapshot.docker?.homeDir;
 			if (!homeDir) throw new Error('The selected local fixture has no managed home.');
 			const picker = document.querySelector('#instance-picker');
-			return picker.tagName === 'SELECT' && picker.value === homeDir &&
-				picker.selectedOptions[0].textContent === snapshot.identity.name &&
-				picker.options[picker.options.length-1].textContent === 'Open another instance…' &&
-				picker.getAttribute('aria-label') === 'Choose instance' && picker.getBoundingClientRect().height >= 40 &&
+			return picker.tagName === 'BUTTON' && picker.textContent === snapshot.identity.name &&
+				picker.getAttribute('aria-label') === 'Choose another assistant' && picker.getBoundingClientRect().height >= 40 &&
 				!document.querySelector('.sidebar-footer') && !document.querySelector('#refresh') &&
 				!document.querySelector('#selected-instance-path') &&
 				document.querySelector('#overview-home').textContent === homeDir &&
@@ -608,7 +608,7 @@ async function verifySidebar(window: BrowserWindow, outputDir: string): Promise<
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
 			const picker = document.querySelector('#instance-picker');
-			return picker.selectedOptions[0].textContent.length > 50 && picker.getBoundingClientRect().height < 60 &&
+			return picker.textContent.length > 50 &&
 				document.querySelector('.sidebar').scrollWidth <= document.querySelector('.sidebar').clientWidth + 1;
 		})()`),
 			'Long identity spilled out of the instance picker.'
@@ -1158,6 +1158,8 @@ async function run(): Promise<Record<string, unknown>> {
 				10000
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
+            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
@@ -1205,6 +1207,8 @@ async function run(): Promise<Record<string, unknown>> {
 				10000
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
+            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
@@ -1529,7 +1533,7 @@ async function run(): Promise<Record<string, unknown>> {
 
 		progress('refreshing native provider inventory');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#provider-saved-accounts').open=true; document.querySelector('#load-providers').click(); undefined"
+			"document.querySelector('#load-providers').click(); undefined"
 		);
 		await waitForRenderer(
 			window,
@@ -1605,7 +1609,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#dismiss-notice').click();
 			document.querySelector('[data-view=connections]').click();
-			document.querySelector('#codex-connection').open=true;
+			document.querySelector('[data-detail-target=codex-connection]').click();
 			document.querySelector('[data-remote-enable=codex]').focus();
 			document.querySelector('[data-remote-enable=codex]').click();
 			if (!document.querySelector('#remote-dialog').open) throw new Error('Remote setup dialog did not open.');
@@ -1766,7 +1770,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'native AKM recall stayed ready across recreation after explicit hook approval, without remote startup or vendor login'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#codex-connection').open = false"
+			"document.querySelector('#codex-connection > .detail-back').click()"
 		);
 		await window.webContents.executeJavaScript(
 			"document.querySelector('[data-view=overview]').click()"
@@ -1805,25 +1809,25 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
-				const cards = [...document.querySelectorAll('#view-system > details')];
+				const cards = [...document.querySelectorAll('#view-system > [data-detail-page]')];
 				const backup = document.querySelector('#backup-recovery');
 				return cards.map(card => card.id).join(',') === 'backup-recovery,deployment-settings,installation-details,recent-logs,connection-keys,custody-panel' &&
-					cards.every(card => !card.open) &&
-					backup.querySelector('summary').textContent.startsWith('Backup and recovery') &&
+					cards.every(card => card.hidden) &&
+					backup.querySelector('h2').textContent.startsWith('Backup and recovery') &&
 					backup.contains(document.querySelector('#import-export')) &&
 					backup.contains(document.querySelector('#runtime-recovery'));
 			})()`),
-			'System sections are not in the requested order, collapsed by default, or consistently named.'
+			'System pages are not in the requested order, hidden behind their navigation cards, or consistently named.'
 		);
 		await assertRenderedFloor(window, 'System section order');
 		const systemScreenshot = await capture(window, outputDir, '04k-system.png');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true; document.querySelector('#import-export').scrollIntoView({block:'start'})"
+			"document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=import-export]').click(); document.querySelector('#import-export').scrollIntoView({block:'start'})"
 		);
 		await assertRenderedFloor(window, 'import and export');
 		const backupScreenshot = await capture(window, outputDir, '04d-backup.png');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#import-export').open=false; document.querySelector('#installation-details').open=true; document.querySelector('#installation-details').scrollIntoView({block:'start'})"
+			"document.querySelector('#import-export > .detail-back').click(); document.querySelector('[data-detail-target=installation-details]').click(); document.querySelector('#installation-details').scrollIntoView({block:'start'})"
 		);
 		await assertRenderedFloor(window, 'troubleshooting');
 		const troubleshootingScreenshot = await capture(window, outputDir, '04e-troubleshooting.png');
@@ -2020,12 +2024,12 @@ async function run(): Promise<Record<string, unknown>> {
 
 		await connectFixtureAgent(window);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=connections]').click(); document.querySelector('#opencode-connection > summary').click()"
+			"document.querySelector('[data-view=connections]').click(); document.querySelector('[data-detail-target=opencode-connection]').click()"
 		);
 		await waitForRenderer(
 			window,
 			`document.querySelector('#view-connections')?.hidden === false &&
-					document.querySelector('#opencode-connection')?.open === true &&
+					document.querySelector('#opencode-connection')?.checkVisibility() === true &&
 					document.querySelector('#direct-url')?.textContent.startsWith('http://') &&
 					document.querySelector('#direct-username')?.textContent === 'opencode'`,
 			'the complete OpenCode connection recipe'
@@ -2040,7 +2044,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'the explicit OpenCode password reveal'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#claude-connection').open=true; document.querySelector('#claude-permissions-form').closest('details.connection-method').open=true"
+			"document.querySelector('[data-detail-target=claude-connection]').click()"
 		);
 		await waitForRenderer(
 			window,
@@ -2097,7 +2101,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const claudeScreenshot = await capture(window, outputDir, '04f-claude-desktop.png', true);
 		await openControlDisclosures(window, '#save-mcp-permissions');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#mcp-connection').open=true; document.querySelector('#mcp-permissions-form').requestSubmit()"
+			"document.querySelector('[data-detail-target=mcp-connection]').click(); document.querySelector('#mcp-permissions-form').requestSubmit()"
 		);
 		await waitForRenderer(
 			window,
@@ -2155,7 +2159,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await sizeViewport(window, 1120, 780);
 
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#discord-connection').open=true;
+			document.querySelector('[data-detail-target=discord-connection]').click();
 			document.querySelector('#discord').checked = true;
 			document.querySelector('#discord').dispatchEvent(new Event('change', { bubbles: true }));
 			document.querySelector('#discord-connections-form').requestSubmit();
@@ -2163,7 +2167,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice')?.classList.contains('error') &&
-					document.querySelector('#discord-access-disclosure')?.open === true &&
+					document.querySelector('#discord-access-disclosure')?.checkVisibility() === true &&
 					document.activeElement?.id === 'discord-users'`,
 			'the Discord access-scope guidance',
 			10_000,
@@ -2177,7 +2181,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await waitForRenderer(
 			window,
 			`document.querySelector('#notice-message')?.textContent === 'Save a Discord bot token before enabling Discord.' &&
-					document.querySelector('#discord-tokens')?.open === true &&
+					document.querySelector('#discord-tokens')?.checkVisibility() === true &&
 					document.activeElement?.id === 'discord-bot-token'`,
 			'the Discord private-token guidance',
 			10_000,
@@ -2205,7 +2209,7 @@ async function run(): Promise<Record<string, unknown>> {
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('#gateway').checked = true;
 			document.querySelector('#gateway').dispatchEvent(new Event('change', { bubbles: true }));
-			document.querySelector('#mcp-connection').open=true;
+			document.querySelector('[data-detail-target=mcp-connection]').click();
 			document.querySelector('#mcp-connections-form').requestSubmit();
 		})()`);
 		await waitForRenderer(
@@ -2251,7 +2255,7 @@ async function run(): Promise<Record<string, unknown>> {
 
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=connections]').click();
-			document.querySelector('#advanced-access').open=true;
+			document.querySelector('[data-detail-target=advanced-access]').click();
 			document.querySelector('[data-new-saved-access]').click();
 			document.querySelector('#saved-access-name').value = 'e2e-reader';
 			document.querySelector('#dialog-policy-read').checked = true;
@@ -2312,8 +2316,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 
 		await window.webContents.executeJavaScript(`(() => {
-			document.querySelector('#discord-connection').open=true;
-			document.querySelector('#discord-user-access').open=true;
+			document.querySelector('[data-detail-target=discord-connection]').click();
 			document.querySelector('[data-add-person-permissions="discord"]').click();
 			document.querySelector('#person-id').value = '123456789012345678';
 			document.querySelector('#dialog-policy-read').checked = true;
@@ -2757,7 +2760,7 @@ async function run(): Promise<Record<string, unknown>> {
 		);
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
-			document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true;
+			document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=runtime-recovery]').click();
 			document.querySelector('#runtime-recovery').scrollIntoView({block:'start'});
 		})()`);
 		await assertRenderedFloor(window, 'portable versus runtime recovery');
@@ -2919,12 +2922,12 @@ async function run(): Promise<Record<string, unknown>> {
 			'Admin did not display actual accepted publication.'
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-enabled').focus()"
+			"document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=runtime-recovery]').click(); document.querySelector('#runtime-recovery-enabled').focus()"
 		);
 		await assertRenderedFloor(window, 'running runtime recovery');
 		assert(
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#runtime-recovery').open && document.querySelector('#runtime-recovery-storage').getBoundingClientRect().height > 0"
+				"!document.querySelector('#runtime-recovery').hidden && document.querySelector('#runtime-recovery-storage').getBoundingClientRect().height > 0"
 			),
 			'Runtime recovery controls were not visible for their rendered audit.'
 		);
@@ -2935,7 +2938,7 @@ async function run(): Promise<Record<string, unknown>> {
 			true
 		);
 		await window.webContents.executeJavaScript(
-			"document.querySelector('#backup-recovery').open = true; document.querySelector('#runtime-recovery').open = true; document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()"
+			"document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=runtime-recovery]').click(); document.querySelector('#runtime-recovery-advanced').open = true; document.querySelector('#runtime-recovery-instance-id').focus()"
 		);
 		await assertRenderedFloor(window, 'additional runtime paths and SQLite coverage');
 		assert(
@@ -3074,7 +3077,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const fullExport = join(outputDir, 'full-instance-export');
 		await window.webContents.executeJavaScript(`(() => {
 			document.querySelector('[data-view=system]').click();
-			document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true;
+			document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=import-export]').click();
 			document.querySelector('#backup-scope').value='instance';
 			document.querySelector('#backup-scope').dispatchEvent(new Event('change'));
 			document.querySelector('#backup-destination').value=${JSON.stringify(fullExport)};
@@ -3103,7 +3106,7 @@ async function run(): Promise<Record<string, unknown>> {
 		const sourceIntent = readFileSync(join(homeDir, 'state/stack.json'));
 		const sourceKey = readFileSync(join(homeDir, 'state/secrets/fhold_opencode_password'));
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=system]').click(); document.querySelector('#backup-recovery').open=true; document.querySelector('#import-export').open=true"
+			"document.querySelector('[data-view=system]').click(); document.querySelector('[data-detail-target=backup-recovery]').click(); document.querySelector('[data-detail-target=import-export]').click()"
 		);
 		confirmations.push(0);
 		const cancelledExportPrompt = prompts.length + 1;
@@ -3625,6 +3628,8 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		} else {
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [homeDir] });
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
+            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
+            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy !== 'true'",

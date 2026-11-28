@@ -5,6 +5,7 @@ import { refresh, render } from './snapshot.js';
 import { managedFormIds, state, viewMeta } from './state.js';
 import { renderInstallationReadiness } from './instances.js';
 import { instanceCapability, instancePresentation, selectedLogOptions } from './instance-presentation.js';
+import { bindDetailNavigation, openDetail, resetDetails } from './navigation.js';
 
 export const byId = (id) => document.getElementById(id);
 
@@ -76,7 +77,6 @@ export function setBusy(value) {
 					: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
 	byId('instance-picker').disabled = value;
-	byId('hosting-connection').disabled = value;
 	if (value) {
 		state.disabledButtons = all('button').map((button) => ({ button, disabled: button.disabled }));
 		for (const { button } of state.disabledButtons) button.disabled = true;
@@ -175,6 +175,8 @@ export function showView(name, options = {}) {
 	const ready = lifecycle === 'ready' || lifecycle === 'deployed';
 	if (!ready && name !== 'provider') return;
 	const enteringKnowledge = name === 'knowledge' && state.currentView !== name;
+	if (state.currentView !== name || options.focus === true)
+		resetDetails(byId(`view-${name}`));
 	if (state.currentView !== name && !byId('notice').className.includes('error')) notice('');
 	state.currentView = name;
 	document.body.dataset.activeView = name;
@@ -212,10 +214,11 @@ export function showView(name, options = {}) {
 export function showConnectionApp(name) {
 	if (!['opencode', 'claude', 'codex', 'discord', 'slack', 'mcp'].includes(name)) return;
 	showView('connections');
-	byId(`${name}-connection`).open = true;
+	openDetail(`${name}-connection`);
 }
 
 export function bindUiEvents() {
+	bindDetailNavigation();
 	const narrow = window.matchMedia?.('(max-width: 700px)');
 	if (narrow) {
 		const update = () => {
@@ -254,8 +257,7 @@ export function bindUiEvents() {
 			showView(button.dataset.viewTarget, { focus: true });
 			const section = button.dataset.sectionTarget ? byId(button.dataset.sectionTarget) : null;
 			if (section && section.closest('[data-view-panel]')?.dataset.viewPanel === state.currentView) {
-				section.open = true;
-				section.querySelector('summary')?.focus();
+				openDetail(section.id);
 			}
 		});
 	}

@@ -54,7 +54,8 @@ instructions and editable prose do not.
 | Field | Persistent visible label, full-width control within its form, helper below, common height with its adjacent button. A placeholder is not a label. |
 | Checkbox/radio | 16px native mark and a generous clickable label. Never turn ordinary options into oversized colored switches or policy cards. |
 | Navigation | Same icon/text alignment and neutral selected surface; `aria-current` identifies the active page. The agent picker has no brand mark or path. |
-| Disclosure | Explicit chevron, consistent hit area and open/hover/focus states. Apps/System use responsive task cards with purpose text visible when closed. Expanded cards span the row; nested advanced settings use the smaller disclosure component. |
+| Detail navigation | Apps and System cards navigate to one editor, replacing the index. Back returns to the originating card and restores focus. Form drafts survive navigation and snapshot refreshes. Backup categories use the same flow. |
+| Disclosure | Reserve for optional technical output or advanced parameters. Do not use expanding cards or nested accordions as primary navigation. |
 | Status | Concise text, optionally a small decorative dot. Running is not authenticated or paired. Color alone never carries meaning. |
 | Feedback | Shared bordered notice/callout, contextual error and next action. Keep pending restart in the sidebar and preserve explicit restart confirmation. |
 | Dialog | Named native dialog, bounded width/height, ordinary form components and separated footer. Cancel precedes the final primary action. Escape and native focus containment remain available. |
@@ -69,13 +70,19 @@ context; active work must never appear completed optimistically.
 
 ## Screen composition
 
+Use the available workspace width with consistent page gutters and left-aligned
+headers. Keep reading measures on explanatory text, not a centered width cap on
+the whole screen. The assistant library uses cards for recent assistants, locations,
+creation and import. The sidebar assistant button opens that browsing flow without
+discarding drafts; only selecting another assistant asks to discard unsaved work.
+
 Every selected instance uses the same navigation: Overview, Agent settings,
 Knowledge, Apps and System. Knowledge retains its native embedded AKM browser,
 header and full-height layout. Card styles belong to management content, not
 the embedded browser or its shell. Hosting providers never replace the navigation or page layout.
 The renderer maps the selected snapshot into one presentation contract; it does
 not branch on provider names. A missing management capability disables the existing
-section's native fieldset and explains why immediately above it. The disclosure
+section's native fieldset and explains why immediately above it. The navigation card
 remains usable so users can discover the feature and its limitation. Unavailable
 does not mean unconfigured, disabled at runtime, or signed out. Never carry a
 previous instance's credentials, settings or readiness into an uninspectable target.
@@ -93,7 +100,8 @@ Logs and installation details remain under System, not on a separate cloud page.
   the same fields, list choices and action hierarchy. Never imply saved sign-in
   proves readiness.
 - **Apps:** one inventory ordered OpenCode, Claude, Codex, Discord, Slack, MCP.
-  Settings and permissions stay with the app, with advanced actions subordinate.
+  Each card opens a dedicated page with a Back to Apps action. Settings and
+  permissions stay visible with the app instead of requiring nested expansion.
 - **System:** Backup and recovery comes first, followed by deployment,
   installation, logs, key maintenance and experimental private task access.
   Each card explains its purpose before opening. Common automatic backup settings do
@@ -123,7 +131,7 @@ The real Chromium walkthrough in `admin-providers-browser.test.ts` renders the
 actual modules/CSS, records screenshots and axe findings, traverses controls with
 native keyboard events, and checks the four management pages at 320, 360, 375,
 414, 480, 640, 768, 1024, 1280 and 1440px. It also covers individual Apps,
-System disclosures, provider states, first-use/recents/discovery, Settings,
+System detail navigation, provider states, first-use/recents/discovery, Settings,
 new/import and native dialogs. Representative states use 200% text size.
 
 `admin-static.test.ts` checks the token/contrast contract and existing behavior.
