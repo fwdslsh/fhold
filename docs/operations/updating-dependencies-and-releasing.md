@@ -53,7 +53,7 @@ Check upstream changelogs and supported engines, including every intervening
 breaking change. Prefer the current supported stable line for ordinary tools.
 AKM's npm `latest` is stable. The `next` tag carries prereleases and may lag a
 later stable release. Select channels explicitly. See the
-[November 24 review](dependency-refresh-2026-11-24.md) for the stable pins and
+[November 28 review](dependency-refresh-2026-11-28.md) for the stable pins and
 their compatibility review.
 Resolve the plugins' and `akm-web`'s required CLI version before choosing pins.
 Assistant's shared tools live in containers/assistant/tools/package.json. Claude

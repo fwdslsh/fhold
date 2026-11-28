@@ -11,7 +11,7 @@ It contains:
 - image-baked standard AKM plugins for the edition's included harnesses;
 - in AIO, pinned native Codex and Claude Code workers, experimental with default-on supervisors (Slim omits both);
 - supercronic;
-- Playwright 1.65.0, its matching Chromium and fonts/system libraries; and
+- Playwright 1.65.1, its matching Chromium and fonts/system libraries; and
 - ripgrep, jq, Python with pip/venv, SQLite, zip/unzip, Poppler PDF tools,
   file, less and process utilities.
 

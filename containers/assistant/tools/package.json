@@ -11,6 +11,6 @@
 		"@opencode/plugin": "2.2.6",
 		"akm-cli": "0.10.261135",
 		"akm-web": "0.10.261135",
-		"playwright": "1.65.0"
+		"playwright": "1.65.1"
 	}
 }

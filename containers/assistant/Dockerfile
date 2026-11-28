@@ -1,5 +1,5 @@
-FROM node:26.13.0-bookworm-slim AS node-runtime
-ARG NPM_VERSION=12.2.2
+FROM node:26.13.1-bookworm-slim AS node-runtime
+ARG NPM_VERSION=12.2.3
 # Use npm's supported self-upgrade at build time, without altering its bundle.
 # Keep npm's patched upstream bundle intact; do not override private packages.
 RUN npm install --global "npm@${NPM_VERSION}" \
@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=local go install \
     -ldflags="-X main.Version=${SUPERCRONIC_VERSION}" \
     "github.com/aptible/supercronic@${SUPERCRONIC_VERSION}"
 
-FROM oven/bun:1.4.4 AS manifests
+FROM oven/bun:1.4.5 AS manifests
 ARG TARGETARCH
 WORKDIR /repo
 COPY package.json bun.lock ./

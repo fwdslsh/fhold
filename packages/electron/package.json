@@ -26,11 +26,11 @@
   },
   "devDependencies": {
     "@fhold/lib": "workspace:*",
-    "axe-core": "4.14.0",
-    "electron": "45.2.3",
+    "axe-core": "4.14.1",
+    "electron": "45.5.0",
     "electron-builder": "^26.18.1",
-    "playwright-core": "1.65.0",
+    "playwright-core": "1.65.1",
     "typescript": "^7.0.2",
-    "@types/node": "^26.6.6"
+    "@types/node": "^26.6.11"
   }
 }
