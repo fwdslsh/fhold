@@ -1383,6 +1383,10 @@ it('qualifies AI account controls in real headless Chromium with the actual rend
 			apps:{config:{state:'not-inspected',reason:'Not managed.'},connections:{state:'not-inspected',reason:'Connect explicitly.'},status:{state:'not-inspected',reason:'Not managed.'}},
 			data:{recovery:{state:'not-inspected',reason:'Not managed.'}}
 		});state.dirtyForms.add('preferences-form');})()`);
+		await evaluate(`(async()=>{const {setBusy}=await import('./ui.js');setBusy(true);})()`);
+		expect(await evaluate("document.querySelector('#instance-picker').disabled")).toBe(true);
+		await evaluate(`(async()=>{const {setBusy}=await import('./ui.js');setBusy(false);})()`);
+		expect(await evaluate("document.querySelector('#instance-picker').disabled")).toBe(false);
 		await click('#instance-picker');
 		await click('[data-connection-id=local]');
 		expect(

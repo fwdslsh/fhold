@@ -76,7 +76,6 @@ export function setBusy(value) {
 					? byId('instance-welcome')
 					: byId('main-content');
 	busyRegion?.setAttribute('aria-busy', String(value));
-	byId('instance-picker').disabled = value;
 	if (value) {
 		state.disabledButtons = all('button').map((button) => ({ button, disabled: button.disabled }));
 		for (const { button } of state.disabledButtons) button.disabled = true;
@@ -87,6 +86,7 @@ export function setBusy(value) {
 			renderInstallationReadiness(state.installationReadiness);
 		if (state.currentSnapshot) renderRuntimeControls(state.currentSnapshot);
 	}
+	byId('instance-picker').disabled = value;
 }
 
 export async function operation(progress, action, success = `${progress} complete.`) {

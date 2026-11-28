@@ -382,7 +382,10 @@ async function captureScreenshot(
 	preserveFocus: boolean
 ): Promise<string> {
 	const embedded = window.contentView.children.find(
-		(view) => view instanceof WebContentsView && view.webContents !== window.webContents && view.getVisible()
+		(view) =>
+			view instanceof WebContentsView &&
+			view.webContents !== window.webContents &&
+			view.getVisible()
 	) as WebContentsView | undefined;
 	// capturePage records one webContents, not the composed native window.
 	// Label the shell honestly and retain AKM's rendered pixels separately.
@@ -436,8 +439,10 @@ async function captureScreenshot(
 	});
 	writeFileSync(path, image.toPNG());
 	if (embedded)
-		writeFileSync(join(directory, name.replace(/\.png$/, '-akm.png')),
-			(await embedded.webContents.capturePage()).toPNG());
+		writeFileSync(
+			join(directory, name.replace(/\.png$/, '-akm.png')),
+			(await embedded.webContents.capturePage()).toPNG()
+		);
 	return path;
 }
 
@@ -535,6 +540,23 @@ async function assertRadioLabelClick(window: BrowserWindow, id: string): Promise
 		targetMinimum: 40,
 		activationPassed: true
 	});
+}
+
+async function browseLocalInstances(window: BrowserWindow): Promise<void> {
+	await window.webContents.executeJavaScript("document.querySelector('#instance-picker').click()");
+	await waitForRenderer(
+		window,
+		"document.querySelector('[data-connection-id=local]')?.checkVisibility() && document.body.dataset.busy !== 'true'",
+		'local location card'
+	);
+	await window.webContents.executeJavaScript(
+		"document.querySelector('[data-connection-id=local]').click()"
+	);
+	await waitForRenderer(
+		window,
+		"!document.querySelector('#hosting-location-results').hidden && document.body.dataset.busy !== 'true' && !document.querySelector('#hosting-install').disabled",
+		'local assistant discovery'
+	);
 }
 
 async function openControlDisclosures(window: BrowserWindow, selector: string): Promise<void> {
@@ -879,8 +901,10 @@ async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContent
 	while (Date.now() < deadline && !embedded.getVisible())
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	assert(embedded.getVisible(), 'Hydrated AKM browser remained hidden after Knowledge navigation.');
-	assert(embedded.getBounds().height > 0 && embedded.getBounds().width > 0,
-		'Embedded AKM browser has no visible area.');
+	assert(
+		embedded.getBounds().height > 0 && embedded.getBounds().width > 0,
+		'Embedded AKM browser has no visible area.'
+	);
 	const contents = embedded.webContents;
 	assert(
 		await contents.executeJavaScript(
@@ -1158,8 +1182,14 @@ async function run(): Promise<Record<string, unknown>> {
 				10000
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
-            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
+			await waitForRenderer(
+				window,
+				"!!document.querySelector('[data-connection-id=local]')",
+				'local location card'
+			);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('[data-connection-id=local]').click()"
+			);
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
@@ -1207,8 +1237,14 @@ async function run(): Promise<Record<string, unknown>> {
 				10000
 			);
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
-            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
+			await waitForRenderer(
+				window,
+				"!!document.querySelector('[data-connection-id=local]')",
+				'local location card'
+			);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('[data-connection-id=local]').click()"
+			);
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy!=='true'",
@@ -1867,7 +1903,7 @@ async function run(): Promise<Record<string, unknown>> {
 				"document.querySelector('[data-view=system]').click()"
 			);
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#assistant-url-detail').focus()"
+				"document.querySelector('[data-detail-target=installation-details]').click(); document.querySelector('#assistant-url-detail').focus()"
 			);
 			window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' });
 			window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
@@ -1959,9 +1995,7 @@ async function run(): Promise<Record<string, unknown>> {
 			pendingChanges(await adminSnapshot())?.pending,
 			'Pending state was not saved with the instance.'
 		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))"
-		);
+		await browseLocalInstances(window);
 		await waitForRenderer(
 			window,
 			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
@@ -2492,9 +2526,8 @@ async function run(): Promise<Record<string, unknown>> {
 			window.confirm = () => true;
 			document.querySelector('#provider-key').value = 'transient-key-must-not-survive';
 			document.querySelector('#provider-endpoint-key').value = 'transient-credential-must-not-survive';
-			document.querySelector('#instance-picker').value = 'open-another';
-			document.querySelector('#instance-picker').dispatchEvent(new Event('change'));
 		})()`);
+		await browseLocalInstances(window);
 		await waitForRenderer(
 			window,
 			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
@@ -2709,32 +2742,40 @@ async function run(): Promise<Record<string, unknown>> {
 		await openControlDisclosures(window, '#assistant-bind');
 		assert(
 			await window.webContents.executeJavaScript(`(() => {
-			const picker = document.querySelector('#instance-picker');
 			window.confirm = () => false;
 			document.querySelector('#assistant-bind').value = '192.0.2.77';
 			document.querySelector('#assistant-bind').dispatchEvent(new Event('input', {bubbles:true}));
-			picker.value = ${JSON.stringify(homeDir)};
-			picker.dispatchEvent(new Event('change'));
-			return picker.value === ${JSON.stringify(otherHome)} && document.querySelector('#assistant-bind').value === '192.0.2.77';
+			return document.querySelector('#assistant-bind').value === '192.0.2.77';
 		})()`),
-			'Cancelling a recent-instance switch lost the selection or draft.'
+			'The connection draft was not entered.'
+		);
+		await browseLocalInstances(window);
+		await window.webContents.executeJavaScript(
+			`[...document.querySelectorAll('#hosting-instance-list .instance-choice')].find(button => button.getAttribute('aria-label').endsWith(${JSON.stringify(` at ${homeDir}`)})).click()`
 		);
 		assert(
 			(await adminSnapshot()).docker?.homeDir === otherHome,
 			'Cancelled picker switch changed the actual managed home.'
+		);
+		await window.webContents.executeJavaScript("document.querySelector('#hosting-back').click()");
+		assert(
+			await window.webContents.executeJavaScript(
+				"document.querySelector('#assistant-bind').checkVisibility() && document.querySelector('#assistant-bind').value === '192.0.2.77'"
+			),
+			'Cancelling an instance switch lost the visible connection draft.'
 		);
 		const instancePickerScreenshot = await capture(
 			window,
 			outputDir,
 			'06c-recent-instance-picker.png'
 		);
+		await browseLocalInstances(window);
 		await window.webContents.executeJavaScript(`(() => {
 			window.confirm = () => true;
-			const picker = document.querySelector('#instance-picker');
-			if (!Array.from(picker.options).some(option => option.value === ${JSON.stringify(homeDir)} && option.textContent === ${JSON.stringify(projectName)}))
-				throw new Error('Recent instance picker lost the saved name.');
-			picker.value = ${JSON.stringify(homeDir)};
-			picker.dispatchEvent(new Event('change'));
+			const card = [...document.querySelectorAll('#hosting-instance-list .instance-choice')].find(button => button.getAttribute('aria-label').endsWith(${JSON.stringify(` at ${homeDir}`)}));
+			if (card?.querySelector('.instance-name')?.textContent !== ${JSON.stringify(projectName)})
+				throw new Error('Instance card lost the saved name.');
+			card.click();
 		})()`);
 		await waitForRenderer(
 			window,
@@ -3143,9 +3184,7 @@ async function run(): Promise<Record<string, unknown>> {
 			'08-full-instance-export.png',
 			true
 		);
-		await window.webContents.executeJavaScript(
-			"document.querySelector('#instance-picker').value='open-another'; document.querySelector('#instance-picker').dispatchEvent(new Event('change'))"
-		);
+		await browseLocalInstances(window);
 		await waitForRenderer(
 			window,
 			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true' && document.querySelector('#hosting-import').checkVisibility() && !document.querySelector('#hosting-import').disabled",
@@ -3504,7 +3543,7 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 		);
 		assert(
 			await window.webContents.executeJavaScript(
-				`document.querySelector('#instance-picker').value === ${JSON.stringify(expectedHome)} && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`
+				`document.querySelector('#instance-picker').tagName === 'BUTTON' && document.querySelector('#overview-home').textContent === ${JSON.stringify(expectedHome)}`
 			),
 			'A fresh app launch did not select the last-used instance.'
 		);
@@ -3523,11 +3562,7 @@ async function verifyReopenedLaunch(): Promise<Record<string, unknown>> {
 			'Automatically reopening the instance started a container.'
 		);
 		const reopened = await capture(window, outputDir, '09-reopened-instance.png');
-		await window.webContents.executeJavaScript(`(() => {
-			const picker = document.querySelector('#instance-picker');
-			picker.value = 'open-another';
-			picker.dispatchEvent(new Event('change', {bubbles:true}));
-		})()`);
+		await browseLocalInstances(window);
 		await waitForRenderer(
 			window,
 			"!document.querySelector('#open-hosting').hidden && document.body.dataset.busy!=='true'",
@@ -3628,8 +3663,14 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		} else {
 			dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [homeDir] });
 			await window.webContents.executeJavaScript("document.querySelector('#connect-host').click()");
-            await waitForRenderer(window, "!!document.querySelector('[data-connection-id=local]')", 'local location card');
-            await window.webContents.executeJavaScript("document.querySelector('[data-connection-id=local]').click()");
+			await waitForRenderer(
+				window,
+				"!!document.querySelector('[data-connection-id=local]')",
+				'local location card'
+			);
+			await window.webContents.executeJavaScript(
+				"document.querySelector('[data-connection-id=local]').click()"
+			);
 			await waitForRenderer(
 				window,
 				"!document.querySelector('#choose-instance').hidden && document.body.dataset.busy !== 'true'",

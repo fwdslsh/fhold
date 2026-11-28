@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.4.1116 — Clearer Admin navigation and refreshed stack
+
+Replace Admin's nested management accordions with task cards and dedicated
+pages with Back navigation. Browse assistants by location, keep unsaved edits
+when returning from browsing, and use full-width screens with left-aligned
+headers. Knowledge continues to open AKM Web automatically in its embedded view.
+
+Update AKM CLI/Web to **0.10.261135** and harness plugins to **0.10.261141**.
+Refresh Node, Bun, npm, Claude Code, Codex, Playwright, Electron and supported
+Slack dependencies. Fix native plugin startup and Knowledge initialization.
+See the [dependency review](docs/operations/dependency-refresh-2026-11-28.md)
+for exact pins, verification and upstream holds.
+
+OpenCode remains **2.2.6** pending investigation of the reported background-agent
+issue. Existing approved source-audit exceptions remain until supported parent
+packages provide fixes; no incompatible transitive overrides are added.
+
+Prepare a full stable release: AIO/Slim Assistant, Guardian, Portal, Linux
+x64/arm64 CLI and Admin, and the optional desktop extension. Existing instances
+are not upgraded automatically.
+
 ## 0.4.1115-beta — Hosted AKM Web and safer private task access
 
 Update Assistant to stable AKM CLI/web **0.10.261133** and all three harness

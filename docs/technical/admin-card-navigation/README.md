@@ -43,7 +43,7 @@ The existing palette remains dark even with a light OS preference.
 
 ## Verification
 
-- Browser walkthrough: 398 assertions passed, 130 captured states,
+- Browser walkthrough: 400 assertions passed, 130 captured states,
   [zero axe violations](after/accessibility.json). Includes keyboard operation,
   backup shortcut navigation without an operation, Back focus restoration,
   draft retention across return/reopening/refresh, unavailable capabilities,
@@ -51,12 +51,18 @@ The existing palette remains dark even with a light OS preference.
   dialogs, long paths, widths from 320 to 1440 CSS pixels, 200% text size and
   reduced motion. The [manifest](after/qa-manifest.json) records source hashes
   and keyboard events. The complete temporary screenshot set is
-  `/tmp/fhold-provider-chromium-bXKj0c`.
+  `/tmp/fhold-provider-chromium-jG3taD`. The regression also verifies the assistant
+  picker becomes usable after an operation, including a busy-state transition.
 - Native Electron smoke passed with real IPC and an isolated profile against a
   disposable stopped assistant: location cards, app editors, unsaved fields,
   Back focus, backup pages and return to the selected assistant. No live instance
-  or saved credential was changed. This revision did not repeat the earlier
-  full native installation/recovery suite; that remains pre-merge qualification.
+  or saved credential was changed. Full native verification also passed against
+  the published install baseline and local dependency-refresh image: native
+  browser sign-in, Guardian authorization, two-instance isolation, cancelled
+  switches with draft retention, checkpoint/custom SQLite recovery, stopped
+  full-instance export/import, and read-only reopening in a fresh process.
+  Evidence: `audit/admin-stable-native-20261128-r5` in the parent workspace.
+  Provider sign-in was intentionally unconfigured; no paid-provider test is claimed.
 - Repository tests: 1,292 passed; 24 existing opt-in tests skipped.
 - Type checks, lint, CLI build and Admin bundle passed. Lint retains the
   repository's existing warnings. No dependency, container, native consent or
@@ -65,6 +71,9 @@ The existing palette remains dark even with a light OS preference.
 Existing tests that asserted native disclosure expansion or select-option markup
 were updated because those controls are now navigation pages/buttons. The browser
 tests exercise the replacement controls and verify observable state and focus.
+Native verification caught and corrected busy-state restoration leaving the new
+assistant-picker button disabled after an operation. The browser regression and
+native keyboard/instance-switch flows cover this behavior.
 
 Automated accessibility checks and screenshots are complementary evidence,
 not a declaration of complete WCAG conformance or live cloud readiness.
