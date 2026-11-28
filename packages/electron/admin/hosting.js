@@ -31,13 +31,24 @@ function selectedConnectionId() {
 	return state.currentSnapshot?.identity?.ref?.connectionId;
 }
 export async function loadHostingConnections() {
-	const selected = byId('hosting-connection').value;
+	const selected = state.hostingConnectionId;
 	savedConnections = await state.api.hostingConnections();
-	setOptions(
-		byId('hosting-connection'),
-		savedConnections.map((item) => ({ value: item.id, label: item.label })),
-		savedConnections.some((item) => item.id === selected) ? selected : 'local'
-	);
+	state.hostingConnectionId = savedConnections.some((item) => item.id === selected) ? selected : 'local';
+	const locations = byId('hosting-locations');
+	locations.replaceChildren();
+	for (const connection of savedConnections) {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'navigation-card';
+		button.dataset.connectionId = connection.id;
+		const name = document.createElement('strong');
+		name.textContent = connection.label;
+		const description = document.createElement('span');
+		description.textContent = connection.kind === 'local-docker' ? 'Assistants on this computer' : connection.kind === 'ssh-docker' ? 'Assistants on an SSH host' : 'Assistants in Azure Container Apps';
+		button.append(name, description);
+		button.addEventListener('click', () => void showHostingChooser(connection.id));
+		locations.append(button);
+	}
 	renderConnectionList();
 }
 function hostingStatus(value, error = false) {
@@ -66,7 +77,7 @@ async function connectionOperation(progress, action) {
 }
 async function discover() {
 	clearInstanceOpenError();
-	const id = byId('hosting-connection').value;
+	const id = state.hostingConnectionId;
 	const epoch = ++discoveryEpoch;
 	byId('hosting-instance-list').replaceChildren();
 	byId('hosting-discover').hidden = true;
@@ -83,13 +94,13 @@ async function discover() {
 		try {
 			instances = await state.api.hostingInstances(id);
 		} catch (error) {
-			if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+			if (epoch !== discoveryEpoch || id !== state.hostingConnectionId) return;
 			throw error;
 		}
-		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+		if (epoch !== discoveryEpoch || id !== state.hostingConnectionId) return;
 		const list = byId('hosting-instance-list');
 		features = await state.api.hostingFeatures(id);
-		if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+		if (epoch !== discoveryEpoch || id !== state.hostingConnectionId) return;
 		list.replaceChildren();
 		hostingStatus(
 			instances.length
@@ -120,7 +131,7 @@ async function discover() {
 			list.append(button);
 		}
 	});
-	if (epoch !== discoveryEpoch || id !== byId('hosting-connection').value) return;
+	if (epoch !== discoveryEpoch || id !== state.hostingConnectionId) return;
 	for (const button of ['hosting-install', 'hosting-import', 'hosting-open-folder']) {
 		const available = button === 'hosting-install' ? features?.installation : features?.directory;
 		byId(button).disabled = !available;
@@ -148,17 +159,28 @@ export async function showHostingChooser(id) {
 	byId('instance-welcome').hidden = false;
 	byId('instance-options').hidden = true;
 	byId('open-hosting').hidden = false;
+	byId('hosting-creation-help').hidden = true;
+	byId('hosting-locations').hidden = !!id;
+	byId('hosting-location-results').hidden = !id;
+	byId('hosting-locations-back').hidden = !id;
+	for (const button of ['hosting-install', 'hosting-import']) byId(button).hidden = !id;
+	setText('hosting-back', state.currentSnapshot ? '← Back to assistant' : '← Recent assistants');
+	setText('hosting-chooser-title', id ? 'Assistants at this location' : 'Locations');
+	hostingStatus('');
 	setSkipTarget('instance-welcome');
 	byId('hosting-chooser-title').focus();
+	const navigation = ++discoveryEpoch;
 	try {
 		await loadHostingConnections();
-		if (id)
-			byId('hosting-connection').value = savedConnections.some((item) => item.id === id)
-				? id
-				: 'local';
-		await discover();
+		if (navigation !== discoveryEpoch) return;
+		setText('hosting-chooser-title', id ? savedConnections.find((item) => item.id === id)?.label || 'Location unavailable' : 'Locations');
+		if (id) {
+			if (!savedConnections.some((item) => item.id === id)) throw new Error('This location is no longer saved. Choose another location.');
+			state.hostingConnectionId = id;
+			await discover();
+		}
 	} catch (error) {
-		hostingStatus(message(error), true);
+		if (navigation === discoveryEpoch) hostingStatus(message(error), true);
 	}
 }
 function providerFields() {
@@ -374,7 +396,7 @@ export function bindHostingEvents() {
 	byId('hosting-open-folder').addEventListener('click', async () => {
 		if (state.operationInFlight) return;
 		const connection = savedConnections.find(
-			(item) => item.id === byId('hosting-connection').value
+			(item) => item.id === state.hostingConnectionId
 		);
 		const previous = state.installConnection;
 		state.installConnection = connection;
@@ -396,13 +418,15 @@ export function bindHostingEvents() {
 		}
 	});
 	byId('connect-host').addEventListener('click', () => void showHostingChooser());
+	byId('hosting-locations-back').addEventListener('click', () => void showHostingChooser());
 	byId('open-hosting').addEventListener('hosting-refresh', () => {
-		if (!byId('open-hosting').hidden) void showHostingChooser();
+		if (!byId('open-hosting').hidden) void showHostingChooser(byId('hosting-location-results').hidden ? undefined : state.hostingConnectionId);
 	});
 	byId('hosting-back').addEventListener('click', () => {
 		if (state.operationInFlight) return;
 		discoveryEpoch++;
 		byId('open-hosting').hidden = true;
+		setText('hosting-chooser-title', 'Assistants');
 		state.installConnection = undefined;
 		state.installationReadiness = undefined;
 		if (state.currentSnapshot) {
@@ -434,12 +458,6 @@ export function bindHostingEvents() {
 			byId('hosting-advanced').open = true;
 		});
 	byId('hosting-provider').addEventListener('change', providerFields);
-	byId('hosting-connection').addEventListener('change', () => {
-		discoveryEpoch++;
-		byId('hosting-instance-list').replaceChildren();
-		hostingStatus('');
-		void discover();
-	});
 	for (const [button, importing] of [
 		['hosting-install', false],
 		['hosting-import', true]
@@ -447,7 +465,7 @@ export function bindHostingEvents() {
 		byId(button).addEventListener('click', async () => {
 			if (state.operationInFlight || !confirmInstanceSwitch()) return;
 			const connection = savedConnections.find(
-				(item) => item.id === byId('hosting-connection').value
+				(item) => item.id === state.hostingConnectionId
 			);
 			const info = await connectionOperation('Preparing setup', () =>
 				importing
@@ -506,7 +524,7 @@ export function bindHostingEvents() {
 				return;
 			}
 			await loadHostingConnections();
-			byId('hosting-connection').value = saved.id;
+			state.hostingConnectionId = saved.id;
 			closeEditor();
 			byId('hosting-instance-list').replaceChildren();
 			hostingStatus('Connection saved. Check it to verify sign-in and discover instances.');

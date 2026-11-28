@@ -22,7 +22,7 @@
     </svg>
     <main id="admin-settings" class="admin-settings-shell" tabindex="-1" hidden aria-labelledby="admin-settings-title">
       <button id="admin-settings-back" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button>
-      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Settings</h1><p class="page-description">Host connections and preferences for Admin.</p></header>
+      <header class="page-header"><h1 id="admin-settings-title" tabindex="-1">Admin settings</h1><p class="page-description">Manage host connections and this desktop app. For an assistant’s model, apps or backups, return to its workspace.</p></header>
       <div class="admin-settings-sections">
     <section id="hosting-manager" class="settings-section" aria-labelledby="hosting-manager-title">
       <header class="hosting-manager-header"><div><h2 id="hosting-manager-title">Host connections</h2><p class="help-text">Your saved remote locations. This computer is always available.</p></div><button id="hosting-new" class="secondary" type="button">Add connection</button></header>
@@ -99,7 +99,7 @@
       <section class="welcome-card instance-card" aria-label="Choose an instance">
         <header class="instance-intro">
           <p class="instance-wordmark">f<span aria-hidden="true">/</span>hold</p>
-          <button class="text-button" type="button" data-admin-settings>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
+          <button class="text-button" type="button" data-admin-settings>Admin settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
         </header>
         <div class="library-layout">
           <aside class="library-rail" aria-label="Instance locations and actions">
@@ -109,15 +109,11 @@
               <button id="connect-host" class="library-browse" type="button">Browse locations <span aria-hidden="true">→</span></button>
             </div>
             <div class="library-host-navigation">
-              <button id="hosting-back" class="text-button" type="button">← Back</button>
-              <label class="field" for="hosting-connection"><span>Location</span><select id="hosting-connection"><option value="local">This computer</option></select></label>
+              <button id="hosting-back" class="text-button" type="button">← Recent assistants</button>
+              <button id="hosting-locations-back" class="text-button" type="button" hidden>← All locations</button>
               <button id="hosting-manage" class="text-button" type="button">Manage connections</button>
             </div>
             <div class="library-create">
-              <div id="instance-create-actions" class="instance-create-actions">
-                <button id="begin-new-instance" class="primary" type="button"><span aria-hidden="true">+</span> New assistant</button>
-                <button id="begin-instance-import" class="text-button" type="button">Import assistant…</button>
-              </div>
               <div class="hosting-create-actions">
                 <button id="hosting-install" class="primary" type="button" hidden><span aria-hidden="true">+</span> New assistant</button>
                 <button id="hosting-import" class="text-button" type="button" hidden>Import assistant…</button>
@@ -126,7 +122,7 @@
             </div>
           </aside>
           <div class="library-content">
-            <header class="library-heading"><h1 id="hosting-chooser-title" tabindex="-1">Assistants</h1></header>
+            <header class="library-heading"><h1 id="hosting-chooser-title" tabindex="-1">Assistants</h1><p class="page-description">Choose an assistant to manage its model, apps and backups. Browse locations to find one on this computer or a saved host.</p></header>
             <p id="instance-preference-warning" class="inline-status error" role="status" hidden></p>
             <div id="instance-options" class="instance-options">
           <section id="existing-instance-section" class="instance-existing" aria-label="Existing instances">
@@ -141,14 +137,21 @@
               </div>
             </div>
             <section id="open-hosting" class="hosting-chooser" hidden aria-labelledby="hosting-chooser-title">
-              <div class="library-list-heading"><span>Available assistants</span><button id="hosting-discover" class="text-button" type="button" hidden>Try again</button></div>
               <p id="hosting-status" class="help-text" role="status" aria-live="polite" hidden></p>
+              <nav id="hosting-locations" class="navigation-cards" aria-label="Assistant locations"></nav>
+              <div id="hosting-location-results" hidden>
+              <div class="library-list-heading"><span>Available assistants</span><button id="hosting-discover" class="text-button" type="button" hidden>Try again</button></div>
               <div id="hosting-instance-list" aria-live="polite"></div>
               <div class="library-folder-actions">
                 <button id="choose-instance" class="text-button hosting-folder-choice" type="button" hidden>Open an instance folder…</button>
                 <button id="hosting-open-folder" class="text-button hosting-folder-choice" type="button" hidden>Open an instance folder…</button>
               </div>
+              </div>
             </section>
+            <nav id="instance-create-actions" class="navigation-cards instance-create-actions" aria-label="Add an assistant">
+              <button id="begin-new-instance" class="navigation-card" type="button"><strong>New assistant</strong><span>Install a new assistant on this computer.</span></button>
+              <button id="begin-instance-import" class="navigation-card" type="button"><strong>Import assistant</strong><span>Move an existing assistant from an export.</span></button>
+            </nav>
           </div>
         </div>
       </section>
@@ -179,6 +182,7 @@
           <li><span>3</span><bdi id="install-third-step">Ready</bdi></li>
         </ol>
         <h1 id="welcome-title" class="visually-hidden">Set up fhold</h1>
+        <p class="wizard-context">Install a private assistant, connect its AI model, then check that it can respond.</p>
         <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="install-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div id="install-requirements" class="install-requirements" data-install-requirements role="status" aria-live="polite">
@@ -289,6 +293,7 @@
           <li><span>2</span> Review &amp; import</li>
         </ol>
         <h1 id="instance-import-title" class="visually-hidden">Import an instance</h1>
+        <p class="wizard-context">Continue an existing assistant from a verified export. Choose the package, review its contents, then import into an empty folder.</p>
         <p class="setup-location help-text" data-setup-location hidden></p>
         <p id="instance-import-status" class="help-text" role="status" aria-live="polite" hidden></p>
         <div class="install-requirements" data-install-requirements role="status" aria-live="polite">
@@ -348,9 +353,8 @@
     <div id="app-shell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-instance">
-          <select id="instance-picker" class="sidebar-instance-picker" aria-label="Choose instance">
-            <option value="">Loading…</option>
-          </select>
+          <span class="workspace-context">Selected assistant</span>
+          <button id="instance-picker" class="sidebar-instance-picker" type="button" aria-label="Choose another assistant">Loading…</button>
         </div>
 
         <details id="mobile-navigation" class="ready-only" open hidden>
@@ -391,7 +395,7 @@
             </div>
           </section>
         </div>
-        <button class="nav-item admin-settings-link" type="button" data-admin-settings><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>Settings<span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
+        <button class="nav-item admin-settings-link" type="button" data-admin-settings><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span><span class="workspace-context-inline">Admin </span>Settings</span><span data-admin-update-badge class="admin-update-badge" hidden>Update ready</span></button>
       </aside>
 
       <div class="workspace">
@@ -435,7 +439,7 @@
 
             <section class="runtime-panel" aria-labelledby="runtime-heading">
               <div class="section-heading">
-                <div><h2 id="runtime-heading">Services</h2></div>
+                <div><h2 id="runtime-heading">Services</h2><p class="help-text">Run, stop or update this assistant’s services.</p></div>
                 <div class="button-row compact">
                   <button id="start-stack" data-action="host.start" class="secondary" type="button">Start</button>
                   <button id="restart-stack" data-action="host.restart" class="text-button" type="button">Restart</button>
@@ -452,6 +456,15 @@
                   <button id="update-stack" class="secondary" type="button">Update</button>
                 </div>
                 <p id="runtime-version-help" class="help-text">Included with this fhold version. Custom image settings are kept.</p>
+              </div>
+            </section>
+
+            <section class="overview-tasks" aria-labelledby="overview-tasks-title">
+              <h2 id="overview-tasks-title">Manage this assistant</h2>
+              <div class="task-grid">
+                <button class="task-card" type="button" data-view-target="provider"><strong>AI model</strong><span>Choose a service and test the model’s response.</span><span class="task-link">Agent settings <span aria-hidden="true">→</span></span></button>
+                <button class="task-card" type="button" data-view-target="connections"><strong>Apps and connections</strong><span>Use OpenCode, connect an app or configure a bot.</span><span class="task-link">Browse apps <span aria-hidden="true">→</span></span></button>
+                <button class="task-card" type="button" data-view-target="system" data-section-target="backup-recovery"><strong>Backup and recovery</strong><span>Protect this assistant or review export options.</span><span class="task-link">Manage backups <span aria-hidden="true">→</span></span></button>
               </div>
             </section>
 
@@ -571,13 +584,13 @@
                 </form>
               </section>
 
-            <details id="provider-saved-accounts" class="disclosure provider-saved-setups" aria-labelledby="provider-saved-heading">
-                <summary id="provider-saved-heading">Saved AI setups</summary>
+            <section id="provider-saved-accounts" class="editor-section provider-saved-setups" aria-labelledby="provider-saved-heading">
+                <h2 id="provider-saved-heading">Saved AI setups</h2>
                 <p class="help-text">Saved details are not proof a service works. Edit a setup to choose and test a model.</p>
                 <p id="provider-saved-empty" class="help-text">No saved AI setups.</p>
                 <ul id="provider-saved-list" class="provider-account-list" aria-label="Saved AI setups"></ul>
                 <button id="load-providers" class="text-button" type="button">Refresh saved setups</button>
-              </details>
+              </section>
               </fieldset>
             </section>
 
@@ -613,9 +626,9 @@
             <section id="knowledge-viewport" aria-label="Embedded AKM UI"></section>
           </section>
 
-          <section id="view-connections" class="view-panel ready-only disclosure-inventory" data-view-panel="connections" hidden aria-labelledby="view-title">
-            <details id="opencode-connection" class="panel panel-disclosure connection-app" data-connection-app="opencode" name="connected-app">
-              <summary><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></summary>
+          <section id="view-connections" class="view-panel ready-only" data-view-panel="connections" hidden aria-labelledby="view-title" data-navigation="Apps">
+            <section id="opencode-connection" class="editor-page connection-app" data-connection-app="opencode" data-detail-page data-title="OpenCode" data-description="Open your agent in a browser or an OpenCode client." hidden>
+              <h2 tabindex="-1"><span>OpenCode<small>Open your agent in a browser or an OpenCode client.</small></span><span id="opencode-connection-status" class="status-badge neutral">Not checked</span></h2>
               <div class="app-connection-body">
                 <p class="help-text">Open the server address to sign in automatically. OpenCode gives full native access, independently of app permissions.</p>
                 <dl class="connection-values">
@@ -634,8 +647,8 @@
                   <p class="help-text">If automatic credential access is unavailable, enter the native OpenCode password. It stays only in this Admin session and is never saved with the connection.</p>
                   <button id="connect-native-agent" class="secondary" type="button">Connect to native agent</button>
                 </div>
-                <details class="disclosure">
-                  <summary>Advanced · network access</summary>
+                <section class="editor-section">
+                  <h3>Advanced · network access</h3>
                   <form id="opencode-network-form" class="form-stack" data-managed-form>
                     <div class="field-grid two-column">
                       <label class="field" for="assistant-bind"><span>Bind address</span><input id="assistant-bind" autocomplete="off" required /></label>
@@ -645,17 +658,17 @@
                     <p class="help-text">127.0.0.1 keeps access on this computer. Direct access bypasses Guardian; LAN or public access needs explicit network and TLS configuration.</p>
                     <button class="secondary" type="submit">Save OpenCode network settings</button>
                   </form>
-                </details>
+                </section>
                 </fieldset>
               </div>
-            </details>
-            <details id="claude-connection" class="panel panel-disclosure connection-app" data-connection-app="claude" name="connected-app">
-              <summary><span>Claude<small>Chat on this computer or work remotely from any device.</small></span></summary>
+            </section>
+            <section id="claude-connection" class="editor-page connection-app" data-connection-app="claude" data-detail-page data-title="Claude" data-description="Chat on this computer or work remotely from any device." hidden>
+              <h2 tabindex="-1"><span>Claude<small>Chat on this computer or work remotely from any device.</small></span></h2>
               <div class="app-connection-body">
                 <p id="claude-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="claude-fields" class="capability-fields" data-instance-feature="agent.remote" aria-describedby="claude-fields-unavailable" aria-label="Claude connection settings">
-                <details class="disclosure connection-method" name="claude-method">
-                  <summary><span>Desktop chat<small>Use the Claude Desktop app on this computer.</small></span></summary>
+                <section class="editor-section connection-method">
+                  <h3><span>Desktop chat<small>Use the Claude Desktop app on this computer.</small></span></h3>
                   <form id="claude-permissions-form" class="form-stack" data-managed-form>
                     <input id="claude-credential" type="hidden" />
                     <fieldset id="claude-permissions" class="permission-options"><legend>What can Claude Desktop do?</legend>
@@ -675,60 +688,60 @@
                       <p class="help-text">Paste it into the desktop extension’s fhold access key field. Keep it private.</p>
                     </div></li>
                   </ol>
-                </details>
-                <details class="disclosure connection-method" name="claude-method">
-                  <summary><span>Claude remote connection<small>Work with this instance from the Claude app on any device.</small></span><span class="card-label">Experimental</span></summary>
+                </section>
+                <section class="editor-section connection-method">
+                  <h3><span>Claude remote connection<small>Work with this instance from the Claude app on any device.</small></span><span class="card-label">Experimental</span></h3>
                   <p class="help-text">Sign in with your Claude account and approve access to this instance. Then open the connection link in Claude.</p>
                   <p><span id="claude-remote-status" class="status-badge neutral">Startup not checked</span></p>
                   <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="claude">Set up remote connection</button><button class="secondary" type="button" data-remote-connect="claude" disabled>Open in Claude</button><button class="text-button" type="button" data-remote-disable="claude" hidden>Disable startup</button></div>
                   <p class="help-text">Requires an eligible Claude subscription. Remote sessions can work with this instance’s files using Claude’s own permissions. The desktop chat permissions above do not apply. Disabling startup keeps your sign-in; manage paired devices in Claude.</p>
-                </details>
+                </section>
                 </fieldset>
               </div>
-            </details>
+            </section>
 
-            <details id="codex-connection" class="panel panel-disclosure connection-app" data-connection-app="codex" name="connected-app">
-              <summary><span>Codex<small>Remote sessions with your ChatGPT account.</small></span><span class="card-label">Experimental</span></summary>
+            <section id="codex-connection" class="editor-page connection-app" data-connection-app="codex" data-detail-page data-title="Codex" data-description="Remote sessions with your ChatGPT account." hidden>
+              <h2 tabindex="-1"><span>Codex<small>Remote sessions with your ChatGPT account.</small></span><span class="card-label">Experimental</span></h2>
               <div class="app-connection-body">
                 <p id="codex-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="codex-fields" class="capability-fields" data-instance-feature="agent.remote" aria-describedby="codex-fields-unavailable" aria-label="Codex connection settings">
                 <p class="help-text">Set up guides sign-in, workspace access and execution settings. Then get a pairing code to connect your Codex client.</p>
                 <p><span id="codex-remote-status" class="status-badge neutral">Startup not checked</span></p>
                 <div class="button-row compact"><button class="secondary" type="button" data-remote-enable="codex">Set up Codex</button><button class="secondary" type="button" data-remote-connect="codex" disabled>Get pairing code</button><button class="text-button" type="button" data-remote-disable="codex" hidden>Disable startup</button></div>
-                <details class="disclosure">
-                  <summary>Knowledge recall</summary>
+                <section class="editor-section">
+                  <h3>Knowledge recall</h3>
                   <p class="help-text">Automatic recall: <span id="codex-recall-status" class="status-badge neutral">Not checked</span></p>
                   <p id="codex-recall-guidance" class="help-text">Review AKM hooks here; no Codex command is needed.</p>
                   <button class="secondary" type="button" data-codex-recall-review>Review knowledge recall</button>
-                </details>
+                </section>
                 <p class="help-text">Codex runs its own agent. This uses native access; the MCP permissions do not apply. Client and host support are required. Disabling startup keeps your sign-in; manage paired devices through your account provider.</p>
                 </fieldset>
               </div>
-            </details>
+            </section>
 
-            <details id="discord-connection" class="panel panel-disclosure connection-app" data-connection-app="discord" name="connected-app">
-              <summary><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></summary>
+            <section id="discord-connection" class="editor-page connection-app" data-connection-app="discord" data-detail-page data-title="Discord" data-description="Message your agent from a Discord server." hidden>
+              <h2 tabindex="-1"><span>Discord<small>Message your agent from a Discord server.</small></span><span id="discord-connection-status" class="status-badge neutral">Not configured</span></h2>
               <div class="app-connection-body">
                 <p id="discord-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="discord-fields" class="capability-fields" data-instance-feature="apps.portal.saveToken" aria-describedby="discord-fields-unavailable" aria-label="Discord connection settings">
-                <details class="disclosure setup-help"><summary>Set up your Discord bot</summary><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with View Channels, Read Message History, Send Messages, Create Public Threads, Send Messages in Threads, and Add Reactions.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></details>
-                <details id="discord-tokens" class="disclosure">
-                  <summary><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></summary>
+                <section class="editor-section setup-help"><h3>Set up your Discord bot</h3><ol><li>Create an application and add a bot in the Discord Developer Portal.</li><li>Enable the bot’s <strong>Message Content Intent</strong>.</li><li>Invite it with View Channels, Read Message History, Send Messages, Create Public Threads, Send Messages in Threads, and Add Reactions.</li><li>Save its bot token here, choose who may use it, then enable Discord.</li></ol><button class="text-button" type="button" data-external-url="https://discord.com/developers/applications">Open Discord app setup</button></section>
+                <section id="discord-tokens" class="editor-section">
+                  <h3><span>Bot tokens</span><span id="discord-token-status" class="status-badge neutral">Not configured</span></h3>
                   <form id="discord-token-form" class="form-stack" data-managed-form>
                     <label class="field" for="discord-bot-token"><span id="discord-bot-token-label">Discord bot token</span><input id="discord-bot-token" type="password" autocomplete="off" /></label>
                     <p id="discord-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
                     <button class="secondary" type="submit">Save Discord token</button>
                   </form>
-                </details>
+                </section>
                 <form id="discord-connections-form" class="form-stack" data-managed-form>
                   <input id="discord-credential" type="hidden" />
                   <label class="switch"><input id="discord" type="checkbox" /><span>Enable Discord</span></label>
-                  <details id="discord-access-disclosure" class="disclosure">
-                    <summary>Who can use the bot</summary>
+                  <section id="discord-access-disclosure" class="editor-section">
+                    <h3>Who can use the bot</h3>
                     <p class="help-text">Add at least one allowed server, role or user ID. Nobody is allowed by default.</p>
                     <div class="field-grid two-column disclosure-body"><label class="field" for="discord-guilds"><span>Allowed server IDs</span><input id="discord-guilds" autocomplete="off" placeholder="123456789012345678" /></label><label class="field" for="discord-roles"><span>Allowed role IDs</span><input id="discord-roles" autocomplete="off" /></label><label class="field" for="discord-users"><span>Allowed user IDs</span><input id="discord-users" autocomplete="off" /></label><label class="field" for="discord-blocked-users"><span>Blocked user IDs</span><input id="discord-blocked-users" autocomplete="off" /></label></div>
                     <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
-                  </details>
+                  </section>
                   <fieldset id="discord-permissions" class="permission-options"><legend>What can Discord do?</legend>
                     <label class="permission-option"><input id="discord-policy-chat" name="discord-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
                     <label class="permission-option"><input id="discord-policy-read" name="discord-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
@@ -737,41 +750,41 @@
                   <p id="discord-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Discord settings</button>
                 </form>
-                <details id="discord-user-access" class="disclosure">
-                  <summary>Different permissions for a person</summary>
+                <section id="discord-user-access" class="editor-section">
+                  <h3>Different permissions for a person</h3>
                   <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
                   <button class="secondary" type="button" data-add-person-permissions="discord">Add person</button>
                   <div id="discord-mappings" class="mapping-list" aria-live="polite"></div>
 
-                </details>
+                </section>
                 </fieldset>
               </div>
-            </details>
+            </section>
 
-            <details id="slack-connection" class="panel panel-disclosure connection-app" data-connection-app="slack" name="connected-app">
-              <summary><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></summary>
+            <section id="slack-connection" class="editor-page connection-app" data-connection-app="slack" data-detail-page data-title="Slack" data-description="Message your agent from your Slack workspace." hidden>
+              <h2 tabindex="-1"><span>Slack<small>Message your agent from your Slack workspace.</small></span><span id="slack-connection-status" class="status-badge neutral">Not configured</span></h2>
               <div class="app-connection-body">
                 <p id="slack-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="slack-fields" class="capability-fields" data-instance-feature="apps.portal.saveToken" aria-describedby="slack-fields-unavailable" aria-label="Slack connection settings">
-                <details class="disclosure setup-help"><summary>Set up your Slack bot</summary><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need. Add <code>reactions:write</code> for tool reactions.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need.</li><li>Enable Interactivity &amp; Shortcuts for question, approval and Stop buttons. Socket Mode needs no public Request URL.</li><li>Install or reinstall the app, save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></details>
-                <details id="slack-tokens" class="disclosure">
-                  <summary><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></summary>
+                <section class="editor-section setup-help"><h3>Set up your Slack bot</h3><ol><li>Create a Slack app and enable Socket Mode.</li><li>Create an app-level token with <code>connections:write</code>.</li><li>Grant the bot <code>app_mentions:read</code>, <code>chat:write</code>, and the history scopes your channels need. Add <code>reactions:write</code> for tool reactions.</li><li>Subscribe to <code>app_mention</code> and the message events those channels need.</li><li>Enable Interactivity &amp; Shortcuts for question, approval and Stop buttons. Socket Mode needs no public Request URL.</li><li>Install or reinstall the app, save both tokens here, choose who may use it, then enable Slack.</li></ol><button class="text-button" type="button" data-external-url="https://api.slack.com/apps">Open Slack app setup</button></section>
+                <section id="slack-tokens" class="editor-section">
+                  <h3><span>Bot tokens</span><span id="slack-token-status" class="status-badge neutral">Not configured</span></h3>
                   <form id="slack-token-form" class="form-stack" data-managed-form>
                     <label class="field" for="slack-bot-token"><span id="slack-bot-token-label">Slack bot token</span><input id="slack-bot-token" type="password" autocomplete="off" /></label>
                     <label class="field" for="slack-app-token"><span id="slack-app-token-label">Slack app token</span><input id="slack-app-token" type="password" autocomplete="off" /></label>
                     <p id="slack-token-help" class="help-text">Stored privately. Leave a configured token blank to keep it.</p>
                     <button class="secondary" type="submit">Save Slack tokens</button>
                   </form>
-                </details>
+                </section>
                 <form id="slack-connections-form" class="form-stack" data-managed-form>
                   <input id="slack-credential" type="hidden" />
                   <label class="switch"><input id="slack" type="checkbox" /><span>Enable Slack</span></label>
-                  <details id="slack-access-disclosure" class="disclosure">
-                    <summary>Who can use the bot</summary>
+                  <section id="slack-access-disclosure" class="editor-section">
+                    <h3>Who can use the bot</h3>
                     <p class="help-text">Add at least one allowed channel or user ID. Nobody is allowed by default.</p>
                     <div class="field-grid two-column disclosure-body"><label class="field" for="slack-channels"><span>Allowed channel IDs</span><input id="slack-channels" autocomplete="off" placeholder="C012ABCDEF" /></label><label class="field" for="slack-users"><span>Allowed user IDs</span><input id="slack-users" autocomplete="off" placeholder="U012ABCDEF" /></label><label class="field" for="slack-blocked-users"><span>Blocked user IDs</span><input id="slack-blocked-users" autocomplete="off" /></label></div>
                     <p class="help-text">Separate IDs with commas. Every filled allowed list must match; blocked users are always denied.</p>
-                  </details>
+                  </section>
                   <fieldset id="slack-permissions" class="permission-options"><legend>What can Slack do?</legend>
                     <label class="permission-option"><input id="slack-policy-chat" name="slack-policy" type="radio" value="chat" /><span><strong>Chat only</strong><small>Chat without tools or file access.</small></span></label>
                     <label class="permission-option"><input id="slack-policy-read" name="slack-policy" type="radio" value="read" checked /><span><strong>Read files</strong><small>Chat and read non-sensitive workspace files. Cannot change files or run commands.</small></span></label>
@@ -780,19 +793,19 @@
                   <p id="slack-policy-help" class="help-text" role="status"></p>
                   <button class="secondary" type="submit">Save Slack settings</button>
                 </form>
-                <details id="slack-user-access" class="disclosure">
-                  <summary>Different permissions for a person</summary>
+                <section id="slack-user-access" class="editor-section">
+                  <h3>Different permissions for a person</h3>
                   <p class="help-text">Allowed people use the bot’s permissions unless you set different permissions here.</p>
                   <button class="secondary" type="button" data-add-person-permissions="slack">Add person</button>
                   <div id="slack-mappings" class="mapping-list" aria-live="polite"></div>
 
-                </details>
+                </section>
                 </fieldset>
               </div>
-            </details>
+            </section>
 
-            <details id="mcp-connection" class="panel panel-disclosure connection-app" data-connection-app="mcp" name="connected-app">
-              <summary><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></summary>
+            <section id="mcp-connection" class="editor-page connection-app" data-connection-app="mcp" data-detail-page data-title="MCP" data-description="Connect other AI apps to your agent." hidden>
+              <h2 tabindex="-1"><span>MCP<small>Connect other AI apps to your agent.</small></span><span id="mcp-connection-status" class="status-badge neutral">Not checked</span></h2>
               <div class="app-connection-body">
                 <p id="mcp-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="mcp-fields" class="capability-fields" data-instance-feature="apps.credentials.create" aria-describedby="mcp-fields-unavailable" aria-label="MCP connection settings">
@@ -852,8 +865,8 @@
                   <button class="secondary" type="button" data-copy-client-key="mcp">Copy access key</button>
                   <p class="help-text">Paste it into your app’s access-token or bearer-token field. Keep it private.</p>
                 </section>
-                <details class="disclosure">
-                  <summary>Advanced · network & troubleshooting</summary>
+                <section class="editor-section">
+                  <h3>Advanced · network & troubleshooting</h3>
                   <form id="mcp-network-form" class="form-stack" data-managed-form>
                     <div class="field-grid two-column">
                       <label class="field" for="gateway-bind"><span>Bind address</span><input id="gateway-bind" autocomplete="off" required /></label>
@@ -864,123 +877,28 @@
                   <p id="guardian-api-status" class="help-text"></p>
                   <dl class="connection-values"><div><dt>Health check</dt><dd><code id="guardian-health-url-detail">Loading…</code><button class="text-button" type="button" data-copy-field="guardian-health-url-detail">Copy</button></dd></div></dl>
                   <p class="help-text">MCP is an API, not a website. Use the full /mcp address, not the base port. The health check returns JSON. 127.0.0.1 accepts connections only from this computer; LAN or public access needs explicit network and TLS configuration.</p>
-                </details>
+                </section>
                 </fieldset>
               </div>
-            </details>
-            <details id="advanced-access" class="disclosure">
-              <summary>Advanced access</summary>
+            </section>
+            <section id="advanced-access" class="editor-page" data-detail-page data-title="Advanced access" data-description="Manage named client permissions and shared access." hidden>
+              <h2 tabindex="-1">Advanced access</h2>
               <p id="access-fields-unavailable" class="capability-note" hidden></p>
               <fieldset id="access-fields" class="capability-fields" data-instance-feature="apps.credentials.create" aria-describedby="access-fields-unavailable" aria-label="Advanced app permissions">
               <p class="help-text">Change permissions for existing connections. Changes apply to every app using that connection; external apps may not be listed. OpenCode, Claude remote connection and Codex use their own permissions.</p>
               <div id="saved-access" class="saved-access-list"></div>
               <button class="secondary" type="button" data-new-saved-access>Create separate access</button>
               </fieldset>
-            </details>
+            </section>
           </section>
 
-          <section id="view-system" class="view-panel ready-only disclosure-inventory" data-view-panel="system" hidden aria-labelledby="view-title">
-            <details id="custody-panel" class="panel panel-disclosure">
-              <summary><span>Private task access · Experimental</span></summary>
-              <p>Store credentials separately from your assistant and approve specific tasks that may use them. Requires the credential custody Docker overlay. These settings may change or be removed.</p>
-              <p class="help-text">Credentials remain plaintext in a private volume, outside normal fhold backups. Trusted host administrators and approved scripts can access them. Approval allows repeated use, without a prompt each time.</p>
-              <button id="custody-load" class="secondary" type="button">Load private task access</button>
-              <p id="custody-status" role="status">Load private task access to inspect this instance.</p>
-              <div id="custody-forms" class="form-stack" hidden>
-                <form id="custody-secret-form" class="form-stack" autocomplete="off">
-                  <h3>Add or replace a credential</h3>
-                  <label class="field" for="custody-secret-name"><span>Credential name</span><input id="custody-secret-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
-                  <label class="field" for="custody-secret-value"><span>Credential value</span><input id="custody-secret-value" type="password" autocomplete="new-password" required maxlength="16384" spellcheck="false" placeholder="Enter the credential privately"></label>
-                  <p class="help-text">The value is sent privately and cleared from this form when submitted. There is no reveal action. Replacing a name changes the credential used by tasks that reference it.</p>
-                  <button class="primary" type="submit">Save credential</button>
-                </form>
-                <form id="custody-task-form" class="form-stack" autocomplete="off">
-                  <h3>Create a task draft</h3>
-                  <label class="field" for="custody-task-name"><span>New task name</span><input id="custody-task-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="check-service"></label>
-                  <label class="field" for="custody-task-credential"><span>Credential name to use</span><input id="custody-task-credential" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
-                  <label class="field" for="custody-task-script"><span>Reviewed shell script</span><textarea id="custody-task-script" required rows="10" maxlength="32768" spellcheck="false" placeholder="#!/bin/sh&#10;set -eu&#10;# Use CREDENTIAL in a fixed, trusted operation."></textarea></label>
-                  <p class="help-text">Start with #!/bin/sh. The credential is provided as CREDENTIAL in the script environment. Never paste its value here, echo it, put it in process arguments, or load assistant-writable code. Use fixed trusted destinations. Existing drafts are not overwritten; create a new name for revisions and revoke the old grant.</p>
-                  <button class="secondary" type="submit">Save draft for review</button>
-                </form>
-                <h3>Admin-created tasks</h3>
-                <p class="help-text">Manual tasks and grants are preserved and are not managed in this list.</p>
-                <div id="custody-task-list" class="button-row"></div>
-                <div id="custody-review-panel" class="form-stack" hidden>
-                  <h3>Review task access</h3>
-                  <p id="custody-grant-status"></p>
-                  <pre id="custody-review" class="custody-review"></pre>
-                  <label><input id="custody-reviewed" type="checkbox"> I reviewed the entire script, its dependencies and destinations, and trust it to use this credential.</label>
-                  <div class="button-row"><button id="custody-approve" class="primary" type="button">Approve task</button><button id="custody-revoke" class="secondary" type="button">Revoke task access</button></div>
-                </div>
-              </div>
-            </details>
-            <details id="deployment-settings" class="panel panel-disclosure">
-              <summary>Deployment settings</summary>
-              <p id="deployment-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="deployment-fields" class="capability-fields" data-instance-feature="host.deployment.prepare" aria-describedby="deployment-fields-unavailable">
-                <p class="help-text">Save a small pending change, then choose when to apply it. Unrelated deployment settings are preserved. Changing availability does not silently change scheduling.</p>
-                <button id="load-deployment-settings" class="secondary" type="button">Load current settings</button>
-                <form id="deployment-edit-form" class="form-stack" hidden>
-                  <p id="deployment-current" class="help-text"></p>
-                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability" aria-describedby="deployment-availability-help"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select><small id="deployment-availability-help"></small></label>
-                  <label class="field" for="deployment-container"><span>Image to update</span><select id="deployment-container"></select></label>
-                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" aria-describedby="deployment-image-help" /><small id="deployment-image-help"></small></label>
-                  <p class="help-text">The settings below apply to the Assistant, regardless of the image selected above.</p>
-                  <label class="field" for="deployment-timezone"><span>Scheduler timezone (optional)</span><input id="deployment-timezone" placeholder="Keep current timezone" aria-describedby="deployment-timezone-help" /><small id="deployment-timezone-help"></small></label>
-                  <label class="field" for="deployment-schedule"><span>Scheduling</span><select id="deployment-schedule"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-schedule-current"></small></label>
-                  <label class="field" for="deployment-claude"><span>Claude worker startup</span><select id="deployment-claude"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-claude-current"></small></label>
-                  <label class="field" for="deployment-codex"><span>Codex worker startup</span><select id="deployment-codex"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-codex-current"></small></label>
-                  <p class="help-text">Worker startup is separate from native sign-in and consent. Outbound connections cannot wake an on-demand instance. No credentials are saved in this draft.</p>
-                  <div class="button-row"><button class="primary" type="submit">Save changes</button><button id="discard-deployment" class="secondary" type="button">Discard pending changes</button></div>
-                </form>
-              </fieldset>
-            </details>
-            <details id="installation-details" class="panel panel-disclosure">
-              <summary id="diagnostics-heading">Installation details</summary>
-              <dl class="detail-list">
-                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
-                <div><dt>Instance location</dt><dd id="home">Loading…</dd></div>
-                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
-                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
-              </dl>
-              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
-              <a id="deployment-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open deployment tools</a>
-              <pre id="deployment-revisions" class="help-text" hidden></pre>
-            </details>
-
-            <details id="recent-logs" class="panel panel-disclosure">
-              <summary>Recent logs</summary>
-              <p id="log-help" class="help-text"></p>
-              <div class="field-grid three-column">
-                <label class="field" for="log-source"><span>Source</span><select id="log-source"><option value="system">System</option><option value="console">Agent console</option></select></label>
-                <label class="field" for="log-revision"><span>Revision</span><select id="log-revision"><option value="">Current</option></select></label>
-                <label class="field" for="log-container"><span>Container</span><select id="log-container"><option value="">All services</option></select></label>
-              </div>
-              <button id="load-logs" class="secondary" type="button">Load logs</button>
-              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
-            </details>
-
-            <details id="connection-keys" class="panel panel-disclosure">
-              <summary><span>Connection keys <small>Advanced security maintenance</small></span></summary>
-              <p id="keys-fields-unavailable" class="capability-note" hidden></p>
-              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials.revealKey" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
-              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
-              <form id="key-rotation-form" class="form-stack">
-                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
-                <button class="secondary" type="submit">Rotate key</button>
-              </form>
-              <div id="rotated-key-details" hidden>
-                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
-                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
-              </div>
-              </fieldset>
-            </details>
-
-            <details id="backup-recovery" class="panel panel-disclosure">
-              <summary><span>Backup and recovery <small>Automatic backups and manual exports</small></span></summary>
+          <section id="view-system" class="view-panel ready-only" data-view-panel="system" hidden aria-labelledby="view-title" data-navigation="System">
+            <section id="backup-recovery" class="panel" data-detail-page data-title="Backup and recovery" data-description="Protect conversations and sign-ins, restore an Assistant or export files." hidden>
+              <h2 tabindex="-1"><span>Backup and recovery <small>Protect conversations and sign-ins, restore an Assistant or export files.</small></span></h2>
+              <div data-navigation="Backup and recovery">
               <p class="section-intro">Protect the same Assistant with automatic backups, or export an entire stopped instance or reviewed portable content. The same backup settings work with persistent and replaceable containers.</p>
-              <details id="runtime-recovery" class="disclosure" open>
-                <summary>Automatic Assistant backups</summary>
+              <section id="runtime-recovery" class="editor-page" data-detail-page data-title="Automatic Assistant backups" data-description="Choose a destination, schedule and recovery coverage." hidden>
+                <h2 tabindex="-1">Automatic Assistant backups</h2>
                 <p id="recovery-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="recovery-fields" class="capability-fields" aria-describedby="recovery-fields-unavailable" aria-label="Automatic Assistant backup settings">
                 <p class="section-intro">Use the same automatic backups on local, SSH and cloud hosts. SQLite snapshots and selected files finish on local disk, then copy to the backup destination. Startup restores the same agent’s conversations, sign-ins, approvals and SQLite state before writers run, including after ordinary image upgrades.</p>
@@ -1035,17 +953,17 @@
                   <button id="check-recovery-status" class="secondary" type="button">Check checkpoint status</button>
                   <button id="inspect-recovery" class="secondary" type="button">Inspect saved coverage</button>
                 </div>
-                <details class="disclosure"><summary>Initialize or restore while stopped</summary>
+                <section class="editor-section"><h3>Initialize or restore while stopped</h3>
                   <p id="runtime-recovery-offline-help" class="help-text">Save the settings, stop this instance, then initialize a genuinely new destination once. Start it to publish its first checkpoint. For an existing namespace, do not initialize again: startup restores automatically before writers run. Offline validation/restoration leaves containers stopped and never overwrites surviving local data.</p>
                   <p id="runtime-recovery-offline-availability" class="help-text"></p>
                   <div class="button-row"><button id="initialize-recovery" class="secondary" type="button" disabled>Initialize new destination</button><button id="restore-runtime-recovery" class="secondary" type="button" disabled>Validate / restore same instance</button></div>
                   <p class="help-text">A stale owner needs separate, explicit stopped-writer verification; Admin never takes over a lock automatically. Retain the original disk/checkpoints until cold recovery is verified.</p>
-                </details>
+                </section>
                 <details class="disclosure technical-disclosure"><summary>Private checkpoint details</summary><textarea id="runtime-recovery-details" class="technical-output log-output" readonly spellcheck="false" aria-label="Private checkpoint status and selected container paths">No checkpoint operation has run.</textarea></details>
                 </fieldset>
-              </details>
-              <details id="checkpoint-packages" class="disclosure">
-                <summary>Export / import Assistant backup</summary>
+              </section>
+              <section id="checkpoint-packages" class="editor-page" data-detail-page data-title="Export / import Assistant backup" data-description="Package a private checkpoint or restore it into an empty home." hidden>
+                <h2 tabindex="-1">Export / import Assistant backup</h2>
                 <p id="checkpoint-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="checkpoint-fields" class="capability-fields" data-instance-feature="data.recovery.package" aria-describedby="checkpoint-fields-unavailable" aria-label="Assistant checkpoint export and import">
                   <p class="help-text">Export packages the last accepted Assistant backup. If automatic backups are off, the same engine captures a backup once. The package contains private sign-ins, approvals and task intent; keep it private. Host settings, Guardian/Portal state and external drives need separate protection.</p>
@@ -1062,15 +980,15 @@
                   </form>
                   <textarea id="checkpoint-package-result" class="technical-output" readonly spellcheck="false" aria-label="Checkpoint backup preview and result">No checkpoint package operation has run.</textarea>
                 </fieldset>
-              </details>
-              <details id="import-export" class="disclosure">
-                <summary id="backup-heading">Other export options</summary>
+              </section>
+              <section id="import-export" class="editor-page" data-detail-page data-title="Other export options" data-description="Move an entire stopped instance or selected portable content." hidden>
+                <h2 tabindex="-1" id="backup-heading">Other export options</h2>
                 <p id="transfer-fields-unavailable" class="capability-note" hidden></p>
                 <fieldset id="transfer-fields" class="capability-fields" data-instance-feature="data.backup" aria-describedby="transfer-fields-unavailable" aria-label="Instance export">
                 <p class="section-intro">Choose an entire stopped instance to keep conversations and sign-ins, or portable content to transfer reviewed files into a fresh agent.</p>
                 <p class="help-text">To import an entire instance, choose “Open another instance…” → “Import assistant…” and select an empty destination. To import portable content, create a fresh instance and choose “Import from an fhold export” during setup. Imported portable tasks stay inactive until reviewed.</p>
                 <p class="help-text">Automatic Assistant backups above preserve same-instance recovery. Their format is not an import/export file.</p>
-                <details class="disclosure"><summary>What is included?</summary><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></details>
+                <section class="editor-section"><h3>What is included?</h3><p class="help-text">Entire instance includes system, config, knowledge, workspace, state and data: native conversations, sign-ins, credentials, permissions, plugins and active task settings. Only process coordination is omitted. Portable content includes reviewed knowledge, workspace, allowlisted settings and inactive task definitions. No native conversations or remote sign-ins in portable content. Neither option captures external drives, named volumes, external symlink targets or container images.</p></section>
                 <form id="backup-form" class="form-stack">
                   <label class="field" for="backup-scope"><span>Export scope</span><select id="backup-scope"><option value="portable">Portable content</option><option value="instance">Entire instance (must be stopped)</option></select></label>
                   <p id="backup-full-help" class="help-text" hidden>Stop the instance in Overview first. All containers and other writers must stay stopped until export finishes. The unencrypted export includes private sign-ins and access keys. Import it into an empty folder, and never run both copies together. Export does not automatically stop or restart containers.</p>
@@ -1088,9 +1006,103 @@
                 <div id="backup-summary" class="inline-status neutral" hidden></div>
                 <details class="disclosure technical-disclosure"><summary>Export details</summary><textarea id="backup-result" class="technical-output" readonly spellcheck="false" aria-label="Export technical details">No export operation has run.</textarea></details>
                 </fieldset>
-              </details>
+              </section>
 
-            </details>
+            </div>
+            </section>
+            <section id="deployment-settings" class="panel" data-detail-page data-title="Deployment settings" data-description="Change images, availability and worker startup. Review before applying." hidden>
+              <h2 tabindex="-1"><span>Deployment settings<small>Change images, availability and worker startup. Review before applying.</small></span></h2>
+              <p id="deployment-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="deployment-fields" class="capability-fields" data-instance-feature="host.deployment.prepare" aria-describedby="deployment-fields-unavailable">
+                <p class="help-text">Save a small pending change, then choose when to apply it. Unrelated deployment settings are preserved. Changing availability does not silently change scheduling.</p>
+                <button id="load-deployment-settings" class="secondary" type="button">Load current settings</button>
+                <form id="deployment-edit-form" class="form-stack" hidden>
+                  <p id="deployment-current" class="help-text"></p>
+                  <label class="field" for="deployment-availability"><span>Availability</span><select id="deployment-availability" aria-describedby="deployment-availability-help"><option value="">Keep current</option><option value="always">Always running</option><option value="on-demand">On demand</option></select><small id="deployment-availability-help"></small></label>
+                  <label class="field" for="deployment-container"><span>Image to update</span><select id="deployment-container"></select></label>
+                  <label class="field" for="deployment-image"><span>New image (optional)</span><input id="deployment-image" autocomplete="off" spellcheck="false" placeholder="Keep current image" aria-describedby="deployment-image-help" /><small id="deployment-image-help"></small></label>
+                  <p class="help-text">The settings below apply to the Assistant, regardless of the image selected above.</p>
+                  <label class="field" for="deployment-timezone"><span>Scheduler timezone (optional)</span><input id="deployment-timezone" placeholder="Keep current timezone" aria-describedby="deployment-timezone-help" /><small id="deployment-timezone-help"></small></label>
+                  <label class="field" for="deployment-schedule"><span>Scheduling</span><select id="deployment-schedule"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-schedule-current"></small></label>
+                  <label class="field" for="deployment-claude"><span>Claude worker startup</span><select id="deployment-claude"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-claude-current"></small></label>
+                  <label class="field" for="deployment-codex"><span>Codex worker startup</span><select id="deployment-codex"><option value="">Keep current</option><option value="1">Enabled</option><option value="0">Disabled</option></select><small id="deployment-codex-current"></small></label>
+                  <p class="help-text">Worker startup is separate from native sign-in and consent. Outbound connections cannot wake an on-demand instance. No credentials are saved in this draft.</p>
+                  <div class="button-row"><button class="primary" type="submit">Save changes</button><button id="discard-deployment" class="secondary" type="button">Discard pending changes</button></div>
+                </form>
+              </fieldset>
+            </section>
+            <section id="installation-details" class="panel" data-detail-page data-title="Installation details" data-description="Find this assistant’s location, configuration and native access." hidden>
+              <h2 tabindex="-1" id="diagnostics-heading"><span>Installation details<small>Find this assistant’s location, configuration and native access.</small></span></h2>
+              <dl class="detail-list">
+                <div><dt>Instance name</dt><dd id="instance-name">Loading…</dd></div>
+                <div><dt>Instance location</dt><dd id="home">Loading…</dd></div>
+                <div><dt>Stack configuration</dt><dd id="config-path">Loading…</dd></div>
+                <div><dt>Trusted OpenCode address</dt><dd><a id="assistant-url-detail" class="endpoint-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open OpenCode in your browser</a></dd></div>
+              </dl>
+              <p class="help-text">Direct access bypasses Guardian. Find the OpenCode username and password in Apps.</p>
+              <a id="deployment-portal" class="secondary-link" href="about:blank" target="_blank" rel="noreferrer" hidden>Open deployment tools</a>
+              <pre id="deployment-revisions" class="help-text" hidden></pre>
+            </section>
+            <section id="recent-logs" class="panel" data-detail-page data-title="Recent logs" data-description="Inspect service output when something needs attention." hidden>
+              <h2 tabindex="-1"><span>Recent logs<small>Inspect service output when something needs attention.</small></span></h2>
+              <p id="log-help" class="help-text"></p>
+              <div class="field-grid three-column">
+                <label class="field" for="log-source"><span>Source</span><select id="log-source"><option value="system">System</option><option value="console">Agent console</option></select></label>
+                <label class="field" for="log-revision"><span>Revision</span><select id="log-revision"><option value="">Current</option></select></label>
+                <label class="field" for="log-container"><span>Container</span><select id="log-container"><option value="">All services</option></select></label>
+              </div>
+              <button id="load-logs" class="secondary" type="button">Load logs</button>
+              <textarea id="logs" class="technical-output log-output" readonly spellcheck="false" aria-label="Recent fhold logs">Logs have not been loaded.</textarea>
+            </section>
+            <section id="connection-keys" class="panel" data-detail-page data-title="Connection keys" data-description="Replace an exposed key and reconnect the apps that use it." hidden>
+              <h2 tabindex="-1"><span>Connection keys <small>Replace an exposed key and reconnect the apps that use it.</small></span></h2>
+              <p id="keys-fields-unavailable" class="capability-note" hidden></p>
+              <fieldset id="keys-fields" class="capability-fields" data-instance-feature="apps.credentials.revealKey" aria-describedby="keys-fields-unavailable" aria-label="Connection key maintenance">
+              <p class="help-text">Rotate a key only if it was exposed or needs replacing. This does not change permissions or conversations, but every app using the old key must be updated.</p>
+              <form id="key-rotation-form" class="form-stack">
+                <label class="field" for="key-rotation-credential"><span>Connection</span><select id="key-rotation-credential" required></select></label>
+                <button class="secondary" type="submit">Rotate key</button>
+              </form>
+              <div id="rotated-key-details" hidden>
+                <p class="help-text">Key rotated. Update each external app using this connection. fhold supplies bot keys automatically; apply the saved change when ready.</p>
+                <button id="copy-rotated-key" class="secondary" type="button">Copy new key</button>
+              </div>
+              </fieldset>
+            </section>
+            <section id="custody-panel" class="panel" data-detail-page data-title="Private task access · Experimental" data-description="Review specific tasks that may use separately stored credentials." hidden>
+              <h2 tabindex="-1"><span>Private task access · Experimental<small>Review specific tasks that may use separately stored credentials.</small></span></h2>
+              <p>Store credentials separately from your assistant and approve specific tasks that may use them. Requires the credential custody Docker overlay. These settings may change or be removed.</p>
+              <p class="help-text">Credentials remain plaintext in a private volume, outside normal fhold backups. Trusted host administrators and approved scripts can access them. Approval allows repeated use, without a prompt each time.</p>
+              <button id="custody-load" class="secondary" type="button">Load private task access</button>
+              <p id="custody-status" role="status">Load private task access to inspect this instance.</p>
+              <div id="custody-forms" class="form-stack" hidden>
+                <form id="custody-secret-form" class="form-stack" autocomplete="off">
+                  <h3>Add or replace a credential</h3>
+                  <label class="field" for="custody-secret-name"><span>Credential name</span><input id="custody-secret-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-secret-value"><span>Credential value</span><input id="custody-secret-value" type="password" autocomplete="new-password" required maxlength="16384" spellcheck="false" placeholder="Enter the credential privately"></label>
+                  <p class="help-text">The value is sent privately and cleared from this form when submitted. There is no reveal action. Replacing a name changes the credential used by tasks that reference it.</p>
+                  <button class="primary" type="submit">Save credential</button>
+                </form>
+                <form id="custody-task-form" class="form-stack" autocomplete="off">
+                  <h3>Create a task draft</h3>
+                  <label class="field" for="custody-task-name"><span>New task name</span><input id="custody-task-name" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="check-service"></label>
+                  <label class="field" for="custody-task-credential"><span>Credential name to use</span><input id="custody-task-credential" required pattern="[a-z][a-z0-9-]{0,47}" maxlength="48" placeholder="my-service"></label>
+                  <label class="field" for="custody-task-script"><span>Reviewed shell script</span><textarea id="custody-task-script" required rows="10" maxlength="32768" spellcheck="false" placeholder="#!/bin/sh&#10;set -eu&#10;# Use CREDENTIAL in a fixed, trusted operation."></textarea></label>
+                  <p class="help-text">Start with #!/bin/sh. The credential is provided as CREDENTIAL in the script environment. Never paste its value here, echo it, put it in process arguments, or load assistant-writable code. Use fixed trusted destinations. Existing drafts are not overwritten; create a new name for revisions and revoke the old grant.</p>
+                  <button class="secondary" type="submit">Save draft for review</button>
+                </form>
+                <h3>Admin-created tasks</h3>
+                <p class="help-text">Manual tasks and grants are preserved and are not managed in this list.</p>
+                <div id="custody-task-list" class="button-row"></div>
+                <div id="custody-review-panel" class="form-stack" hidden>
+                  <h3>Review task access</h3>
+                  <p id="custody-grant-status"></p>
+                  <pre id="custody-review" class="custody-review"></pre>
+                  <label><input id="custody-reviewed" type="checkbox"> I reviewed the entire script, its dependencies and destinations, and trust it to use this credential.</label>
+                  <div class="button-row"><button id="custody-approve" class="primary" type="button">Approve task</button><button id="custody-revoke" class="secondary" type="button">Revoke task access</button></div>
+                </div>
+              </div>
+            </section>
           </section>
         </main>
       </div>

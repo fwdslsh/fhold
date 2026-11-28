@@ -114,17 +114,17 @@ try {
 	await wait(
 		() =>
 			evaluate(
-				"!document.querySelector('#open-hosting').hidden && !document.querySelector('#hosting-connection').disabled"
+				"document.querySelector('[data-connection-id=qa]')?.checkVisibility() && document.body.dataset.busy !== 'true'"
 			),
 		'computer picker'
 	);
 	await evaluate(
-		"const picker=document.querySelector('#hosting-connection');picker.value='qa';picker.dispatchEvent(new Event('change'));"
+		"document.querySelector('[data-connection-id=qa]').click()"
 	);
 	await wait(
 		() =>
 			evaluate(
-				`!document.querySelector('#hosting-connection').disabled && [...document.querySelectorAll('#hosting-instance-list button')].some(button=>button.textContent.includes(${JSON.stringify(home)}))`
+				`document.body.dataset.busy !== 'true' && [...document.querySelectorAll('#hosting-instance-list button')].some(button=>button.textContent.includes(${JSON.stringify(home)}))`
 			),
 		'automatic discovery'
 	);
@@ -156,35 +156,33 @@ try {
 		await shot(page);
 	}
 	await evaluate(
-		"document.querySelector('#instance-picker').value='manage-hosting';document.querySelector('#instance-picker').dispatchEvent(new Event('change'));"
+		"document.querySelector('.sidebar [data-admin-settings]').click()"
 	);
 	await wait(
 		() =>
 			evaluate(
-				"document.querySelector('#hosting-manager').open && document.querySelector('#hosting-manager-list').children.length>0"
+				"document.querySelector('#hosting-manager').checkVisibility() && document.querySelector('#hosting-manager-list').children.length>0"
 			),
 		'connection manager'
 	);
 	await shot('connections');
 	await evaluate(
-		"document.querySelector('#hosting-manager-close').click();document.querySelector('#instance-picker').value='open-another';document.querySelector('#instance-picker').dispatchEvent(new Event('change'));"
+		"document.querySelector('#admin-settings-back').click();document.querySelector('#instance-picker').click()"
 	);
-	await wait(() => evaluate("document.body?.dataset.phase==='welcome'"), 'return to Welcome');
-	await evaluate("document.querySelector('#connect-host').click()");
 	await wait(
 		() =>
 			evaluate(
-				"!document.querySelector('#open-hosting').hidden && !document.querySelector('#hosting-connection').disabled"
+				"document.querySelector('[data-connection-id=qa]')?.checkVisibility() && document.body.dataset.busy !== 'true'"
 			),
 		'reopened picker'
 	);
 	await evaluate(
-		"const picker=document.querySelector('#hosting-connection');picker.value='qa';picker.dispatchEvent(new Event('change'));"
+		"document.querySelector('[data-connection-id=qa]').click()"
 	);
 	await wait(
 		() =>
 			evaluate(
-				"!document.querySelector('#hosting-connection').disabled && !document.querySelector('#hosting-open-folder').hidden"
+				"document.body.dataset.busy !== 'true' && document.querySelector('#hosting-open-folder').checkVisibility()"
 			),
 		'remote folder action'
 	);

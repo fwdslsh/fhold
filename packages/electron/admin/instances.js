@@ -1,6 +1,6 @@
 import { refresh } from './snapshot.js';
 import { state } from './state.js';
-import { all, byId, message, notice, setBusy, setOptions, setSkipTarget, setText } from './ui.js';
+import { all, byId, message, notice, setBusy, setSkipTarget, setText } from './ui.js';
 import { showHostingChooser, targetKey, targetLocation } from './hosting.js';
 import { chooseManagedDirectory } from './directories.js';
 import { resetProviderState } from './providers.js';
@@ -15,27 +15,9 @@ function instanceName(target) {
 }
 
 export function renderInstancePicker(snapshot) {
-	const ref = snapshot.identity.ref;
-	const selected = ref.kind === 'local-docker' ? ref.homeDir : targetKey({ kind: 'hosted', ref });
-	const others = state.recentInstances.filter((target) => targetKey(target) !== selected);
-	setOptions(
-		byId('instance-picker'),
-		[
-			{
-				value: selected,
-				label:
-					ref.kind === 'local-docker'
-						? snapshot.identity.name
-						: instanceName({ kind: 'hosted', ref, name: snapshot.identity.name })
-			},
-			...others.map((target) => ({
-				value: targetKey(target),
-				label: instanceName(target)
-			})),
-			{ value: 'open-another', label: 'Open another instance…' }
-		],
-		selected
-	);
+	const { ref, name } = snapshot.identity;
+	setText('instance-picker', ref.kind === 'local-docker' ? name : instanceName({ kind: 'hosted', ref, name }));
+	byId('instance-picker').title = `${snapshot.identity.name} · Choose another assistant`;
 	byId('instance-picker').disabled = state.operationInFlight;
 }
 
@@ -262,22 +244,7 @@ export function bindInstanceEvents() {
 		state.installationReadiness = undefined;
 		showNewInstanceSetup();
 	});
-	byId('instance-picker').addEventListener('change', async () => {
-		const requested = byId('instance-picker').value;
-		const current = state.currentSnapshot;
-		const ref = current?.identity.ref;
-		const selected = !ref
-			? ''
-			: ref.kind === 'local-docker'
-				? ref.homeDir
-				: targetKey({ kind: 'hosted', ref });
-		byId('instance-picker').value = selected;
-		if (requested === 'open-another') await showHostingChooser(ref?.connectionId);
-		else {
-			const target = state.recentInstances.find((item) => targetKey(item) === requested);
-			if (target && targetKey(target) !== selected) await openInstance(target);
-		}
-	});
+	byId('instance-picker').addEventListener('click', () => showHostingChooser());
 	byId('install-instance-name').addEventListener('input', suggestInstanceHome);
 	byId('install-home').addEventListener('input', suggestInstanceHome);
 	for (const field of all('#install-advanced input'))

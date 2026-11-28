@@ -107,7 +107,7 @@ synthetic IPC responses, not real SSH/Azure connectivity or provider readiness.
 Packaged startup remains a separate native preload/settings check.
 
 Repeat the four management pages for local Docker, SSH and a capability-limited
-platform snapshot. Navigation, Apps order and System disclosure order must match.
+platform snapshot. Navigation, Apps order and System card order must match.
 Unsupported fieldsets must stay visible and natively disabled, with adjacent
 reasons; image/lifecycle actions must stay in place rather than disappear. Verify
 an unavailable field cannot invoke IPC by pointer or keyboard, while logs and
@@ -124,8 +124,10 @@ collapsed Advanced for folder/ports, Install below Advanced, and a single
 Cancel action on the first step. After installation, Finish later leaves the
 agent running. Successful prerequisite checks
 are hidden; failures show guidance, official Docker/Compose links and retry.
-The sidebar uses a full-width picker without a brand mark; disclosures use filled headers and
-chevrons. Welcome offers a separate **Import assistant…** choice. Import has
+The sidebar assistant button opens location cards without discarding drafts. Apps
+and System cards open dedicated pages; Back restores the originating card's focus.
+Verify a typed draft survives Back, reopening and snapshot refresh. Views use the
+available width and left-aligned headers. Welcome offers an **Import assistant** card. Import has
 Choose folders → Review & import steps, independent export/destination controls
 and a separate review screen. Back exists only on review, keeps both choices
 and requires a new preview; Cancel exits. No installation control is moved,
@@ -213,8 +215,8 @@ inside the wizard. Native restart confirmation and postponement remain unchanged
 For this preview, manually check first-launch choices, one-click previous-instance
 opening, name-based folder suggestions, custom-folder preservation, navigation,
 default-collapsed Advanced, background check/retry states and installation.
-Check that the picker fills the sidebar without a brand mark, disclosure headers are clearly
-interactive, and the requirement guides open normally before selecting a home.
+Check that the picker fills the sidebar without a brand mark, location and assistant
+cards navigate correctly, and requirement guides open normally before selecting a home.
 After installing in a disposable home, Finish later must not stop the agent;
 reopening must resume account setup. Review full import with a disposable export:
 the startup Import choice must open the independent form, Review import must
