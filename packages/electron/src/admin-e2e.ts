@@ -1807,7 +1807,7 @@ async function run(): Promise<Record<string, unknown>> {
 			await window.webContents.executeJavaScript(`(() => {
 				const cards = [...document.querySelectorAll('#view-system > details')];
 				const backup = document.querySelector('#backup-recovery');
-				return cards.map(card => card.id).join(',') === 'custody-panel,deployment-settings,installation-details,recent-logs,connection-keys,backup-recovery' &&
+				return cards.map(card => card.id).join(',') === 'backup-recovery,deployment-settings,installation-details,recent-logs,connection-keys,custody-panel' &&
 					cards.every(card => !card.open) &&
 					backup.querySelector('summary').textContent.startsWith('Backup and recovery') &&
 					backup.contains(document.querySelector('#import-export')) &&

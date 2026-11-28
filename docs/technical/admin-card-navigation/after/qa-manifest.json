@@ -1,0 +1,342 @@
+{
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/158.0.8127.36",
+    "revision": "@14d6f648e8cd7ad750a4044200ce94d3321be260",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.0.0 Safari/537.36",
+    "jsVersion": "15.8.62.31"
+  },
+  "sourceHashes": {
+    "instance-presentation.js": "a00b25ff21286ecba245c247875c138eee778c604a9388dcc579f1886403a2db",
+    "index.html": "f750f27bca1123a8be22eb66078d534f3e3613a96e4eeb426c9e1157149d51e0",
+    "providers.js": "4269198296affacc5ba002811bb98586ba13f769ff89472df1ec86f15530e1b3",
+    "recovery.js": "0d1d36c849aeb26eabb5d3d505b8770c0f995f099cda06e723e296d570d6883d",
+    "instrument-sans.ttf": "b24f1812584816958afcf22e22d08e44318c5e51651e25d2438efdde389b33b1",
+    "hosting.js": "25b78a4679bc3291489d285bac7577fd6da7271dfac2b365dfaded79e8ed2abc",
+    "remote.js": "e9c8c59b3fa34122682a63e1d2f93528b2b1dfddd718f754d06232b08935856f",
+    "configuration.js": "123c9787616a54a517b45b8113a81f3e391a6e74e8ea0c9377ffe9b1d1332f14",
+    "instances.js": "db9dbba8e45532d128a898958b471ec287848e3d3b663bd082dd8eaef2043caf",
+    "model.js": "b88069e4852f165e57639d9dc944f8ff6d2931dcdbd70206dbe7a9d08cdfa57a",
+    "admin.js": "eaf4b206bcb62b92217fe48df42e50324ff4f3ba1bc9696a5ff10c5c0d0d57bf",
+    "ui.js": "e6abc4fa9cf6396bc3e642de2158409c9b7dd14ef96aa03dbf2ca89a60390feb",
+    "access.js": "5047ae938a76c3ff75fda20a92d07ca245bb40ab3345b701fa6d50b3309ac272",
+    "backup.js": "f73998c3449a00a4fff30cb6581028fa27556e2294e355801c207fc85a2e47a6",
+    "admin.css": "15190667143cfe03fb29e86c7fee929317803b34958c734e6c4a2211d7fdbf05",
+    "runtime.js": "06925189b0ce94a1c32d6f0758e5382828775425f804310c2c0780aa78ea493e",
+    "design-tokens.css": "d39ec25a6a6b909be0800e82c6323068984d2bb0d764ab61a388d2b1544b42b6",
+    "keys.js": "5fb169730bd818e98d112158c2f37bd1617aef5039c1c6c8b289edd46fca9198",
+    "connections.js": "d28c81732eb497e2f426d69d6764dbe338256c7712792cb1b46576459ada4814",
+    "custody.js": "b63b81a405a88134145312e8668d434a6636cdbc457e29a49d09721441a83011",
+    "snapshot.js": "499ee37be7b8d93d0fb81694aff4f160b730c9c5caccd15b1aeddd0e4052b199",
+    "state.js": "951b97027e0fc749062a1b14eb8e2931f01a2bc932236e9d85f1c30677c8a1fb",
+    "provisioning.js": "56c6e1b9aacf5957c323ca03b1a7b4a48859858f057d81808c36d1ccdf93f3eb",
+    "settings.js": "c5312da1e00e4e2f3af5473c65f965c2d8a5a0b67bdd0152d9bc293066f8109a",
+    "restart.js": "41a31273f797f70e17c207f0e113820fc942670ad6d2c4885256d3e25b2a89f6",
+    "directories.js": "36a395c832875f46c31d17e2ae9ef6e14381114bcb143b1cacdef1fb6bf404a8"
+  },
+  "keyboardTrace": [
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "overview-opencode-link"
+    },
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "SUMMARY"
+    },
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "SUMMARY"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "remote-cancel"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "remote-begin"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 8,
+      "focus": "remote-cancel"
+    },
+    {
+      "key": "Escape",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "dialog-policy-read"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "cancel-permissions"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 8,
+      "focus": "dialog-policy-read"
+    },
+    {
+      "key": "Escape",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Escape",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "provider"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 8,
+      "focus": "provider-search"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "load-provider-models"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "provider-model-manual"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "test-provider"
+    },
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "test-provider"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "use-provider-model"
+    },
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "change-provider-model"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "change-provider-model"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "add-provider-service"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "finish-provider-setup"
+    },
+    {
+      "key": "Enter",
+      "modifiers": 0,
+      "focus": "overview-name"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "hosting-new"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "BUTTON"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "admin-desktop-install"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "admin-update-channel"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "admin-update-automatic"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "admin-updates-save"
+    },
+    {
+      "key": "Tab",
+      "modifiers": 0,
+      "focus": "admin-update-check"
+    }
+  ],
+  "evidence": "Actual unmodified renderer modules in headless Chromium; synthetic IPC responses only. No Docker or native provider request.",
+  "captures": [
+    "initial-loading-reduced-motion.png",
+    "instance-error-320.png",
+    "instance-error-desktop.png",
+    "checkpoint-package-import-320.png",
+    "backup-recovery-cloud-320.png",
+    "backup-recovery-cloud-desktop.png",
+    "ssh-docker-deployment-settings-320.png",
+    "ssh-docker-deployment-settings-desktop.png",
+    "local-docker-deployment-settings-320.png",
+    "local-docker-deployment-settings-desktop.png",
+    "aca-pending-apply-later-320.png",
+    "aca-pending-apply-later-desktop.png",
+    "instances-cloud-connected-awaiting-verification.png",
+    "instances-cloud-progress-320.png",
+    "instances-cloud-review-320.png",
+    "instances-cloud-review-desktop.png",
+    "instances-cloud-install-desktop.png",
+    "instances-cloud-default-review-desktop.png",
+    "instances-cloud-creation-unavailable.png",
+    "instances-import-review-desktop.png",
+    "instances-import-choose-desktop.png",
+    "instances-new-ssh-desktop.png",
+    "instances-ssh-chooser-200pct.png",
+    "instances-ssh-chooser-narrow.png",
+    "instances-ssh-open-error.png",
+    "instances-ssh-chooser-desktop.png",
+    "instances-open-error.png",
+    "instances-recents-desktop.png",
+    "instances-local-chooser-desktop.png",
+    "instances-from-aca-desktop.png",
+    "instances-first-use-desktop.png",
+    "hosting-discovery-error.png",
+    "admin-settings-narrow-200pct.png",
+    "hosting-connections-narrow.png",
+    "hosting-connections-desktop.png",
+    "hosting-connection-editor-desktop.png",
+    "admin-settings-update-ready.png",
+    "admin-settings-stable-desktop.png",
+    "aca-system-200pct.png",
+    "aca-system-1120.png",
+    "aca-connections-1120.png",
+    "aca-knowledge-1120.png",
+    "aca-provider-1120.png",
+    "aca-overview-1120.png",
+    "aca-system-620.png",
+    "aca-connections-620.png",
+    "aca-knowledge-620.png",
+    "aca-provider-620.png",
+    "aca-overview-620.png",
+    "aca-system-320.png",
+    "aca-connections-320.png",
+    "aca-knowledge-320.png",
+    "aca-provider-320.png",
+    "aca-overview-320.png",
+    "aca-overview-narrow.png",
+    "aca-discord-unavailable.png",
+    "aca-export-unavailable.png",
+    "aca-system-desktop.png",
+    "aca-connections-desktop.png",
+    "aca-knowledge-desktop.png",
+    "aca-provider-desktop.png",
+    "aca-overview-desktop.png",
+    "ssh-system-desktop.png",
+    "ssh-connections-desktop.png",
+    "ssh-knowledge-desktop.png",
+    "ssh-provider-desktop.png",
+    "ssh-overview-desktop.png",
+    "install-distinct-retry-passed.png",
+    "install-failure-retry-ready.png",
+    "install-failure-recovery-busy.png",
+    "model-narrow-200pct-error.png",
+    "model-no-default.png",
+    "model-setup-explicit-continue.png",
+    "model-oauth-pending.png",
+    "model-default-use-refused.png",
+    "model-endpoint-reenabled-tested.png",
+    "model-endpoint-disabled.png",
+    "model-saved-setups.png",
+    "model-custom-saved-response-failed.png",
+    "model-custom-endpoint.png",
+    "model-llama.cpp-endpoint.png",
+    "model-lmstudio-endpoint.png",
+    "model-ollama-endpoint.png",
+    "model-default-after-use.png",
+    "model-tested-explicit-use.png",
+    "model-cloud-key.png",
+    "model-search-empty.png",
+    "model-service-choices.png",
+    "model-current-fail.png",
+    "model-current-pass.png",
+    "model-current-unverified.png",
+    "directory-dialog-desktop.png",
+    "permissions-dialog-desktop.png",
+    "remote-dialog-desktop.png",
+    "system-1280.png",
+    "system-768.png",
+    "system-320.png",
+    "connections-1280.png",
+    "connections-768.png",
+    "connections-320.png",
+    "knowledge-1280.png",
+    "knowledge-768.png",
+    "knowledge-320.png",
+    "provider-1280.png",
+    "provider-768.png",
+    "provider-320.png",
+    "overview-1280.png",
+    "overview-768.png",
+    "overview-320.png",
+    "system-runtime-recovery-desktop.png",
+    "system-import-export-desktop.png",
+    "system-installation-details-desktop.png",
+    "system-light-preference-desktop.png",
+    "connections-light-preference-desktop.png",
+    "provider-light-preference-desktop.png",
+    "overview-light-preference-desktop.png",
+    "overview-backup-shortcut.png",
+    "system-desktop.png",
+    "app-mcp-desktop.png",
+    "app-slack-desktop.png",
+    "app-discord-desktop.png",
+    "app-codex-desktop.png",
+    "app-claude-desktop.png",
+    "app-opencode-desktop.png",
+    "apps-desktop.png",
+    "overview-unavailable.png",
+    "overview-200pct.png",
+    "overview-narrow.png",
+    "overview-missing-host-metadata.png",
+    "overview-desktop.png"
+  ]
+}

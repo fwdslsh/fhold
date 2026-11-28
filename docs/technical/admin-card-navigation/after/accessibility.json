@@ -1,0 +1,652 @@
+[
+  {
+    "screen": "overview-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "overview-missing-host-metadata.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "overview-narrow.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "overview-200pct.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "overview-unavailable.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "apps-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-opencode-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-claude-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-codex-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-discord-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-slack-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "app-mcp-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "system-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "overview-backup-shortcut.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "overview-light-preference-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "provider-light-preference-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "connections-light-preference-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "system-light-preference-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "system-installation-details-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "system-import-export-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "system-runtime-recovery-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "overview-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "overview-768.png",
+    "width": 768,
+    "violations": []
+  },
+  {
+    "screen": "overview-1280.png",
+    "width": 1280,
+    "violations": []
+  },
+  {
+    "screen": "provider-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "provider-768.png",
+    "width": 768,
+    "violations": []
+  },
+  {
+    "screen": "provider-1280.png",
+    "width": 1280,
+    "violations": []
+  },
+  {
+    "screen": "knowledge-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "knowledge-768.png",
+    "width": 768,
+    "violations": []
+  },
+  {
+    "screen": "knowledge-1280.png",
+    "width": 1280,
+    "violations": []
+  },
+  {
+    "screen": "connections-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "connections-768.png",
+    "width": 768,
+    "violations": []
+  },
+  {
+    "screen": "connections-1280.png",
+    "width": 1280,
+    "violations": []
+  },
+  {
+    "screen": "system-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "system-768.png",
+    "width": 768,
+    "violations": []
+  },
+  {
+    "screen": "system-1280.png",
+    "width": 1280,
+    "violations": []
+  },
+  {
+    "screen": "remote-dialog-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "permissions-dialog-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "directory-dialog-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-current-unverified.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-current-pass.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-current-fail.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-service-choices.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-search-empty.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-cloud-key.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-tested-explicit-use.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-default-after-use.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-ollama-endpoint.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-lmstudio-endpoint.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-llama.cpp-endpoint.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-custom-endpoint.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-custom-saved-response-failed.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-saved-setups.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-endpoint-disabled.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-endpoint-reenabled-tested.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-default-use-refused.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-oauth-pending.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-setup-explicit-continue.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-no-default.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "model-narrow-200pct-error.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "install-failure-recovery-busy.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "install-failure-retry-ready.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "install-distinct-retry-passed.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "ssh-overview-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "ssh-provider-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "ssh-knowledge-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "ssh-connections-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "ssh-system-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-overview-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-provider-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-knowledge-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-connections-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-system-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-export-unavailable.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-discord-unavailable.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-overview-narrow.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-overview-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "aca-provider-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "aca-knowledge-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "aca-connections-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "aca-system-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "aca-overview-620.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-provider-620.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-knowledge-620.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-connections-620.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-system-620.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "aca-overview-1120.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-provider-1120.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-knowledge-1120.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-connections-1120.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-system-1120.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "aca-system-200pct.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "admin-settings-stable-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "admin-settings-update-ready.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "hosting-connection-editor-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "hosting-connections-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "hosting-connections-narrow.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "admin-settings-narrow-200pct.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "hosting-discovery-error.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "instances-first-use-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-from-aca-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-local-chooser-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-recents-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-open-error.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-ssh-chooser-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-ssh-open-error.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-ssh-chooser-narrow.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "instances-ssh-chooser-200pct.png",
+    "width": 620,
+    "violations": []
+  },
+  {
+    "screen": "instances-new-ssh-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-import-choose-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-import-review-desktop.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-creation-unavailable.png",
+    "width": 1120,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-default-review-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-install-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-review-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-review-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-progress-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "instances-cloud-connected-awaiting-verification.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "aca-pending-apply-later-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "aca-pending-apply-later-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "local-docker-deployment-settings-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "local-docker-deployment-settings-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "ssh-docker-deployment-settings-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "ssh-docker-deployment-settings-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "backup-recovery-cloud-desktop.png",
+    "width": 1060,
+    "violations": []
+  },
+  {
+    "screen": "backup-recovery-cloud-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "checkpoint-package-import-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "instance-error-desktop.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "instance-error-320.png",
+    "width": 320,
+    "violations": []
+  },
+  {
+    "screen": "initial-loading-reduced-motion.png",
+    "width": 320,
+    "violations": []
+  }
+]
