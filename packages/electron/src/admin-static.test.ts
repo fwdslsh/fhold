@@ -382,7 +382,7 @@ beforeEach(() => {
 	);
 	selector(
 		'[data-instance-feature]',
-		...[...html.matchAll(/<fieldset id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(
+		...[...html.matchAll(/<(?:fieldset|div) id="([^"]+)"[^>]+data-instance-feature="([^"]+)"/g)].map(
 			(match) => {
 				const fields = control(match[1]);
 				fields.dataset.instanceFeature = match[2];
@@ -696,7 +696,7 @@ describe('Admin static security boundary', () => {
 		renderInstanceCapabilities(snapshot);
 		showView('knowledge');
 		expect(control('view-knowledge').hidden).toBe(false);
-		expect(control('knowledge-header-actions').hidden).toBe(false);
+		expect(control('knowledge-fields').hidden).toBe(false);
 		expect(control('knowledge-fields').disabled).toBe(false);
 		expect(opened).toBe(1);
 		showView('knowledge');
@@ -713,11 +713,11 @@ describe('Admin static security boundary', () => {
 		expect(control('knowledge-fields').disabled).toBe(true);
 		expect(control('knowledge-fields-unavailable').hidden).toBe(false);
 		showView('overview');
-		expect(control('knowledge-header-actions').hidden).toBe(true);
+		expect(control('knowledge-fields').hidden).toBe(true);
 		showView('knowledge');
 		expect(opened).toBe(2);
 	});
-	it('reports an automatic Knowledge launch failure and permits an explicit retry', async () => {
+	it('reports a Knowledge launch failure without adding a retry button or a render retry loop', async () => {
 		state.currentSnapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
 		let attempts = 0;
 		state.api = { openKnowledge: async () => {
@@ -730,7 +730,10 @@ describe('Admin static security boundary', () => {
 		expect(state.operationInFlight).toBe(false);
 		showView('knowledge');
 		expect(attempts).toBe(1);
-		await control('open-knowledge').listeners.get('click')?.();
+		expect(html).not.toContain('id="open-knowledge"');
+		showView('overview');
+		showView('knowledge');
+		await Promise.resolve();
 		expect(attempts).toBe(2);
 		expect(control('notice').hidden).toBe(true);
 	});

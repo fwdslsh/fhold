@@ -381,7 +381,12 @@ async function captureScreenshot(
 	name: string,
 	preserveFocus: boolean
 ): Promise<string> {
-	const path = join(directory, name);
+	const embedded = window.contentView.children.find(
+		(view) => view instanceof WebContentsView && view.webContents !== window.webContents && view.getVisible()
+	) as WebContentsView | undefined;
+	// capturePage records one webContents, not the composed native window.
+	// Label the shell honestly and retain AKM's rendered pixels separately.
+	const path = join(directory, embedded ? name.replace(/\.png$/, '-admin-shell.png') : name);
 	progress(`capturing ${name}`);
 	const evaluate = async (script: string, step: string) => {
 		try {
@@ -430,6 +435,9 @@ async function captureScreenshot(
 		if (timeout) clearTimeout(timeout);
 	});
 	writeFileSync(path, image.toPNG());
+	if (embedded)
+		writeFileSync(join(directory, name.replace(/\.png$/, '-akm.png')),
+			(await embedded.webContents.capturePage()).toPNG());
 	return path;
 }
 
@@ -866,6 +874,13 @@ async function verifyKnowledgeBrowser(window: BrowserWindow): Promise<WebContent
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 	assert(embedded, 'Knowledge did not attach a native embedded browser.');
+	// Hydration alone does not prove that the user can see the native view.
+	// Wait for the application's own layout sync; never repair it from the test.
+	while (Date.now() < deadline && !embedded.getVisible())
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	assert(embedded.getVisible(), 'Hydrated AKM browser remained hidden after Knowledge navigation.');
+	assert(embedded.getBounds().height > 0 && embedded.getBounds().width > 0,
+		'Embedded AKM browser has no visible area.');
 	const contents = embedded.webContents;
 	assert(
 		await contents.executeJavaScript(
@@ -3674,16 +3689,13 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 			);
 			const layout = await window.webContents.executeJavaScript(`(() => {
 				const header = document.getElementById('instance-page-header').getBoundingClientRect();
-				const button = document.getElementById('open-knowledge').getBoundingClientRect();
 				const slot = document.getElementById('knowledge-viewport').getBoundingClientRect();
 				const workspace = document.querySelector('.workspace').getBoundingClientRect();
 				return {ok: document.documentElement.scrollWidth <= innerWidth + 1 &&
-					button.left >= header.left && button.right <= header.right + 1 &&
-					button.top >= header.top && button.bottom <= header.bottom + 1 &&
 					slot.top >= header.bottom - 1 && slot.height > 0 &&
 					Math.abs(slot.width - workspace.width) < 1 &&
 					Math.abs(slot.bottom - innerHeight) < 1,
-					header:header.toJSON(),button:button.toJSON(),slot:slot.toJSON(),workspace:workspace.toJSON(), width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth};
+					header:header.toJSON(),slot:slot.toJSON(),workspace:workspace.toJSON(), width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth};
 			})()`);
 			assert(layout.ok, `Knowledge viewport/header layout mismatch: ${JSON.stringify(layout)}`);
 		};
@@ -3777,7 +3789,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 				]);
 			else await promisify(execFile)('docker', ['exec', restartContainer, 'pkill', '-f', pattern]);
 			await window.webContents.executeJavaScript(
-				"document.querySelector('#open-knowledge').click()"
+				"document.querySelector('[data-view=overview]').click(); document.querySelector('[data-view=knowledge]').click()"
 			);
 			const restartDeadline = Date.now() + 30_000;
 			while (window.contentView.children.includes(previous) && Date.now() < restartDeadline)
@@ -3803,6 +3815,8 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		).find((source) => source.id.split(':')[1] === window.getMediaSourceId().split(':')[1]);
 		const windowScreenshot = join(outputDir, 'knowledge-window.png');
 		const nativeWindowCaptured = !!nativeWindow && !nativeWindow.thumbnail.isEmpty();
+		if (process.env.FH_ADMIN_E2E_CAPTURE_WINDOW === '1')
+			assert(nativeWindowCaptured, 'Native window capture was requested but unavailable.');
 		if (nativeWindowCaptured) writeFileSync(windowScreenshot, nativeWindow.thumbnail.toPNG());
 		const guest = embedded.webContents;
 		const concurrentRead = await window.webContents.executeJavaScript(`(async () => {
@@ -3831,7 +3845,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		}
 		return {
 			ok: true,
-			knowledgeClickThrough: true,
+			knowledgeAutoNavigation: true,
 			persistentWeb,
 			transport: sshHost ? 'native-ssh' : 'local-docker',
 			bearerAuthenticatedReload: true,

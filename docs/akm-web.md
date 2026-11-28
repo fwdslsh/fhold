@@ -4,8 +4,6 @@ Assistant includes AKM Web. Selecting Admin's **Knowledge** page opens it automa
 Admin without an external browser. By default, this starts a private session
 server and stops it when the instance disconnects. Local and SSH access require
 a reachable Linux Docker bridge; Docker Desktop is not supported for this mode.
-If opening fails, correct the connection problem and use **Retry AKM UI** in the
-page header. Refreshing Admin's status does not repeatedly retry the launch.
 
 ## Keep a URL available
 
