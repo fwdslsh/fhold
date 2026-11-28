@@ -682,7 +682,7 @@ describe('Admin static security boundary', () => {
 		expect(observationValue(known('known value'))).toBe('known value');
 		expect(observationValue({ state: 'unavailable', reason: 'Offline' })).toBeUndefined();
 	});
-	it('shows Knowledge and opens native AKM without taking a URL or token through the renderer', async () => {
+	it('opens AKM on Knowledge navigation, without repeating on render or passing renderer credentials', async () => {
 		const snapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
 		state.currentSnapshot = snapshot;
 		let opened = 0;
@@ -698,13 +698,41 @@ describe('Admin static security boundary', () => {
 		expect(control('view-knowledge').hidden).toBe(false);
 		expect(control('knowledge-header-actions').hidden).toBe(false);
 		expect(control('knowledge-fields').disabled).toBe(false);
-		await control('open-knowledge').listeners.get('click')?.();
 		expect(opened).toBe(1);
+		showView('knowledge');
+		expect(opened).toBe(1);
+		await Promise.resolve();
+		showView('knowledge');
+		expect(opened).toBe(1);
+		showView('overview');
+		showView('knowledge');
+		expect(opened).toBe(2);
+		await Promise.resolve();
+		state.currentSnapshot = normalizedSnapshot();
 		renderInstanceCapabilities(normalizedSnapshot());
 		expect(control('knowledge-fields').disabled).toBe(true);
 		expect(control('knowledge-fields-unavailable').hidden).toBe(false);
 		showView('overview');
 		expect(control('knowledge-header-actions').hidden).toBe(true);
+		showView('knowledge');
+		expect(opened).toBe(2);
+	});
+	it('reports an automatic Knowledge launch failure and permits an explicit retry', async () => {
+		state.currentSnapshot = normalizedSnapshot({ operations: { 'data.knowledgeUi': supported() } });
+		let attempts = 0;
+		state.api = { openKnowledge: async () => {
+			if (++attempts === 1) throw new Error('Could not load this Assistant’s AKM UI.');
+		} };
+		bindConnectionsEvents();
+		showView('knowledge');
+		await Promise.resolve();
+		expect(control('notice-message').textContent).toContain('Could not load');
+		expect(state.operationInFlight).toBe(false);
+		showView('knowledge');
+		expect(attempts).toBe(1);
+		await control('open-knowledge').listeners.get('click')?.();
+		expect(attempts).toBe(2);
+		expect(control('notice').hidden).toBe(true);
 	});
 	it('opens authenticated native access without exposing a credential to the renderer', async () => {
 		const snapshot = normalizedSnapshot({

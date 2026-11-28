@@ -1839,7 +1839,7 @@ async function run(): Promise<Record<string, unknown>> {
 		};
 		try {
 			await window.webContents.executeJavaScript(
-				"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+				"document.querySelector('[data-view=knowledge]').click()"
 			);
 			await verifyKnowledgeBrowser(window);
 			assert(openedUrls.length === 0, 'Knowledge launched an external browser.');
@@ -3633,7 +3633,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 			openedUrls.push(url);
 		};
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+			"document.querySelector('[data-view=knowledge]').click()"
 		);
 		let embedded = await verifyKnowledgeBrowser(window);
 		assert(openedUrls.length === 0, 'Knowledge launched an external browser.');
@@ -3642,7 +3642,7 @@ async function verifyKnowledgeLaunch(): Promise<Record<string, unknown>> {
 		);
 		assert(!embedded.getVisible(), 'Knowledge remained over another Admin section.');
 		await window.webContents.executeJavaScript(
-			"document.querySelector('[data-view=knowledge]').click(); document.querySelector('#open-knowledge').click()"
+			"document.querySelector('[data-view=knowledge]').click()"
 		);
 		assert(
 			(await verifyKnowledgeBrowser(window)) === embedded,
